@@ -61,6 +61,7 @@ import { NamesListError } from '../engine/names-list.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 const DEFAULT_LIST_LIMIT = 20;
 /** Each knock may carry an avatar (up to KNOCK_RULES.avatarChars), so a page is kept small. */
@@ -136,7 +137,7 @@ function parseAvatar(raw: unknown): Parsed<string | null> {
     if (/^bundled:\/\/[A-Za-z0-9_-]{1,64}$/.test(value)) return { ok: true, value };
     if (value.length > KNOCK_RULES.avatarChars) return { ok: false, error: 'That picture is too large. Please choose a smaller one.' };
     const refusal = /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(value) ? avatarValueRefusal(value) : { kind: 'format' as const };
-    if (refusal) return { ok: false, error: photoRefusalText(refusal, 'The picture must be a JPEG, PNG, WebP or GIF image.') };
+    if (refusal) return { ok: false, error: photoRefusalText(refusal, word('The picture must be a JPEG, PNG, WebP or GIF image.')) };
     return { ok: true, value: stripImageValue(value) };
 }
 

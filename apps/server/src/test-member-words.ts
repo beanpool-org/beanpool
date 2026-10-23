@@ -104,6 +104,7 @@ async function testWayOut(): Promise<void> {
             '/api/count-one': [400, { error: 'You have 1 active trade in progress.' }],
             '/api/count-many': [400, { error: 'You have 3 active trades in progress.' }],
             '/api/decimal': [400, { error: 'You hold 2.5 Beans: you can pay the Commons only what you hold.' }],
+            '/api/cents': [400, { error: 'You hold 12.50 Beans: you can pay the Commons only what you hold.' }],
             '/api/odd-value': [400, { error: 'Only Ann (a.k.a. [x]+?) can remove this' }],
             '/api/no-fit': [400, { error: 'A post can have at most photos' }],
             '/api/coded-sentence': [403, { error: 'UNAUTHORIZED: Only a convenor can do that' }],
@@ -192,6 +193,9 @@ async function testWayOut(): Promise<void> {
         const decimal = await get('/api/decimal', 'fr');
         assert(decimal.body?.error === 'Vous avez 2,5 Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
             `a number read back out of the English is written the language's way (${decimal.body?.error})`);
+        const cents = await get('/api/cents', 'fr');
+        assert(cents.body?.error === 'Vous avez 12,50 Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
+            `with the decimals it was written with (${cents.body?.error})`);
         const odd = await get('/api/odd-value', 'fr');
         assert(odd.body?.error === 'Seul Ann (a.k.a. [x]+?) peut retirer ceci', `a value with a pattern's own characters in it is kept as it was (${odd.body?.error})`);
         const noFit = await get('/api/no-fit', 'fr');
@@ -403,7 +407,7 @@ interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
  * the same status, the same code and every other field, only the sentence in French. The suite's French is every marked
  * sentence after FR_SIGN, so a family whose sentence was never marked fails here.
  */
-async function testFamilies({ owner, ann, bob }: People): Promise<void> {
+async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     console.log("\n--- 6. Each family's refusals in the member's language ---");
     useCatalogsForTests('fr', { server: await everyMarkInFrench(), core: FR_CORE });
     const family = async (name: string, english: string, method: 'GET' | 'POST', who: Id | null, route: string, body?: unknown,
@@ -433,6 +437,14 @@ async function testFamilies({ owner, ann, bob }: People): Promise<void> {
     // The engine's refusals through a route (state-engine.ts): a sentence, and one with a value in it.
     await family('trust, vouching', 'You cannot vouch for yourself', 'POST', ann, '/api/profile/vouch', { targetPubkey: ann.pk });
     await family('the Commons, a payment', 'You hold 0 Beans: you can pay the Commons only what you hold.', 'POST', ann, '/api/commons/pay', { amount: 5 });
+
+    // Enterprises, the community's Decisions and a group's votes (routes/treasury.ts, decisions-engine.ts).
+    await family('enterprises, a read of what is none', 'Not a treasury', 'GET', ann, `/api/enterprise/${bob.pk}`);
+    await family("the community's Decisions, standing to propose", 'Proposing a Decision requires earned trade standing (earnedCredit > 0)',
+        'POST', ann, '/api/commons/decisions', { title: 'Seeds', touches: 'pool', effect: 'grant', description: 'Seeds for the garden beds', subject: ann.pk, params: { amount: 5 } });
+    const tools = se.createGroup({ name: 'Tool Library', joinPolicy: 'open', createdBy: ann.pk });
+    await family('groups, a vote with nobody to vote with', 'Nobody else in this group can vote, so there is nobody to vote with.',
+        'POST', ann, `/api/groups/${tools.id}/decisions`, { effect: 'close_group', title: 'Close it', description: 'We have finished with the library' });
 }
 
 // ── 5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

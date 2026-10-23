@@ -137,9 +137,13 @@ function sentenceTemplates(catalog: Catalog | null): SentenceTemplate[] {
     return out.sort((a, b) => b.fixed - a.fixed);
 }
 
-/** A value read back out of the English: a plain number is a number again, so the language writes it its own way. */
-function valueOf(text: string): string | number {
-    return /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text) ? Number(text) : text;
+/**
+ * A value read back out of the English, as the language writes it: a plain number in its own decimal mark and digits,
+ * with the decimals it was written with ("12.50" stays two places), anything else as it came.
+ */
+function valueIn(words: Words, text: string): string {
+    const number = /^-?(?:0|[1-9]\d*)(?:\.(\d+))?$/.exec(text);
+    return number ? words.formatNumber(Number(text), number[1]?.length ?? 0) : text;
 }
 
 /** One sentence of a refusal in `words`' language: as a whole sentence, or as one with values in it. */
@@ -150,18 +154,19 @@ function translatedSentence(text: string, words: Words, templates: SentenceTempl
     for (const template of templates) {
         const found = template.pattern.exec(text);
         if (!found) continue;
-        const values: WordValues = {};
+        const read: Record<string, string> = {};
         let fits = true;
         template.names.forEach((name, i) => {
-            const v = valueOf(found[i + 1]);
             // The same value twice in one sentence is one value.
-            if (name in values && values[name] !== v) fits = false;
-            values[name] = v;
+            if (name in read && read[name] !== found[i + 1]) fits = false;
+            read[name] = found[i + 1];
         });
         if (!fits) continue;
+        const values: WordValues = Object.fromEntries(Object.entries(read).map(([name, v]) => [name, valueIn(words, v)]));
         if (template.count) {
-            if (typeof values.n !== 'number') continue;
-            return words.tn(values.n, template.count.one as WordKey, template.count.other as WordKey, values);
+            // The count picks the language's form; it is written as the English wrote it, in the language's digits.
+            if (!/^\d+$/.test(read.n ?? '')) continue;
+            return words.tn(Number(read.n), template.count.one as WordKey, template.count.other as WordKey, values);
         }
         return words.t(template.sentence as WordKey, values, template.context);
     }

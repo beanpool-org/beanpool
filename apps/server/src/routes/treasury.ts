@@ -51,7 +51,7 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlOf, isSyntheticAccount, isWholeCents, replaceLoneSurrogates } from '@beanpool/core';
+import { avatarUrlOf, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { getThresholds } from '../config/local-config.js';
@@ -137,15 +137,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
     const requireOperator = (ctx: any, treasury: string): string | null => {
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return null; }
         if (!actor || !canOperateTreasury(actor, treasury)) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not a keeper of this enterprise' };
+            ctx.body = { error: word('You are not a keeper of this enterprise') };
             return null;
         }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
+            ctx.body = { error: word('This enterprise has been closed, so its funds can no longer be moved.') };
             return null;
         }
         if (blocked(statusOf(actor))) {
@@ -163,16 +163,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
      */
     const requireKeeperOrAdmin = (ctx: any, treasury: string) => {
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return null; }
         if (!actor || !canAdministerTreasury(actor, treasury)) {
             ctx.status = 403;
-            ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may perform this action' };
+            ctx.body = { error: word('Only a keeper of this enterprise (or node admin) may perform this action') };
             return null;
         }
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so it can no longer be modified.' };
+            ctx.body = { error: word('This enterprise has been closed, so it can no longer be modified.') };
             return null;
         }
         if (blocked(statusOf(actor))) {
@@ -354,7 +354,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, bio, joined_at, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
-        if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        if (!m) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
 
@@ -529,7 +529,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         // An enterprise that reached its goal is not closed: it says so in the words pledgeToProject uses, on the door both
@@ -542,7 +542,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (enterpriseStatus !== 'active') {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
+            ctx.body = { error: word('This enterprise has been closed, so its funds can no longer be moved.') };
             return;
         }
         // A visitor's row pledges nothing, as a key with no row pledges nothing (getActingMember): pledgeToProject moves the
@@ -550,7 +550,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (memberStatus !== 'active') {
             ctx.status = 403;
-            ctx.body = { error: 'Only active community members can pledge.' };
+            ctx.body = { error: word('Only active community members can pledge.') };
             return;
         }
         if (blockCrossNodeSettlement(ctx, actor)) return;
@@ -560,7 +560,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedAmount = Number(amount);
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             ctx.status = 400;
-            ctx.body = { error: 'A positive amount is required' };
+            ctx.body = { error: word('A positive amount is required') };
             return;
         }
         // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
@@ -582,7 +582,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
 
@@ -590,7 +590,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (memberStatus !== 'active') {
             ctx.status = 403;
-            ctx.body = { error: 'Only active community members can create an enterprise' };
+            ctx.body = { error: word('Only active community members can create an enterprise') };
             return;
         }
         if (isOperatorSwitchedOff(actor)) {
@@ -717,7 +717,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to create enterprise') };
+            ctx.body = { error: memberErrorText(e, word('Failed to create enterprise')) };
         }
     };
     router.post('/api/treasury', createEnterpriseHandler);
@@ -868,7 +868,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
-            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, word('Each photo must be a JPEG, PNG or WebP image')) }; return; }
         }
         try {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
@@ -881,7 +881,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const limit = enterprisePostLimit(treasury, actor);
             // `shopId`: the enterprise's own shop, raw: the engine refuses any other (engine/shops.ts assertShopForPost).
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });
-            if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
+            if (!post) { ctx.status = 400; ctx.body = { error: word('Failed to create offer') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -901,7 +901,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
-            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, word('Each photo must be a JPEG, PNG or WebP image')) }; return; }
         }
         try {
             assertNotMuted(actor);
@@ -909,7 +909,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const limit = enterprisePostLimit(treasury, actor);
             // A Need never goes in a shop: a `shopId` sent is refused in the engine's words, never dropped.
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });
-            if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
+            if (!post) { ctx.status = 400; ctx.body = { error: word('Failed — the treasury needs a live Offer first (offer covenant)') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
@@ -940,7 +940,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!b.title) { ctx.status = 400; ctx.body = { error: 'title is required' }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
-            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
+            if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, word('Each photo must be a JPEG, PNG or WebP image')) }; return; }
         }
         try {
             assertNotMuted(actor);
@@ -948,7 +948,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const limit = enterprisePostLimit(treasury, actor);
             const timeOut: EventTimeOut = {};
             const post = createEventFromBody(b, treasury, actor, limit.beforeWrite, timeOut);
-            if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
+            if (!post) { ctx.status = 400; ctx.body = { error: word('Failed — the enterprise must be a registered member') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
         } catch (e: any) {
@@ -967,7 +967,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
             const tx = approvePostRequest(String(transactionId), treasury, { authSigner: actor });
-            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not approve (not this treasury’s deal, or already actioned)' }; return; }
+            if (!tx) { ctx.status = 400; ctx.body = { error: word('Could not approve (not this treasury’s deal, or already actioned)') }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
@@ -987,7 +987,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedHours = dealQuantityFromBody(finalHours !== undefined ? finalHours : hours);
         try {
             const tx = completePostTransaction(String(transactionId), treasury, parsedHours, { authSigner: actor });
-            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
+            if (!tx) { ctx.status = 400; ctx.body = { error: word('Could not release (not this treasury’s deal to confirm)') }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
@@ -1004,7 +1004,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
             const tx = rejectPostRequest(String(transactionId), treasury);
-            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not reject (not this treasury’s deal, or already actioned)' }; return; }
+            if (!tx) { ctx.status = 400; ctx.body = { error: word('Could not reject (not this treasury’s deal, or already actioned)') }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
@@ -1021,7 +1021,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         // To the cent, as a member's payment to the Commons is (LED-05).
         if (!isWholeCents(amt)) { ctx.status = 400; ctx.body = { error: WHOLE_CENTS_ERROR }; return; }
-        if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
+        if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: word('Cannot sweep more than the treasury holds') }; return; }
         // moveToCommons, NOT transfer(..., 'COMMONS_POOL', ...) — #126. The latter debited the treasury and
         // then had the Commons credit overwritten by the next persistCommonsBalance() flush, DESTROYING the
         // beans and breaking the node's zero-sum invariant. Measured: 40 in, 40 gone.
@@ -1049,14 +1049,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.status = invariant ? 400 : 500;
             ctx.body = {
                 error: invariant
-                    ? 'That sweep could not be completed. Nothing has been moved.'
-                    : 'Something went wrong saving that sweep. Nothing has been moved — please try again.',
+                    ? word('That sweep could not be completed. Nothing has been moved.')
+                    : word('Something went wrong saving that sweep. Nothing has been moved — please try again.'),
             };
             return;
         }
         if (!ok) {
             ctx.status = 400;
-            ctx.body = { error: 'That sweep could not be completed — check the treasury still holds that much.' };
+            ctx.body = { error: word('That sweep could not be completed — check the treasury still holds that much.') };
             return;
         }
         ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance };
@@ -1080,7 +1080,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to pause enterprise') };
+            ctx.body = { error: memberErrorText(e, word('Failed to pause enterprise')) };
         }
     };
     router.post('/api/treasury/:treasury/pause', pauseHandler);
@@ -1100,7 +1100,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to resume enterprise') };
+            ctx.body = { error: memberErrorText(e, word('Failed to resume enterprise')) };
         }
     };
     router.post('/api/treasury/:treasury/resume', resumeHandler);
@@ -1124,7 +1124,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to initiate wind-up') };
+            ctx.body = { error: memberErrorText(e, word('Failed to initiate wind-up')) };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/initiate', initiateWindUpHandler);
@@ -1144,7 +1144,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only a keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to cancel wind-up') };
+            ctx.body = { error: memberErrorText(e, word('Failed to cancel wind-up')) };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/cancel', cancelWindUpHandler);
@@ -1167,7 +1167,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Not authorised/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to finalise wind-up') };
+            ctx.body = { error: memberErrorText(e, word('Failed to finalise wind-up')) };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/finalise', finaliseWindUpHandler);
@@ -1188,7 +1188,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (!(await checkAdminAuth(ctx))) return;
             authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
             actor = ctx.state?.actor || authSigner;
-            if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+            if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         } else {
             actor = requireKeeperOrAdmin(ctx, treasury);
             if (!actor) return;
@@ -1215,7 +1215,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = isLocationRefusal(e) ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to update enterprise location') };
+            ctx.body = { error: memberErrorText(e, word('Failed to update enterprise location')) };
         }
     };
 
@@ -1227,7 +1227,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (!(await checkAdminAuth(ctx))) return;
             authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
             actor = ctx.state?.actor || authSigner;
-            if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+            if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         } else if (isTreasury(treasury) && statusOf(treasury) === 'completed') {
             // A wound-up enterprise has no keepers left, and requireKeeperOrAdmin refuses completed enterprises.
             // A node admin must still be able to clear a location it left behind (PR #839 Blocker A).
@@ -1255,7 +1255,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = isLocationRefusal(e) ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to clear enterprise location') };
+            ctx.body = { error: memberErrorText(e, word('Failed to clear enterprise location')) };
         }
     };
 
@@ -1316,7 +1316,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getLedgerHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         const { since, until, limit } = ctx.query;
         try {
             const ledger = getEnterpriseLedger(treasury, {
@@ -1329,7 +1329,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = ledgerForReader(ledger, treasury, ctx.state?.actor as string | undefined);
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to retrieve enterprise ledger') };
+            ctx.body = { error: memberErrorText(e, word('Failed to retrieve enterprise ledger')) };
         }
     };
     router.get('/api/treasury/:treasury/ledger', getLedgerHandler);
@@ -1339,7 +1339,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Get active backing pledges for an enterprise
     const getPledgesHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         const actor = ctx.state?.actor;
         const floorInfo = getEnterpriseFloor(treasury);
         ctx.body = {
@@ -1380,7 +1380,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to pledge backing') };
+            ctx.body = { error: memberErrorText(e, word('Failed to pledge backing')) };
         }
     };
 
@@ -1402,13 +1402,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) {
             ctx.status = 404;
-            ctx.body = { error: 'Not a treasury' };
+            ctx.body = { error: word('Not a treasury') };
             return;
         }
         const actor = ctx.state?.actor;
         if (!actor) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not an authorized keeper or pledge holder of this enterprise' };
+            ctx.body = { error: word('You are not an authorized keeper or pledge holder of this enterprise') };
             return;
         }
 
@@ -1420,7 +1420,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
         if (!isOp && !hasActivePledge) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not an authorized keeper or pledge holder of this enterprise' };
+            ctx.body = { error: word('You are not an authorized keeper or pledge holder of this enterprise') };
             return;
         }
 
@@ -1453,7 +1453,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to release backing') };
+            ctx.body = { error: memberErrorText(e, word('Failed to release backing')) };
         }
     };
     router.post('/api/treasury/:treasury/release', releaseHandler);
@@ -1471,11 +1471,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const requestJoinHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so it can no longer be joined.' };
+            ctx.body = { error: word('This enterprise has been closed, so it can no longer be joined.') };
             return;
         }
         if (blocked(statusOf(actor))) {
@@ -1490,7 +1490,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, request: req };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to submit join request') };
+            ctx.body = { error: memberErrorText(e, word('Failed to submit join request')) };
         }
     };
     router.post('/api/treasury/:treasury/keepers/request', requestJoinHandler);
@@ -1499,11 +1499,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const listKeeperRequestsHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed.' };
+            ctx.body = { error: word('This enterprise has been closed.') };
             return;
         }
         if (blocked(statusOf(actor))) {
@@ -1513,7 +1513,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (!isLeadOrSoleKeeperOrAdmin(treasury, actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Only the lead keeper, sole keeper, or admin may view keeper requests' };
+            ctx.body = { error: word('Only the lead keeper, sole keeper, or admin may view keeper requests') };
             return;
         }
         const { status } = ctx.query;
@@ -1524,7 +1524,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, requests };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to list keeper requests') };
+            ctx.body = { error: memberErrorText(e, word('Failed to list keeper requests')) };
         }
     };
     router.get('/api/treasury/:treasury/keepers/requests', listKeeperRequestsHandler);
@@ -1533,11 +1533,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const approveKeeperRequestHandler = async (ctx: any) => {
         const { treasury, requestId } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its keepers can no longer be modified.' };
+            ctx.body = { error: word('This enterprise has been closed, so its keepers can no longer be modified.') };
             return;
         }
         if (blocked(statusOf(actor))) {
@@ -1552,7 +1552,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to approve keeper request') };
+            ctx.body = { error: memberErrorText(e, word('Failed to approve keeper request')) };
         }
     };
     router.post('/api/treasury/:treasury/keepers/requests/:requestId/approve', approveKeeperRequestHandler);
@@ -1561,11 +1561,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const declineKeeperRequestHandler = async (ctx: any) => {
         const { treasury, requestId } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its keepers can no longer be modified.' };
+            ctx.body = { error: word('This enterprise has been closed, so its keepers can no longer be modified.') };
             return;
         }
         if (blocked(statusOf(actor))) {
@@ -1579,7 +1579,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to decline keeper request') };
+            ctx.body = { error: memberErrorText(e, word('Failed to decline keeper request')) };
         }
     };
     router.post('/api/treasury/:treasury/keepers/requests/:requestId/decline', declineKeeperRequestHandler);
@@ -1588,13 +1588,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Lead Succession (docs/the-commons.md §2.3) -------------------------------------
     const getSuccessionHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
         try {
             const data = getSuccessionProposals(treasury);
             ctx.body = { success: true, ...data };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to get succession information') };
+            ctx.body = { error: memberErrorText(e, word('Failed to get succession information')) };
         }
     };
     router.get('/api/treasury/:treasury/succession', getSuccessionHandler);
@@ -1603,11 +1603,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const proposeSuccessionHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its lead role can no longer be modified.' };
+            ctx.body = { error: word('This enterprise has been closed, so its lead role can no longer be modified.') };
             return;
         }
         if (blocked(statusOf(actor))) {
@@ -1630,7 +1630,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only an active keeper|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to propose lead succession') };
+            ctx.body = { error: memberErrorText(e, word('Failed to propose lead succession')) };
         }
     };
     router.post('/api/treasury/:treasury/succession/propose', proposeSuccessionHandler);
@@ -1639,11 +1639,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const voteSuccessionHandler = async (ctx: any) => {
         const { treasury, proposalId } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its lead role can no longer be modified.' };
+            ctx.body = { error: word('This enterprise has been closed, so its lead role can no longer be modified.') };
             return;
         }
         if (blocked(statusOf(actor))) {
@@ -1668,7 +1668,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only active keepers|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to vote on succession') };
+            ctx.body = { error: memberErrorText(e, word('Failed to vote on succession')) };
         }
     };
     router.post('/api/treasury/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
@@ -1679,11 +1679,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const keeperActionGuard = (ctx: any): string | null => {
         const { treasury } = ctx.params;
         const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return null; }
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: word('Not a treasury') }; return null; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return null; }
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
-            ctx.body = { error: 'This enterprise has been closed, so its keepers can no longer be modified.' };
+            ctx.body = { error: word('This enterprise has been closed, so its keepers can no longer be modified.') };
             return null;
         }
         if (blocked(statusOf(actor))) {
@@ -1703,7 +1703,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /Only the lead keeper/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to remove keeper') };
+            ctx.body = { error: memberErrorText(e, word('Failed to remove keeper')) };
         }
     };
     router.post('/api/treasury/:treasury/keepers/:pubkey/remove', removeKeeperHandler);
@@ -1720,7 +1720,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...res, change: keeperChangeForReader(res.change, backingReaderOf(actor)) };
         } catch (e: any) {
             ctx.status = /Only an active keeper|cannot object/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to object') };
+            ctx.body = { error: memberErrorText(e, word('Failed to object')) };
         }
     };
     router.post('/api/treasury/:treasury/keepers/changes/:changeId/object', objectKeeperChangeHandler);
@@ -1735,7 +1735,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /not a keeper/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to step down') };
+            ctx.body = { error: memberErrorText(e, word('Failed to step down')) };
         }
     };
     router.post('/api/treasury/:treasury/keepers/step-down', stepDownHandler);
@@ -1795,7 +1795,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         // Each line is a row in a room its keepers and members read, so it is throttled as a group or event chat line is:
@@ -1813,7 +1813,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const mRow = db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(actor) as any;
         if (mRow?.credit_frozen === 1) {
             ctx.status = 403;
-            ctx.body = { error: 'Frozen members cannot post in discussion threads' };
+            ctx.body = { error: word('Frozen members cannot post in discussion threads') };
             return;
         }
 
@@ -1832,7 +1832,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
         if (!text.trim()) {
             ctx.status = 400;
-            ctx.body = { error: 'Message text cannot be empty' };
+            ctx.body = { error: word('Message text cannot be empty') };
             return;
         }
 
@@ -1848,7 +1848,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             // Before the matching below, which would answer a mute as a plain 400.
             if (respondProfileRefusal(ctx, e)) return;
-            const msg = memberErrorText(e, 'Failed to post message');
+            const msg = memberErrorText(e, word('Failed to post message'));
             if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
                 ctx.status = 409;
                 ctx.body = { error: msg };
@@ -1880,12 +1880,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         if (!isKeeperOfEnterprise(actor, treasury)) {
             ctx.status = 403;
-            ctx.body = { error: 'Only a keeper of this enterprise can remove messages from its thread' };
+            ctx.body = { error: word('Only a keeper of this enterprise can remove messages from its thread') };
             return;
         }
         // A removal changes the room for everyone in it, so it is throttled as posting a line is (as a group chat's delete).
@@ -1912,7 +1912,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 message,
             };
         } catch (e: any) {
-            const msg = memberErrorText(e, 'Failed to remove message');
+            const msg = memberErrorText(e, word('Failed to remove message'));
             if (msg.includes('Enterprise not found')) {
                 ctx.status = 404;
             } else if (msg.includes('Only a keeper')) {

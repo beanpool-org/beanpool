@@ -45,6 +45,8 @@ Setting your server up with an AI assistant? See Setting up your server with an 
 
 ## Claim your community: the address, then your phone
 
+First, on the phone that will own the community: install BeanPool from Google Play or the App Store, open it and make your account. With no invite, tap **Explore BeanPool worldwide**. It shows you 12 words: write them on paper. Then scan the QR code below. Scanned before the account is made, BeanPool says so, offers **Make my account**, and comes back to the claim once it is made.
+
 The last step of an install, on the server:
 
 docker compose exec beanpool-node beanpool claim
@@ -52,7 +54,7 @@ docker compose exec beanpool-node beanpool claim
 - With your server's IP address, beanpool claim --ip 203.0.113.7, or your own domain, beanpool claim --address https://your.domain: your server keeps the address and gets its own certificate for it, and beanpool claim waits up to three minutes until the address answers with that certificate. Then the QR code carries it. If it does not answer in time, beanpool claim says why, for example that port 80 is not reachable from the internet and needs opening in the firewall; for a domain, it also says which DNS record to make. With --ip the QR code then carries no address, and with --address it carries your domain anyway. Your server keeps trying by itself: run beanpool claim again once it has its certificate, and the QR code carries the address.
 - Without either, it asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip, or use --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.
 - Without an address that works, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).
-- It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up.
+- It shows the one-time claim code, a QR code and, numbered, what to do next on your phone. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up.
 
 To scan the QR code, point your phone's camera at it: the camera opens it in BeanPool, on **Claim ‹name›** with the code filled in. Or open BeanPool yourself, go to **Find a community** (or **Start a community**), tap **Set up a new community server**, then **Scan the code**. If the QR code carries no address, BeanPool fills in the code and asks for your server's address. To type the code instead, it is the part after claim- that beanpool claim shows: the empty box shows xxxx-xxxx-xxxx-xxxx, an example, not a code.
 

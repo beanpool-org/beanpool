@@ -13,8 +13,9 @@ import { nodeCredential } from '../../lib/profiles';
  * The confirmation dial, the known floor and the cap. With the dial on, a member an admin has confirmed on the names
  * list may go into debt down to the known floor while they keep at least one offer listed. Every community starts with
  * the dial on (Marty, 21 Oct: "Yes, on by default"): nobody's limit changes until an admin confirms someone, and an
- * owner can switch it off. Only an owner saves; an admin sees the numbers and why they aren't theirs to change. A node
- * older than the known floor answers 404, and nothing is shown.
+ * owner can switch it off. Only an owner saves, under How this community works (POST /api/local/admin/community-shape
+ * `knownFloor`, slice S2; the page of that name takes this panel over in slice S4); an admin sees the numbers and why
+ * they aren't theirs to change. A node older than the known floor answers 404, and nothing is shown.
  *
  * Operator manual text: packages/beanpool-guide/operators/people/running-a-known-community.md.
  */
@@ -39,6 +40,13 @@ export function readKnownFloorSettings(v: unknown): Settings | null {
         creditCapDefault: Number.isInteger(o.creditCapDefault) ? o.creditCapDefault! : 2000,
         creditCapMax: Number.isInteger(o.creditCapMax) ? o.creditCapMax! : 5000,
     };
+}
+
+/** The settings as the shape a save answers with reads them (settings.knownFloor.value), the cap's default as before. */
+export function readShapeKnownFloor(shape: unknown, before: Settings): Settings | null {
+    const v = (shape as { settings?: { knownFloor?: { value?: { on?: unknown; floor?: unknown; cap?: unknown; capMax?: unknown } } } } | null)
+        ?.settings?.knownFloor?.value;
+    return v ? readKnownFloorSettings({ confirmation: v.on, knownFloor: v.floor, creditCap: v.cap, creditCapDefault: before.creditCapDefault, creditCapMax: v.capMax }) : null;
 }
 
 export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
@@ -97,14 +105,16 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
         setSaving(true);
         setStatus(null);
         try {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/known-floor'), {
+            // How this community works' `knownFloor`: the one place it changes (logged, the owners alerted, the members told
+            // when their known floor turns on, off or moves).
+            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-shape'), {
                 method: 'POST',
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), confirmation: dial, knownFloor: floorN, creditCap: capN }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), changes: { knownFloor: { on: dial, floor: floorN, cap: capN } } }),
             });
-            const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown };
+            const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown; shape?: unknown };
             if (res.ok) {
-                const s = readKnownFloorSettings(body);
+                const s = readShapeKnownFloor(body.shape, saved);
                 if (s) setSaved(s);
                 setStatus({ kind: 'saved', text: 'Saved.' });
             } else {

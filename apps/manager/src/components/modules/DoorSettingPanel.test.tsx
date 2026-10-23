@@ -8,8 +8,8 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 /**
  * People & Safety → Invites & QR → "Who may invite" (the door, community modes slice 1; apps/server config/door.ts):
- * the presets Invite (any member invites) and Known (only admins invite), read from /api/node/config and saved alone
- * by an owner. A node older than the door shows nothing; the global node's open door is shown, not offered.
+ * the presets Invite (any member invites) and Known (only admins invite), read from /api/node/config and saved as How
+ * this community works' `join` (POST /api/local/admin/community-shape) by an owner. A node older than the door shows nothing; the global node's open door is shown, not offered.
  */
 
 const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
@@ -28,8 +28,11 @@ function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, bo
                 ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'no' }) })
                 : Promise.resolve({ ok: true, json: () => Promise.resolve({ roles }) });
         }
-        if (url.includes('/api/local/admin/node/config')) {
+        if (url.includes('/api/local/admin/community-shape')) {
             return Promise.resolve({ ok: save.ok, status: save.status ?? (save.ok ? 200 : 403), json: () => Promise.resolve(save.body) });
+        }
+        if (url.includes('/api/local/admin/node/config')) {
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) });
         }
         if (url.includes('/api/node/config')) {
             return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishLocation: true, serviceRadius: null, ...config }) });
@@ -40,7 +43,11 @@ function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, bo
     return fetchMock;
 }
 
+/** The door's saves: How this community works' route, the one place who can join changes. */
 const saveCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.filter((c: any[]) => String(c[0]).includes('/api/local/admin/community-shape'));
+/** Node Identity's own save, which never carries the door. */
+const configCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
     fetchMock.mock.calls.filter((c: any[]) => String(c[0]).includes('/api/local/admin/node/config'));
 
 const radio = (name: RegExp) => screen.getByRole('radio', { name });
@@ -105,10 +112,10 @@ describe('Who may invite, for an owner', () => {
             const calls = saveCalls(fetchMock);
             expect(calls).toHaveLength(1);
             expect(calls[0][1].method).toBe('POST');
-            // The door alone: the node keeps every other setting as it is.
-            expect(JSON.parse(calls[0][1].body)).toEqual({ password: 'pw', door: 'admins' });
+            // Who can join alone: the node keeps every other setting as it is.
+            expect(JSON.parse(calls[0][1].body)).toEqual({ password: 'pw', changes: { join: 'admins' } });
             expect(calls[0][1].headers['X-Admin-Password']).toBe('pw');
-            await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Only admins invite now.'));
+            await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Only admins invite now, and every member is told.'));
             expect(saveButton()).toBeDisabled();
         });
     }
@@ -119,8 +126,8 @@ describe('Who may invite, for an owner', () => {
         await waitFor(() => expect(radio(/Known: only admins invite/)).toBeChecked());
         await act(async () => { fireEvent.click(radio(/Invite: any member invites/)); });
         await act(async () => { fireEvent.click(saveButton()); });
-        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).door).toBe('members');
-        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Any member invites now.'));
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).changes.join).toBe('members');
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Any member invites now, and every member is told.'));
     });
 
     it("a refusal is shown in the node's words, and the door stays as the node has it", async () => {
@@ -171,7 +178,7 @@ describe('nodes with no door to choose', () => {
 
 describe('Node Identity: who answers a request to join follows the door', () => {
     const nodeConfigBody = (fetchMock: ReturnType<typeof vi.fn>) => {
-        const call = saveCalls(fetchMock)[0];
+        const call = configCalls(fetchMock)[0];
         return call ? JSON.parse(call[1].body) : undefined;
     };
 
@@ -238,7 +245,7 @@ describe('Known with nobody to act on it', () => {
         await act(async () => { fireEvent.click(radio(/Known/)); });
         await act(async () => { fireEvent.click(saveButton()); });
         expect(saveCalls(fetchMock)).toHaveLength(1);
-        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).door).toBe('admins');
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).changes.join).toBe('admins');
     });
 
     it('says nothing when an owner or an admin holds a role', async () => {

@@ -15,9 +15,11 @@ import { passwordField } from '../../lib/node-client';
  * session here can't read it (design §4.3). The global node's door is open: anyone joins with a sign-in and nobody invites, which
  * its profile sets, so it is shown and not offered. A local community can't open its door: the node refuses it.
  *
- * Read from /api/node/config (`door`, public); a node older than the door says nothing, and nothing is shown. Saved
- * alone (`{ door }`) to /api/local/admin/node/config, by an owner (the password is an owner's): an admin sees the
- * setting and why it isn't theirs to change, and the node refuses an admin anyway. A role, never a tier.
+ * Read from /api/node/config (`door`, public); a node older than the door says nothing, and nothing is shown. Saved as
+ * How this community works' `join` (POST /api/local/admin/community-shape, the one place it changes: logged, the owners
+ * alerted, every member told), by an owner (the password is an owner's): an admin sees the setting and why it isn't
+ * theirs to change, and the node refuses an admin anyway. A role, never a tier. The page "How this community works"
+ * replaces this panel (slice S4).
  *
  * Operator manual text for this screen: packages/beanpool-guide/operators/people/members-and-invites.md.
  */
@@ -100,15 +102,15 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         setSaving(true);
         setStatus(null);
         try {
-            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/node/config'), {
+            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-shape'), {
                 method: 'POST',
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), door: choice }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), changes: { join: choice } }),
             });
             const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown };
             if (res.ok) {
                 setSaved(choice);
-                setStatus({ kind: 'saved', text: choice === 'admins' ? 'Saved. Only admins invite now.' : 'Saved. Any member invites now.' });
+                setStatus({ kind: 'saved', text: choice === 'admins' ? 'Saved. Only admins invite now, and every member is told.' : 'Saved. Any member invites now, and every member is told.' });
             } else {
                 setStatus({
                     kind: 'error',

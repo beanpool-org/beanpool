@@ -400,18 +400,18 @@ describe('a pinned Find your community on the web (#1517)', () => {
 
 describe('enterprise latest line: positive incoming ("from"), negative outgoing ("to")', () => {
     it('member: positive incoming is "from", negative outgoing is "to"', () => {
-        expect(enterpriseLatestLine({ kind: 'member', amount: 12, who: 'Ana', at: null })).toBe('Latest: +12 Beans from Ana');
-        expect(enterpriseLatestLine({ kind: 'member', amount: -50, who: 'Ana', at: null })).toBe('Latest: −50 Beans to Ana');
-        expect(enterpriseLatestLine({ kind: 'member', amount: -1, who: 'Ana', at: null })).toBe('Latest: −1 Bean to Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: 12, who: 'Ana', at: '' })).toBe('Latest: +12 Beans from Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: -50, who: 'Ana', at: '' })).toBe('Latest: −50 Beans to Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: -1, who: 'Ana', at: '' })).toBe('Latest: −1 Bean to Ana');
     });
 
     it('deal / escrow: positive is "from escrow", negative is "to escrow"', () => {
-        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: null })).toBe('Latest: +25 Beans from escrow');
-        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: null })).toBe('Latest: −25 Beans to escrow');
+        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: '' })).toBe('Latest: +25 Beans from escrow');
+        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: '' })).toBe('Latest: −25 Beans to escrow');
     });
 
     it('commons: positive is "from Commons", negative is "to Commons"', () => {
-        expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: null })).toBe('Latest: +10 Beans from Commons');
-        expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: null })).toBe('Latest: −10 Beans to Commons');
+        expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: '' })).toBe('Latest: +10 Beans from Commons');
+        expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: '' })).toBe('Latest: −10 Beans to Commons');
     });
 });

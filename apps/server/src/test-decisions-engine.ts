@@ -64,6 +64,7 @@ import {
     adminSetUserStatus,
     adminEmergencySuspend,
     adminLiftSuspension,
+    adminSetCreditFrozen,
     publicDecision,
 } from './state-engine.js';
 import * as decisionsEngine from './decisions-engine.js';
@@ -1160,6 +1161,30 @@ async function runDecisionsSuite() {
     testAssert(halEnd.status === 'failed' && statusOf(hal) === 'disabled',
         `No on Hal's pause vote leaves the community's own suspension in place (${halEnd.status}, ${statusOf(hal)}: ${halEnd.executionReason})`);
     retire(hal);
+    // A paused member whom a removal a member proposed puts in its grace window: the community has spoken, even with their
+    // credit unfrozen by an admin.
+    const kit = fresh('GraceKit');
+    const kitPause = pause(kit);
+    const removeKit = createDecision({ authorPubkey: authorD, title: 'Remove Kit', description: 'A removal a member proposes while Kit is paused', touches: 'member', effect: 'remove_member', subject: kit });
+    vote(removeKit.id, 4, 0);
+    testAssert(closeAndTick(removeKit.id).status === 'execution_pending_grace', 'setup: a member\'s removal of Kit, paused, passes into its grace window');
+    adminSetCreditFrozen(kit, false);
+    testAssert(!checkVoterEligibility(kit, other).ok && !countsIn(other.id, kit),
+        'A member in a removal\'s grace window votes on nothing and is in no electorate, whatever their credit says');
+    adminHaltDecision(removeKit.id, admin, 'Out of the way of the time travel below');
+    adminHaltDecision(kitPause.id, admin, 'Out of the way of the time travel below');
+    retire(kit);
+    // Only a pause's own vote (the node's, rule 2) keeps a paused member's vote: not a member's removal written with its
+    // marks, nor a removal vote of the node's without them.
+    const forgedHold = fresh('ForgedHold'), nodeNoRule = fresh('NodeNoRule');
+    for (const pk of [forgedHold, nodeNoRule]) db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(pk);
+    const forgedRow = insertStoredDecision({ author: authorD, effect: 'remove_member', touches: 'member', subject: forgedHold, params: { rule: 2, pausedBy: admin } });
+    const noRuleRow = insertStoredDecision({ author: 'SYSTEM', effect: 'remove_member', touches: 'member', subject: nodeNoRule, params: { pausedBy: admin } });
+    testAssert(!checkVoterEligibility(forgedHold, other).ok && !checkVoterEligibility(nodeNoRule, other).ok,
+        'Only the node\'s pause vote, marked rule 2, keeps a disabled member\'s vote');
+    testAssert(!countsIn(other.id, forgedHold) && !countsIn(other.id, nodeNoRule), 'and their place in the electorate');
+    for (const id of [forgedRow, noRuleRow]) adminHaltDecision(id, admin, 'Out of the way of the time travel below');
+    retire(forgedHold, nodeNoRule);
 
     // An older node's pause: a "Keep …'s suspension?" vote, its role held aside under it.
     const legacyPause = (callsign: string): { pk: string; id: string; role: any } => {
@@ -1249,15 +1274,20 @@ async function runDecisionsSuite() {
     testAssert(abeEnd.status === 'execution_blocked' && statusOf(abe) === 'active' && sameRole(abeRole, roleRow(abe)),
         `Its Yes is not carried out, and the pause lifts with the vote, his admin role back (${abeEnd.status}, ${statusOf(abe)}: ${abeEnd.executionReason})`);
     // Votes switched off before it closes: no vote removes anyone there, and the pause still ends.
-    const vic = fresh('VotesOffVic');
-    const vicVote = pause(vic);
+    const vic = fresh('VotesOffVic'), val = fresh('VotesOffVal');
+    const vicVote = pause(vic), valVote = pause(val);
     vote(vicVote.id, 4, 0);
     const votesOff = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     votesOff.run(`${NODE_PROFILE_KEY}.decisions`, 'false');
-    let vicEnd: any;
-    try { vicEnd = closeAndTick(vicVote.id); } finally { db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`); }
+    let vicEnd: any, valEnd: any;
+    try {
+        vicEnd = closeAndTick(vicVote.id);
+        valEnd = closeAndTick(valVote.id);
+    } finally { db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`); }
     testAssert(vicEnd?.status === 'unresolved' && statusOf(vic) === 'active' && /Community votes are switched off/.test(vicEnd?.executionReason ?? ''),
         `Votes switched off before it closed: nothing it decided is carried out, and the pause lifts (${vicEnd?.status}: ${vicEnd?.executionReason})`);
+    testAssert(valEnd?.status === 'unresolved' && statusOf(val) === 'active' && /Community votes are switched off/.test(valEnd?.executionReason ?? ''),
+        `One nobody voted on is never tallied there: it ends for the same reason (${valEnd?.status}: ${valEnd?.executionReason})`);
     // The grace window can't start (a write fails): the pause still ends with its vote.
     const gil = fresh('GraceGil');
     const gilVote = pause(gil);

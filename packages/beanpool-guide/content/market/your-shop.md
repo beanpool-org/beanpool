@@ -27,6 +27,10 @@ Each of these is one field. Fill them in any order, or not at all:
 - **About**: what it is, in a few words.
 - **How I deal**: where to pick things up, and when they come back.
 
+## How members see it
+
+Tap **See it as members do** on Your shop. It shows your shop as other members here see it: its name, kind and since when, your picture and trust level, About, the Offers you feature, its Offers in sections (**To buy**, **Book a time**, **To borrow**), How I deal, and a **Message** button that opens a chat with you. To change it, tap **Change your shop**.
+
 ## Putting Offers in it
 
 Only your own Offers for everyone here go in a shop. A Need, or an Offer for a group or one person, stays out.

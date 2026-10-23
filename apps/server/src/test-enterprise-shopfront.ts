@@ -21,7 +21,8 @@
  *      a crowdfund and a Commons proposal start with no About (their description is their purpose), their own edits
  *      (POST /api/crowdfund/projects/update, /api/commons/projects/update) leave the keepers' About as written, and
  *      their chat follows the rename those edits make
- *   4. the detail (GET /api/treasury/:t): `since` and `about`; each keeper's tier, rating, trades and the categories of
+ *   4. the detail (GET /api/treasury/:t): `since` and `about`; its shop as a member reads it at GET /api/shops/:id (its
+ *      kind and how it deals: S5's kind chip and "How we deal"), and to anyone else its kind and counts only; each keeper's tier, rating, trades and the categories of
  *      their own live Offers for everyone here (never a paused one, a Need, one for one person, an ended one); the
  *      enterprise's categories, the union with its own; every figure as the engine has it. Members only: unsigned, a key
  *      that is no member and a visitor's row get none of it (refused by the read gate with read auth on; with it off, the
@@ -292,6 +293,28 @@ async function main(): Promise<void> {
     const same = await call('PUT', kit, profilePath(ent), { about: sixHundred });
     assert(same.status === 200 && JSON.stringify(faceOf(ent)) === stillStamp, 'a PUT that changes nothing stamps nothing');
 
+    // A field sent back as it was stored is no change, though the form sends it trimmed and the row holds it as it was
+    // written (#2391 review): a crowdfund's description keeps its textarea's newline as its purpose (db.ts
+    // createCrowdfundProject), and a row an older seed filled keeps an About past 600 that nobody here wrote.
+    const cfTrail = (await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Trail Sentinel', description: 'Fix bikes for the street.\n', goalAmount: 100 })).body?.project?.id ?? '';
+    if (!cfTrail) throw new Error('setup: Lou could not start the crowdfund with a trailing newline');
+    adminAssignTreasuryOperator(cfTrail, kit.pk, 'admin');
+    const trailStored = faceOf(cfTrail);
+    const trailForm = await call('GET', kit, `/api/treasury/${cfTrail}`);
+    const kitForm = await call('PUT', kit, profilePath(cfTrail), { name: trailForm.body?.name ?? trailStored.callsign, purpose: trailForm.body?.purpose ?? trailStored.purpose, about: 'Open Saturdays.' });
+    assert(trailStored.purpose === 'Fix bikes for the street.\n' && kitForm.status === 200 && faceOf(cfTrail).bio === 'Open Saturdays.'
+        && faceOf(cfTrail).purpose === 'Fix bikes for the street.\n' && faceOf(cfTrail).callsign === 'Lou Trail Sentinel',
+        `a keeper who doesn't lead sends the whole form back with only a new About: About is written, the purpose stays as stored (${show(kitForm)}; ${JSON.stringify(faceOf(cfTrail).purpose)})`);
+    const legacyAbout = `${'Mended wheels. '.repeat(69)}\n`;
+    db.prepare('UPDATE members SET bio = ? WHERE public_key = ?').run(legacyAbout, cfTrail);
+    const legacyStamp = JSON.stringify(faceOf(cfTrail));
+    const louForm = await call('PUT', lou, profilePath(cfTrail), { name: trailStored.callsign, purpose: trailStored.purpose, about: legacyAbout });
+    assert(legacyAbout.length > 600 && louForm.status === 200 && JSON.stringify(faceOf(cfTrail)) === legacyStamp,
+        `the lead's untouched form over an About an older seed left past 600 is no change, not a refusal (${show(louForm)})`);
+    const louLogo = await call('PUT', lou, profilePath(cfTrail), { name: trailStored.callsign, purpose: trailStored.purpose, about: legacyAbout, avatar: png(90, 160, 90) });
+    assert(louLogo.status === 200 && faceOf(cfTrail).bio === legacyAbout && faceOf(cfTrail).photo?.startsWith('data:image/png;base64,') === true,
+        `and that form with a new logo saves the logo, leaving the About as it was (${show(louLogo)})`);
+
     // ── 3. the shop follows a rename ────────────────────────────────────────────────────────────
     console.log('\n── 3. the shop and the chat follow a rename ──');
     const chatBefore = await call('GET', kit, `/api/treasury/${ent}/thread`); // opened under the name it has now
@@ -390,6 +413,15 @@ async function main(): Promise<void> {
     assert(JSON.stringify(keeperOf(ownRead, rae.pk)?.offerCategories) === JSON.stringify(['food', 'tools']),
         'a keeper reading their own row gets the same live ones, not the one they paused');
 
+    // Its shop on its page (S5, round 3 §3: the kind chip and "How we deal"): what a member reads of it at GET /api/shops/:id.
+    const dressed = await call('PUT', kit, `/api/treasury/${ent}/shop`, { kind: 'repairs', howToDeal: 'Bring it by on a Saturday; pay in Beans when it works.' });
+    const withShop = await call('GET', max, `/api/treasury/${ent}`);
+    const shopAsRead = await call('GET', max, `/api/shops/${entShop}`);
+    assert(dressed.status === 200 && withShop.body?.shop?.id === entShop && withShop.body?.shop?.kind === 'repairs'
+        && withShop.body?.shop?.howToDeal === 'Bring it by on a Saturday; pay in Beans when it works.' && withShop.body?.shop?.enterprise === true
+        && JSON.stringify(withShop.body?.shop) === JSON.stringify(shopAsRead.body),
+        `the detail carries its shop as a member reads it at GET /api/shops/:id: its kind and how it deals (${show(dressed)} | ${JSON.stringify(withShop.body?.shop)?.slice(0, 200)})`);
+
     const badges = ['tier', 'rating', 'trades', 'offerCategories'];
     const strangers: Array<[string, Id | null]> = [['unsigned', null], ['a key that is no member', nemo], ["a visitor's row", vic]];
     for (const [who, id] of strangers) {
@@ -401,6 +433,8 @@ async function main(): Promise<void> {
             assert(r.status === 200 && Array.isArray(r.body?.keepers) && r.body.keepers.length === 4 && !('offerCategories' in r.body)
                 && r.body.keepers.every((k: any) => badges.every(f => !(f in k)) && typeof k.callsign === 'string' && typeof k.role === 'string') && !leaked,
                 `read auth off, ${who} gets the page with the keepers' names and roles and none of their badges or categories (${r.status}${leaked ? `; leaked ${leaked.join(',')}` : ''})`);
+            assert(JSON.stringify(Object.keys(r.body?.shop ?? {}).sort()) === JSON.stringify(['counts', 'id', 'kind']) && r.body.shop.kind === 'repairs',
+                `and of its shop the kind and counts only, as GET /api/shops/:id answers a visitor (${JSON.stringify(r.body?.shop)})`);
         } else {
             assert((r.status === 401 || r.status === 403) && !leaked && !Array.isArray(r.body?.keepers),
                 `${who} is refused the detail and gets none of it (${show(r)})`);

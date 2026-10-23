@@ -2978,8 +2978,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: '0.4rem', fontWeight: (conv.unreadCount || 0) > 0 ? 700 : 600, fontSize: '0.95rem' }}>
                                         <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{getConversationTitle(conv)}</span>
-                                        {/* The member's own request, not accepted yet (design §4.4): a small tag, and nothing more. */}
-                                        {conv.type === 'dm' && conv.request && conv.request.state !== 'accepted' && conv.request.from === identity.publicKey && (
+                                        {/* The member's own request, not accepted yet (design §4.4): a small tag, and nothing more.
+                                            Only once the chat has a line: the node makes the request's row at the open, before
+                                            they type, and nobody is asked anything until they write (engine/dm-requests.ts). */}
+                                        {conv.type === 'dm' && conv.request && conv.request.state !== 'accepted' && conv.request.from === identity.publicKey && conv.lastMsgType && (
                                             <span data-testid="request-tag" style={{
                                                 fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: '999px',
                                                 background: 'var(--bp-chip-accent-tint)', color: 'var(--bp-chip-accent-ink)', border: '1px solid var(--bp-chip-accent-border)',

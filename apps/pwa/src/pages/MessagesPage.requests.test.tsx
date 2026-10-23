@@ -569,6 +569,16 @@ describe('the sender\'s side', () => {
         await screen.findByText('Ann');
         expect(screen.queryByTestId('request-tag')).toBeNull();
     });
+
+    it('a chat opened but never written in carries no tag: nobody has been asked anything yet', async () => {
+        // The node makes the request's row at the open, before a line (#2392: "the request is made by that line, not by the
+        // open"), and lists the chat with no last line: `last_msg_type` from a LEFT JOIN on messages, null.
+        node.list = boList(pending());
+        node.list.conversations[0].lastMsgType = null;
+        render(<MessagesPage identity={idOf(bo)} />);
+        await screen.findByText('Ann');
+        expect(screen.queryByTestId('request-tag')).toBeNull();
+    });
 });
 
 describe('where requests are off', () => {

@@ -11,14 +11,31 @@
  * Kept in memory for this run only, read once, and only for the account it was asked for: a landing left over (the
  * node called the restored key a stranger, so the guard never reached its landing) is dropped when another account, or
  * none, is on the phone, so a later account never lands on it (PR #1357 confirmation, N1).
+ *
+ * One more: a claim waiting for the phone's first account ({@link landOnClaim}) lands on the claim screen, ahead of both.
  */
 
-export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
+/** The claim screen with a waiting claim's fields (utils/claim-link.ts `claimRouteFor`). */
+export type ClaimLanding = `/claim-community${string}`;
+
+export type MemberLanding = '/(tabs)' | '/(tabs)/settings' | ClaimLanding;
 
 /** The tabs' index: every landing from welcome but the one a screen asked for. */
 export const DEFAULT_MEMBER_LANDING: MemberLanding = '/(tabs)';
 
 let next: { to: MemberLanding; publicKey: string | null } | null = null;
+let claim: { to: ClaimLanding; until: number } | null = null;
+
+/**
+ * A claim waits for this phone's account (utils/onboarding-state.ts `PendingClaim`): until `until` (ms), every landing from
+ * welcome goes to the claim screen instead of the tabs, for whichever account the phone makes. Not taken once, unlike
+ * {@link landNextOn}: a restart part-way through still comes back to it, until the claim screen spends it or the member
+ * leaves it there and it is taken off the phone. Kept in step with the phone by the root layout (null once it is gone);
+ * never set by a screen.
+ */
+export function landOnClaim(to: { route: ClaimLanding; until: number } | null): void {
+    claim = to ? { to: to.route, until: to.until } : null;
+}
 
 /**
  * The guard's next landing from welcome goes to `to`. Call it before `setIdentity`, and don't navigate: the guard does.
@@ -31,14 +48,15 @@ export function landNextOn(to: MemberLanding, publicKey: string | null = null): 
 
 /**
  * The root guard's last check, for a member with an identity whose node has not said otherwise: on welcome or the bare
- * root, where to go (a landing asked for with `landNextOn`, taken once, else the tabs' index). Anywhere else, null:
- * stay, and leave a landing asked for untouched.
+ * root, where to go (a waiting claim's screen, {@link landOnClaim}; else a landing asked for with `landNextOn`, taken
+ * once; else the tabs' index). Anywhere else, null: stay, and leave a landing asked for untouched.
  */
-export function memberRedirect(segments: readonly string[], publicKey: string | null = null): MemberLanding | null {
+export function memberRedirect(segments: readonly string[], publicKey: string | null = null, now: number = Date.now()): MemberLanding | null {
     // Asked for another account than the one now on the phone: never used, whatever the route.
     if (next && next.publicKey !== null && next.publicKey !== publicKey) next = null;
     if (segments.length !== 0 && segments[0] !== 'welcome') return null;
-    const to = next?.to ?? DEFAULT_MEMBER_LANDING;
+    if (claim && !(now < claim.until)) claim = null;
+    const to = claim?.to ?? next?.to ?? DEFAULT_MEMBER_LANDING;
     next = null;
     return to;
 }

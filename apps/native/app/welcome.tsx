@@ -91,6 +91,7 @@ import { communitySwitched } from '../utils/community-switch';
 import { ConsentText } from '../components/ConsentText';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
+import { ClaimWaitingNote } from '../components/ClaimWaitingNote';
 import { Sentence } from '../components/Sentence';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
@@ -3502,6 +3503,8 @@ export default function WelcomeScreen() {
                     {/* The language, before anything else: a small switch, never a step (director amendment 2). */}
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
+                    {/* A claim waiting for this phone's account (app/claim-community.tsx): above the doors, read before one is chosen. */}
+                    <ClaimWaitingNote style={styles.claimWaitingNote} />
 
                     <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={openGlobalDoor} styles={styles} />
 
@@ -3549,6 +3552,8 @@ const styles = StyleSheet.create({
     homeMain: { width: '100%', alignItems: 'center' },
     // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
+    // A claim waiting for this account (components/ClaimWaitingNote.tsx): body ink on a card, readable in light and dark.
+    claimWaitingNote: { width: '100%', marginTop: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, color: colors.text.body, fontSize: 15, lineHeight: 21, textAlign: 'center', overflow: 'hidden' },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
     // The sentence about BeanPool, under the doors (it was the subtitle above them).
     homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },

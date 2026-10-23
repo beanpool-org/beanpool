@@ -170,6 +170,14 @@ describe('the root guard while the member is still setting up', () => {
         expect(setupRedirect(['welcome'], WIZARD_PENDING)).toBeNull();
     });
 
+    it('leaves the claim screen with no identity: the server\'s QR on a new phone says an account comes first (Dax, 23 Oct)', () => {
+        // Sent to welcome, the claim was lost and nothing said where to go. The screen claims nothing without an account.
+        expect(setupRedirect(['claim-community'], NO_IDENTITY)).toBeNull();
+        // A join wizard half done still comes first, as for every other root.
+        expect(setupRedirect(['claim-community'], WIZARD_PENDING)).toBe('/welcome');
+        expect(setupRedirect(['claim-community'], SET_UP)).toBeNull();
+    });
+
     it('does not act once the member is set up: the node-recognition checks decide, as before', () => {
         for (const segments of [...OTHER_ROOTS, ['welcome'], ['recover-identity'], ...PROVIDERS.map((p) => ['auth', p])]) {
             expect(setupRedirect(segments, SET_UP), segments.join('/') || '(empty)').toBeNull();

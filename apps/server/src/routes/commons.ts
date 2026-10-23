@@ -498,7 +498,9 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
         deps.broadcast?.({ type: 'project_deleted', projectId: id });
         ctx.body = { success: true };
     } catch (e: any) {
-        ctx.status = 400;
+        // Forge reliability fix: return 404 Not Found when project is missing, or 403 Forbidden when unauthorized.
+        const msg = String(e?.message || '');
+        ctx.status = msg.includes('Project not found') ? 404 : msg.includes('Unauthorized') ? 403 : 400;
         ctx.body = { error: memberErrorText(e, word('Failed to delete project')) };
     }
 });

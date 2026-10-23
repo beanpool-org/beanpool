@@ -167,3 +167,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
 **Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.
+
+## 2026-10-24 - [Missing 404/403 HTTP status on crowdfund project deletion errors]
+**Issue:** `POST /api/crowdfund/projects/delete` in `apps/server/src/routes/commons.ts` returned HTTP 400 Bad Request for all errors thrown by `deleteCrowdfundProject`, including "Project not found" and "Unauthorized to delete this project".
+**Learning:** Catch blocks that default to HTTP 400 for domain function errors obscure missing resource (404) or authorization (403) errors from API callers.
+**Pattern:** Inspect thrown error messages in route catch blocks (e.g. `msg.includes('Project not found') ? 404 : msg.includes('Unauthorized') ? 403 : 400`) to set accurate HTTP status codes.

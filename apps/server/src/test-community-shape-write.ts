@@ -15,7 +15,10 @@
  *      where the request leaves the node (requests to join and invites, the known floor and Beans).
  *   4. Every bad request answers 400 and writes nothing, the good changes beside a bad one included (all or nothing).
  *   5. The known floor: its own checks for the amounts, its own log kept too, and the shape reading the change once.
- *   6. The global kind, and a ledger that has moved.
+ *   6. The global kind, and a ledger that has moved. A pause in each (the open door set or not, the ledger moved or not):
+ *      taken only where nobody new then joins by any door and un-pausing puts every row and door back as it was; refused
+ *      (409, nothing written) where the open door is set, open (it would still take everyone) or shut by the ledger (a
+ *      pause only whoever runs the server could lift).
  *   7. A standby changes nothing (409), and what is written travels as before (the profile record, the community
  *      settings record, the log's plain rows).
  *   8. The old ways in: `acceptKnocks`, `dmRequests` and `door` on POST /api/local/admin/node/config are refused (400,
@@ -191,6 +194,43 @@ async function main(): Promise<void> {
     }
     const lockWhy = (sh: Shape, setting: keyof Shape['settings']) => (sh.settings[setting] as { lock: { why: string } | null } | undefined)?.lock?.why ?? '(no lock)';
 
+    // ── Paused, by every door (#2415 review r4360864333) ──────────────────────────────────────────
+    const configRows = () => JSON.stringify(db.prepare('SELECT key, value FROM node_config ORDER BY key').all());
+    /** Every way in, as the node's gates run it: the door, invites, requests to join, the open door and its 12 words. */
+    const doorsNow = () => {
+        const f = np.getNodeFeatures();
+        return JSON.stringify({ door: getDoor(), invites: f.invites, knocks: f.knocks, openJoin: f.openJoin, wordsDoor: f.wordsDoor });
+    };
+    const nobodyJoins = () => {
+        const f = np.getNodeFeatures();
+        return getDoor() !== 'open' && !f.invites && !f.knocks && !f.openJoin && !f.wordsDoor;
+    };
+    /**
+     * Paused and un-paused: while paused nobody new joins by any door, the shape reads paused (set and running, and no lock,
+     * so the owner can take it back), and members are told so; un-paused to the door it had, every row and every door is as
+     * it was before the pause, byte for byte (design §3.1).
+     */
+    async function pausesAndComesBack(label: string): Promise<void> {
+        const rowsBefore = configRows(), doorsBefore = doorsNow(), back = readShape().settings.join.configured;
+        const mk = noticeMark();
+        const p = await change({ join: 'paused' });
+        const j = p.body?.shape?.settings?.join;
+        assert(p.status === 200 && p.body?.told === 'members' && nobodyJoins() && j?.value === 'paused' && j?.configured === 'paused' && j?.lock === null,
+            `${label}: paused, and nobody new joins by any door (${show(p)}; ${doorsNow()})`);
+        assert(isDeepStrictEqual(toldEach(mk), [SENT('no new members are being taken for now.')]), `${label}: members are told no new members are being taken`);
+        const u = await change({ join: back });
+        assert(u.status === 200 && configRows() === rowsBefore && doorsNow() === doorsBefore,
+            `${label}: un-paused to ${back}, every row and every door as they were before the pause (${show(u)}; ${doorsNow()} vs ${doorsBefore})`);
+    }
+    /** Where the open door is set beside invites, members ↔ admins is still the owner's: the pause alone is refused. */
+    async function doorStillChosen(label: string): Promise<void> {
+        const back = readShape().settings.join.configured;
+        const to = back === 'admins' ? 'members' : 'admins';
+        const r = await change({ join: to });
+        assert(r.status === 200 && getDoor() === to, `${label}: who invites is still the owner's to choose (${show(r)})`);
+        await change({ join: back });
+    }
+
     // ── 1. Who ───────────────────────────────────────────────────────────────────────────────────
     console.log('── 1. only an owner changes how it works ──');
     const flip = { decisions: false };
@@ -264,6 +304,10 @@ async function main(): Promise<void> {
         `paused → any member with requests to join off, in one request: the lock it lifts doesn't refuse it (${show(lifted)})`);
     await refusedClean('pausing and changing requests to join in one request (invites_off)', () => change({ join: 'paused', knocks: true }), 409, 'invites_off');
     assert(np.getNodeFeatures().invites && getDoor() === 'members', 'and invites are as they were: nothing of it was written');
+    await pausesAndComesBack('a local community, the open door not set, the ledger never moved');
+    await change({ join: 'admins' });
+    await pausesAndComesBack('the same, only admins inviting');
+    await change({ join: 'members' });
 
     // Several at once: a line each, one alert, one notice with each members' rule.
     mark = logMark(); nMark = noticeMark(); aMark = alerts.length;
@@ -490,12 +534,41 @@ async function main(): Promise<void> {
     await refusedClean('and is then refused as a locked 12-words door is (private_preview)', () => change({ wordsDoor: false }), 409, 'private_preview', lockWhy(g, 'wordsDoor'));
     process.env.PRIVATE_PREVIEW = '';
     assert(np.getNodeFeatures().wordsDoor, 'the preview off, the 12-words door set on takes people');
+    // The open door set beside invites (an operator's nodeProfile.invites, as the boot warning tells them): a pause is
+    // invites off, which there reads as the open door, still taking everyone (#2415 review r4360864333).
+    setOverrideRow('invites', true);
+    g = readShape();
+    assert(g.settings.join.configured === g.settings.join.value && g.settings.join.configured !== 'open' && g.settings.join.lock === null && g.settings.openDoor.value,
+        `the global kind with invites set on: who invites is the door row's, and the open door takes people too (${JSON.stringify(g.settings.join)})`);
+    await refusedClean('pausing where the open door is set and open beside invites (profile)', () => change({ join: 'paused' }), 409, 'profile',
+        /anyone can also join through the open door/);
+    assert(np.getNodeFeatures().openJoin && np.getNodeFeatures().invites, 'and both doors are as they were');
+    await doorStillChosen('the global kind with invites set on');
+    setOverrideRow('invites', null);
     process.env.NODE_PROFILE = '';
+    setOverrideRow('openJoin', true);
+    g = readShape();
+    assert(g.settings.openDoor.value && g.settings.join.lock === null, `a local community whose own row sets the open door on: it takes people (${JSON.stringify(g.settings.openDoor)})`);
+    await refusedClean('pausing a local community whose own row sets the open door (profile)', () => change({ join: 'paused' }), 409, 'profile',
+        /anyone can also join through the open door/);
+    await doorStillChosen('a local community with the open door set');
+    setOverrideRow('openJoin', null);
 
     se.transfer('genesis', sam.pk, 5, 'the ledger moves', 'direct', true);
     np.forgetLedgerHistory();
     assert(np.ledgerHistory() !== null, 'the ledger has moved');
     await refusedClean('Beans off once the ledger has moved (ledger_moved)', () => change({ beans: false }), 409, 'ledger_moved', lockWhy(readShape(), 'beans'));
+    await pausesAndComesBack('a local community whose ledger has moved, the open door not set');
+    // The open door set and shut by the ledger: paused, invites off would read as that shut door, and a join set to the
+    // open door is one no owner may change, so the pause could never be taken back here.
+    setOverrideRow('openJoin', true);
+    g = readShape();
+    assert(!g.settings.openDoor.value && g.settings.openDoor.lock?.code === 'ledger_moved' && g.settings.join.lock === null,
+        `a local community whose own row sets the open door, the ledger moved: the door shut, who invites the owner's (${JSON.stringify(g.settings.join)})`);
+    await refusedClean('pausing where the open door is set and shut by the ledger (ledger_moved)', () => change({ join: 'paused' }), 409, 'ledger_moved',
+        /only whoever runs the server could take the pause back/);
+    await doorStillChosen('a local community with the open door set and shut');
+    setOverrideRow('openJoin', null);
     process.env.NODE_PROFILE = 'global';
     g = readShape();
     assert(g.settings.openDoor.lock?.code === 'ledger_moved', 'on the global kind the open door is shut for good');
@@ -513,6 +586,14 @@ async function main(): Promise<void> {
     await refusedClean('who can join where the open door is set and shut (ledger_moved)', () => change({ join: 'members' }), 409, 'ledger_moved', lockWhy(g, 'join'));
     const beansOnGlobal = await change({ beans: true });
     assert(beansOnGlobal.status === 200, `Beans on, once they have moved anyway, is no lock's to refuse (${show(beansOnGlobal)})`);
+    // The setup the boot warning tells an operator to use (node-profile.ts: "turn invites back on with nodeProfile.invites").
+    setOverrideRow('invites', true);
+    g = readShape();
+    assert(g.settings.join.configured !== 'open' && g.settings.join.lock === null && !g.settings.openDoor.value,
+        `the global kind with invites set on, the ledger moved: who invites is the owner's, the open door shut (${JSON.stringify(g.settings.join)})`);
+    await refusedClean('pausing the global kind with invites set on, its open door shut by the ledger (ledger_moved)', () => change({ join: 'paused' }), 409, 'ledger_moved',
+        /only whoever runs the server could take the pause back/);
+    await doorStillChosen('the global kind with invites set on, the ledger moved');
     clearOverrides();
     process.env.NODE_PROFILE = '';
 

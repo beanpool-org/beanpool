@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
+import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus, word } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -524,14 +524,14 @@ export function removeGroupThreadMessage(
 ): EventThreadMessage {
     loadGroupForThread(groupId);
     if (groupChatRole(groupId, actorPubkey) !== 'convenor') {
-        throw new Error('Only a convenor can remove messages from this group chat');
+        throw new Error(word('Only a convenor can remove messages from this group chat'));
     }
     // A convenor whose account is suspended removes nothing until it ends (the route answers 403 for "suspended").
     assertConvenorPowersActive(db, actorPubkey);
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
     // A line from before the convenor's membership is one they were never served: an id nobody has (groupLineHearers).
     if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error('Message not found');
-    if (msgRow.type === 'system') throw new Error('A system line cannot be removed');
+    if (msgRow.type === 'system') throw new Error(word('A system line cannot be removed'));
     // Already down — a second removal is a no-op success, and must not rewrite who took it down first (an
     // author who deleted their own line stays the author on the record, not this convenor).
     if (msgRow.type === 'removed') return groupChatMessageOf(msgRow, groupId);
@@ -637,7 +637,7 @@ export function postGroupThreadMessageFromSendRoute(
     metadata?: string,
 ): EventThreadMessage {
     if (typeof nonce !== 'string' || !nonce.startsWith(GROUP_NONCE_PREFIX)) throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
-    if (type !== 'text' || hasAttachment) throw new Error('Only text can be sent to a group chat');
+    if (type !== 'text' || hasAttachment) throw new Error(word('Only text can be sent to a group chat'));
     // What this route's metadata carries into the chat: the epoch, a reply, and the mentions the app declared, which the
     // node cuts to active members (§9). Reactions stay the node's to write.
     return postGroupThreadMessage(cb, groupId, authorPubkey, { ciphertext, nonce, metadata }, clientId);

@@ -13,8 +13,9 @@
  * - Only Beans from one person to another: a member's or a visitor's key to a member's, not an enterprise's or a system
  *   account's (withholdsNote). An enterprise's book is read by its keepers and the member on each line
  *   (routes/treasury.ts), so a note there is shared, as a line in its chat is. A block the community keeps is one made in
- *   the web app; a phone app's block stays on the phone, and the phone app shows BLOCKED_BEANS_NOTE in place of the note
- *   itself (@beanpool/core ledgerLineNote).
+ *   either app: the phone app's reaches it once the phone is connected (apps/native utils/blocklist.ts syncBlocks).
+ *   Until then, and on a node with no block list, the phone app shows BLOCKED_BEANS_NOTE in place of the note itself
+ *   (@beanpool/core ledgerLineNote).
  * - Local to this server, never in a copy (engine/replication-manifest.ts): a promoted standby has the row with no note,
  *   and the sender's own note is what a take-over loses, as with withheld lines. The signed request a send keeps
  *   (`auth_payload`, SRV-20) still holds the words it was signed with: it is the sender's signature, which a standby

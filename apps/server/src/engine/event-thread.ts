@@ -30,7 +30,7 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight } from './post-sight.js';
 import type { MessagingCallbacks } from './messaging.js';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, word } from '@beanpool/core';
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';
@@ -457,7 +457,7 @@ export function postEventThreadMessage(
     assertThreadMemberCanPost(authorPubkey);
 
     const cleanText = (text || '').trim();
-    if (!cleanText) throw new Error('Message text cannot be empty');
+    if (!cleanText) throw new Error(word('Message text cannot be empty'));
     if (cleanText.length > EVENT_THREAD_MESSAGE_MAX) {
         throw new Error(`Message is too long (maximum ${EVENT_THREAD_MESSAGE_MAX} characters)`);
     }
@@ -520,7 +520,7 @@ export function removeEventThreadMessage(
     // refusal says so (the route answers 403 for "suspended").
     if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
     if (!isEventHost(db, row, actorPubkey)) {
-        throw new Error('Only the host can remove messages from this event chat');
+        throw new Error(word('Only the host can remove messages from this event chat'));
     }
     // isEventHost goes by the post's author and the group's convenor row, and a prune keeps both: a pruned account,
     // or the old key of a member being re-keyed, removes nobody's line (and is answered with nobody).
@@ -530,7 +530,7 @@ export function removeEventThreadMessage(
         .get(messageId, postId) as any;
     if (!msgRow) throw new Error('Message not found');
     // The host's own "opened this chat to everyone going" stays: it is what tells everyone the earlier lines are open.
-    if (msgRow.type === 'system') throw new Error('A system line cannot be removed');
+    if (msgRow.type === 'system') throw new Error(word('A system line cannot be removed'));
 
     const ciphertext = Buffer.from(EVENT_THREAD_REMOVED_TEXT, 'utf8').toString('base64');
     let metaObj: any = {};

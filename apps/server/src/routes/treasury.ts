@@ -8,6 +8,8 @@
  *     the body) so it dodges the requireSignature spoof-guard, which pins body *pubkey fields to the
  *     signer; here the signer is the operator acting *on behalf of* the treasury.
  *   - Public reads: list treasuries + one treasury's detail (community transparency).
+ *   - Its face (PUT /api/treasury/:treasury/profile): About and the logo by any keeper, the name and purpose by the lead
+ *     (engine/enterprise-shopfront.ts; DESIGN-shops-round3-enterprise-shopfront-fable.md §4).
  */
 
 import Router from '@koa/router';
@@ -27,8 +29,9 @@ import {
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
-    passesReadGate, type KeeperJoinRequest,
+    passesReadGate, broadcast, type KeeperJoinRequest,
 } from '../state-engine.js';
+import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../engine/enterprise-shopfront.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
@@ -349,7 +352,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, bio, joined_at, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
@@ -388,6 +391,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor;
         const isOperator = !!(actor && canOperateTreasury(actor, treasury));
         const backingReader = backingReaderOf(actor);
+        // The shopfront's data (round 3 §4, §5): each keeper's badges and their live Offers' categories, and the
+        // enterprise's, to a member of this node only, whatever ENFORCE_READ_AUTH says (engine/enterprise-shopfront.ts).
+        const shopfront = shopfrontOf(treasury, treasuryKeepersForReader(treasury, backingReader), actor);
         // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
         // two people read (ledgerForReader): the keepers, and the member who wrote it or was paid.
         const flow = (db.prepare(
@@ -455,6 +461,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             earnedSurplus: m.earned_surplus ?? 0,
             workingCapitalCeiling: m.working_capital_ceiling ?? null,
             purpose: m.purpose ?? null,
+            // Its About, in its keepers' words, and when it started (round 3 §3: "since Sep 2026").
+            about: m.bio ?? null,
+            since: m.joined_at ?? null,
             goalAmount: m.goal_amount != null ? Number(m.goal_amount) : null,
             currentAmount,
             deadlineAt: m.deadline_at ?? null,
@@ -477,8 +486,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             locationUpdatedAt: m.location_updated_at ?? null,
             deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
-            // able to see who keeps what without asking an admin.
-            keepers: treasuryKeepersForReader(treasury, backingReader),
+            // able to see who keeps what without asking an admin. To a member, each with their tier, stars, trades and
+            // live Offers' categories; and the enterprise's categories, absent for anyone else.
+            keepers: shopfront.keepers,
+            ...(shopfront.offerCategories ? { offerCategories: shopfront.offerCategories } : {}),
             // Every known pledge as one total, unless the reader is an owner or admin (getEnterprisePledgesForReader).
             pledges: getEnterprisePledgesForReader(treasury, backingReader),
             isLeadOrSoleKeeperOrAdmin: actor ? isLeadOrSoleKeeperOrAdmin(treasury, actor) : false,
@@ -1248,6 +1259,31 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.delete('/api/treasury/:treasury/location', clearLocationHandler);
     router.post('/api/local/admin/treasury/:treasury/location', setLocationHandler);
     router.delete('/api/local/admin/treasury/:treasury/location', clearLocationHandler);
+
+    // ---- Its face (DESIGN-shops-round3-enterprise-shopfront-fable.md §4; Marty's answers of 23 Oct 2026) ----------------
+    // PUT { name?, purpose?, about?, avatar? }: any keeper (or a node admin) its About and logo; the lead keeper (the sole
+    // keeper, or a node admin) its name and purpose (engine/enterprise-shopfront.ts changeEnterpriseFace, which says why it
+    // refuses). Who may act is asked first, so nobody else learns anything of names from it. Each field is words or a
+    // picture other members see, so a muted keeper, or a muted enterprise, changes none (G3). Every member's app hears
+    // the enterprise's card changed, as a member's own edit is heard (its shop's name is read from it).
+    const profileHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
+        if (respondIfMuted(ctx, actor) || respondIfMuted(ctx, treasury)) return;
+        const { name, purpose, about, avatar } = (ctx as any).requestBody || {};
+        try {
+            const done = changeEnterpriseFace(treasury, actor, { name, purpose, about, avatar }, { lead: isLeadOrSoleKeeperOrAdmin(treasury, actor) });
+            if (done.changed) broadcast({ type: 'profile_updated', publicKey: treasury, profileUpdatedAt: done.face.profileUpdatedAt }, undefined, { ownCard: true });
+            ctx.body = { success: true, ...done.face, avatarUrl: avatarUrlOf(treasury, (db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(treasury) as { avatar_ref: string | null } | undefined)?.avatar_ref ?? null) };
+        } catch (e) {
+            if (e instanceof EnterpriseFaceRefusal) { ctx.status = e.status; ctx.body = { error: e.message, code: e.code }; return; }
+            if (respondProfileRefusal(ctx, e)) return;
+            throw e;
+        }
+    };
+    router.put('/api/treasury/:treasury/profile', profileHandler);
+    router.put('/api/enterprise/:treasury/profile', profileHandler);
 
     // Read-only accountability ledger (public to all node members)
     /**

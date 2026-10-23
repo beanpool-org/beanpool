@@ -134,6 +134,7 @@ import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { scrubServerFaults } from './routes/member-error-text.js';
+import { memberWordsOnTheWayOut } from './member-words.js';
 import { apiCompression, apiGzipFromEnv, API_GZIP_ENV } from './api-compression.js';
 import { tlsSendWindows } from './tls-send-window.js';
 import { CommonsPotUnknownError } from './engine/audit.js';
@@ -1227,6 +1228,11 @@ export async function startHttpsServer(port: number): Promise<number> {
     // so it compresses the final one: its work is after next(). API_GZIP=off in .env leaves it out altogether.
     if (apiGzipFromEnv()) app.use(apiCompression());
     else console.log(`🗜️  ${API_GZIP_ENV}=off: /api answers go out as the routes make them, not gzipped here.`);
+
+    // A refusal's sentence in the language the member's app names (X-Language), outside the operator's routes
+    // (member-words.ts). Before the fault scrub, so its work after next() runs after the scrub's: a fault's fixed words
+    // are translated too.
+    app.use(memberWordsOnTheWayOut());
 
     // A database, network or bug's text in an answer outside the operator's routes is a server fault: replaced by fixed
     // words and answered 500, over every route and gate below (routes/member-error-text.ts).

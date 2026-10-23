@@ -20,7 +20,7 @@ import {
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
-import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './nodes';
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -6688,10 +6688,28 @@ export async function redeemInvite(
         const memberAvatar = data.member?.avatarUrl ?? data.member?.avatar ?? null;
         const nodeHasPhoto = alreadyMember && isServableAvatarValue(memberAvatar);
 
+        // A member here now, new or not: no longer a guest visit (nodes.ts markGuestNode). Every invite join passes here,
+        // and not every screen that calls this clears the mark itself; while it stands, the next sync sends this community
+        // none of the phone's blocks (blocklist.ts). Each spelling the sync reads; never fails the join.
+        try {
+            const plain = anchorUrl.replace(/\/+$/, '');
+            for (const url of new Set([anchorUrl, plain, `${plain}/`])) await clearGuestNode(url);
+        } catch (e) {
+            console.warn('[DB] Could not clear the guest mark for this community', e);
+        }
+
         if (alreadyMember) {
             console.log('[DB] ℹ️ User is already a registered member of this community.');
         } else {
             console.log('[DB] ✅ Invite redeemed successfully!');
+            // A new member here keeps no block list here yet, whatever the phone once sent to this address (a node set up
+            // again there): the next sync sends the phone's blocks (blocklist.ts). Not waited for; never fails the join.
+            try {
+                const { communityKeepsNoBlocks } = await import('./blocklist');
+                void communityKeepsNoBlocks(identity.publicKey, anchorUrl);
+            } catch (e) {
+                console.warn('[DB] Could not tell the block list this is a new member here', e);
+            }
         }
         return { success: true, alreadyMember, nodeHasPhoto };
     } catch (e: any) {

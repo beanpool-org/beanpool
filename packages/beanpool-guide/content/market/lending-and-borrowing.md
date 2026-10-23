@@ -36,6 +36,8 @@ Someone who wants to borrow it asks through the Offer, as for any Offer, and you
 
 **Take out of your shop** pauses its Offer. **Put back in your shop** puts the same Offer back in the Market.
 
+A thing taken out of your shop can have its Offer back in the Market without the Tool shed: you put it back up in the Market itself, or you reopened a shop that was holding it. The thing then says **Its Offer is up in the Market again**: tap **Put back in your shop** and the Tool shed shows it in your shop too. If someone borrows it meanwhile, it says **Out on a loan** and is in **Loans**.
+
 If your shop is closed for now, nothing goes back in it until you reopen it: **Put back in your shop** says so, and changes nothing. **Take out of your shop** is not there while it is closed. A thing you lend outside BeanPool or delete while it is closed keeps its Offer off the Market when you reopen, and so does one you took out before you closed it.
 
 ## Lending it outside BeanPool

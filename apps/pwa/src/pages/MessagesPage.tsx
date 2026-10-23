@@ -12,8 +12,10 @@ import {
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
-    type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry,
+    type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry, type DmRequestEntry,
 } from '../lib/api';
+import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
+import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
@@ -116,6 +118,8 @@ interface Props {
     openConversationId?: string | null;
     onConversationOpened?: () => void;
     onNavigate?: (tab: string, contextId?: string) => void;
+    /** A person's profile: a request's sender, from their card or the chat's header in request mode. */
+    onOpenProfile?: (pubkey: string) => void;
 }
 
 /** Resize/compress a picked image to a JPEG data URI (keeps attachments light). */
@@ -224,8 +228,13 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
     return <img src={uri} alt="" style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />;
 }
 
-export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate }: Props) {
+export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile }: Props) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
+    // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
+    // null where the community has requests off (its list has no `requests`).
+    const [requests, setRequests] = useState<{ count: number; conversations: DmRequestEntry[] } | null>(null);
+    // Their cards' lines as read, kept here so a chat opened from a card and Back reads none of them again.
+    const requestPreviews = useRequestPreviews();
     // A listing the viewer has a conversation about is not applied from the live feed: this list shows its title
     // and status, and only the refresh re-reads them, so the change rings the doorbell (lib/live-posts).
     // Set in the commit, not in a later effect, so a push landing in between is tested against this list.
@@ -234,6 +243,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => registerLivePostTie(conversationTie(() => conversationsRef.current)), []);
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
+    // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
+    useEffect(() => { if (!requests && activeTab === 'requests') setActiveTab('all'); }, [requests, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
@@ -252,7 +263,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [showNewDm, setShowNewDm] = useState(false);
     // Who this page can name: the member directory, or on a community where people are asked for, not read whole
     // (lib/members-on-demand, the worldwide one), the cards asked for by key, as the page needs them (below).
-    const [members, setMembers] = useState<Array<Pick<Member, 'publicKey' | 'callsign' | 'avatarUrl'>>>([]);
+    const [members, setMembers] = useState<Array<Pick<Member, 'publicKey' | 'callsign' | 'avatarUrl'> & { joinedAt?: string }>>([]);
     const membersOnDemand = useMembersOnDemand();
     const membersOnDemandRef = useRef<boolean | null>(null);
     membersOnDemandRef.current = membersOnDemand;
@@ -295,12 +306,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Why the last paste or drop went nowhere — shown inline above the composer.
     const [imageNotice, setImageNotice] = useState<string | null>(null);
     // The node's own words when it refused a message or a new conversation: a new account's limit (429
-    // probation_limit) or a moderation pause (403 moderation_muted). Shown in place, the draft kept.
+    // probation_limit), a moderation pause (403 moderation_muted) or an account's pause, which opens no new
+    // conversation (403 paused). Shown in place, the draft kept.
     const [chatRefusal, setChatRefusal] = useState<string | null>(null);
     /** A failed send or opening: the node's refusal in place, anything else as before. */
     function showChatError(err: any, fallback: string) {
         const refusal = nodeRefusal(err);
+        const waiting = requestPendingRefusal(err);
         if (refusal) setChatRefusal(refusal.message);
+        else if (waiting) {
+            // The opener's request still waits (lib/dm-requests.ts): the node's words, and the chat read again, so the
+            // composer shows it waiting.
+            setChatRefusal(waiting);
+            const id = activeConvIdRef.current;
+            if (id) void loadMessages(id);
+        }
         else alert(err?.message || fallback);
     }
     const [dragActive, setDragActive] = useState(false);
@@ -325,6 +345,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (isGroupChat && !openGroup) return [];
         return messages;
     }, [messages, isDmThread, isGroupChat, openGroup]);
+    // The open chat's message request mode (lib/dm-requests.ts): read from the node's `request` and, for the opener, the
+    // loaded lines of this chat only (never the last chat's, still in `messages` until this one's arrive): until they do,
+    // the opener's is not known, rather than taken for one with no line in it yet.
+    const requestMode = requestModeOf(activeConv, identity.publicKey, activeConv && loadedDmId === activeConv.id ? shownMessages : null);
     // Each line of a locked group chat as drawn (lib/group-chat-lines.ts groupLineShown): a sealed line under the name of
     // the key that signed it, a node line in the app's words, anything else nobody's. Null for every other chat.
     const groupShown = useMemo(() => {
@@ -552,12 +576,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return c;
             });
             setConversations(filtered);
+            // The requests waiting for this member, apart (lib/dm-requests.ts): direct chats only, never from someone
+            // blocked here. Where requests are off the list has none, and there is no Requests pill.
+            const heldRequests = (result.requests?.conversations || [])
+                .map((c: DmRequestEntry) => holdConversation(c, locked))
+                .filter((c: DmRequestEntry) => c.type === 'dm' && !(c.participants || []).some(p => p !== identity.publicKey && blocked.has(p)));
+            const leftOut = (result.requests?.conversations || []).length - heldRequests.length;
+            setRequests(result.requests ? { count: Math.max(heldRequests.length, (result.requests.count || 0) - leftOut), conversations: heldRequests } : null);
             // The member's own deals only where deals are not in preview (lib/features readsOwn).
             if (await readsOwn('escrow')) setUserTransactions(await getMyMarketplaceTransactions(identity.publicKey));
             setActiveConv(prev => {
                 if (!prev) return null;
-                const fresh = held.find(c => c.id === prev.id);
-                return fresh ? { ...prev, ...fresh } : prev;
+                const fresh = held.find(c => c.id === prev.id) ?? heldRequests.find(c => c.id === prev.id);
+                return fresh ? { ...prev, ...fresh, request: requestAfterRead(prev.request, fresh) } : prev;
             });
         } catch { /* offline */ }
     }
@@ -571,6 +602,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 const locked = await lockedGroupsOrNull(identity.publicKey);
                 const held = (result.conversations || []).map((c: Conversation) => holdConversation(c, locked));
                 let conv = held.find((c: Conversation) => c.id === openConversationId);
+                // A request waiting for this member, opened by its id (its push): in request mode, never asked for again,
+                // which would accept it (lib/dm-requests.ts).
+                if (!conv) conv = (result.requests?.conversations || []).map((c: Conversation) => holdConversation(c, locked))
+                    .find((c: Conversation) => c.id === openConversationId && c.type === 'dm');
                 if (!conv) {
                     conv = held.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
                 }
@@ -585,7 +620,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         if (created.conversation && !conv) setChatRefusal(GROUP_HOLD_STARTED_DM_TEXT);
                         await loadConversations();
                     } catch (e) {
-                        // Offline stays quiet; the node refusing to open it (a new account's limit) says why.
+                        // Offline stays quiet; the node refusing to open it (a new account's limit, an account's pause)
+                        // says why. Every way in by someone's key lands here: a profile's Message and Collaborate, People.
                         const refusal = nodeRefusal(e);
                         if (refusal) setChatRefusal(refusal.message);
                     }
@@ -738,6 +774,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     return {
                         ...prev,
                         ...heldConv,
+                        request: requestAfterRead(prev.request, heldConv),
                         peerLastReadAt: isDm
                             ? (peerCursor?.lastReadAt ?? (heldConv as any).peerLastReadAt ?? prev.peerLastReadAt)
                             : null,
@@ -807,7 +844,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
         } catch (err: any) {
             console.error('Failed to react:', err);
-            alert(err.message || t('Failed to react to message'));
+            const waiting = requestPendingRefusal(err);
+            if (waiting) setChatRefusal(waiting);
+            else alert(err.message || t('Failed to react to message'));
             await loadMessages(activeConv.id);
         }
     }
@@ -826,6 +865,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         for (const m of messages) if (m.authorPubkey) wanted.push(m.authorPubkey);
         if (activeConv) wanted.push(...(activeConv.participants || []));
         for (const c of conversations) if (c.type === 'dm' && !c.peerCallsign) wanted.push(...(c.participants || []));
+        // A request's sender, for when they joined on its card (the requests on screen only).
+        if (activeTab === 'requests') for (const c of requests?.conversations.slice(0, REQUEST_CARDS_SHOWN) ?? []) wanted.push(...(c.participants || []));
         const missing = wanted.filter(k => k !== identity.publicKey && !blocked.has(k) && !held.has(k) && !askedKeysRef.current.has(k));
         for (const batch of memberKeysBatches(missing)) {
             batch.forEach(k => askedKeysRef.current.add(k));
@@ -834,12 +875,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     if (cards.length === 0) return;
                     setMembers(prev => {
                         const have = new Set(prev.map(m => m.publicKey));
-                        return [...prev, ...cards.filter(c => !have.has(c.publicKey)).map(c => ({ publicKey: c.publicKey, callsign: c.callsign, avatarUrl: c.avatarUrl ?? null }))];
+                        return [...prev, ...cards.filter(c => !have.has(c.publicKey)).map(c => ({ publicKey: c.publicKey, callsign: c.callsign, avatarUrl: c.avatarUrl ?? null, joinedAt: c.joinedAt }))];
                     });
                 })
                 .catch(() => { batch.forEach(k => askedKeysRef.current.delete(k)); });
         }
-    }, [membersOnDemand, conversations, messages, activeConv, members, identity.publicKey]);
+    }, [membersOnDemand, conversations, messages, activeConv, members, identity.publicKey, activeTab, requests]);
 
     async function loadMembers() {
         // With members on demand nothing is read whole: a block takes the person's card out of what is held.
@@ -895,7 +936,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const result = await getConversationMessages(conv.id);
             if (!result.conversation) return conv;
             const held = holdConversation(result.conversation, await lockedGroupsOrNull(identity.publicKey), result.messages);
-            setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...held } : prev));
+            setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...held, request: requestAfterRead(prev.request, held) } : prev));
             return { ...conv, ...held };
         } catch {
             return conv;
@@ -971,6 +1012,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         await loadMessages(conv.id);
     }
 
+    /**
+     * The node took a new line of this member's in `convId`: where it said their next line was their request's, that was
+     * it, so the chat waits now, before the read after it lands or if it never does (lib/dm-requests.ts requestAfterOwnLine).
+     */
+    function ownLineTaken(convId: string) {
+        setActiveConv(prev => {
+            if (!prev || prev.id !== convId) return prev;
+            const request = requestAfterOwnLine(prev.request, identity.publicKey);
+            return request === prev.request ? prev : { ...prev, request };
+        });
+    }
+
     async function handleSend() {
         if (!draft.trim() || !activeConv) return;
         setSending(true);
@@ -1027,6 +1080,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }
                 // 1. Store locally (Server will handle Libp2p federation relay automatically)
                 await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
+                ownLineTaken(activeConv.id);
 
                 setDraft('');
                 setReplyToMessage(null);
@@ -1070,6 +1124,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
+            ownLineTaken(activeConv.id);
             setReplyToMessage(null);
             setChatRefusal(null);
             await loadMessages(activeConv.id);
@@ -1108,6 +1163,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (activeConv.type !== 'dm') {
             clearPendingImage();
             setImageNotice(t('Photos can only be sent in direct messages'));
+            return;
+        }
+
+        // Nor while a message request waits for this member, or for the other to accept, or while the opener's chat is still
+        // being read (lib/dm-requests.ts): a paste goes nowhere then, as a drop does, and the 📎 is hidden.
+        if (!requestTakesPhoto(requestMode)) {
+            clearPendingImage();
             return;
         }
 
@@ -1176,6 +1238,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         dragDepthRef.current = 0;
         setActiveEditNoticeId(null);
     }, [activeConv?.id]);
+
+    // A picture waiting for Send goes once the chat takes none: the opener's line found in it when its read lands, or a
+    // request waiting for this member. Its Send would only be refused under the sentence saying they can't yet.
+    useEffect(() => {
+        if (!requestTakesPhoto(requestMode)) clearPendingImage();
+    }, [requestMode]);
 
     // What decryptMessage() puts in place of a body it could not read. A photo's
     // body is its caption, so these must never be shown as one.
@@ -1495,10 +1563,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             ? (activeConv.participants?.find(p => p !== identity.publicKey) || '')
             : '';
         const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
+        const inRequest = requestMode !== 'none';
 
         // Dropping onto a blocked conversation would only produce a message the
-        // person cannot send, so the chat takes no drops at all while blocked.
-        const acceptsDrop = !isPeerBlocked;
+        // person cannot send, so the chat takes no drops at all while blocked; nor
+        // while a request waits for this member to decide, or for the other to accept,
+        // or while the opener's chat is still being read (its 📎 is hidden then too).
+        const acceptsDrop = !isPeerBlocked && requestTakesPhoto(requestMode);
 
         return (
             <div
@@ -1590,6 +1661,25 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </span>
                                 </>
                             );
+                            // A request waiting for this member: the sender's profile one tap away (design §4.5).
+                            if (requestMode === 'to-me' && peerPubkey && onOpenProfile) {
+                                return (
+                                    <button
+                                        type="button"
+                                        data-testid="request-header-profile"
+                                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
+                                        onClick={() => onOpenProfile(peerPubkey)}
+                                        aria-label={t("{name}, see {name}'s profile", { name: title })}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
+                                            minHeight: '44px', padding: '0 0.25rem', background: 'none', border: 'none',
+                                            color: 'inherit', font: 'inherit', cursor: 'pointer', borderRadius: '0.5rem',
+                                        }}
+                                    >
+                                        {body}
+                                    </button>
+                                );
+                            }
                             if (!ownerTab || !onNavigate) return <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>{body}</div>;
                             return (
                                 <button
@@ -1985,7 +2075,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const uniqueEmojis = Object.keys(reactionCounts);
                         const totalReactionsCount = reactions.length;
                         const myReaction = reactions.find((r: any) => r && r.author === identity.publicKey);
-                        const showEmojiPicker = activeEmojiPickerId === msg.id;
+                        const showEmojiPicker = !inRequest && activeEmojiPickerId === msg.id;
                         const isTopMessage = index < 2;
 
                         return (
@@ -2120,6 +2210,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             // invisible to the person who typed it.
                                             const body = decryptMessage(msg).trim();
                                             const caption = UNREADABLE_BODIES.includes(body) ? '' : body;
+                                            // A request waiting for this member: the photo stays closed, and isn't even
+                                            // fetched, until they accept (design §4.6). Its caption is words, and reads.
+                                            if (requestMode === 'to-me') {
+                                                return (
+                                                    <>
+                                                        <span style={{ fontStyle: 'italic', opacity: 0.8 }}><span aria-hidden="true">🖼️ </span>{closedPhotoWords()}</span>
+                                                        {caption && (
+                                                            <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                                                {caption}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            }
                                             return (
                                                 <>
                                                     <ChatImageBubble
@@ -2174,6 +2278,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 {readByPeer ? '✓✓' : '✓'}
                                             </span>
                                         )}
+                                        {/* No replies or reactions in a chat that is still a request: the opener's are
+                                            refused until it is accepted, and the person it is for decides first. */}
+                                        {!inRequest && <>
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); handleStartReply(msg); }}
@@ -2224,6 +2331,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             {t('React')}
                                         </button>
+                                        </>}
                                         {canEdit && (
                                             <button
                                                 type="button"
@@ -2511,7 +2619,51 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {t('Unblock')}
                         </button>
                     </div>
+                ) : requestMode === 'to-me' ? (
+                    // Request mode (design §4.5): the lines read above, and in place of the composer the card's three
+                    // buttons. Report is in the header. Nothing is written until the node takes the decision.
+                    <div data-testid="request-mode" style={{
+                        padding: '0.75rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
+                    }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)', overflowWrap: 'anywhere' }}>
+                            {t('{name} wants to message you', { name: getConversationTitle(activeConv) })}
+                        </p>
+                        <p style={{ margin: '0.25rem 0 0.6rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            {t('Accept to reply. If you ignore it, they are not told.')}
+                        </p>
+                        <RequestActions
+                            conversationId={activeConv.id}
+                            peerPubkey={peerPubkey}
+                            peerName={getConversationTitle(activeConv)}
+                            identity={identity}
+                            onAccepted={(request) => {
+                                const id = activeConv.id;
+                                setActiveConv(prev => (prev && prev.id === id ? { ...prev, request } : prev));
+                                void loadConversations();
+                            }}
+                            onIgnored={() => { setActiveConv(null); setActiveTab('requests'); void loadConversations(); }}
+                            onBlocked={() => { setActiveConv(null); setActiveTab('requests'); void loadConversations(); }}
+                        />
+                    </div>
+                ) : requestMode === 'mine-waiting' && !editingMessage ? (
+                    // The opener's line is in: what happens now, honestly, and nothing the node didn't say (an ignore and a
+                    // block read as a request nobody has opened yet). Their own line still edits, from its bubble.
+                    <div role="status" data-testid="request-waiting" style={{
+                        padding: '0.75rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
+                        fontSize: '0.85rem', color: 'var(--text-secondary)', overflowWrap: 'anywhere',
+                    }}>
+                        {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
+                    </div>
                 ) : (
+                    <>
+                    {requestMode === 'mine-unsent' && (
+                        <div data-testid="request-first-line" style={{
+                            padding: '0.5rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
+                            fontSize: '0.8rem', color: 'var(--text-secondary)', overflowWrap: 'anywhere',
+                        }}>
+                            {t('Your first message goes to {name} as a request. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
+                        </div>
+                    )}
                     <div style={{
                         display: 'flex', gap: '0.5rem',
                         padding: '0.5rem 1rem',
@@ -2519,7 +2671,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         borderTop: '1px solid var(--border-primary)',
                         background: 'var(--bg-secondary)',
                     }}>
-                        {activeConv.type === 'dm' && (
+                        {activeConv.type === 'dm' && requestTakesPhoto(requestMode) && (
                             <label title={t('Send photo')} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: '40px', height: '40px', borderRadius: '50%',
@@ -2595,6 +2747,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {sending ? '…' : (editingMessage ? '✓' : '↑')}
                         </button>
                     </div>
+                    </>
                 )}
 
                 {reportTarget && (
@@ -2628,6 +2781,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         { id: 'direct', label: t('Direct'), count: 0 },
         { id: 'groups', label: t('Groups'), count: groupsUnread },
     ];
+    // Requests (lib/dm-requests.ts): only where the community has them on and one is waiting, or while it is open (so it
+    // doesn't vanish under the member as they decide the last). Its count is its own, never in the unread ones.
+    const requestCount = requests?.count ?? 0;
+    if (requests && (requestCount > 0 || activeTab === 'requests')) filterChips.push({ id: 'requests', label: t('Requests'), count: requestCount });
+    const showingRequests = activeTab === 'requests' && !!requests;
+    // When a person joined, on a request card, where this page holds their card.
+    const joinedWordsOf = (pubkey: string): string | null => {
+        const joinedAt = membersByPublicKey.get(pubkey)?.joinedAt;
+        const date = joinedAt ? conversationDate(joinedAt) : '';
+        return date ? t('Joined {date}', { date }) : null;
+    };
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
@@ -2658,12 +2822,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             <div className="scrollbar-none" data-testid="conversation-filter-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)', paddingBottom: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 {filterChips.map(chip => {
                     const active = activeTab === chip.id;
+                    const isRequests = chip.id === 'requests';
                     return (
                         <button
                             key={chip.id}
                             onClick={() => setActiveTab(chip.id)}
                             aria-pressed={active}
-                            aria-label={chip.count > 0 ? t('{label}, {count} unread', { label: chip.label, count: chip.count }) : undefined}
+                            aria-label={chip.count > 0
+                                ? (isRequests
+                                    ? tn(chip.count, 'Requests, {n} person wants to message you', 'Requests, {n} people want to message you')
+                                    : t('{label}, {count} unread', { label: chip.label, count: chip.count }))
+                                : undefined}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', background: active ? 'var(--text-primary)' : 'var(--bg-hover)', color: active ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                         >
                             {chip.label}
@@ -2672,7 +2841,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     aria-hidden="true"
                                     data-testid={`conversation-filter-count-${chip.id}`}
                                     style={{
-                                        background: 'var(--danger)', color: 'var(--on-danger)', fontSize: '0.7rem', fontWeight: 800,
+                                        // Requests' count is not unread lines: the sage accent, not the unread red.
+                                        background: isRequests ? 'var(--bp-accent-fill)' : 'var(--danger)', color: isRequests ? 'var(--bp-accent-on)' : 'var(--on-danger)', fontSize: '0.7rem', fontWeight: 800,
                                         minWidth: '18px', height: '18px', borderRadius: '9px', display: 'inline-flex', alignItems: 'center',
                                         justifyContent: 'center', padding: '0 5px', lineHeight: 1,
                                     }}
@@ -2702,7 +2872,27 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 />
             )}
 
-            {activeTab === 'groups' && !hasGroups ? (
+            {showingRequests ? (
+                <MessageRequestsList
+                    entries={requests!.conversations}
+                    count={requestCount}
+                    identity={identity}
+                    store={requestPreviews}
+                    avatar={renderAvatar}
+                    joinedWordsOf={joinedWordsOf}
+                    onOpen={(entry) => { setActiveConv(entry); loadMembers(); }}
+                    onOpenProfile={onOpenProfile}
+                    onAccepted={(entry, request) => {
+                        // Accepted: an ordinary chat now, opened (design §4.5), found under All when they come back.
+                        setActiveTab('all');
+                        setActiveConv({ ...entry, request });
+                        loadMembers();
+                        void loadConversations();
+                    }}
+                    onChanged={() => { void loadConversations(); }}
+                    onReport={(pubkey, name) => setReportTarget({ pubkey, name })}
+                />
+            ) : activeTab === 'groups' && !hasGroups ? (
                 // On a card as the list is, so the words never sit on the page's doodles.
                 <div data-testid="groups-empty" style={{ textAlign: 'center', padding: '2rem 1.25rem', background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '1rem' }}>
                     <p aria-hidden="true" style={{ fontSize: '2.75rem', margin: 0 }}>🌻</p>
@@ -2829,8 +3019,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 )}
     
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: (conv.unreadCount || 0) > 0 ? 700 : 600, fontSize: '0.95rem' }}>
-                                        {getConversationTitle(conv)}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: '0.4rem', fontWeight: (conv.unreadCount || 0) > 0 ? 700 : 600, fontSize: '0.95rem' }}>
+                                        <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{getConversationTitle(conv)}</span>
+                                        {/* The member's own request, not accepted yet (design §4.4): a small tag, and nothing more.
+                                            Only once the chat has a line: the node makes the request's row at the open, before
+                                            they type, and nobody is asked anything until they write (engine/dm-requests.ts). */}
+                                        {conv.type === 'dm' && conv.request && conv.request.state !== 'accepted' && conv.request.from === identity.publicKey && conv.lastMsgType && (
+                                            <span data-testid="request-tag" style={{
+                                                fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: '999px',
+                                                background: 'var(--bp-chip-accent-tint)', color: 'var(--bp-chip-accent-ink)', border: '1px solid var(--bp-chip-accent-border)',
+                                            }}>
+                                                {t('request', undefined, "tag: the member's own message request, still waiting")}
+                                            </span>
+                                        )}
                                     </div>
                                     {/* The listing's title, then its status: the status drops under the title rather than squeezing it
                                         (a longer language's status at 320 px left the title a few pixels wide). */}
@@ -2866,6 +3067,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             );
                         })}
                 </div>
+            )}
+
+            {/* A request card's 🚩 Report (the chat has its own, in its header). */}
+            {reportTarget && (
+                <ReportModal
+                    isOpen={!!reportTarget}
+                    onClose={() => setReportTarget(null)}
+                    reporterPubkey={identity.publicKey}
+                    targetPubkey={reportTarget.pubkey}
+                    targetName={reportTarget.name}
+                />
             )}
         </div>
     );

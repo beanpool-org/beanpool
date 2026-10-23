@@ -46,7 +46,7 @@
  * applicant's status and the members' list still read on a standby, from its copy.
  */
 import Router from '@koa/router';
-import { mayBringSomeoneIn, readsAsMember, assertMemberActive, getNodeRole } from '../state-engine.js';
+import { mayBringSomeoneIn, isNodeMember, readsAsMember, assertMemberActive, getNodeRole } from '../state-engine.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { getConfiguredSwitches, getProfileSwitches } from '../config/node-profile.js';
 import { avatarValueRefusal, photoRefusalText } from '../engine/avatar.js';
@@ -94,8 +94,9 @@ function signer(ctx: any, unsignedMessage: string): string | null {
 function answeringMember(ctx: any): string | null {
     const key = signer(ctx, word('A signed request is required.'));
     if (!key) return null;
-    // Answering brings someone in (or shuts them out): not a visitor's row, which gets a non-member's answer.
-    if (!mayBringSomeoneIn(key)) {
+    // Answering brings someone in (or shuts them out): not a visitor's row, which gets a non-member's answer. A member
+    // whose account is paused, whom the invite test refuses too, is told so in their own words, as before.
+    if (!isNodeMember(key)) {
         answer(ctx, 403, word('Only a member of this community can see or answer requests to join.'), 'not_member');
         return null;
     }
@@ -103,6 +104,10 @@ function answeringMember(ctx: any): string | null {
         assertMemberActive(key);
     } catch {
         answer(ctx, 403, word('Your account here is suspended, so you can’t answer requests to join.'), 'not_active');
+        return null;
+    }
+    if (!mayBringSomeoneIn(key)) {
+        answer(ctx, 403, word('Only a member of this community can see or answer requests to join.'), 'not_member');
         return null;
     }
     return key;

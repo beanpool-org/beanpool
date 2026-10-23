@@ -12,6 +12,10 @@
  *   512 bytes serialised, the whole value ≤ 8 KB, ids unique. {@link checkHomeLayout} refuses a value over any bound
  *   whole (the node's write); {@link readHomeLayout} keeps what it can (a stored value, an answer).
  * - **Never in the list:** `needs` and `community` (always drawn), the per-device Tips record and hint flags.
+ * - **How it is drawn** (`view`, scratch/global-node/DESIGN-home-wide-and-content-fable.md D1, slice W0): the columns the
+ *   member chose for a wide screen, `view.columns` 'auto' | 1 | 2. Absent until they choose, which is Auto. Read tolerantly
+ *   (anything else is Auto, a view that is no object is none), refused on a write when malformed, and kept by every edit
+ *   of the list and by Reset: columns are no card. The web reads it; the phone, one column always, carries it.
  *
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone, barrel-is-universal.test.ts).
  */
@@ -30,6 +34,16 @@ export interface HomeCardInstance {
     settings?: Record<string, unknown>;
 }
 
+/** How many columns a Home stands in on a wide screen (D1): Auto fills the width with up to three; One; Two wide. */
+export const HOME_COLUMN_CHOICES = ['auto', 1, 2] as const;
+export type HomeColumns = (typeof HOME_COLUMN_CHOICES)[number];
+
+/** How a member's Home is drawn rather than what is on it. Any other key is a newer app's and rides along, as an unknown card does. */
+export interface HomeLayoutView {
+    columns: HomeColumns;
+    [later: string]: unknown;
+}
+
 /** A member's Home as kept on their account (version 2). */
 export interface HomeLayoutV2 {
     v: 2;
@@ -38,6 +52,8 @@ export interface HomeLayoutV2 {
     /** When the member put away a card that comes back on a schedule (only `safety`), by instance id. */
     dismissed: Record<string, string>;
     updatedAt: string | null;
+    /** The columns they chose (W0); absent until they choose, which is Auto. Read it through {@link homeColumns}. */
+    view?: HomeLayoutView;
 }
 
 /** The version-1 layout today's apps send: the catalogue in the member's order with some hidden. Read, never written here. */
@@ -74,6 +90,8 @@ export const HOME_FRAME_MESSAGES = {
     settingsSize: `A card's settings are at most ${HOME_FRAME_LIMITS.settingsBytes} bytes.`,
     layoutSize: `A Home layout is at most ${HOME_FRAME_LIMITS.layoutBytes / 1024} KB.`,
     date: 'A date in a Home layout is a date and time, as 2026-10-02T15:40:00.000Z.',
+    // Marked: the node's answer carries it in the member's language (apps/server member-words.ts).
+    view: word("A Home layout's view names its columns: auto, 1 or 2."),
 } as const;
 export type HomeFrameProblem = keyof typeof HOME_FRAME_MESSAGES;
 
@@ -289,9 +307,18 @@ function instanceProblem(raw: unknown): HomeFrameProblem | null {
 /** An instance as kept: its own object (unknown fields and all), so a type this build doesn't know survives byte for byte. */
 const keptInstance = (raw: Record<string, unknown>): HomeCardInstance => raw as unknown as HomeCardInstance;
 
+const isHomeColumns = (v: unknown): v is HomeColumns => (HOME_COLUMN_CHOICES as readonly unknown[]).includes(v);
+
+/** The columns the member chose for a wide screen: Auto when they never chose, or for a choice this build doesn't know. */
+export function homeColumns(layout: Pick<HomeLayoutV2, 'view'> | null | undefined): HomeColumns {
+    const columns = layout?.view?.columns;
+    return isHomeColumns(columns) ? columns : 'auto';
+}
+
 /**
  * A version-2 layout checked strictly, as the node takes a member's write: shape and bounds, never the type. Every bound
- * refuses the whole value with its problem. `updatedAt` is left as sent (null when absent); the caller stamps it.
+ * refuses the whole value with its problem, and so does a `view` that is no object or whose `columns` isn't 'auto', 1 or
+ * 2 (its other keys, a newer app's, are kept). `updatedAt` is left as sent (null when absent); the caller stamps it.
  */
 /** As long as any date the node keeps (an ISO string): the size of a stamp still to come. */
 const KEPT_DATE_STAND_IN = new Date(0).toISOString();
@@ -334,6 +361,11 @@ export function checkHomeLayout(value: unknown): { ok: true; layout: HomeLayoutV
         if (updatedAt === null) return { ok: false, problem: 'date' };
     }
     const layout: HomeLayoutV2 = { v: 2, cards, dismissed, updatedAt };
+    if (value.view !== undefined) {
+        const view = value.view;
+        if (!isPlainObject(view) || !isHomeColumns(view.columns)) return { ok: false, problem: 'view' };
+        layout.view = { ...view, columns: view.columns };
+    }
     // The bound is on what is KEPT: dates come back as 24-character ISO strings and the caller stamps a missing updatedAt, so a
     // body just under the bound as sent could be stored over it and refuse its own read-back (review of #1697, finding 1).
     if (utf8Bytes(JSON.stringify({ ...layout, updatedAt: updatedAt ?? KEPT_DATE_STAND_IN })) > HOME_FRAME_LIMITS.layoutBytes) {
@@ -369,8 +401,9 @@ export function translateV1(v1: Pick<HomeLayoutV1, 'order' | 'hidden'> & Partial
 
 /**
  * Any stored or answered layout, read tolerantly: version 2 keeps every instance whose shape is right, known type or not
- * (a malformed one, a repeated id or one past the 24th is dropped, never the whole); version 1 reads through
- * {@link translateV1}; anything else is null (the default Home).
+ * (a malformed one, a repeated id or one past the 24th is dropped, never the whole), and a `view` that is an object, its
+ * `columns` Auto unless it is one of the choices; version 1 reads through {@link translateV1} (it has no view); anything
+ * else is null (the default Home).
  */
 export function readHomeLayout(value: unknown): HomeLayoutV2 | null {
     if (!isPlainObject(value)) return null;
@@ -400,7 +433,12 @@ export function readHomeLayout(value: unknown): HomeLayoutV2 | null {
             if (when !== null && id.length > 0 && id.length <= HOME_FRAME_LIMITS.idChars) dismissed[id] = when;
         }
     }
-    return { v: 2, cards, dismissed, updatedAt: homeLayoutDate(value.updatedAt) };
+    const read: HomeLayoutV2 = { v: 2, cards, dismissed, updatedAt: homeLayoutDate(value.updatedAt) };
+    if (isPlainObject(value.view)) {
+        const columns = value.view.columns;
+        read.view = { ...value.view, columns: isHomeColumns(columns) ? columns : 'auto' };
+    }
+    return read;
 }
 
 // ── Editing ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -481,6 +519,16 @@ export function endTourLayout(layout: HomeLayoutV2 | null, opts: { pinned?: read
     const have = new Set(kept.map((c) => c.id));
     const cards = [...kept, ...starterCards().filter((c) => !have.has(c.id))].slice(0, HOME_FRAME_LIMITS.cards);
     return { ...base, cards, dismissed, updatedAt: now };
+}
+
+/**
+ * The columns chosen in Edit home on a wide screen (D1), dated now so the last write wins as for a move. Unchanged when it
+ * is already the choice (no view is Auto). A newer app's other keys in the view are kept.
+ */
+export function setHomeColumns(layout: HomeLayoutV2 | null, columns: HomeColumns, now: number = Date.now()): HomeLayoutV2 {
+    const base = layout ?? defaultHomeLayout();
+    if (homeColumns(base) === columns) return base;
+    return { ...base, view: { ...base.view, columns }, updatedAt: new Date(now).toISOString() };
 }
 
 /** The card's settings through its type's reader, or undefined for a type with none (or one this build doesn't know). */

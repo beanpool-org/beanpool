@@ -22,8 +22,18 @@
  *      the same ask in another order is the same tag; a settings change moves the tag and a 304 still answers an unchanged
  *      Home; `community.place` is the node's location to two decimals, absent when unset, part of the tag (a move is a
  *      200, no move a 304); none on the global node
- *   6. the size: under 6 KB gzipped with fixture data, titles of thousands of characters included (each text is cut), and
- *      what a cold landing and a 304 cost (requests, bytes, server time), printed
+ *  5d. W3, real content in the cards (scratch/global-node/DESIGN-home-wide-and-content-fable.md §2, §5 row W3): deals
+ *      rows (the listing, the other party, whose step, when), the enterprise's balance, keepers, month and latest line for
+ *      its keeper, Decide rows ("You voted" the signer's own) and the first open poll's question, each group's last line
+ *      (a locked one's bytes only while short, `🔒 Message` kept), four Pulse items with `publishedAt`, the member's own
+ *      month on Beans (circulation fees apart), and the community's figures; a second member's deal, balance, month,
+ *      notice and group line never in the first's answer (also in the read-auth-off run); the tag moves on a new group
+ *      line, and on the member's own line in a chat no card shows (the chat stamp), and not on another member's trade;
+ *      `cards=` still skips the new reads
+ *   6. the size: the default Home under 4 KB gzipped and every card under 8 KB gzipped and 24 KB raw (§2 "Budget"), with
+ *      fixture data, titles of thousands of characters included (each text is cut) and three locked group lines at
+ *      their cap; each card's size and what W3 added to it printed, and what a cold landing and a 304 cost (requests,
+ *      bytes, server time), the enterprise card's server time over a book of a thousand lines included
  *   7. H0b on a local node: the Beans card is each signer's own balance as the ledger holds it, and Beans and escrow stay
  *      on (and so their cards) where the ledger has moved, whatever an override says
  *   8. the other runs, each in a child process with its own node: the global profile (below), a local node with
@@ -38,7 +48,9 @@
  * subset (`welcome`, find, market, events, community; no `me`, no layout, no Pulse, no `joined`, even when asked), naming
  * nobody; a member gets their own Home, with `joined` a count by area and no names, the `find` card the landing card's
  * own body, and H0b: with Beans and escrow off, no Beans card and no deals, though a balance and a deal
- * written behind the switches' back are there to show; the visitors' answer stays under 6 KB gzipped. And (review A, C,
+ * written behind the switches' back are there to show; the visitors' answer stays under 4 KB gzipped, and W3 gives it
+ * nothing new but `community.listings` (every key it holds is one it held before), nor the global member's community card
+ * the local figures (joined this week, events coming up, the Commons pot). And (review A, C,
  * D): a 300,000-character category leaves the visitors' answer a few KB; a disabled member gets their own `me`
  * (`standing: 'suspended'`), never `welcome`, and the visitors' view of the listings; "Coming up" within 50 km is the
  * soonest by start, read from each event's area, with 101 upcoming.
@@ -47,7 +59,8 @@
  * `features.enterprises` (enterprises AND treasuries), so with treasuries switched off a keeper gets no enterprise card.
  *
  * The read-auth-off run (ENFORCE_READ_AUTH=false, child, H0b): the route refuses an unsigned call (401) and a non-member
- * (403) itself, and the Beans card is the signer's own whatever key the query names.
+ * (403) itself, and the Beans card is the signer's own whatever key the query names; and W3's privacy checks (5d) hold
+ * there too.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-home.ts
  */
@@ -85,7 +98,12 @@ function assert(cond: boolean, msg: string): void {
 }
 const DAY = 86_400_000;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
-const SIX_KB = 6 * 1024;
+/** The budget (DESIGN-home-wide-and-content-fable.md §2): the default Home under 4 KB gzipped; every card under 8 KB gzipped and 24 KB raw. */
+const FOUR_KB = 4 * 1024;
+const EIGHT_KB = 8 * 1024;
+const EVERY_CARD_RAW = 24 * 1024;
+/** A default Home's raw bytes, as before W3: every text is cut, so a default answer is a few KB whatever anyone typed. */
+const DEFAULT_RAW = 16 * 1024;
 
 // ── the child runs: stopped with this process, however it ends ──────────────────────────────────────────────────────
 const children = new Set<ChildProcess>();
@@ -288,6 +306,108 @@ async function main(): Promise<void> {
         return cafe;
     };
 
+    // ── W3's fixtures and privacy checks (5d; the read-auth-off run makes the same and checks the same) ─────────────
+    const monthStart = (() => { const d = new Date(); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1); })();
+    const lastMonth = new Date(monthStart - DAY).toISOString();
+    let lastLineAt = 0;
+    /**
+     * A payment between two parties as a settled deal moves it: through the escrow path, which a member's first trade
+     * needs no earlier one for (the send gate is for a direct gift), and with no fee, so the figures are the amounts.
+     */
+    const pay = (from: Id, to: string, amount: number, memo: string) => se.transfer(from.pk, to, amount, memo, 'escrow', true);
+    /** A chat line as the node stores one: plaintext-v1 as an older app sent it, or a sealed group line's bytes. Each one later than the last. */
+    const chatLine = (conversationId: string, author: Id, text: string, sealed?: { ciphertext: string; nonce: string; metadata: string | null }) => {
+        lastLineAt = Math.max(Date.now(), lastLineAt + 1);
+        const id = crypto.randomUUID();
+        db.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(id, conversationId, author.pk, sealed?.ciphertext ?? Buffer.from(text).toString('base64'), sealed?.nonce ?? 'plaintext-v1', 'text',
+                sealed?.metadata ?? null, new Date(lastLineAt).toISOString());
+        return id;
+    };
+    /** A sealed group line's bytes (shape only, as group-test-payload.ts makes them) whose three parts come to `chars` characters. */
+    const sealedLine = (chars: number) => {
+        const nonce = `group-xc20p-v1:${crypto.randomBytes(24).toString('base64')}`;
+        const metadata = '{"epoch":1}';
+        const left = chars - nonce.length - metadata.length;
+        const ciphertext = crypto.randomBytes(Math.ceil(left * 3 / 4) + 3).toString('base64').slice(0, left);
+        return { ciphertext, nonce, metadata };
+    };
+    /**
+     * W3's fixtures (DESIGN-home-wide-and-content-fable.md §5 row W3), made where they move no earlier section's figures:
+     * Alice keeps an enterprise Bob paid this month and once last month; Bob writes a line in Alice's group; Carol has a
+     * group of her own with a line, Alice not in it; Mia and Ned pay each other this month (and Ned paid Mia once last
+     * month), and Ned pays Bob; a second open Decision. The payments only where Beans move (MONEY).
+     */
+    const w3Fixtures = async () => {
+        const { ensureGroupThread } = await import('./engine/group-thread.js');
+        const ent = se.createTreasury('HomeSentinel Bakery', 'bundled://sprout', 0, { leadKeeperPubkey: alice.pk });
+        const carols = se.createGroup({ name: 'HomeSentinel carol circle', createdBy: carol.pk });
+        ensureGroupThread(group.id);
+        ensureGroupThread(carols.id);
+        chatLine(carols.id, carol, 'HomeSentinel carol circle line');
+        const bobsLine = chatLine(group.id, bob, 'HomeSentinel who has a ladder?');
+        db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, franchise, status, opens_at, closes_at)
+                    VALUES ('dec-home-2', ?, 'HomeSentinel bus shelter', 'A shelter', 'pool', 'grant', '1m1v', 'open', ?, ?)`)
+            .run(carol.pk, new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 5 * DAY).toISOString()); // one open Decision an author
+        const mia = member('HomeWenMia', { balance: 30, earned: 10 });
+        const ned = member('HomeWenNed', { balance: 40, earned: 10 });
+        if (MONEY) {
+            se.reconcileLedgerFromDb();
+            const backdate = (t: { id: string } | null) => { if (t) db.prepare('UPDATE transactions SET timestamp = ? WHERE id = ?').run(lastMonth, t.id); return !!t; };
+            const paid = [
+                backdate(pay(bob, ent.publicKey, 2, 'HomeSentinel last month')),
+                !!pay(bob, ent.publicKey, 3, 'HomeSentinel for the bakery'),
+                backdate(pay(ned, mia.pk, 0.65, 'HomeSentinel last month')),
+                !!pay(ned, mia.pk, 4.25, 'HomeSentinel thanks'),
+                !!pay(mia, ned.pk, 1.75, 'HomeSentinel back'),
+                !!pay(ned, bob.pk, 2.35, 'HomeSentinel for Bob'),
+            ];
+            assert(paid.every(Boolean), `setup W3: Bob pays the bakery (once last month), Mia and Ned pay each other, Ned pays Bob (${paid.join(',')})`);
+        }
+        return { ent, carols, bobsLine, mia, ned };
+    };
+    type W3 = Awaited<ReturnType<typeof w3Fixtures>>;
+    /** The signer's own figures for this month, read as the ledger holds them (getTransactions): circulation fees apart. */
+    const ownMonthOf = (id: Id) => {
+        const lines = se.getTransactions(id.pk, 500).filter(t => Date.parse(t.timestamp) >= monthStart);
+        const fee = (t: { id: string; to: string }) => t.to === 'COMMONS_POOL' && t.id.startsWith('demurrage_');
+        const r2 = (n: number) => Math.round(n * 100) / 100;
+        return {
+            trades: lines.filter(t => !fee(t)).length,
+            in: r2(lines.filter(t => !fee(t) && t.to === id.pk).reduce((n, t) => n + t.amount - (t.taxFee || 0), 0)),
+            out: r2(lines.filter(t => !fee(t) && t.from === id.pk).reduce((n, t) => n + t.amount, 0)),
+            fees: r2(lines.filter(fee).reduce((n, t) => n + t.amount, 0)),
+        };
+    };
+    /**
+     * §2 "What never shows", as a test: a second member's deal, balance, month, notice and group line are never in the first
+     * member's answer, and a group's last line is only its members'.
+     */
+    const w3Privacy = async (w3: W3) => {
+        console.log(`\n── 5d. W3 ${MODE}: nobody else's deal, balance, month, notice or group line ──`);
+        const a = await get(`/api/home?${ALL}`, alice);
+        const lines = (a.body?.cards?.groups?.items ?? []).map((g: any) => g.last?.text);
+        assert(a.status === 200 && lines.includes('HomeSentinel who has a ladder?') && !a.text.includes('HomeSentinel carol circle'),
+            `Alice's groups carry her group's last line and never Carol's circle, which she is not in, nor its line (${JSON.stringify(lines)})`);
+        const c = await get(`/api/home?${ALL}`, carol);
+        assert(c.status === 200 && (c.body?.cards?.groups?.items ?? []).some((g: any) => g.last?.text === 'HomeSentinel carol circle line')
+            && !c.text.includes('HomeSentinel who has a ladder?'),
+            `Carol's circle's line is hers, and Alice's group's line is not (${JSON.stringify((c.body?.cards?.groups?.items ?? []).map((g: any) => g.last?.text))})`);
+        const dealsWith = (r: Res) => (r.body?.cards?.deals?.items ?? []).map((d: any) => `${d.txId}:${d.with}`);
+        assert(!a.text.includes('tx-home-carol') && !dealsWith(a).some((d: string) => d.includes('HomeCarol')) && !a.text.includes('HomeSentinel carol notice'),
+            `Alice's deals are hers alone (${JSON.stringify(dealsWith(a))}), and Carol's notice is not in her answer`);
+        if (!MONEY) return;
+        const m = await get(`/api/home?${ALL}&publicKey=${w3.ned.pk}`, w3.mia);
+        const ned = ownMonthOf(w3.ned);
+        const nedBalance = se.getBalance(w3.ned.pk).balance;
+        assert(m.status === 200 && m.body?.cards?.beans?.balance === se.getBalance(w3.mia.pk).balance && !hasNumber(m.text, nedBalance) && !hasNumber(m.text, ned.out),
+            `Mia naming Ned's key gets her own Beans and month, never Ned's balance ${nedBalance} or his ${ned.out} out (${JSON.stringify(m.body?.cards?.beans)})`);
+        const aMonth = a.body?.cards?.beans?.month;
+        const aliceOwn = ownMonthOf(alice);
+        assert(!!aMonth && aMonth.trades === aliceOwn.trades && aMonth.in === aliceOwn.in && aMonth.out === aliceOwn.out && !hasNumber(a.text, 4.25),
+            `Alice's month is her own (${JSON.stringify(aMonth)}), never Mia's 4.25 in`);
+    };
+
     if (RUN === 'global') return globalRun();
     if (RUN === 'open-reads') return openReadsRun();
     if (RUN === 'fresh-ledger') return freshLedgerRun();
@@ -348,8 +468,9 @@ async function main(): Promise<void> {
             `joined: with her photo's URL, made from avatar_ref (${c.joined?.names?.[0]?.avatarUrl}, ref ${carolRef})`);
         assert(c.groups?.items?.some((g: any) => g.name === 'HomeSentinel garden group'), `groups: hers (${JSON.stringify(c.groups)})`);
         const pulse = c.pulse?.items ?? [];
-        assert(pulse.length === 2 && pulse[0].category === 'garden' && /^\/api\/pulse\/items\/item-home-2\/thumbnail$/.test(pulse[0].thumbnailUrl),
-            `pulse: two, her starred garden first, thumbnails through the node (${JSON.stringify(pulse.map((p: any) => [p.category, p.thumbnailUrl]))})`);
+        // Up to four since W3 (§2), and the week holds three.
+        assert(pulse.length === 3 && pulse[0].category === 'garden' && /^\/api\/pulse\/items\/item-home-2\/thumbnail$/.test(pulse[0].thumbnailUrl),
+            `pulse: the week's three, her starred garden first, thumbnails through the node (${JSON.stringify(pulse.map((p: any) => [p.category, p.thumbnailUrl]))})`);
         assert(c.beans?.balance === 42.5 && typeof c.beans?.room === 'number' && typeof c.beans?.tier === 'string', `beans: her own 42.5 (${JSON.stringify(c.beans)})`);
         assert(c.notices?.unseen === 1 && c.notices?.first?.id === aliceNotice && c.notices.first.line === 'A moderator kept your post.',
             `notices: hers, its first line (${JSON.stringify(c.notices)})`);
@@ -718,6 +839,224 @@ async function main(): Promise<void> {
             `the group's own member finds the group's listing in their saved search, as in their Market (${titles(halHarrier)})`);
     }
 
+    // ── 5d. W3: the cards carry real content ────────────────────────────────────────────────────────────────────
+    console.log('\n── 5d. W3: each card\'s slice (DESIGN-home-wide-and-content-fable.md §2) ──');
+    const w3 = await w3Fixtures();
+    await w3Privacy(w3);
+    {
+        // Two more of the week's Pulse items, so there are five to choose four from.
+        for (const i of [4, 5]) {
+            db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, external_id, url, title, thumbnail_url, published_at, category, source, muted, curated, created_at, updated_at)
+                        VALUES (?, 'chan-home', ?, 'rss', ?, ?, ?, NULL, ?, 'food', 'autolist', 0, 0, ?, ?)`)
+                .run(`item-home-${i}`, bob.pk, `ext-${i}`, `https://blog.example.org/${i}`, `HomeSentinel pulse ${i}`,
+                    new Date(Date.now() - i * 3600_000).toISOString(), new Date().toISOString(), new Date().toISOString());
+        }
+        const r = await get(`/api/home?${ALL}`, alice);
+        const c = r.body?.cards ?? {};
+
+        // Deals: her one open deal as a row, with the other party by name and whose step it is.
+        const dealRow = c.deals?.items?.[0];
+        assert(c.deals?.items?.length === 1 && dealRow?.txId === 'tx-home-alice' && dealRow.postId === alicesOffer.id && dealRow.title === 'HomeSentinel alice drill'
+            && dealRow.with === 'HomeBob' && dealRow.waitsOnMe === true && Number.isFinite(Date.parse(dealRow.at)) && c.deals.open === 1 && c.deals.waitingOnMe?.txId === 'tx-home-alice',
+            `deals: her deal as a row, the listing, with Bob, waiting on her, since when; the counts as before (${JSON.stringify(c.deals)})`);
+        const bobs = (await get(`/api/home?cards=deals`, bob)).body?.cards?.deals;
+        assert(JSON.stringify(bobs?.items?.map((d: any) => [d.txId, d.with, d.waitsOnMe])) === JSON.stringify([['tx-home-carol', 'HomeCarol', true], ['tx-home-alice', 'HomeAlice', false]]),
+            `Bob's two: the one waiting on him first, then the one waiting on Alice, each naming its other party (${JSON.stringify(bobs?.items)})`);
+
+        // A deal whose listing row is gone (deciding review of #2416): Needs you still comes, its line with no bare colon.
+        {
+            const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(alicesOffer.id) as Record<string, unknown>;
+            const fk = db.pragma('foreign_keys', { simple: true });
+            db.pragma('foreign_keys = OFF');
+            db.prepare('DELETE FROM posts WHERE id = ?').run(alicesOffer.id);
+            try {
+                const gone = (await get('/api/home?cards=needs,deals', alice)).body?.cards ?? {};
+                const line = gone.needs?.items?.find((i: any) => i.kind === 'deal');
+                assert(line?.label === 'A deal is waiting for you' && line.target?.txId === 'tx-home-alice' && gone.deals?.items?.[0]?.title === '',
+                    `needs: a deal whose listing is gone keeps the card, "A deal is waiting for you" with no title (${JSON.stringify(gone.needs)})`);
+            } finally {
+                const cols = Object.keys(row);
+                db.prepare(`INSERT INTO posts (${cols.join(', ')}) VALUES (${cols.map(c => '@' + c).join(', ')})`).run(row);
+                db.pragma(`foreign_keys = ${fk ? 'ON' : 'OFF'}`);
+            }
+        }
+
+        // The enterprise: its balance (open, #1286), keepers, this month's figures and its latest line, for its keeper.
+        const e = c.enterprise;
+        const entBalance = se.getBalance(w3.ent.publicKey).balance;
+        assert(e?.id === w3.ent.publicKey && e.name === 'HomeSentinel Bakery' && e.keepers === 1 && e.balance === entBalance && entBalance === 5,
+            `enterprise: the bakery, one keeper, its balance as the ledger holds it (${JSON.stringify(e)}, ledger ${entBalance})`);
+        assert(JSON.stringify(e?.month) === JSON.stringify({ trades: 1, in: 3, out: 0 })
+            && e?.latest?.amount === 3 && e.latest.who === 'HomeBob' && e.latest.kind === 'member' && Number.isFinite(Date.parse(e.latest.at)),
+            `enterprise: this month one line, 3 in (last month's 2 left out), the latest +3 from Bob (${JSON.stringify(e?.month)} ${JSON.stringify(e?.latest)})`);
+
+        // Decide: the open Decisions as rows, soonest first, "You voted" hers (she voted on the compost bay in section 4), and the poll.
+        assert(JSON.stringify(c.decide?.items?.map((d: any) => [d.id, d.title, d.voted])) === JSON.stringify([['dec-home-1', 'HomeSentinel compost bay', true], ['dec-home-2', 'HomeSentinel bus shelter', false]])
+            && c.decide.items.every((d: any) => Number.isFinite(Date.parse(d.closesAt))) && c.decide.open === 2,
+            `decide: two rows, soonest first, voted as she voted (${JSON.stringify(c.decide?.items)})`);
+        assert(c.decide?.poll?.id === poll.id && c.decide.poll.title === 'HomeSentinel which day' && Number.isFinite(Date.parse(c.decide.poll.closesAt)) && c.decide.polls === 1,
+            `decide: the first open poll's question (${JSON.stringify(c.decide?.poll)})`);
+        const bobsDecide = (await get('/api/home?cards=decide', bob)).body?.cards?.decide;
+        assert(JSON.stringify(bobsDecide?.items?.map((d: any) => d.voted)) === '[false,false]', `and Bob's rows say he voted on neither: a ballot is its voter's own (${JSON.stringify(bobsDecide?.items)})`);
+
+        // Groups: each group's last line, who and when.
+        const garden = c.groups?.items?.find((g: any) => g.id === group.id);
+        assert(garden?.last?.who === 'HomeBob' && garden.last.text === 'HomeSentinel who has a ladder?' && Number.isFinite(Date.parse(garden.last.at)) && garden.last.locked === undefined,
+            `groups: her group's last line, Bob's, and when (${JSON.stringify(garden)})`);
+
+        // Pulse: four, each with when it was published.
+        const pulse = c.pulse?.items ?? [];
+        assert(pulse.length === 4 && pulse[0].category === 'garden' && pulse.every((p: any) => Number.isFinite(Date.parse(p.publishedAt))),
+            `pulse: four of the week's five, her starred garden first, each with publishedAt (${JSON.stringify(pulse.map((p: any) => [p.id, p.publishedAt]))})`);
+
+        // Beans: the member's own month; Mia's, with a line from last month left out.
+        const aliceMonth = ownMonthOf(alice);
+        assert(c.beans?.balance === 42.5 && JSON.stringify(c.beans?.month) === JSON.stringify({ ...aliceMonth, more: false }),
+            `beans: her own month as her ledger holds it (${JSON.stringify(c.beans?.month)}, ledger ${JSON.stringify(aliceMonth)})`);
+        const miaBeans = (await get('/api/home?cards=beans', w3.mia)).body?.cards?.beans;
+        const miaOwn = ownMonthOf(w3.mia);
+        assert(miaOwn.trades === 2 && miaOwn.in === 4.25 && miaOwn.out === 1.75 && JSON.stringify(miaBeans?.month) === JSON.stringify({ ...miaOwn, more: false })
+            && miaBeans?.balance === se.getBalance(w3.mia.pk).balance,
+            `beans: Mia's month, 2 trades, 4.25 in, 1.75 out, last month's 0.65 left out (${JSON.stringify(miaBeans)})`);
+
+        // A payment that carries the 1.5% fee (review of #2416): "in" on both cards is what the payee was credited, net of
+        // the fee, as the latest line and the balance say it, never the amount paid. `pay` takes no fee, so these don't use it.
+        const r2 = (n: number) => Math.round(n * 100) / 100;
+        const [entBefore, miaBefore] = [se.getBalance(w3.ent.publicKey).balance, se.getBalance(w3.mia.pk).balance];
+        const feePaid = [
+            !!se.transfer(bob.pk, w3.ent.publicKey, 10, 'HomeSentinel with a fee', 'escrow'),
+            !!se.transfer(w3.ned.pk, w3.mia.pk, 10, 'HomeSentinel with a fee', 'escrow'),
+        ];
+        const entRose = r2(se.getBalance(w3.ent.publicKey).balance - entBefore);
+        const miaRose = r2(se.getBalance(w3.mia.pk).balance - miaBefore);
+        assert(feePaid.every(Boolean) && entRose === 9.85 && miaRose === 9.85,
+            `setup: Bob pays the bakery and Ned pays Mia 10 Beans each, the fee taken (${feePaid.join(',')}; credited ${entRose} and ${miaRose})`);
+        const fe = (await get('/api/home?cards=enterprise', alice)).body?.cards?.enterprise;
+        assert(fe?.month?.trades === e.month.trades + 1 && fe.month.in === r2(e.month.in + entRose) && fe.month.out === e.month.out
+            && fe.latest?.amount === entRose && fe.balance === se.getBalance(w3.ent.publicKey).balance,
+            `enterprise: the payment with a fee adds what the bakery was credited, ${entRose}, to this month's in, as its latest line and balance say (${JSON.stringify(fe?.month)} ${JSON.stringify(fe?.latest)}, balance ${fe?.balance})`);
+        const miaFee = (await get('/api/home?cards=beans', w3.mia)).body?.cards?.beans?.month;
+        assert(miaFee?.trades === miaOwn.trades + 1 && miaFee.in === r2(miaOwn.in + miaRose) && miaFee.out === miaOwn.out && miaFee.fees === miaOwn.fees,
+            `beans: Mia's month adds what she was credited, ${miaRose}, not the 10 Ned paid (${JSON.stringify(miaFee)})`);
+
+        // Community: the figures. Listings to anyone answered; the rest to a member who reads as one.
+        const info = se.getPublicCommunityInfo();
+        const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
+                                         AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(new Date(Date.now() - 7 * DAY).toISOString()) as { c: number }).c;
+        assert(c.community?.listings === info.postCount && c.community.joined7d === joined7d && joined7d === 1 && c.community.eventsSoon === 1
+            && c.community.commonsPot === Math.round(info.commonsBalance) && Number.isInteger(c.community.commonsPot),
+            `community: ${info.postCount} listings, ${joined7d} joined this week (Carol), one event in the fortnight, the Commons pot in whole Beans (${JSON.stringify(c.community)})`);
+        const d = await get(`/api/home?${ALL}`, dan);
+        assert(d.status === 200 && d.body?.cards?.community?.listings === info.postCount
+            && ['joined7d', 'eventsSoon', 'commonsPot'].every(k => !(k in (d.body?.cards?.community ?? {}))),
+            `a suspended member's community card: the listings count, none of what a member reads (${JSON.stringify(d.body?.cards?.community)})`);
+        // An event that is running (started an hour ago, ends in two) is coming up: counted as the Events card beside the
+        // figure lists it (review of #2416), and once it has ended, in neither. Posted with a start ahead, then moved.
+        const running = post(carol, 'event', 'general', 'HomeSentinel running now', {
+            eventStartAt: new Date(Date.now() + DAY).toISOString(), eventEndAt: new Date(Date.now() + DAY + 3600_000).toISOString(),
+        });
+        db.prepare('UPDATE posts SET event_start_at = ?, event_end_at = ? WHERE id = ?')
+            .run(new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 2 * 3600_000).toISOString(), running.id);
+        const soon = (await get('/api/home?cards=events,community', alice)).body?.cards;
+        const soonTitles = (soon?.events?.items ?? []).map((i: any) => i.title);
+        assert(soonTitles.length === 2 && soonTitles.includes('HomeSentinel running now') && soon?.community?.eventsSoon === soonTitles.length,
+            `community: a running event is among those coming up, as many as the Events card lists (${soon?.community?.eventsSoon}; ${JSON.stringify(soonTitles)})`);
+        db.prepare('UPDATE posts SET event_end_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), running.id);
+        const ended = (await get('/api/home?cards=events,community', alice)).body?.cards;
+        assert(ended?.community?.eventsSoon === 1 && !(ended?.events?.items ?? []).some((i: any) => i.id === running.id),
+            `and once it has ended, in neither (${ended?.community?.eventsSoon}; ${JSON.stringify((ended?.events?.items ?? []).map((i: any) => i.title))})`);
+        // Nor an event the board leaves out for its host's sake (second review of #2416): a host on holiday's, a paused
+        // enterprise's. Bob's in two days and the bakery's in four (posted as Carol's, then moved to the bakery, which posts
+        // no events of its own here); counted as the Events card lists them at each step, then each host put back and both ended.
+        const holidayEvent = post(bob, 'event', 'general', 'HomeSentinel holiday host', {
+            eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 3600_000).toISOString(),
+        });
+        const pausedEvent = post(carol, 'event', 'general', 'HomeSentinel paused bakery', {
+            eventStartAt: new Date(Date.now() + 4 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 4 * DAY + 3600_000).toISOString(),
+        });
+        db.prepare('UPDATE posts SET author_pubkey = ? WHERE id = ?').run(w3.ent.publicKey, pausedEvent.id);
+        const boardStep = async () => {
+            const b = (await get('/api/home?cards=events,community', alice)).body?.cards;
+            return { titles: (b?.events?.items ?? []).map((i: any) => i.title) as string[], soon: b?.community?.eventsSoon };
+        };
+        const onBoard = await boardStep();
+        setPref(bob, 'holiday_mode', true);
+        const onHoliday = await boardStep();
+        db.prepare('UPDATE members SET paused = 1 WHERE public_key = ?').run(w3.ent.publicKey);
+        const paused = await boardStep();
+        db.prepare("DELETE FROM member_preferences WHERE public_key = ? AND pref_key = 'holiday_mode'").run(bob.pk);
+        db.prepare('UPDATE members SET paused = 0 WHERE public_key = ?').run(w3.ent.publicKey);
+        db.prepare('UPDATE posts SET event_end_at = ? WHERE id IN (?, ?)').run(new Date(Date.now() - 60_000).toISOString(), holidayEvent.id, pausedEvent.id);
+        assert(onBoard.titles.length === 3 && onBoard.soon === 3,
+            `setup: with every host on the board, three events in the card and in the figure (${onBoard.soon}; ${JSON.stringify(onBoard.titles)})`);
+        assert(onHoliday.titles.length === 2 && !onHoliday.titles.includes('HomeSentinel holiday host') && onHoliday.soon === onHoliday.titles.length,
+            `community: Bob on holiday, his event in neither the card nor the figure (${onHoliday.soon}; ${JSON.stringify(onHoliday.titles)})`);
+        assert(JSON.stringify(paused.titles) === '["HomeSentinel seed swap"]' && paused.soon === 1,
+            `community: the bakery paused too, its event in neither: one, the seed swap (${paused.soon}; ${JSON.stringify(paused.titles)})`);
+
+        // Who joined this week, in the figure and on the card (second review of #2416): the figure is the community's, the
+        // reader counted as `members` counts them; the Joined card is the people new to the reader, never the reader. Carol
+        // joined this week; with Mia moved into the week too (and back after), Carol's card names Mia alone and her figure
+        // counts both, while Alice, here for months, reads 2 on both.
+        const miaJoinedAt = (db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(w3.mia.pk) as { joined_at: string }).joined_at;
+        db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - DAY).toISOString(), w3.mia.pk);
+        const carolsWeek = (await get('/api/home?cards=joined,community', carol)).body?.cards;
+        const alicesWeek = (await get('/api/home?cards=joined,community', alice)).body?.cards;
+        db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(miaJoinedAt, w3.mia.pk);
+        assert(carolsWeek?.joined?.count7d === 1 && JSON.stringify(carolsWeek.joined.names?.map((n: any) => n.callsign)) === '["HomeWenMia"]'
+            && carolsWeek?.community?.joined7d === 2,
+            `joined: Carol, new this week herself, has Mia alone on the Joined card and both of them in the figure (${JSON.stringify(carolsWeek?.joined)}, figure ${carolsWeek?.community?.joined7d})`);
+        assert(alicesWeek?.joined?.count7d === 2 && alicesWeek?.community?.joined7d === 2,
+            `and Alice, here for months, 2 on both (card ${alicesWeek?.joined?.count7d}, figure ${alicesWeek?.community?.joined7d})`);
+
+        // A locked line: its bytes while ciphertext, nonce and metadata come to 512 characters at most, "🔒 Message" always.
+        const short = sealedLine(512);
+        chatLine(group.id, bob, '', short);
+        const lockedShort = (await get('/api/home?cards=groups', alice)).body?.cards?.groups?.items?.find((g: any) => g.id === group.id)?.last;
+        assert(lockedShort?.text === '🔒 Message' && JSON.stringify(lockedShort?.locked) === JSON.stringify(short),
+            `a locked line of 512 characters: "🔒 Message" and its bytes as stored, for the app to open (${JSON.stringify(lockedShort)?.slice(0, 160)})`);
+        const long = sealedLine(513);
+        chatLine(group.id, bob, '', long);
+        const lockedLongRes = await get('/api/home?cards=groups', alice);
+        const lockedLong = lockedLongRes.body?.cards?.groups?.items?.find((g: any) => g.id === group.id)?.last;
+        assert(lockedLong?.text === '🔒 Message' && lockedLong?.who === 'HomeBob' && lockedLong.locked === undefined && !lockedLongRes.text.includes(long.ciphertext.slice(0, 40)),
+            `one of 513: "🔒 Message" kept, its bytes nowhere in the answer (${JSON.stringify(lockedLong)})`);
+
+        // cards= still skips the work of every card not asked for.
+        const builds = () => ({ ...homeCardBuilds });
+        const before = builds();
+        await get('/api/home?cards=community', alice);
+        const after = builds();
+        assert(['deals', 'enterprise', 'decide', 'groups', 'pulse', 'beans'].every(k => (after[k] ?? 0) === (before[k] ?? 0)) && (after.community ?? 0) === (before.community ?? 0) + 1,
+            `cards=community builds the community card alone: no ledger, chat, Decision or Pulse read (${JSON.stringify(after)})`);
+    }
+    {
+        // The tag (§2 "Budget"): a new group line moves it, and so does the member's own line in a chat when no card
+        // that shows it is asked for (the chat stamp); another member's trade does not, a fee to the Commons included.
+        const start = await get('/api/home', alice);
+        chatLine(group.id, bob, 'HomeSentinel the ladder is back');
+        const moved = await get('/api/home', alice, { 'If-None-Match': start.etag! });
+        assert(moved.status === 200 && moved.etag !== start.etag && moved.text.includes('HomeSentinel the ladder is back'),
+            `a new line in her group moves the tag, and the answer has it (${moved.status})`);
+        const needsOnly = await get('/api/home?cards=needs', alice);
+        chatLine(group.id, alice, 'HomeSentinel her own line, from her laptop');
+        const stamped = await get('/api/home?cards=needs', alice, { 'If-None-Match': needsOnly.etag! });
+        const sansAt = (b: any) => JSON.stringify({ ...b, generatedAt: undefined });
+        assert(stamped.status === 200 && stamped.etag !== needsOnly.etag && sansAt(stamped.body) === sansAt(needsOnly.body),
+            `her own line moves the tag of a Home that doesn't show it (cards=needs): the chat stamp (${stamped.status}, the body ${sansAt(stamped.body) === sansAt(needsOnly.body) ? 'unchanged' : 'changed'})`);
+        const steady = await get('/api/home', alice);
+        const potBefore = se.getPublicCommunityInfo().commonsBalance;
+        const traded = [
+            !!pay(w3.ned, bob.pk, 1, 'HomeSentinel thanks'),
+            !!se.transfer(w3.ned.pk, carol.pk, 1, 'HomeSentinel with a fee', 'escrow'),
+        ];
+        const potAfter = se.getPublicCommunityInfo().commonsBalance;
+        assert(traded.every(Boolean) && potAfter > potBefore && Math.round(potAfter) === Math.round(potBefore),
+            `setup: Ned pays Bob, and pays Carol with the 1.5% fee to the Commons (pot ${potBefore} → ${potAfter}, whole Beans the same)`);
+        const notMoved = await get('/api/home', alice, { 'If-None-Match': steady.etag! });
+        assert(notMoved.status === 304, `another member's trades leave her tag as it was: a 304 (${notMoved.status})`);
+    }
+
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. the size, and what a landing costs ──');
     {
@@ -732,11 +1071,50 @@ async function main(): Promise<void> {
         db.prepare("UPDATE groups SET name = ? WHERE id = ?").run(long('HomeSentinel group'), group.id);
         keepNotice(alice.pk, long('HomeSentinel long notice'), long('line'), { kind: 'moderation' });
         db.prepare('UPDATE pulse_items SET title = ?').run(long('HomeSentinel long pulse'));
+        // W3's texts (§2 "Budget": thousand-character fixtures): the Decisions' and the poll's titles, the enterprise's
+        // name, Bob's name (on her deal, his group lines, the Pulse and the enterprise's latest line) and a group line;
+        // and three of her chats each ending on a locked line at its cap, whose bytes are carried (1.5 KB, incompressible).
+        db.prepare("UPDATE decisions SET title = ? WHERE id IN ('dec-home-1', 'dec-home-2')").run(long('HomeSentinel long decision'));
+        storedLong(poll, 'HomeSentinel long poll');
+        db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run(long('HomeSentinel bakery'), w3.ent.publicKey);
+        db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run(long('HomeBob'), bob.pk);
+        const { ensureGroupThread } = await import('./engine/group-thread.js');
+        const chats = [group.id, ...[1, 2].map(i => se.createGroup({ name: `HomeSentinel group ${i}`, createdBy: alice.pk }).id)];
+        for (const id of chats) db.prepare('UPDATE groups SET name = ? WHERE id = ?').run(long('HomeSentinel group'), id);
+        for (const id of chats) {
+            ensureGroupThread(id);
+            chatLine(id, bob, long('HomeSentinel long line'));
+            chatLine(id, bob, '', sealedLine(512));
+        }
         const full = await get(`/api/home?${ALL}`, alice);
         const raw = Buffer.byteLength(full.text);
         const zipped = gz(full.text);
-        assert(full.status === 200 && zipped < SIX_KB, `the whole Home, every card, is ${raw} bytes, ${zipped} gzipped: under 6 KB (§5.2)`);
+        const lockedCarried = (full.body?.cards?.groups?.items ?? []).filter((g: any) => g.last?.locked).length;
+        assert(full.status === 200 && zipped < EIGHT_KB && raw < EVERY_CARD_RAW && lockedCarried === 3,
+            `the whole Home, every card, ${lockedCarried} locked lines carried, is ${raw} bytes, ${zipped} gzipped: under 8 KB gzipped and 24 KB raw (§2)`);
         assert(!full.text.includes('x'.repeat(200)), 'no text in it runs past its cut');
+        // Each card's size, and what W3 added to it (the card without W3's fields, measured the same way).
+        const withoutW3: Record<string, (card: any) => unknown> = {
+            deals: ({ items: _i, ...rest }) => rest,
+            enterprise: ({ keepers: _k, balance: _b, month: _m, latest: _l, ...rest }) => rest,
+            decide: ({ items: _i, poll: _p, ...rest }) => rest,
+            groups: (g) => ({ ...g, items: g.items.map(({ last: _l, ...item }: any) => item) }),
+            pulse: (p) => ({ ...p, items: p.items.slice(0, 2).map(({ publishedAt: _p, ...item }: any) => item) }),
+            beans: ({ month: _m, ...rest }) => rest,
+            community: ({ listings: _l, joined7d: _j, eventsSoon: _e, commonsPot: _c, ...rest }) => rest,
+        };
+        const sized = Object.entries(full.body?.cards ?? {}).map(([id, card]) => {
+            const text = JSON.stringify(card);
+            const before = withoutW3[id] ? JSON.stringify(withoutW3[id](card)) : text;
+            return `${id} ${Buffer.byteLength(text)} B (${gz(text)} gz)${withoutW3[id] ? `, W3 +${Buffer.byteLength(text) - Buffer.byteLength(before)} B` : ''}`;
+        });
+        console.log(`  each card, raw (gzipped alone) and what W3 added: ${sized.join('; ')}`);
+        const missing = Object.keys(withoutW3).filter(id => !(id in (full.body?.cards ?? {})));
+        assert(missing.length === 0, `every card W3 fills is in the measure (${missing.length ? `missing ${missing.join(',')}` : Object.keys(withoutW3).join(',')})`);
+        const fresh = member('HomeNewcomer', { joinedAt: new Date().toISOString() });
+        const newcomer = await get('/api/home', fresh);
+        assert(newcomer.status === 200 && gz(newcomer.text) < FOUR_KB,
+            `a newcomer's default Home is ${Buffer.byteLength(newcomer.text)} B, ${gz(newcomer.text)} B gzipped: under 4 KB (§2)`);
 
         // What a landing costs, measured here (localhost, no Cloudflare): one request for the whole screen, and a 304.
         const headers = signedHeaders('GET', '/api/home', '', alice);
@@ -751,6 +1129,42 @@ async function main(): Promise<void> {
             + ` a 304: 0 B body + ~${respHeaders} B response headers, ~${headerBytes(headers)} B signed request headers;`
             + ` median ${times[10].toFixed(1)} ms, worst ${times[19].toFixed(1)} ms a request on localhost (assembly included)`);
         assert(notModified.status === 200 && n304.status === 304, 'a stale tag gets the answer, the current one a 304');
+        assert(gz(plain.text) < FOUR_KB && Buffer.byteLength(plain.text) < DEFAULT_RAW,
+            `her default Home, every text at its longest and three locked lines in it, is ${Buffer.byteLength(plain.text)} B, ${gz(plain.text)} B gzipped: under 4 KB (§2)`);
+        db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run('HomeBob', bob.pk);
+
+        // The enterprise card's server time over a book of a thousand lines (§7 "Not verified": getEnterpriseLedger reads
+        // the enterprise's whole book, its `since` filtering in JavaScript), printed beside the card it costs.
+        if (MONEY) {
+            const medianOf = async (path: string, who: Id) => {
+                const ms: number[] = [];
+                for (let i = 0; i < 11; i++) ms.push((await get(path, who)).ms);
+                return ms.sort((a, b) => a - b)[5];
+            };
+            const entTimes = () => medianOf('/api/home?cards=enterprise', alice);
+            const bobsBeans = async () => [(db.prepare('SELECT COUNT(*) AS c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?').get(bob.pk, bob.pk) as { c: number }).c,
+                await medianOf('/api/home?cards=beans', bob)];
+            const [bobFewLines, bobFew] = await bobsBeans();
+            // The control: a card that reads no ledger, measured beside them (the writes themselves slow every read a little).
+            const control = () => medianOf('/api/home?cards=community', alice);
+            const controlFew = await control();
+            const lines = () => (db.prepare('SELECT COUNT(*) AS c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?').get(w3.ent.publicKey, w3.ent.publicKey) as { c: number }).c;
+            const [fewLines, few] = [lines(), await entTimes()];
+            const t0 = performance.now();
+            let paid = 0;
+            for (let i = 0; i < 1000; i++) if (pay(bob, w3.ent.publicKey, 0.01, 'HomeSentinel a penny')) paid++;
+            const writeMs = performance.now() - t0;
+            const [manyLines, many] = [lines(), await entTimes()];
+            const book = (await get('/api/home?cards=enterprise', alice)).body?.cards?.enterprise;
+            console.log(`  the enterprise card: median ${few.toFixed(1)} ms a request with ${fewLines} lines on its book, ${many.toFixed(1)} ms with ${manyLines}`
+                + ` (${writeMs.toFixed(0)} ms to write them); month ${JSON.stringify(book?.month)}`);
+            const [bobManyLines, bobMany] = await bobsBeans();
+            const controlMany = await control();
+            console.log(`  the Beans card (the payer's own month): median ${bobFew.toFixed(1)} ms with ${bobFewLines} lines in his history, ${bobMany.toFixed(1)} ms with ${bobManyLines};`
+                + ` the control (cards=community, no ledger read): ${controlFew.toFixed(1)} ms before the writes, ${controlMany.toFixed(1)} ms after`);
+            // 1002: this month's two lines from 5d (Bob's 3, and his 10 with the fee), then the thousand.
+            assert(paid === 1000 && book?.month?.trades === 1002, `setup: a thousand more lines on the bakery's book this month (${paid}, month ${JSON.stringify(book?.month)})`);
+        }
 
         // Against today's landing (§5.4): the Market's first page and the header's "needs you" reads, which the phone
         // makes on opening (apps/native index.tsx, NeedsYouIcons.tsx); /api/community/info is read by both, so it is left
@@ -801,7 +1215,7 @@ async function main(): Promise<void> {
         const item = after.body?.cards?.market?.items?.find((i: any) => i.id === hugeId);
         assert(!!item && item.category.length <= 40 && item.category.startsWith('catccc'),
             `A: the listing is on Carol's Market card, its category cut to ${item?.category?.length} characters`);
-        assert(gz(after.text) < SIX_KB && Buffer.byteLength(after.text) < 16 * 1024 && !after.text.includes('c'.repeat(200)),
+        assert(gz(after.text) < FOUR_KB && Buffer.byteLength(after.text) < DEFAULT_RAW && !after.text.includes('c'.repeat(200)),
             `A: Carol's default Home is ${Buffer.byteLength(after.text)} B (${gz(after.text)} B gz) with it, ${Buffer.byteLength(before.text)} B before: a few KB`);
         const hugeUrl = `https://blog.example.org/${'u'.repeat(HUGE)}`;
         db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, external_id, url, title, thumbnail_url, published_at, category, source, muted, curated, created_at, updated_at)
@@ -812,7 +1226,7 @@ async function main(): Promise<void> {
         assert(!!huge && huge.url === null && Buffer.byteLength(pulse.text) < 4096 && !pulse.text.includes('u'.repeat(200)),
             `A: a harvested Pulse link of ${hugeUrl.length} characters is left out (url ${huge ? (huge.url === null ? 'null' : `${String(huge.url).length} characters`) : 'item missing'}), the item kept: ${Buffer.byteLength(pulse.text)} B (${gz(pulse.text)} B gz)`);
         const everyCard = await get(`/api/home?${ALL}`, carol);
-        assert(gz(everyCard.text) < SIX_KB && Buffer.byteLength(everyCard.text) < 16 * 1024 && !everyCard.text.includes('c'.repeat(200)) && !everyCard.text.includes('u'.repeat(200)),
+        assert(gz(everyCard.text) < EIGHT_KB && Buffer.byteLength(everyCard.text) < EVERY_CARD_RAW && !everyCard.text.includes('c'.repeat(200)) && !everyCard.text.includes('u'.repeat(200)),
             `A: every card, both in view: ${Buffer.byteLength(everyCard.text)} B (${gz(everyCard.text)} B gz)`);
 
         // D: "Coming up" is the soonest by start, not the 100 most recently updated.
@@ -888,7 +1302,24 @@ async function main(): Promise<void> {
             assert(r.body?.cards?.events?.items?.[0]?.place === null && r.body?.cards?.events?.items?.[0]?.rsvp === null, `${who}: an event with no place and no RSVP`);
             const landing = await get(`/api/global/home?lat=${BYRON.lat}&lng=${BYRON.lng}`, id);
             assert(JSON.stringify(r.body?.cards?.find) === JSON.stringify(landing.body), `${who}: the find card is the landing card's own body`);
-            assert(gz(r.text) < SIX_KB, `${who}: ${Buffer.byteLength(r.text)} bytes, ${gz(r.text)} gzipped, under 6 KB`);
+            assert(gz(r.text) < FOUR_KB, `${who}: ${Buffer.byteLength(r.text)} bytes, ${gz(r.text)} gzipped, under 4 KB`);
+            // W3 (§2 "What never shows"): every field a visitor's answer holds is one it held before W3, but the listings count.
+            const before: Record<string, string[]> = {
+                answer: ['generatedAt', 'profile', 'features', 'welcome', 'me', 'layout', 'cards'],
+                community: ['name', 'members', 'communities'],
+                market: ['items', 'total14d', 'more', 'examples'],
+                marketItem: ['id', 'type', 'title', 'category', 'credits', 'photoUrl', 'distanceKm'],
+                events: ['items', 'radiusKm'],
+                eventItem: ['id', 'title', 'startsAt', 'endsAt', 'place', 'rsvp', 'distanceKm', 'startLocal', 'tz', 'online', 'repeat', 'repeatUntil'],
+            };
+            const extra = (o: any, keys: string[]) => Object.keys(o ?? {}).filter(k => !keys.includes(k));
+            const added = [
+                ...extra(r.body, before.answer), ...extra(r.body?.cards?.community, [...before.community, 'listings']),
+                ...extra(r.body?.cards?.market, before.market), ...(r.body?.cards?.market?.items ?? []).flatMap((i: any) => extra(i, before.marketItem)),
+                ...extra(r.body?.cards?.events, before.events), ...(r.body?.cards?.events?.items ?? []).flatMap((i: any) => extra(i, before.eventItem)),
+            ];
+            assert(added.length === 0 && r.body?.cards?.community?.listings === se.getPublicCommunityInfo().postCount,
+                `${who}: W3 gives the visitors' answer nothing new but community.listings (${r.body?.cards?.community?.listings}${added.length ? `; new: ${added.join(',')}` : ''})`);
         }
         const a = await get(`/api/home?${ALL}`, alice);
         const c = a.body?.cards ?? {};
@@ -913,6 +1344,9 @@ async function main(): Promise<void> {
             'escrow off: no deals card and no deal line, though a deal waits on her');
         assert(c.find?.point === 'area' && typeof c.community?.communities === 'number' && c.community?.tradesThisMonth === undefined,
             `find from her area; the community card counts communities, no trades (${JSON.stringify(c.community)})`);
+        // W3 (§2): global's figures are members, communities listed and listings; the local ones are not there.
+        assert(typeof c.community?.listings === 'number' && ['joined7d', 'eventsSoon', 'commonsPot'].every(k => !(k in (c.community ?? {}))),
+            `the global community card: members, communities and listings, no week's joins, events or Commons pot (${JSON.stringify(c.community)})`);
         // F5: the worldwide community has no place of its own, wherever its server is: the sun and moon card uses her area.
         const { updateLocalConfig } = await import('./config/local-config.js');
         updateLocalConfig({ location: { lat: 40.71, lng: -74.01 } });
@@ -956,7 +1390,7 @@ async function main(): Promise<void> {
         const hugeId = await hugeListing(bob);
         const v = await get(`/api/home?lat=${BYRON.lat}&lng=${BYRON.lng}`, null);
         const vItem = v.body?.cards?.market?.items?.find((i: any) => i.id === hugeId);
-        assert(!!vItem && vItem.category.length <= 40 && gz(v.text) < SIX_KB && Buffer.byteLength(v.text) < 16 * 1024 && !v.text.includes('c'.repeat(200)),
+        assert(!!vItem && vItem.category.length <= 40 && gz(v.text) < FOUR_KB && Buffer.byteLength(v.text) < DEFAULT_RAW && !v.text.includes('c'.repeat(200)),
             `A: a visitor near the listing gets ${Buffer.byteLength(v.text)} B (${gz(v.text)} B gz), its category cut (${vItem?.category?.length ?? 'listing missing'})`);
 
         // Review D on global: within 50 km, from each event's area for a visitor, soonest first.
@@ -1003,6 +1437,8 @@ async function main(): Promise<void> {
         const b = await get(`/api/home?${ALL}&publicKey=${alice.pk}`, bob);
         assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !hasNumber(b.text, 42.5),
             `Bob naming Alice's key gets his own 50, never her 42.5 (${JSON.stringify(b.body?.cards?.beans)})`);
+        // W3's privacy checks with read auth off: nobody else's deal, balance, month, notice or group line.
+        await w3Privacy(await w3Fixtures());
     }
 }
 

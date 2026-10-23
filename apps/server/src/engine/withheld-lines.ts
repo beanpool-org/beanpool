@@ -82,9 +82,14 @@ export function withheldConversationOfPair(a: string, b: string): WithheldConver
                         ORDER BY created_at, id LIMIT 1`).get(a, b, b, a) as WithheldConversation | undefined;
 }
 
+/** The withheld conversation `owner` opened with `other`, if they have one: never one `other` opened with them. */
+export function withheldConversationOf(owner: string, other: string): WithheldConversation | undefined {
+    return db.prepare('SELECT * FROM withheld_conversations WHERE owner_pubkey = ? AND other_pubkey = ?').get(owner, other) as WithheldConversation | undefined;
+}
+
 /** `owner`'s withheld conversation with `other`: the one they have, or a new one with this id. */
 export function openWithheldConversation(owner: string, other: string, id: string, at: string): { conversation: WithheldConversation; created: boolean } {
-    const had = db.prepare('SELECT * FROM withheld_conversations WHERE owner_pubkey = ? AND other_pubkey = ?').get(owner, other) as WithheldConversation | undefined;
+    const had = withheldConversationOf(owner, other);
     if (had) return { conversation: had, created: false };
     db.prepare('INSERT INTO withheld_conversations (id, owner_pubkey, other_pubkey, created_at) VALUES (?, ?, ?, ?)').run(id, owner, other, at);
     return { conversation: { id, owner_pubkey: owner, other_pubkey: other, created_at: at }, created: true };

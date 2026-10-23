@@ -33,10 +33,11 @@
  *     and invite redemption still refuses the replaced key itself. No flow needs a replaced key to sign.
  *  7. A re-key never brings back an account that was deleted (by its owner) or removed (pruned, by an admin or a
  *     community vote): completing it is refused in plain words, and nothing changes.
- *  8. Controls, unchanged: an ordinary member and a suspended one (the status a report suspension writes, not a re-key)
- *     still post, message, pause, resume and edit their own listing, and delete their own account; a member suspended
- *     by an admin or a vote ('disabled') is refused what it was before, still pauses, resumes and edits their own
- *     listing, and can still delete their own account.
+ *  8. Controls: an ordinary member and a suspended one (the status a report's suspension wrote before it was a pause,
+ *     not a re-key) still post, message, pause, resume and edit their own listing, and delete their own account; a
+ *     member paused by an admin, a report or a vote ('disabled') still can't post, answers in the conversation they are
+ *     in (removal by vote S1, DESIGN-removal-by-vote §3.1: refused every line before), still pauses, resumes and edits
+ *     their own listing, and can still delete their own account.
  *  9. A closed account signs nothing (4109713263): a member removed by an admin, and one who deleted their own account
  *     over HTTP, each with an offer, an event Bob is going to and a poll paused. The prune and the self-delete leave no
  *     paused post behind (each ends as the same post up would: cancelled, the poll closed). The closed key can't edit
@@ -760,8 +761,9 @@ async function main(): Promise<void> {
         const cases: Array<[string, 'active' | 'suspended' | 'disabled', number, number]> = [
             // [who, their status, the post's answer, the message's answer]; each then deletes their own account.
             ['an ordinary member', 'active', 200, 200],
-            ['a member a report suspended', 'suspended', 200, 200],
-            ['a member suspended by an admin or a vote', 'disabled', 400, 400],
+            ['a member a report suspended before its suspension was a pause', 'suspended', 200, 200],
+            // A paused member answers in the conversations they are in (removal by vote S1), and posts nothing.
+            ['a member paused by an admin, a report or a vote', 'disabled', 400, 200],
         ];
         for (const [who, status, postWant, messageWant] of cases) {
             const member = makeMember(`Control ${status} NM`);
@@ -783,7 +785,7 @@ async function main(): Promise<void> {
             const purge = await signedFetch('POST', '/api/member/purge', member, {});
             const after = accountOf(member.pubKeyHex);
             assert(post.status === postWant && message.status === messageWant,
-                `${who}: a post and a message are answered as before, ${postWant} and ${messageWant} (got ${post.status} ${message.status} ${JSON.stringify(message.body)})`);
+                `${who}: a post and a message are answered ${postWant} and ${messageWant} (got ${post.status} ${message.status} ${JSON.stringify(message.body)})`);
             assert(purge.status === 200 && after?.status === 'pruned' && after?.callsign === 'Deleted Member',
                 `${who}: and they can still delete their own account (got ${purge.status} ${JSON.stringify(purge.body)})`);
         }

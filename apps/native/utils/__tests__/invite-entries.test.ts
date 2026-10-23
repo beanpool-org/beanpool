@@ -20,7 +20,7 @@ import { invitesOn, readNodeProfile } from '../node-profile';
 import {
     communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, joinWays, bringSomeoneHereText, invitesOffFallback, GUEST_NO_INVITES_TEXT, GUEST_AT_GLOBAL_WAITING_TEXT, guestNoInvitesText,
     guestDoorText, guestDoorButton, guestDoorLabel, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText,
-    adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
+    adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT, pausedRefusal, PAUSED_FALLBACK,
 } from '../invite-entries';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
@@ -387,6 +387,48 @@ describe('People → Invites where only admins invite (source check)', () => {
         expect(handler.indexOf('adminsOnlyRefusal(')).toBeLessThan(ticket);
         expect(handler).toContain('mayMakeOfflineTicket(nodeProfile?.features, inviteRole)');
         expect(handler.indexOf('mayMakeOfflineTicket(')).toBeLessThan(ticket);
+    });
+});
+
+// ── A member whose account is paused (removal by vote S1) ────────────────────────────────────────────────────────────
+// The node refuses their generate (403 `paused`, apps/server routes/community.ts), and a ticket they sign admits nobody
+// while the pause lasts (engine members.ts mayBringSomeoneIn): the node's words, and no offline ticket.
+
+describe('what a member whose account is paused is told', () => {
+    const words = 'Your account here is paused for now, so you can’t invite anyone.';
+
+    it("a generate the node refuses for it (403 paused) gives the node's words, so no offline ticket is made", () => {
+        expect(pausedRefusal(403, { error: words, code: 'paused' })).toBe(words);
+        expect(pausedRefusal(403, { code: 'paused' })).toBe(PAUSED_FALLBACK);
+        expect(pausedRefusal(403, { code: 'paused', error: ' ' })).toBe(PAUSED_FALLBACK);
+        expect(PAUSED_FALLBACK).toBe(words);
+    });
+
+    it('any other answer is not that refusal, and neither other refusal reads it', () => {
+        expect(pausedRefusal(403, { error: 'Only registered members can generate invites' })).toBeNull();
+        expect(pausedRefusal(403, { code: 'admins_only', error: 'In this community only its admins invite people.' })).toBeNull();
+        expect(pausedRefusal(404, { code: 'feature_off' })).toBeNull();
+        expect(pausedRefusal(404, { code: 'paused', error: words })).toBeNull();
+        expect(pausedRefusal(429, { code: 'writer_limit', error: 'Too many' })).toBeNull();
+        expect(pausedRefusal(200, { success: true })).toBeNull();
+        expect(pausedRefusal(403, null)).toBeNull();
+        expect(pausedRefusal(403, 'Forbidden')).toBeNull();
+        expect(adminsOnlyRefusal(403, { error: words, code: 'paused' })).toBeNull();
+        expect(invitesOffRefusal(403, { error: words, code: 'paused' })).toBeNull();
+    });
+});
+
+describe('People → Invites for a member whose account is paused (source check)', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../..', 'app/(tabs)/people.tsx'), 'utf-8');
+
+    it('a generate refused as paused says so and makes no offline ticket, nor says the phone is offline', () => {
+        const handler = src.slice(src.indexOf('const handleGenerate'), src.indexOf('const shareInvite'));
+        expect(handler.length).toBeGreaterThan(0);
+        const ticket = handler.indexOf('makeOfflineTicket(');
+        expect(ticket).toBeGreaterThan(0);
+        expect(handler).toContain('pausedRefusal(res.status, body)');
+        expect(handler.indexOf('pausedRefusal(')).toBeLessThan(ticket);
+        expect(handler.indexOf('pausedRefusal(')).toBeLessThan(handler.indexOf("t('Offline Mode')"));
     });
 });
 

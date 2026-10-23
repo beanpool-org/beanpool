@@ -90,6 +90,7 @@ import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signa
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
+import { isPausedMember } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
@@ -1160,7 +1161,10 @@ router.post('/api/invite/generate', async (ctx) => {
     try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {
         ctx.status = 403;
-        ctx.body = { error: word('Only registered members can generate invites') };
+        // A member whose account is paused brings nobody in while it lasts (removal by vote S1), and is told so.
+        ctx.body = isPausedMember(publicKey)
+            ? { error: word('Your account here is paused for now, so you can’t invite anyone.'), code: 'paused' }
+            : { error: word('Only registered members can generate invites') };
         return;
     }
     ctx.body = { success: true, invite };

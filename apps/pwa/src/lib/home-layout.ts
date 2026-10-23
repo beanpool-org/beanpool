@@ -182,12 +182,14 @@ function hash64(s: string): string {
 }
 
 /**
- * A layout's list (its cards and dismissals, not its date) as a short print: read as core reads any layout, then as JSON
- * with every object's keys sorted, so the list this browser sent and the node's answer of it print alike.
+ * A layout's list (its cards, dismissals and the columns chosen, not its date) as a short print: read as core reads any
+ * layout, then as JSON with every object's keys sorted, so the list this browser sent and the node's answer of it print
+ * alike. A columns change is an edit (W0); a layout that never chose prints as it did before there were columns.
  */
 export function layoutPrint(l: HomeLayoutV2): string {
     const read = readLayout(l) ?? l;
-    return hash64(JSON.stringify({ cards: read.cards, dismissed: read.dismissed ?? {} }, (_k, v: unknown) => (
+    const view = read.view ? { view: read.view } : {};
+    return hash64(JSON.stringify({ cards: read.cards, dismissed: read.dismissed ?? {}, ...view }, (_k, v: unknown) => (
         isObj(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v
     )));
 }
@@ -349,12 +351,14 @@ export function moveCard(
 /**
  * Reset to defaults: the newcomer's list (§1.3). A schedule's dismissal (the `safety` card) is kept, and so is a card of
  * a type this build doesn't know, at the end: Reset is this app's defaults, not a licence to throw away what it can't see.
+ * The columns chosen are kept too (W0): columns are no card.
  */
 export function resetLayout(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
     const unknown = listOf(layout).filter(c => !homeCardType(c.type));
     // The starter set, never Getting started: a Home reset after the tour would otherwise be empty.
     const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
-    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: iso(editAt(layout, now)) };
+    const view = layout?.view ? { view: layout.view } : {};
+    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: iso(editAt(layout, now)), ...view };
 }
 
 /** The `safety` card was put away: when, on the account too. */

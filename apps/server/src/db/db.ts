@@ -493,6 +493,61 @@ function backfillBoardStanding(): void {
     }
 }
 
+/**
+ * The board leaves a paused account's listings out ('disabled' in engine posts.ts ENTERPRISE_ON_BOARD_SQL, removal by vote
+ * S1), and two objects in the file hold that rule's own expression, which CREATE … IF NOT EXISTS keeps as a node has them:
+ * idx_members_off_board, from which the area set reads its off-board authors only while the two expressions match, and
+ * members_touch_board_standing, which moves a member's board standing when the rule's answer for them changes. Before the
+ * schema exec, each in its older shape is dropped, keyed on its own text as posts_au's replacement is, and the exec makes
+ * it again; every later boot finds the new one and does nothing. An older image booted back on the data keeps both (its
+ * own CREATE … IF NOT EXISTS is a no-op): its board's answers are the same, its area set reads them without the index,
+ * and the trigger stamps a standing on a pause it doesn't read, which costs a delta that carries those listings as they
+ * are.
+ */
+function replaceOffBoardShapes(): void {
+    for (const [type, name] of [['index', 'idx_members_off_board'], ['trigger', 'members_touch_board_standing']] as const) {
+        try {
+            const sql = (db.prepare('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?').get(type, name) as { sql: string | null } | undefined)?.sql;
+            if (sql && !sql.includes("'disabled'")) {
+                db.prepare(`DROP ${type === 'index' ? 'INDEX' : 'TRIGGER'} ${name}`).run();
+                console.log(`[DB] Replacing ${name}: a paused account's listings leave the board`);
+            }
+        } catch (e) {
+            console.error(`[DB] ❌ Could not replace ${name}:`, e);
+        }
+    }
+}
+
+/** node_config: the accounts paused when this node gained the board's pause rule have had their standing stamped. */
+const PAUSED_STANDING_FILLED = 'migration_board_standing_paused_v1';
+
+/**
+ * Stamps members.board_standing_changed_at once, on every account 'disabled' when a node gains the board's pause rule
+ * (replaceOffBoardShapes; node_config `migration_board_standing_paused_v1`, written in the same transaction, so a crash
+ * leaves it to run again). Their listings stayed on the board until now and the phones hold them live: stamped, every
+ * phone's next delta carries them as paused, whatever its cursor, as backfillBoardStanding did for the authors off the
+ * board when the column came in. Every one of them, whatever its standing says already: a phone's cursor is past an older
+ * stamp. updated_at doesn't move (the column isn't in members_touch_updated_at's list, nor is this in the trigger's
+ * columns), so nothing else about those rows is published. A fresh install stamps nothing and writes the marker; a
+ * standby stamps its own copy, as backfillBoardStanding's does.
+ */
+function fillPausedBoardStanding(): void {
+    try {
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(PAUSED_STANDING_FILLED)) return;
+        db.transaction(() => {
+            const filled = db.prepare(`
+                UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'disabled'
+            `).run().changes;
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(PAUSED_STANDING_FILLED);
+            if (filled > 0) console.log(`[DB] Board standing stamped on ${filled} paused member row(s)`);
+        })();
+    } catch (e) {
+        // Nothing is stamped and the marker isn't written, so the next boot tries again. Until then a phone's delta carries
+        // those listings only when they change themselves.
+        console.error('[DB] ❌ Could not stamp paused members\' board standing:', e);
+    }
+}
+
 /** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
 export const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
 
@@ -1831,6 +1886,7 @@ export function initSchema() {
     } catch (e) {
         console.error('[DB] ❌ Could not replace posts_au:', e);
     }
+    replaceOffBoardShapes();
 
     // Members' photos out of their rows (schema.sql member_photos): the reference first, before the exec, whose members
     // trigger names it; then each photo moved, with members_touch_updated_at still dropped above, so no row is stamped.
@@ -1949,6 +2005,7 @@ export function initSchema() {
 
     markExistingVisitors();
     backfillBoardStanding();
+    fillPausedBoardStanding();
     bringMembersToSchemaRules(schemaSql);
     makeAccountBalanceNotNull(schemaSql);
     indexOldConversationIds();

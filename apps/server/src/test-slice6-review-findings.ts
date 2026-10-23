@@ -356,8 +356,14 @@ async function main() {
             db.exec('DROP TRIGGER IF EXISTS temp.fault_msg_insert; DROP TRIGGER IF EXISTS temp.fault_msg_update; DROP TRIGGER IF EXISTS temp.fault_conv_insert;');
         }
 
+        // A paused account ('disabled') answers only in the conversations it is in and opens no new one (removal by vote S1,
+        // DESIGN-removal-by-vote §3.1; it was refused every line before): both refusals stay 4xx, each with its words.
         const refusedSend = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: disabled.pub, ...lockedDm() }, disabled);
-        assert(refusedSend.status === 400 && refusedSend.json?.error === 'Account is disabled', `send: a disabled account is still 400 with its message (got ${refusedSend.status} ${refusedSend.json?.error})`);
+        assert(refusedSend.status === 400 && /not a participant/.test(refusedSend.json?.error ?? ''),
+            `send: a disabled account outside the conversation is still 400 with its message (got ${refusedSend.status} ${refusedSend.json?.error})`);
+        const refusedOpen = await send('POST', '/api/messages/conversation', { type: 'dm', participants: [disabled.pub, b.pub], createdBy: disabled.pub }, disabled);
+        assert(refusedOpen.status === 403 && refusedOpen.json?.code === 'paused' && /paused/.test(refusedOpen.json?.error ?? ''),
+            `conversation: a disabled account opening a new one is 403 with its message (got ${refusedOpen.status} ${refusedOpen.json?.error})`);
         const refusedEdit = await send('POST', '/api/messages/edit', { messageId: existing.id, ...lockedDm() }, b);
         assert(refusedEdit.status === 400 && /Only the author/.test(refusedEdit.json?.error || ''), `edit: a non-author is still 400 (got ${refusedEdit.status})`);
         const dupId = crypto.randomUUID();

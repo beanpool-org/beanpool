@@ -30,7 +30,7 @@ import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
-    mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
+    mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, pausedRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
 import { isGlobalCommunity } from '../../utils/global-join-existing';
 import { useGlobalEntry } from '../../utils/use-global-entry';
@@ -515,6 +515,13 @@ export default function PeopleScreen() {
                         setInviteRole(null);
                         if (identity) void persistNodeRole(anchorUrl, identity.publicKey, null);
                         Alert.alert(t('Only admins invite here'), adminsOnly);
+                        return;
+                    }
+                    // This member's account is paused: the node's words, and no offline ticket, which it would refuse at
+                    // the join until the pause ends. The phone is online, so it never says it is offline.
+                    const paused = pausedRefusal(res.status, body);
+                    if (paused) {
+                        Alert.alert(t('No invites for now'), paused);
                         return;
                     }
                 }

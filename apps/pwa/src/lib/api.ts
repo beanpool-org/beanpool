@@ -865,6 +865,42 @@ export interface Conversation {
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
     /** The member's mute on this chat (set on the phone), null when not muted. */
     mute?: { mutedUntil: string | null; always: boolean } | null;
+    /**
+     * Where the community holds a stranger's first message as a request (PR #2392, `features.dmRequests`): a direct
+     * conversation's request as the reader reads it, null for an ordinary one. Absent where requests are off.
+     */
+    request?: DmRequest | null;
+}
+
+/**
+ * A message request on a direct conversation, as the node gives it to one of its two people (server
+ * engine/dm-requests.ts RequestView): its state for them, who opened it, and when it was made. The opener only ever reads
+ * `pending`, `expired` (30 days on, whatever became of it) or `accepted`.
+ */
+export interface DmRequest {
+    state: 'pending' | 'accepted' | 'ignored' | 'expired';
+    from: string;
+    at: string;
+    /**
+     * In the opener's own view of one not accepted only: whether their next line is the request's line, as the node counts
+     * their lines (PR #2404 review 4356625513). Absent from the other person's view.
+     */
+    nextLineIsRequest?: boolean;
+}
+
+/** A request waiting for the reader, as their conversation list gives it apart from their chats. */
+export interface DmRequestEntry extends Conversation {
+    request: DmRequest;
+    /** The opener has added the reader as a friend. */
+    addedYou?: boolean;
+}
+
+/** The conversation list (GET /api/messages/conversations/:publicKey). `requests` only where requests are on. */
+export interface ConversationsAnswer {
+    conversations: Conversation[];
+    totalUnread: number;
+    /** The requests waiting for the reader, newest first (at most 100 named), and how many in all. */
+    requests?: { count: number; conversations: DmRequestEntry[] };
 }
 
 export enum SystemMessageType {
@@ -947,8 +983,21 @@ export async function toggleMessageReactionApi(
     return request('POST', '/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
-export async function getConversations(publicKey: string): Promise<{ conversations: Conversation[]; totalUnread: number }> {
+export async function getConversations(publicKey: string): Promise<ConversationsAnswer> {
     return request('GET', `/api/messages/conversations/${encodeURIComponent(publicKey)}`);
+}
+
+/**
+ * Accept or ignore a message request waiting for the signer (POST /api/messages/request): the request as they now read
+ * it. Only the person it was sent to may; ignoring tells the opener nothing.
+ */
+export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore'): Promise<{ success: boolean; request: DmRequest }> {
+    return request('POST', '/api/messages/request', { conversationId, decision });
+}
+
+/** Ignore every message request waiting for the signer at once (POST /api/messages/request/ignore-all): how many. */
+export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {
+    return request('POST', '/api/messages/request/ignore-all', {});
 }
 
 export async function markConversationReadApi(pubkey: string, conversationId: string): Promise<void> {

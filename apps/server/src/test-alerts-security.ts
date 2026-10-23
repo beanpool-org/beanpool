@@ -25,7 +25,7 @@
  *     later each actor's rest is one pushed line ("257 more changes by the same admin").
  *  5c. A role lost or given back outside grant and revoke, through the real routes: an admin suspends an admin, an owner
  *     lifts it, an owner removes an admin, an admin suspends a moderator on a report, an admin deletes their account, a
- *     suspension the community does not keep ends, a suspension by a community vote, an owner halting a suspension's
+ *     report's pause and a suspension the community does not keep end, a suspension by a community vote, an owner halting a suspension's
  *     vote: each told once and pushed to the owners, under the actor's own bound, in words naming who acted (a vote, an
  *     owner); node-roles' community-vote actor is state-engine's.
  *  5d. Every security log line is in the history (one line per kind, counted, never its words); 1000 of them write the
@@ -608,6 +608,12 @@ async function main(): Promise<void> {
         /^An admin lost that role, by deleting their own account\./);
     await told('an owner suspends an admin', () => call('POST', `/api/local/admin/users/${sue}/suspend`, { reason: 'A second time, for the vote.' }, asOwner),
         /^An admin lost that role, suspended by an owner\./, 'ExponentPushToken[sue-admin]');
+    // The moderator's suspension on the report is a pause (removal by vote S1): it opened its own vote, which closes
+    // first, and unkept it gives the role back, told on its own line.
+    const rptKeep = db.prepare("SELECT closes_at FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'").get(rpt) as { closes_at: string } | undefined;
+    await told("the community does not keep the moderator's pause on the report", async () => { tickDecisions(Date.parse(rptKeep?.closes_at ?? '') + 1); },
+        /^Someone was made a moderator again, the suspension not kept by a community vote\./);
+    assert(heldNodeRoleOf(rpt) === 'moderator', '5c. the moderator\'s role is back');
     await told('the community does not keep it', async () => { tickDecisions(Date.now() + 8 * 24 * HOUR); },
         /^Someone was made an admin again, the suspension not kept by a community vote\./);
     assert(heldNodeRoleOf(sue) === 'admin', '5c. the role is back once more');

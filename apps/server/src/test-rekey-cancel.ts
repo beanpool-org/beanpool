@@ -20,14 +20,17 @@
  *  E. A code made before the prior status was kept puts a re-key-suspended member back to active, and says so.
  *  F. A member suspended by an admin ('disabled') stays so; two codes in a row put back the status before the first.
  *  G. A write that would touch an unexpected row changes nothing: the key freed meanwhile, the cancel is refused.
- *  H. A suspension something else made stays: a report's suspension while the code waits (and over an expired code),
- *     and an older server's code over a report's suspension (no prior status kept): the member stays suspended, and
- *     Lift suspension lifts it (not while a code holds the key). A report that suspended nobody changes nothing: the
- *     member ends active, under a code with a prior status (Sal) or an older one (Len).
+ *  H. A suspension something else made stays: a report's pause while the code waits (and over an expired code), and an
+ *     older server's code over a report's pause (no prior status kept): the member stays paused, 'disabled', which no
+ *     cancel touches (removal by vote S1 made a report's suspension the pause an admin's emergency suspension is), and
+ *     Lift suspension lifts it. Lifted under an expired code's hold, a new code over that hold, cancelled, ends active,
+ *     never paused again with no record. A report that suspended nobody changes nothing: the member ends active, under a
+ *     code with a prior status (Sal) or an older one (Len); one not known to have, under an older code, stays suspended
+ *     until lifted (Lou).
  *  I. An admin's emergency suspension while the code alone holds the member is made, and outlasts the cancel; a
- *     report's suspension while the code waits is still refused as one.
- *  J. Completing the code keeps a report's suspension made while it waited on the new key (Lift suspension lifts it);
- *     the code's own 'suspended' ends as before.
+ *     report's pause while the code waits is one, so an emergency suspension over it is refused as already suspended.
+ *  J. Completing the code keeps a report's pause made while it waited on the new key (Lift suspension lifts it); the
+ *     code's own 'suspended' ends as before.
  *
  * Run (from apps/server): mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-rekey-cancel" node ../../scripts/run-server-suites.mjs
  */
@@ -308,17 +311,18 @@ async function runTests() {
             return as(ownerSession, 'POST', `/api/local/admin/reports/${report.id}/action`, { suspendUser: true });
         };
 
-        // A report actioned with suspendUser while the code waits (review 4176252096).
+        // A report actioned with suspendUser while the code waits (review 4176252096): the report pauses her over the code,
+        // as an admin's emergency suspension is made over it (I), and the pause is 'disabled', which the cancel leaves.
         const pia = makeKeypair();
         join(pia, 'PiaReported');
         await issue(ownerSession, pia.pubKeyHex);
         const actioned = await reportSuspends(pia.pubKeyHex);
-        assert(actioned.status === 200 && getMember(pia.pubKeyHex)?.status === 'suspended', `H: a report suspends Pia while the code waits (${actioned.status})`);
+        assert(actioned.status === 200 && getMember(pia.pubKeyHex)?.status === 'disabled', `H: a report pauses Pia while the code waits (${actioned.status} ${getMember(pia.pubKeyHex)?.status})`);
         const r = await cancel(ownerSession, pia.pubKeyHex);
-        assert(r.status === 200 && r.json.status === 'suspended' && /report/.test(r.json.note ?? ''),
-            `H: the cancel leaves Pia suspended and says why (${r.status} ${JSON.stringify(r.json)})`);
-        assert(getMember(pia.pubKeyHex)?.status === 'suspended' && heldReason(pia.pubKeyHex) === undefined && latestRequest(pia.pubKeyHex)?.status === 'cancelled',
-            `H: Pia stays suspended; the code is cancelled and its hold gone (${getMember(pia.pubKeyHex)?.status})`);
+        assert(r.status === 200 && r.json.status === 'disabled',
+            `H: the cancel leaves Pia paused, and its answer says so (${r.status} ${JSON.stringify(r.json)})`);
+        assert(getMember(pia.pubKeyHex)?.status === 'disabled' && heldReason(pia.pubKeyHex) === undefined && latestRequest(pia.pubKeyHex)?.status === 'cancelled',
+            `H: Pia stays paused; the code is cancelled and its hold gone (${getMember(pia.pubKeyHex)?.status})`);
         // Where the report alone leaves a member: Pia, after the cancel, can do just what Kit can.
         const kit = makeKeypair();
         join(kit, 'KitReported');
@@ -335,18 +339,18 @@ async function runTests() {
         await cancel(ownerSession, ivy.pubKeyHex); // marks it expired, refused
         await issue(ownerSession, ivy.pubKeyHex);
         const ri = await cancel(ownerSession, ivy.pubKeyHex);
-        assert(ri.status === 200 && getMember(ivy.pubKeyHex)?.status === 'suspended' && /report/.test(ri.json.note ?? ''),
-            `H: a new code over the expired one, cancelled: Ivy stays suspended (${ri.status} ${JSON.stringify(ri.json)})`);
+        assert(ri.status === 200 && ri.json.status === 'disabled' && getMember(ivy.pubKeyHex)?.status === 'disabled',
+            `H: a new code over the expired one, cancelled: Ivy stays paused (${ri.status} ${JSON.stringify(ri.json)})`);
 
-        // P2 (review 4176252098): an older server's code (no prior status) over a report's suspension.
+        // P2 (review 4176252098): an older server's code (no prior status) over a report's pause.
         const quin = makeKeypair();
         join(quin, 'QuinLegacy');
         await reportSuspends(quin.pubKeyHex);
         await issue(ownerSession, quin.pubKeyHex);
         db.prepare('UPDATE rekey_requests SET prior_status = NULL WHERE old_pubkey = ?').run(quin.pubKeyHex);
         const rq = await cancel(ownerSession, quin.pubKeyHex);
-        assert(rq.status === 200 && rq.json.status === 'suspended' && getMember(quin.pubKeyHex)?.status === 'suspended' && /report/.test(rq.json.note ?? ''),
-            `H: P2: an older code over a report’s suspension: Quin stays suspended, and the answer says why (${JSON.stringify(rq.json)})`);
+        assert(rq.status === 200 && rq.json.status === 'disabled' && getMember(quin.pubKeyHex)?.status === 'disabled',
+            `H: P2: an older code over a report’s pause: Quin stays paused, and the answer says so (${JSON.stringify(rq.json)})`);
 
         // P3: the same, the older code expired with the key still held, and a new code made over it.
         const ren = makeKeypair();
@@ -358,8 +362,8 @@ async function runTests() {
         const renew = await issue(ownerSession, ren.pubKeyHex);
         assert(renew.status === 200 && latestRequest(ren.pubKeyHex)?.prior_status !== 'active', `H: P3: a new code over the older expired hold doesn’t record active (${latestRequest(ren.pubKeyHex)?.prior_status})`);
         const rr = await cancel(ownerSession, ren.pubKeyHex);
-        assert(rr.status === 200 && getMember(ren.pubKeyHex)?.status === 'suspended',
-            `H: P3: cancelling it leaves Ren suspended (${rr.status} ${JSON.stringify(rr.json)})`);
+        assert(rr.status === 200 && getMember(ren.pubKeyHex)?.status === 'disabled',
+            `H: P3: cancelling it leaves Ren paused (${rr.status} ${JSON.stringify(rr.json)})`);
 
         // A report's suspension the cancel kept, lifted from the member's page (review 4176287682): Lift suspension.
         const lift = (pk: string) => as(ownerSession, 'POST', `/api/local/admin/users/${pk}/status`, { status: 'active' });
@@ -412,22 +416,25 @@ async function runTests() {
         const liftLog = db.prepare("SELECT COUNT(*) AS c FROM system_logs WHERE message LIKE ?").get(`Lifted the suspension of ${lou.pubKeyHex.slice(0, 12)}%`) as any;
         assert(liftLog.c === 1, `H: the lift is logged (${liftLog.c})`);
 
-        // A report's suspension under an expired code's hold (review 4176372949): the refusals name the way out, and it works.
+        // A report's pause under an expired code's hold (review 4176372949). The pause is 'disabled', which Lift suspension
+        // lifts whatever code holds the key (as an admin's suspension); the key stays held until a new code over the hold
+        // is cancelled, which the cancel's refusal names. That new code inherits the status the first recorded, 'disabled'
+        // from the pause: lifted, the pause is over, so its cancel puts Max back to active, never paused again with no
+        // record and no end (state-engine.ts setUserStatusRow).
         const max = makeKeypair();
         join(max, 'MaxExpiredHold');
         await reportSuspends(max.pubKeyHex);
         await issue(ownerSession, max.pubKeyHex);
         db.prepare("UPDATE rekey_requests SET expires_at = ? WHERE old_pubkey = ?").run(new Date(Date.now() - 60_000).toISOString(), max.pubKeyHex);
         const maxLift = await lift(max.pubKeyHex);
-        assert(maxLift.status === 409 && /run out/.test(maxLift.json.error ?? '') && /make a new code/i.test(maxLift.json.error ?? ''),
-            `H: Max: Lift suspension under the expired hold names the way out (${maxLift.status} ${maxLift.json.error})`);
+        assert(maxLift.status === 200 && getMember(max.pubKeyHex)?.status === 'active' && heldReason(max.pubKeyHex) === 'rekey_pending' && !(await acts(max, 'held')),
+            `H: Max: Lift suspension under the expired hold lifts the pause; his key is still held, so he can't act yet (${maxLift.status} ${getMember(max.pubKeyHex)?.status})`);
         const maxCancel = await cancel(ownerSession, max.pubKeyHex);
-        assert(maxCancel.status === 409 && /make a new code/i.test(maxCancel.json.error ?? ''), `H: Max: so does the cancel's (${maxCancel.json.error})`);
+        assert(maxCancel.status === 409 && /make a new code/i.test(maxCancel.json.error ?? ''), `H: Max: the cancel's refusal names the way out (${maxCancel.json.error})`);
         await issue(ownerSession, max.pubKeyHex);
         const maxOut = await cancel(ownerSession, max.pubKeyHex);
-        const maxLifted = await lift(max.pubKeyHex);
-        assert(maxOut.status === 200 && maxOut.json.status === 'suspended' && maxLifted.status === 200 && getMember(max.pubKeyHex)?.status === 'active'
-            && await acts(max, 'lifted'), `H: Max: a new code, cancelled, then Lift suspension: he is active and acts (${maxOut.status} ${maxLifted.status})`);
+        assert(maxOut.status === 200 && maxOut.json.status === 'active' && getMember(max.pubKeyHex)?.status === 'active' && heldReason(max.pubKeyHex) === undefined
+            && await acts(max, 'lifted'), `H: Max: a new code over the hold, cancelled: he is active, not paused again, and acts (${maxOut.status} ${JSON.stringify(maxOut.json)})`);
 
         // A later action on the same report never lowers what the first recorded (review 4176372892): a report suspends
         // Rae, and the same report is actioned again without suspendUser (a takedown after the fact sends none).
@@ -442,13 +449,13 @@ async function runTests() {
         await issue(ownerSession, rae.pubKeyHex);
         db.prepare('UPDATE rekey_requests SET prior_status = NULL WHERE old_pubkey = ?').run(rae.pubKeyHex);
         const rc = await cancel(ownerSession, rae.pubKeyHex);
-        assert(rc.status === 200 && rc.json.status === 'suspended' && getMember(rae.pubKeyHex)?.status === 'suspended' && /report/.test(rc.json.note ?? ''),
-            `H: Rae: an older code over that report's suspension, cancelled: she stays suspended (${rc.status} ${JSON.stringify(rc.json)})`);
+        assert(rc.status === 200 && rc.json.status === 'disabled' && getMember(rae.pubKeyHex)?.status === 'disabled',
+            `H: Rae: an older code over that report's pause, cancelled: she stays paused (${rc.status} ${JSON.stringify(rc.json)})`);
         const raeCode = await issue(ownerSession, rae.pubKeyHex);
         db.prepare("UPDATE rekey_requests SET prior_status = NULL WHERE old_pubkey = ? AND status = 'pending'").run(rae.pubKeyHex);
         const raeDone = await reEnroll(raeCode.json.code, raeNew);
-        assert(raeDone.status === 200 && getMember(raeNew.pubKeyHex)?.status === 'suspended',
-            `H: Rae: an older code over it, completed: her new key stays suspended (${raeDone.status} ${getMember(raeNew.pubKeyHex)?.status})`);
+        assert(raeDone.status === 200 && getMember(raeNew.pubKeyHex)?.status === 'disabled',
+            `H: Rae: an older code over it, completed: her new key stays paused (${raeDone.status} ${getMember(raeNew.pubKeyHex)?.status})`);
         // A report actioned before the node kept the record stays not known: a later action without a suspension
         // doesn't make it "suspended nobody".
         const roz = makeKeypair();
@@ -465,8 +472,8 @@ async function runTests() {
         await as(ownerSession, 'POST', `/api/local/admin/reports/${sidReport.id}/action`, { suspendUser: false });
         const sid0 = suspendedMember(sidReport.id);
         await as(ownerSession, 'POST', `/api/local/admin/reports/${sidReport.id}/action`, { suspendUser: true });
-        assert(sid0 === 0 && suspendedMember(sidReport.id) === 1 && getMember(sid.pubKeyHex)?.status === 'suspended',
-            `H: Sid: a first action records none, a later one that suspends records it (${sid0} → ${suspendedMember(sidReport.id)})`);
+        assert(sid0 === 0 && suspendedMember(sidReport.id) === 1 && getMember(sid.pubKeyHex)?.status === 'disabled',
+            `H: Sid: a first action records none, a later one that pauses records it (${sid0} → ${suspendedMember(sidReport.id)})`);
     }
 
     // ── I. An admin's emergency suspension while the code waits (review 4176287725) ────────────
@@ -487,15 +494,15 @@ async function runTests() {
         assert(lifted.status === 200 && getMember(tia.pubKeyHex)?.status === 'active' && await acts(tia, 'lifted'),
             `I: lifting it makes Tia active, and she acts (${lifted.status})`);
 
-        // A report's suspension while the code waits is a suspension: still refused, as before.
+        // A report's pause while the code waits is the same pause: an emergency suspension over it is refused, as before.
         const uma = makeKeypair();
         join(uma, 'UmaReported');
         await issue(ownerSession, uma.pubKeyHex);
         const report = submitReport(rep2.pubKeyHex, uma.pubKeyHex, 'Repeated harassment in the market posts');
         await as(ownerSession, 'POST', `/api/local/admin/reports/${report!.id}/action`, { suspendUser: true });
         const su = await suspend(uma.pubKeyHex);
-        assert(su.status === 409 && /already suspended/.test(su.json.error ?? '') && getMember(uma.pubKeyHex)?.status === 'suspended',
-            `I: a report suspended Uma while the code waits: the emergency suspension is refused as already suspended (${su.status} ${su.json.error})`);
+        assert(su.status === 409 && /already suspended/.test(su.json.error ?? '') && getMember(uma.pubKeyHex)?.status === 'disabled',
+            `I: a report paused Uma while the code waits: the emergency suspension is refused as already suspended (${su.status} ${su.json.error})`);
     }
 
     // ── J. Completing the code keeps a suspension it didn't make (review 4176287767) ────────────
@@ -508,8 +515,8 @@ async function runTests() {
         const report = submitReport(rep3.pubKeyHex, cora.pubKeyHex, 'Repeated harassment in the market posts');
         const actioned = await as(ownerSession, 'POST', `/api/local/admin/reports/${report!.id}/action`, { suspendUser: true });
         const done = await reEnroll(made.json.code, coraNew);
-        assert(actioned.status === 200 && done.status === 200 && getMember(coraNew.pubKeyHex)?.status === 'suspended',
-            `J: a report suspends Cora while the code waits; her re-key completes and the new key stays suspended (${done.status} ${getMember(coraNew.pubKeyHex)?.status})`);
+        assert(actioned.status === 200 && done.status === 200 && getMember(coraNew.pubKeyHex)?.status === 'disabled',
+            `J: a report pauses Cora while the code waits; her re-key completes and the new key stays paused (${done.status} ${getMember(coraNew.pubKeyHex)?.status})`);
         const lifted = await as(ownerSession, 'POST', `/api/local/admin/users/${coraNew.pubKeyHex}/status`, { status: 'active' });
         assert(lifted.status === 200 && getMember(coraNew.pubKeyHex)?.status === 'active' && await acts(coraNew, 'lifted'),
             `J: Lift suspension makes her new key active, and it acts (${lifted.status})`);

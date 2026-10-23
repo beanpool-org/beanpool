@@ -93,7 +93,8 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 
 An admin can suspend a member at once, for example to stop harm. They must give a reason that members can read.
 
-- At the same moment, a 7-day Decision opens: "Keep this suspension?".
+- At the same moment, a 7-day Decision opens: "Keep this suspension?". An admin acting on a report can suspend the same way, and the same Decision opens.
+- While it lasts, the member's listings are off the Market and the map, and they can't invite anyone or answer a request to join. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), and finish or cancel deals they already have. It all comes back when the suspension ends.
 - It needs the usual turnout and 60% Yes.
 - If it does not pass, or too few people vote, the suspension lifts by itself.
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.

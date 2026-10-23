@@ -27,6 +27,7 @@ export const INVITE_WORDS = {
     adminsOnlyFallback: word('In this community only its admins invite people. Ask an admin to bring them in.'),
     memberTicketRefused: word('This invite was made by a member, and in this community only its admins bring people in now. Ask an admin for a fresh invite.'),
     offlineAdminsOnly: word('You’re offline, and in this community only its admins invite people. Try again when you’re back online.'),
+    pausedFallback: word('Your account here is paused for now, so you can’t invite anyone.'),
 } as const;
 
 /** Said where the node's own words are missing. */
@@ -112,4 +113,22 @@ export function adminsOnlyRefusal(e: unknown): string | null {
     const err = e as { status?: unknown; code?: unknown; message?: unknown } | null | undefined;
     if (!err || typeof err !== 'object' || err.status !== 403 || err.code !== 'admins_only') return null;
     return typeof err.message === 'string' && err.message.trim() ? err.message : ADMINS_ONLY_FALLBACK;
+}
+
+// ── A member whose account is paused ────────────────────────────────────────────────────────────────────────────────
+// While a member's account is paused (removal by vote S1) they bring nobody in: the node refuses their generate, and a
+// ticket they sign admits nobody until the pause ends (mayBringSomeoneIn in @beanpool/engine).
+
+/** Said where the node's own words are missing. */
+export const PAUSED_FALLBACK = INVITE_WORDS.pausedFallback;
+
+/**
+ * The node's words when it refused a generate because this member's account is paused (403 `paused`, as `request` throws
+ * it), or null for any other failure. Read so the page says so and makes no offline ticket, which the node would refuse
+ * at the join just the same.
+ */
+export function pausedRefusal(e: unknown): string | null {
+    const err = e as { status?: unknown; code?: unknown; message?: unknown } | null | undefined;
+    if (!err || typeof err !== 'object' || err.status !== 403 || err.code !== 'paused') return null;
+    return typeof err.message === 'string' && err.message.trim() ? err.message : PAUSED_FALLBACK;
 }

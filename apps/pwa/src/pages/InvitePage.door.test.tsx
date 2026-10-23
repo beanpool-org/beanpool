@@ -30,7 +30,7 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { buildOfflineInviteCode, generateInvite, request, type CommunityInfo } from '../lib/api';
 import {
     onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal,
-    ADMINS_ONLY_FALLBACK, OFFLINE_ADMINS_ONLY_TEXT,
+    invitesOffRefusal, pausedRefusal, ADMINS_ONLY_FALLBACK, OFFLINE_ADMINS_ONLY_TEXT, PAUSED_FALLBACK,
 } from '../lib/node-invites';
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
@@ -224,4 +224,39 @@ describe('the Invites page where any member invites: as before, and no role is a
             expect(request).not.toHaveBeenCalledWith('GET', '/api/node-admin/me');
         });
     }
+});
+
+// ── A member whose account is paused (removal by vote S1) ────────────────────────────────────────────────────────────
+// The node refuses their generate (403 `paused`, apps/server routes/community.ts), and a ticket they sign admits nobody
+// while the pause lasts (engine members.ts mayBringSomeoneIn): the node's words, and no offline ticket.
+
+const PAUSED_WORDS = 'Your account here is paused for now, so you can’t invite anyone.';
+
+describe('the Invites page for a member whose account is paused', () => {
+    it("only the node's 403 paused is read as that refusal, and neither other refusal reads it", () => {
+        const paused = Object.assign(new Error(PAUSED_WORDS), { status: 403, code: 'paused' });
+        expect(pausedRefusal(paused)).toBe(PAUSED_WORDS);
+        expect(pausedRefusal(Object.assign(new Error(''), { status: 403, code: 'paused' }))).toBe(PAUSED_FALLBACK);
+        expect(pausedRefusal(Object.assign(new Error(' '), { status: 403, code: 'paused' }))).toBe(PAUSED_FALLBACK);
+        expect(PAUSED_FALLBACK).toBe(PAUSED_WORDS);
+        expect(pausedRefusal(Object.assign(new Error('Only registered members can generate invites'), { status: 403 }))).toBeNull();
+        expect(pausedRefusal(Object.assign(new Error(WORDS), { status: 403, code: 'admins_only' }))).toBeNull();
+        expect(pausedRefusal(Object.assign(new Error('off'), { status: 404, code: 'feature_off' }))).toBeNull();
+        expect(pausedRefusal(Object.assign(new Error(PAUSED_WORDS), { status: 404, code: 'paused' }))).toBeNull();
+        expect(pausedRefusal(new TypeError('Failed to fetch'))).toBeNull();
+        expect(pausedRefusal(null)).toBeNull();
+        expect(adminsOnlyRefusal(paused)).toBeNull();
+        expect(invitesOffRefusal(paused)).toBeNull();
+    });
+
+    it("a generate the node refuses as paused: its words, and no offline ticket", async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(MEMBERS);
+        vi.mocked(generateInvite).mockRejectedValueOnce(Object.assign(new Error(PAUSED_WORDS), { status: 403, code: 'paused' }));
+        render(<InvitePage identity={IDENTITY} />);
+        fireEvent.click(await screen.findByRole('button', { name: /Generate New Invite/ }));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(PAUSED_WORDS));
+        expect(buildOfflineInviteCode).not.toHaveBeenCalled();
+        expect(localStorage.getItem(`bp_offline_invites_${IDENTITY.publicKey}`)).toBeNull();
+        expect(screen.queryByText(/Share this code with someone you trust/)).toBeNull();
+    });
 });

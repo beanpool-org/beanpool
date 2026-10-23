@@ -6,6 +6,7 @@ import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
+import { consumeChatPrefill } from '../lib/archetypes';
 import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
 import { dmNotLockedLine } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -1088,6 +1089,42 @@ describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §
         await waitFor(() => expect(createConversationApi).toHaveBeenCalledTimes(1));
         await act(async () => {});
         expect(screen.queryByTestId('chat-refusal')).toBeNull();
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    // A paused account opens no new conversation (removal by vote S1): the node answers 403 `paused` in its words. Each way
+    // in by someone's key lands here with that key (App.tsx's onMessage, PeoplePage's onNavigate), a Collaborate or a Nudge
+    // with its message waiting (lib/archetypes setChatPrefill).
+    const PAUSED = 'Your account here is paused for now, so you can’t start a new conversation. You can still answer the ones you’re in.';
+    it.each([
+        { way: "Message on someone's profile", prefill: null },
+        { way: 'Message on People', prefill: null },
+        { way: "Collaborate on someone's profile", prefill: 'Hey Bob! Want to work on this together?' },
+        { way: "Nudge in Chat on someone's profile", prefill: 'Hey Bob! Take the 60-second working style quiz on your profile.' },
+    ])("403 paused arriving by $way: the node's words, never a tap that says nothing", async ({ prefill }) => {
+        // clearAllMocks keeps an implementation, so the waiting message is put back to none whatever happens here.
+        vi.mocked(consumeChatPrefill).mockImplementation(() => prefill);
+        try {
+            vi.mocked(createConversationApi).mockRejectedValue(refusal(403, 'paused', PAUSED));
+            render(<MessagesPage identity={mockIdentity} openConversationId={PEER} />);
+            const said = await screen.findByTestId('chat-refusal');
+            expect(said).toHaveAttribute('role', 'alert');
+            expect(said.querySelector('span')!.textContent).toBe(PAUSED);
+            expect(createConversationApi).toHaveBeenCalledTimes(1);
+            expect(window.alert).not.toHaveBeenCalled();
+            // Nothing opened, so no composer holds the waiting message.
+            expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        } finally {
+            vi.mocked(consumeChatPrefill).mockImplementation(() => null);
+        }
+    });
+
+    it("403 paused from New DM: the node's words in place, as a new account's limit is", async () => {
+        vi.mocked(createConversationApi).mockRejectedValue(refusal(403, 'paused', PAUSED));
+        render(<MessagesPage identity={mockIdentity} />);
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /New DM/ })); });
+        await act(async () => { fireEvent.click(await screen.findByText('Charlie')); });
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(PAUSED);
         expect(window.alert).not.toHaveBeenCalled();
     });
 });

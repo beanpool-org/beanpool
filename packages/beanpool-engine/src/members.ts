@@ -508,18 +508,12 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
             return { ok: false, reason: 'unknown_inviter', error: INVITER_KEY_SPELLING };
         }
 
-        // A member of this node who may bring someone in (mayBringSomeoneIn), not just a row: a pruned account keeps its
-        // row, and so does the old key of a member being re-keyed, and a ticket either signs would bring its holder in as
-        // someone new (engine/invites.ts); a visitor's row never joined, and its ticket would admit anyone, itself too.
-        // A member whose account is paused is still a member here: the words say the ticket can't be used for now, and
-        // nothing of why (the same reason, so each app's own words for it still fit).
-        if (!mayBringSomeoneIn(db, inviterPubkey)) {
-            return {
-                ok: false, reason: 'unknown_inviter',
-                error: isNodeMember(db, inviterPubkey) && isSuspendedAccount(db, inviterPubkey)
-                    ? word('The member who made this ticket can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.')
-                    : 'Inviter is not a formally recognized member of this decentralized mesh',
-            };
+        // A member of this node (isNodeMember, the invite test's first half; whether they may bring someone in now is
+        // asked once the signature checks out, below), not just a row: a pruned account keeps its row, and so does the
+        // old key of a member being re-keyed, and a ticket either signs would bring its holder in as someone new
+        // (engine/invites.ts); a visitor's row never joined, and its ticket would admit anyone, itself too.
+        if (!isNodeMember(db, inviterPubkey)) {
+            return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
         }
 
         const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -554,6 +548,20 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         );
 
         if (!isValid) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
+
+        // The whole invite test (mayBringSomeoneIn): not while the inviter's account is paused. Only once the signature
+        // checks out: a member's key is in every ticket they gave out, so anyone can write one naming it, and a forged
+        // ticket reads the same whether that member is paused or not (as a replaced key is answered only past its
+        // signature, https-server.ts). A member whose account is paused is still a member here: the words say the ticket
+        // can't be used for now, and nothing of why (the same reason, so each app's own words for it still fit).
+        if (!mayBringSomeoneIn(db, inviterPubkey)) {
+            return {
+                ok: false, reason: 'unknown_inviter',
+                error: isSuspendedAccount(db, inviterPubkey)
+                    ? word('The member who made this ticket can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.')
+                    : 'Inviter is not a formally recognized member of this decentralized mesh',
+            };
+        }
 
         const refused = binding?.({ format: bound ? 2 : 1, audience, inviter: inviterPubkey });
         if (refused) return { ok: false, reason: refused.reason, error: refused.error };

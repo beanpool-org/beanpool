@@ -17,8 +17,9 @@
  *  1. An admin pauses Pia (POST /api/local/admin/users/:pubkey/suspend): 'disabled', the record with the reason, her
  *     moderator role held aside, no Bean moved. Her listings leave the board and a delta carries them as paused, but as
  *     they are to Bea, who has a deal open on one, and to Pia herself. She can't invite: no new code, a ticket she signs
- *     admits nobody, and a code she made before is refused (the check says so, the redeem in words that don't say she
- *     left), unused. She still can't answer a knock (403 not_active). She answers in the conversation she is in, and gets
+ *     admits nobody (the check says so too), though one forged in her name reads as one forged in an active member's, so
+ *     it tells nobody she is paused, and a code she made before is refused (the check says so, the redeem in words that
+ *     don't say she left), unused. She still can't answer a knock (403 not_active). She answers in the conversation she is in, and gets
  *     it again when her app asks, but starts no new one (403 `paused`), as §3.1 has it: an admin's suspension refused her
  *     every line before, a report's let her open any. She takes a line of her own down in it; her group's chat still
  *     refuses her taking hers down there (403), as it did before her pause, and the line stays. She CAN close the deals
@@ -121,6 +122,12 @@ function offlineTicket(inviter: Id): string {
     const payload = JSON.stringify({ i: inviter.pubKeyHex, t: Date.now() });
     const s = crypto.sign(null, Buffer.from(payload), inviter.privateKey).toString('base64');
     return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+}
+
+/** One anyone can write: it names `named` (whose key every ticket they gave out carries) over 64 bytes no key signed. */
+function forgedTicket(named: Id): string {
+    const payload = JSON.stringify({ i: named.pubKeyHex, t: Date.now() });
+    return Buffer.from(JSON.stringify({ p: payload, s: crypto.randomBytes(64).toString('base64') })).toString('base64');
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -364,6 +371,26 @@ async function main() {
     const viaTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(pia), publicKey: nia.pubKeyHex, callsign: nia.callsign }, nia);
     assert(viaTicket.status === 400 && CANT_BRING_IN.test(viaTicket.body?.error ?? '') && !row(nia.pubKeyHex),
         `an offline ticket she signs admits nobody (${viaTicket.status} ${viaTicket.text.slice(0, 140)})`);
+    const ticketChecked = await get(`/api/invite/check?code=${encodeURIComponent(`BP-${offlineTicket(pia)}`)}`);
+    assert(ticketChecked.status === 200 && ticketChecked.body?.valid === false && ticketChecked.body?.reason === 'unknown_inviter',
+        `and the pre-flight check calls one no good (${ticketChecked.text.slice(0, 100)})`);
+    // A ticket forged in her name: her key is in every ticket she gave out, so anyone can name it. It reads as one forged
+    // in Rita's, who isn't paused, in the redeem and in the check, so it tells nobody that Pia's account is paused.
+    const forgedAnswers = async (named: Id) => {
+        const joiner = keypair('ForgingFay');
+        const redeemed = await post('/api/invite/redeem-offline', { ticketB64: forgedTicket(named), publicKey: joiner.pubKeyHex, callsign: joiner.callsign }, joiner);
+        const checkedForged = await get(`/api/invite/check?code=${encodeURIComponent(`BP-${forgedTicket(named)}`)}`);
+        return {
+            redeemed: `${redeemed.status} ${redeemed.body?.error}`,
+            checked: `${checkedForged.status} ${checkedForged.body?.valid} ${checkedForged.body?.reason}`,
+            joined: !!row(joiner.pubKeyHex),
+        };
+    };
+    const forgedPia = await forgedAnswers(pia), forgedRita = await forgedAnswers(rita);
+    assert(forgedPia.redeemed === forgedRita.redeemed && /^400 .*signature/i.test(forgedRita.redeemed) && !forgedPia.joined && !forgedRita.joined,
+        `a ticket forged in her name is refused in the redeem as one forged in Rita's is, for its signature (${forgedPia.redeemed} | ${forgedRita.redeemed})`);
+    assert(forgedPia.checked === forgedRita.checked && forgedRita.checked === '200 false invalid',
+        `and in the check (${forgedPia.checked} | ${forgedRita.checked})`);
     const checked = await get(`/api/invite/check?code=${piaCode}`);
     assert(checked.status === 200 && checked.body?.valid === false, `the pre-flight check calls the code she made before no good now (${checked.text.slice(0, 100)})`);
     const viaCode = await post('/api/invite/redeem', { code: piaCode, publicKey: nia.pubKeyHex, callsign: nia.callsign }, nia);

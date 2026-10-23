@@ -24,7 +24,8 @@
  *   the badge their pushes carry. They accept or ignore it (routes/messaging.ts), or Ignore all. Their own line in it (an
  *   admin's answer from the node's inbox too, nodeLineInRequest), their own open of the chat (Message on the opener's
  *   profile), adding the opener as a friend, or a trade between the two opening, each accepts it too. Accepting makes
- *   nobody a friend.
+ *   nobody a friend. A visitor's row it is for (a key a member messaged, or a member of another community reached over the
+ *   relay) decides it as a member does, and nothing else new (the director's option b on PR #2392 review 4355750376).
  * - Neither side's read marker reaches the other until it is accepted.
  * - 30 days after it was made, a request nobody accepted is over (expireOldRequests): the opener's next line is a new
  *   request, from then.
@@ -49,6 +50,19 @@
  * 'pending', or 'expired' once 30 days have passed, and their next line and reaction are refused as a waiting request's
  * are. It shows once they lift the block. The person who accepted reads it as they left it (the director's option b on
  * PR #2392 review 4354581168).
+ *
+ * ## A block the person it is for made
+ *
+ * The mirror (the director's, 23 Oct, on the PR #2392 deciding pass at 7d20c62d). While the person it is for blocks the
+ * opener, an acceptance of the opener's own act after the block (their line or reaction, once a role or a trade lets them
+ * through) reads to that person as not made ({@link acceptanceHiddenFrom}): as they left it (`state_before`: waiting,
+ * lapsed or ignored), in neither of their lists, nor their unread count or badge. They may Ignore it, and read it ignored;
+ * the opener, whose own act accepted it, reads nothing new and writes on. Their own act (an Accept, a line, their open of
+ * the chat, adding the opener) or a trade's accepts it again, and lifting the block shows it: an Ignore made meanwhile was
+ * of a request the opener had accepted already, as option b's opener reads one once they lift theirs. Once each of them has
+ * accepted it, it shows to both. A removal of the opener ignores it, as one nobody accepted. Where requests are off, one
+ * the person ignored stays out of their lists, whether the opener's act accepted it while on or he writes while off: his
+ * line is kept for him alone then, so it makes no new request ({@link lineWhileOff}).
  *
  * ## The switch turned off
  *
@@ -107,6 +121,7 @@ interface RequestRow {
     requested_at: string;
     decided_at: string | null;
     accepted_by: string | null;
+    state_before: 'pending' | 'ignored' | 'expired' | null;
 }
 
 /** A request as one of its two people reads it: its state for them, who opened it, and when it was made. */
@@ -143,25 +158,31 @@ function over(row: RequestRow, now: number): boolean {
 /**
  * The request as `viewer` reads it. The opener reads only its age and its acceptance (the header's "same, whatever became of
  * it"), and not an acceptance made while they block the one who made it (acceptanceHiddenFrom); the person it is for reads
- * what they did with it, and 'expired' for one that waited 30 days.
+ * what they did with it, and 'expired' for one that waited 30 days, and one whose acceptance is hidden from them as they
+ * left it (`state_before`).
  */
 function viewOf(row: RequestRow, viewer: string, now: number): RequestView {
     let state: RequestState;
-    if (row.state === 'accepted' && !acceptanceHiddenFrom(row, viewer)) state = 'accepted';
+    const hidden = acceptanceHiddenFrom(row, viewer);
+    if (row.state === 'accepted' && !hidden) state = 'accepted';
     else if (viewer === row.from_pubkey) state = over(row, now) ? 'expired' : 'pending';
-    else state = row.state === 'pending' && over(row, now) ? 'expired' : row.state;
+    else {
+        const was = hidden ? row.state_before ?? 'pending' : row.state;
+        state = was === 'pending' && over(row, now) ? 'expired' : was;
+    }
     return { state, from: row.from_pubkey, at: row.requested_at };
 }
 
 /**
- * Whether `viewer`, the opener, reads the request's acceptance as not made: the person it was for accepted it after the
- * opener had blocked them, and the block still holds (the header's "A block the opener made"). An acceptance of the
- * opener's own act, or a trade's, always shows. Read only where requests are on.
+ * Whether `viewer`, one of the two, reads the request's acceptance as not made: the other accepted it by their own act after
+ * `viewer` had blocked them, and the block still holds (the header's "A block the opener made" and "A block the person it
+ * is for made"). An acceptance of the viewer's own act, a trade's, or one each of them made (accepted_by null) always shows.
  */
 function acceptanceHiddenFrom(row: RequestRow, viewer: string): boolean {
-    if (row.state !== 'accepted' || viewer !== row.from_pubkey || row.accepted_by !== row.to_pubkey) return false;
+    const other = viewer === row.from_pubkey ? row.to_pubkey : viewer === row.to_pubkey ? row.from_pubkey : null;
+    if (row.state !== 'accepted' || !other || row.accepted_by !== other) return false;
     const block = db.prepare('SELECT created_at FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?')
-        .get(viewer, row.to_pubkey) as { created_at: string } | undefined;
+        .get(viewer, other) as { created_at: string } | undefined;
     return !!block && Date.parse(block.created_at) <= Date.parse(row.decided_at ?? '');
 }
 
@@ -198,21 +219,26 @@ export function requestNeeded(from: string, to: string): boolean {
 }
 
 /**
- * Whether an act of the person a request is for accepts it (their line, their own open of the chat, adding the opener, a
- * trade between the two): any request not accepted yet, whatever the switch says. Where requests were turned off since,
- * one they ignored is still kept out of their lists (sortRequestsOut), so their act brings it back; and one waiting or
- * lapsed, an ordinary chat while off, stays where they put it when the switch goes on again (PR #2392 review 4354806252).
+ * Whether an act of the person a request is for (`actor`: their line, their own open of the chat, adding the opener), or a
+ * trade between the two (no actor), accepts it: any request not accepted yet, whatever the switch says, and one whose
+ * acceptance reads as not made to the actor, or for a trade to either of them (acceptanceHiddenFrom). Where requests were
+ * turned off since, one they ignored is still kept out of their lists (sortRequestsOut), so their act brings it back; and
+ * one waiting or lapsed, an ordinary chat while off, stays where they put it when the switch goes on again (PR #2392 review
+ * 4354806252).
  */
-function acceptable(row: RequestRow | undefined): row is RequestRow {
-    return !!row && row.state !== 'accepted';
+function acceptable(row: RequestRow | undefined, actor?: string): row is RequestRow {
+    if (!row) return false;
+    if (row.state !== 'accepted') return true;
+    return actor ? acceptanceHiddenFrom(row, actor) : acceptanceHiddenFrom(row, row.from_pubkey) || acceptanceHiddenFrom(row, row.to_pubkey);
 }
 
 /**
- * Accept it: its state, whose act it was, and the two people's sockets (the opener's app can write again), after the write
- * commits. Never the socket of one who has blocked the other: what a blocked member does never reaches the person who
- * blocked them (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392 review 4354581168). `actor`,
- * whose act it is, always hears their own. One accepted already is accepted again only by an act of its opener's own,
- * where they read it as not made (acceptanceHiddenFrom): it is theirs then, and they read it, as they would have.
+ * Accept it: its state, whose act it was, the state it had (`state_before`), and the two people's sockets (the opener's app
+ * can write again), after the write commits. Never the socket of one who has blocked the other: what a blocked member does
+ * never reaches the person who blocked them (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392
+ * review 4354581168). `actor`, whose act it is, always hears their own. One accepted already is accepted again only where
+ * it reads as not made to one of the two (acceptable): by that one's own act, or a trade's. Each of them has accepted it
+ * then, so it shows to both (accepted_by null), and only the actor hears: the other reads nothing new.
  *
  * A conversation still kept for its opener alone when the write commits (engine/withheld-lines.ts; a block lifted since,
  * then the person adding them, or a role letting them through) is no chat the person it was for has: only the opener
@@ -221,14 +247,15 @@ function acceptable(row: RequestRow | undefined): row is RequestRow {
  */
 function accept(row: RequestRow, now: number, actor?: string): void {
     const again = row.state === 'accepted';
-    if (again && !(actor && acceptanceHiddenFrom(row, actor))) return;
+    if (again && !acceptable(row, actor)) return;
     assertPlainTablesWritable();
-    const changed = db.prepare(`UPDATE dm_requests SET state = 'accepted', decided_at = ?, accepted_by = ?
+    const changed = db.prepare(`UPDATE dm_requests SET state = 'accepted', decided_at = ?, accepted_by = ?,
+                                       state_before = CASE WHEN state = 'accepted' THEN state_before ELSE state END
                                  WHERE conversation_id = ? AND (state != 'accepted' OR ?)`)
-        .run(iso(now), actor ?? null, row.conversation_id, again ? 1 : 0).changes;
+        .run(iso(now), again ? null : actor ?? null, row.conversation_id, again ? 1 : 0).changes;
     if (changed === 0) return;
     const request: RequestView = { state: 'accepted', from: row.from_pubkey, at: row.requested_at };
-    const hears = again ? [actor!] : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
+    const hears = again ? (actor ? [actor] : []) : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
         .filter(([who, other]) => who === actor || !hasBlocked(who, other)).map(([who]) => who);
     if (hears.length === 0) return;
     afterTransactionCommit(() => {
@@ -260,7 +287,7 @@ export function openRequest(conversationId: string, from: string, to: string, at
  */
 export function acceptOnOpen(conversationId: string, who: string, now: number = Date.now()): void {
     const row = rowOf(conversationId);
-    if (!acceptable(row) || row.to_pubkey !== who) return;
+    if (!acceptable(row, who) || row.to_pubkey !== who) return;
     if (!requestsOn() && standbyWritesNothing()) return;
     accept(row, now, who);
 }
@@ -319,7 +346,7 @@ function waitingFor(to: string, what: 'write' | 'react'): string {
 /**
  * A member's line in a direct conversation (engine/messaging.ts sendMessage), after every refusal of who may write there and
  * of the line itself, and before it is stored or kept for its sender alone, so the answer is the same either way:
- * - the person a request waits for writing in it accepts it;
+ * - the person a request waits for writing in it accepts it, and one whose acceptance they read as not made;
  * - the opener, when the rule no longer holds them (a friend add, a role, a trade since), is let through and it is accepted;
  * - the opener's first line is the request's line, and so is their first after the 30 days, which makes it a new request;
  * - any other line of the opener's is refused.
@@ -331,7 +358,7 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     const row = rowOf(conversationId);
     if (!row) return DIRECT;
     if (!requestsOn()) {
-        if (row.state !== 'accepted') lineWhileOff(row, author, now);
+        if (acceptable(row, author)) lineWhileOff(row, author, now);
         return DIRECT;
     }
     const hidden = acceptanceHiddenFrom(row, author);
@@ -372,7 +399,7 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
  */
 export function nodeLineInRequest(conversationId: string, author: string, now: number = Date.now()): void {
     const row = rowOf(conversationId);
-    if (!acceptable(row) || row.to_pubkey !== author) return;
+    if (!acceptable(row, author) || row.to_pubkey !== author) return;
     if (requestsOn()) accept(row, now, author);
     else lineWhileOff(row, author, now);
 }
@@ -382,12 +409,14 @@ export function nodeLineInRequest(conversationId: string, author: string, now: n
  * it, as when on, so it stays in their chats when the switch goes on again (PR #2392 review 4354806252). The opener's
  * leaves one waiting or lapsed as it is (an ordinary chat while off), but one the person ignored is still kept out of their
  * lists, and the line would be stored where they never look: it makes that one a new request from then, an ordinary chat
- * while off (the header's "The switch turned off"). A standby, which writes no request, leaves it.
+ * while off (the header's "The switch turned off"). Not while the person blocks the opener: the line is kept for the opener
+ * alone then (engine/withheld-lines.ts), stored nowhere the person looks, and the request stays as they left it (the
+ * header's "A block the person it is for made"). A standby, which writes no request, leaves it.
  */
 function lineWhileOff(row: RequestRow, author: string, now: number): void {
     if (standbyWritesNothing()) return;
     if (author === row.to_pubkey) accept(row, now, author);
-    else if (author === row.from_pubkey && row.state === 'ignored') {
+    else if (author === row.from_pubkey && row.state === 'ignored' && !hasBlocked(row.to_pubkey, author)) {
         db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
             .run(iso(now), row.conversation_id);
     }
@@ -414,16 +443,19 @@ export function reactionRefusal(conversationId: string, author: string, now: num
 
 /**
  * `owner` added `friend` (engine/social.ts addFriend): a request from them waiting for `owner` is accepted, as the design's
- * "I chose you". A standby, which adds a friend as the main server does, writes no request of its own: it gets the
- * acceptance with the main server's copy.
+ * "I chose you", and one whose acceptance `owner` reads as not made. A standby, which adds a friend as the main server
+ * does, writes no request of its own: it gets the acceptance with the main server's copy.
  */
 export function acceptOnFriendAdd(owner: string, friend: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
-    const rows = db.prepare("SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ? AND state != 'accepted'").all(friend, owner) as RequestRow[];
-    for (const row of rows) if (acceptable(row)) accept(row, now, owner);
+    const rows = db.prepare('SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ?').all(friend, owner) as RequestRow[];
+    for (const row of rows) if (acceptable(row, owner)) accept(row, now, owner);
 }
 
-/** A trade between the two opening its chat (engine/messaging.ts ensureTransactionConversation) accepts a request in it. */
+/**
+ * A trade between the two opening its chat (engine/messaging.ts ensureTransactionConversation) accepts a request in it, and
+ * one whose acceptance either of them reads as not made.
+ */
 export function acceptOnTrade(conversationId: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
     const row = rowOf(conversationId);
@@ -515,20 +547,26 @@ export function withRequestFor<T extends { id: string; type: string }>(conv: T, 
     return out;
 }
 
-/** The requests for `viewer` they ignored (or a removal of their opener ignored). */
+/**
+ * The requests for `viewer` they ignored (or a removal of their opener ignored), and one they had ignored, or ignored since,
+ * whose acceptance by its opener's own act is hidden from them (acceptanceHiddenFrom).
+ */
 function ignoredBy(viewer: string): Set<string> {
-    return new Set((db.prepare("SELECT conversation_id FROM dm_requests WHERE to_pubkey = ? AND state = 'ignored'").all(viewer) as { conversation_id: string }[])
-        .map(r => r.conversation_id));
+    const rows = db.prepare(`SELECT * FROM dm_requests WHERE to_pubkey = ?
+                                AND (state = 'ignored' OR (state = 'accepted' AND state_before = 'ignored' AND accepted_by = from_pubkey))`)
+        .all(viewer) as RequestRow[];
+    return new Set(rows.filter(r => r.state === 'ignored' || acceptanceHiddenFrom(r, viewer)).map(r => r.conversation_id));
 }
 
 /**
  * The conversations `viewer`'s badge and unread count leave out (state-engine.ts getListedUnreadCounts): every request for
- * them they haven't accepted. Where requests are off, the ones they ignored, which their list leaves out too.
+ * them they haven't accepted, or whose acceptance is hidden from them. Where requests are off, the ones they ignored, which
+ * their list leaves out too.
  */
 export function heldFromUnread(viewer: string): Set<string> {
     if (!requestsOn()) return ignoredBy(viewer);
-    return new Set((db.prepare("SELECT conversation_id FROM dm_requests WHERE to_pubkey = ? AND state != 'accepted'").all(viewer) as { conversation_id: string }[])
-        .map(r => r.conversation_id));
+    const rows = db.prepare("SELECT * FROM dm_requests WHERE to_pubkey = ? AND (state != 'accepted' OR accepted_by = from_pubkey)").all(viewer) as RequestRow[];
+    return new Set(rows.filter(r => r.state !== 'accepted' || acceptanceHiddenFrom(r, viewer)).map(r => r.conversation_id));
 }
 
 // ── the decisions (routes/messaging.ts) ────────────────────────────────────────────────────────────────────────
@@ -545,6 +583,10 @@ export class RequestDecisionError extends Error {
  * kept for them alone; to anyone else, and for a conversation with no request waiting for them (one its opener hasn't
  * written in yet among them), it is a request nobody has (404, the same answer as an id nobody has). Accepting an accepted one, or ignoring an ignored one, changes nothing; an
  * accepted one can't be ignored (409). Ignoring rings only the ignorer's own sockets: the opener is never told.
+ *
+ * One whose acceptance by its opener's own act is hidden from the person (acceptanceHiddenFrom) is answered as they read it,
+ * as it was: Accept accepts it again, and Ignore makes it read to them as ignored (`state_before`) while it stays accepted
+ * for its opener, who reads nothing new (the header's "A block the person it is for made").
  */
 export function decideRequest(conversationId: string, actor: string, decision: 'accept' | 'ignore', now: number = Date.now()): RequestView {
     const row = typeof conversationId === 'string' && requestsOn() ? rowOf(conversationId) : undefined;
@@ -552,14 +594,21 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         throw new RequestDecisionError(403, 'not_request_recipient', word('Only the person a message request was sent to can accept or ignore it.'));
     }
     const real = !!row && !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(row.conversation_id, actor);
+    const hidden = !!row && acceptanceHiddenFrom(row, actor);
     // An open with nothing written in it yet asks nothing (OPENER_WROTE): ignoring it would swallow the line after it.
-    const asked = !!row && (row.state === 'accepted'
+    const asked = !!row && ((row.state === 'accepted' && !hidden)
         || !!db.prepare(`SELECT 1 FROM dm_requests r WHERE r.conversation_id = ? AND ${OPENER_WROTE}`).get(row.conversation_id));
     if (!row || row.to_pubkey !== actor || !real || !asked) {
         throw new RequestDecisionError(404, 'request_not_found', word('There is no message request for you in this chat.'));
     }
     if (decision === 'accept') {
         accept(row, now, actor);
+    } else if (hidden) {
+        if (row.state_before !== 'ignored') {
+            assertPlainTablesWritable();
+            db.prepare("UPDATE dm_requests SET state_before = 'ignored' WHERE conversation_id = ?").run(row.conversation_id);
+            ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: viewOf({ ...row, state_before: 'ignored' }, actor, now) }, [actor]);
+        }
     } else if (row.state === 'accepted') {
         throw new RequestDecisionError(409, 'request_accepted', word('You have accepted this chat already, so it is no longer a request.'));
     } else if (row.state !== 'ignored') {
@@ -660,10 +709,17 @@ export function tickRequestPushFolds(dispatch: PushFn, now: number = Date.now())
  * rather than deleted: the conversation stays (and for a removal, their line in it), and with no row it would be an
  * ordinary chat in the other person's list and unread count (PR #2392 review 4354387983). An ignored one is in neither, and
  * is held from the badge, whatever the switch says. So is one that had lapsed: where requests are off, an expired one is an
- * ordinary chat (review 4354806402). Every other request of theirs goes, with a tombstone: an accepted one (an ordinary chat
- * either way), one in a conversation kept for them alone (dropWithheldOf took it), and every one waiting for them.
+ * ordinary chat (review 4354806402). So is one whose acceptance by their own act is hidden from the person it was for
+ * (acceptanceHiddenFrom; that person's block of them stays, dropBlocksOf): to that person, nobody accepted it. Every other
+ * request of theirs goes, with a tombstone: an accepted one (an ordinary chat either way), one in a conversation kept for
+ * them alone (dropWithheldOf took it), and every one waiting for them.
  */
 export function dropRequestsOf(publicKey: string, now: number = Date.now()): void {
+    const ignore = db.prepare(`UPDATE dm_requests SET state = 'ignored', decided_at = ?
+                                WHERE conversation_id = ? AND conversation_id IN (SELECT id FROM conversations)`);
+    for (const row of db.prepare("SELECT * FROM dm_requests WHERE from_pubkey = ? AND state = 'accepted' AND accepted_by = from_pubkey").all(publicKey) as RequestRow[]) {
+        if (acceptanceHiddenFrom(row, row.to_pubkey)) ignore.run(iso(now), row.conversation_id);
+    }
     db.prepare(`UPDATE dm_requests SET state = 'ignored', decided_at = ?
                  WHERE from_pubkey = ? AND state IN ('pending', 'expired') AND conversation_id IN (SELECT id FROM conversations)`).run(iso(now), publicKey);
     deletePlainRows('dm_requests', `(from_pubkey = ? AND (state = 'accepted' OR conversation_id NOT IN (SELECT id FROM conversations)))

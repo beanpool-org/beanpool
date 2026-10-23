@@ -1851,6 +1851,23 @@ CREATE TABLE IF NOT EXISTS known_floor_log (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Every change to how this community works (config/community-shape.ts; DESIGN-community-shape-settings-fable.md §2.5): one
+-- row per setting changed, newest the highest id, which the owners' page reads as the shape's `version`. Every owner and
+-- admin reads it. `actor_pubkey` is the key behind the session, or `owner:password`; `note` is the owner's own sentence to
+-- the members, if any. Nothing writes it yet: the write path is slice S2. Known-floor changes keep their own log too.
+CREATE TABLE IF NOT EXISTS community_settings_log (
+    id             INTEGER PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    actor_role     TEXT NOT NULL,
+    setting        TEXT NOT NULL,
+    old_value      TEXT,
+    new_value      TEXT,
+    note           TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
 -- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
 -- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`). A phone taking

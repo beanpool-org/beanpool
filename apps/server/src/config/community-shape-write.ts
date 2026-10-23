@@ -23,7 +23,9 @@
  *   join        'members' | 'admins' | 'paused': the door row and the `invites` override (design §3.1; un-pausing keeps
  *               the door as it was). Refused under the private preview, and where the open door is set (kind or the
  *               operator's rows: no door to choose, `profile`; shut by the ledger, `ledger_moved`).
- *   wordsDoor   the 12-words door, only where the open door is set; refused while the open door is locked shut.
+ *   wordsDoor   the 12-words door, only where the open door is set; refused where its own lock is (set on and kept shut
+ *               with the open door: the preview, a moved ledger), as the shape reads it (#2415 review r4360594615). Set
+ *               off behind a shut door, it may be set on: the words door still takes nobody, so no member is told.
  *   knocks      refused under the private preview, and wherever invites are off once this request is written.
  *   beans       off refused once the ledger has moved (`ledger_moved`); on refused while the open door is set (`profile`).
  *               A local community may switch Beans off before anything moved (Q1).
@@ -252,12 +254,12 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
     }
     const invitesAfter = join !== undefined ? join !== 'paused' : cfg.invites;
 
-    // The 12-words door, only where the open door is set; locked with it.
+    // The 12-words door, only where the open door is set; refused where the shape locks it.
     if (asked.wordsDoor !== undefined) {
         const v = boolOf('wordsDoor', asked.wordsDoor);
         if (!S.wordsDoor) bad('wordsDoor', '12 words at the door are only for a community whose door is open (the global kind).', 'not_changeable');
         if (v !== S.wordsDoor!.configured) {
-            if (S.openDoor.lock) refuse('wordsDoor', S.openDoor.lock);
+            if (S.wordsDoor!.lock) refuse('wordsDoor', S.wordsDoor!.lock);
             planned.push({ setting: 'wordsDoor', from: onOff(S.wordsDoor!.configured), to: onOff(v) });
             switches.push(['ssoRequiredForJoin', !v]);
         }
@@ -382,8 +384,10 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         actor: by.actor,
         actorRole: by.actorRole,
     });
+    // The 12-words door set on behind a shut open door takes nobody yet: members are told only of a door that changed.
+    const wordsDoorMoved = shape.settings.wordsDoor?.value !== S.wordsDoor?.value;
     const sentences = [
-        ...planned.filter((c) => !c.setting.startsWith('knownFloor.')).map(memberSentence),
+        ...planned.filter((c) => !c.setting.startsWith('knownFloor.') && (c.setting !== 'wordsDoor' || wordsDoorMoved)).map(memberSentence),
         floorPlan ? floorSentence(floorPlan, S.knownFloor.value.on, (floorPlan.confirmation ?? S.knownFloor.configured.on) && beansAfter) : null,
     ].filter((s): s is string => !!s);
     let told: 'members' | 'nobody' = 'nobody';

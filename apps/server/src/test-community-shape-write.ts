@@ -466,7 +466,26 @@ async function main(): Promise<void> {
     process.env.PRIVATE_PREVIEW = '1';
     g = readShape();
     await refusedClean('the 12-words door in a private preview (private_preview)', () => change({ wordsDoor: false }), 409, 'private_preview', lockWhy(g, 'openDoor'));
+    // Set off behind the preview's shut door, the 12-words door reads no lock, so it takes the change, as the shape says it
+    // will; the door still takes nobody, so no member is told (#2415 review r4360594615).
     process.env.PRIVATE_PREVIEW = '';
+    await change({ wordsDoor: false });
+    process.env.PRIVATE_PREVIEW = '1';
+    g = readShape();
+    assert(g.settings.wordsDoor?.configured === false && g.settings.wordsDoor.lock === null && g.settings.openDoor.lock?.code === 'private_preview',
+        "off behind the preview's shut door, the 12-words door reads no lock");
+    mark = logMark(); nMark = noticeMark(); aMark = alerts.length;
+    const wordsBehindPreview = await change({ wordsDoor: true });
+    assert(wordsBehindPreview.status === 200 && wordsBehindPreview.body?.told === 'nobody' && np.getConfiguredSwitches().ssoRequiredForJoin === false
+        && !np.getNodeFeatures().wordsDoor, `so it is set on, and the shut door still takes nobody by it (${show(wordsBehindPreview)})`);
+    lines = linesSince(mark);
+    assert(lines.length === 1 && lines[0].setting === 'wordsDoor' && lines[0].old_value === 'off' && lines[0].new_value === 'on'
+        && alerts.length === aMark + 1 && noticeMark() === nMark, 'logged and the owners alerted, and no member told of a door that takes nobody');
+    g = readShape();
+    assert(g.settings.wordsDoor?.lock?.code === 'private_preview', "set on behind the shut door, it reads the door's lock");
+    await refusedClean('and is then refused as a locked 12-words door is (private_preview)', () => change({ wordsDoor: false }), 409, 'private_preview', lockWhy(g, 'wordsDoor'));
+    process.env.PRIVATE_PREVIEW = '';
+    assert(np.getNodeFeatures().wordsDoor, 'the preview off, the 12-words door set on takes people');
     process.env.NODE_PROFILE = '';
 
     se.transfer('genesis', sam.pk, 5, 'the ledger moves', 'direct', true);
@@ -477,6 +496,16 @@ async function main(): Promise<void> {
     g = readShape();
     assert(g.settings.openDoor.lock?.code === 'ledger_moved', 'on the global kind the open door is shut for good');
     await refusedClean('the 12-words door with the open door shut (ledger_moved)', () => change({ wordsDoor: false }), 409, 'ledger_moved', lockWhy(g, 'openDoor'));
+    // Set off behind a door the ledger keeps shut for good: no lock, so the change is taken, and nobody is told.
+    setOverrideRow('ssoRequiredForJoin', true);
+    g = readShape();
+    assert(g.settings.wordsDoor?.configured === false && g.settings.wordsDoor.lock === null, "off behind the ledger's shut door, the 12-words door reads no lock");
+    nMark = noticeMark();
+    const wordsBehindLedger = await change({ wordsDoor: true });
+    assert(wordsBehindLedger.status === 200 && wordsBehindLedger.body?.told === 'nobody' && np.getConfiguredSwitches().ssoRequiredForJoin === false
+        && !np.getNodeFeatures().wordsDoor && noticeMark() === nMark, `so it is set on, takes nobody, and tells nobody (${show(wordsBehindLedger)})`);
+    g = readShape();
+    assert(g.settings.wordsDoor?.lock?.code === 'ledger_moved', "and reads the ledger's lock from then on");
     await refusedClean('who can join where the open door is set and shut (ledger_moved)', () => change({ join: 'members' }), 409, 'ledger_moved', lockWhy(g, 'join'));
     const beansOnGlobal = await change({ beans: true });
     assert(beansOnGlobal.status === 200, `Beans on, once they have moved anyway, is no lock's to refuse (${show(beansOnGlobal)})`);

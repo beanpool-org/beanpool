@@ -41,7 +41,7 @@
  *      requests verbatim, never a blocked opener's; a promoted copy answers as the main server did (R16)
  * Local (the child run):
  *  15. off by default: a stranger's open and two lines arrive as today, and nothing says requests (R1)
- *  16. the operator turns them on in Settings; then a stranger's open is a request, and a chat opened before stays open
+ *  16. an owner turns them on under How this community works (node/config's old dmRequests is refused); then a stranger's open is a request, and a chat opened before stays open
  *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7)
  *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's (one that had lapsed
  *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself; so
@@ -76,7 +76,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
-import { ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
@@ -1127,15 +1127,21 @@ async function localRun(): Promise<void> {
     assert(inChats(annList, boConv) && annList?.totalUnread === 2 && !('requests' in (annList ?? {})) && !('request' in (entryOf(annList, boConv) ?? {})),
         'her list is as it always was: the chat, two unread, nothing about requests');
 
-    // ── 16. the operator turns them on ──────────────────────────────────────────────────────────
-    console.log('── 16. the operator turns them on ──');
-    const admin = ownerTokenHeaders('admin');
-    const badSet = await call('POST', null, '/api/local/admin/node/config', { dmRequests: 'yes' }, admin);
-    const set = await call('POST', null, '/api/local/admin/node/config', { dmRequests: true }, admin);
+    // ── 16. an owner turns them on ──────────────────────────────────────────────────────────────
+    // Under How this community works (POST /api/local/admin/community-shape, slice S2): an owner's key session, as no
+    // automation token changes how the community works.
+    console.log('── 16. an owner turns them on ──');
+    const admin = ownerSessionHeaders();
+    const SHAPE = '/api/local/admin/community-shape';
+    const oldWay = await call('POST', null, '/api/local/admin/node/config', { dmRequests: true }, admin);
+    assert(oldWay.status === 400 && oldWay.body?.code === 'moved_to_community_shape' && (await call('GET', null, '/api/node/config')).body?.dmRequests === false,
+        `node/config's old dmRequests is refused, and changes nothing (${show(oldWay)})`);
+    const badSet = await call('POST', null, SHAPE, { changes: { dmRequests: 'yes' } }, admin);
+    const set = await call('POST', null, SHAPE, { changes: { dmRequests: true } }, admin);
     const cfgOn = await call('GET', null, '/api/node/config');
     const infoOn = await call('GET', null, '/api/community/info');
-    assert(badSet.status === 400 && set.status === 200 && set.body?.dmRequests === true && cfgOn.body?.dmRequests === true && infoOn.body?.features?.dmRequests === true,
-        `Settings turns it on, and only with true or false (${badSet.status}; ${show(set)})`);
+    assert(badSet.status === 400 && set.status === 200 && set.body?.shape?.settings?.dmRequests?.configured === true && cfgOn.body?.dmRequests === true && infoOn.body?.features?.dmRequests === true,
+        `an owner turns it on, and only with true or false (${badSet.status}; ${show(set)})`);
     const cy = member('Cy');
     const cOpen = await open(cy, ann);
     const cyConv: string = cOpen.body?.conversation?.id;
@@ -1218,12 +1224,12 @@ async function localRun(): Promise<void> {
     const dovLate = [await send(dovConv, dov), await send(dovConv, dov)];
     const annReadsDov = (await call('GET', ann, `/api/messages/${dovConv}`)).body?.conversation?.request?.state;
     const unreadOn = (await listOf(ann))?.totalUnread;
-    const off = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
+    const off = await call('POST', null, SHAPE, { changes: { dmRequests: false } }, admin);
     const c3 = await send(cyConv, cy);
     const ro2 = await send(rosConv, ros);
     await sleep(100);
     const annOff = await listOf(ann);
-    assert(off.status === 200 && off.body?.dmRequests === false && c3.status === 200 && inChats(annOff, cyConv) && !('requests' in (annOff ?? {})),
+    assert(off.status === 200 && off.body?.shape?.settings?.dmRequests?.configured === false && c3.status === 200 && inChats(annOff, cyConv) && !('requests' in (annOff ?? {})),
         `off again, Cy's waiting request is an ordinary chat (${show(c3)})`);
     // What Ann ignored, and what a removal ignored, stays out of her chats, her unread count and her badge (PR #2392 review
     // 4354581049): only Cy's chat, waiting until now, adds to her unread.
@@ -1269,14 +1275,14 @@ async function localRun(): Promise<void> {
     // What Ann did while they were off accepts what was waiting for her then (PR #2392 review 4354806252), so turning them
     // on again leaves each chat where she put it. Lu, Mo and Nia each write while on; while off, Ann answers Lu, who
     // writes again, she adds Mo, and she asks for the chat with Nia.
-    const on2 = await call('POST', null, '/api/local/admin/node/config', { dmRequests: true }, admin);
+    const on2 = await call('POST', null, SHAPE, { changes: { dmRequests: true } }, admin);
     const [lu, mo, nia] = [member('Lu'), member('Mo'), member('Nia')];
     const luConv: string = (await open(lu, ann)).body?.conversation?.id;
     const moConv: string = (await open(mo, ann)).body?.conversation?.id;
     const niaConv: string = (await open(nia, ann)).body?.conversation?.id;
     for (const [c, s] of [[luConv, lu], [moConv, mo], [niaConv, nia]] as [string, Id][]) await send(c, s);
     const waitingOn = [luConv, moConv, niaConv].map(c => rowOf(c)?.state);
-    const off2 = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
+    const off2 = await call('POST', null, SHAPE, { changes: { dmRequests: false } }, admin);
     const acts19 = [
         await send(luConv, ann), await send(luConv, ann), await send(luConv, lu), await send(luConv, lu),
         await call('POST', ann, '/api/friends/add', { friendPubkey: mo.pk }),
@@ -1287,7 +1293,7 @@ async function localRun(): Promise<void> {
     assert(on2.status === 200 && off2.status === 200 && waitingOn.every(st => st === 'pending') && acts19.every(r => r.status === 200)
         && [luConv, moConv, niaConv].every(c => inChats(annOff2, c) && rowOf(c)?.state === 'accepted'),
         `while off, her answer, her add and her own open each accept the one waiting for her (${[luConv, moConv, niaConv].map(c => rowOf(c)?.state).join(', ')})`);
-    const on3 = await call('POST', null, '/api/local/admin/node/config', { dmRequests: true }, admin);
+    const on3 = await call('POST', null, SHAPE, { changes: { dmRequests: true } }, admin);
     const annOn2 = await listOf(ann);
     const counts19 = attempt(() => getListedUnreadCounts(ann.pk)) ?? {};
     const luReads = await call('GET', lu, `/api/messages/${luConv}`);

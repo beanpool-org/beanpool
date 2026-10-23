@@ -41,7 +41,7 @@ import { db } from '../db/db.js';
 import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig } from '../state-engine.js';
 import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
-import { setDoor, type CommunityDoor } from './door.js';
+import { setDoor, doorSettingRefusal, type CommunityDoor } from './door.js';
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
 import { readShape, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
@@ -229,6 +229,11 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
     // Who can join: the door row, and the `invites` override (paused).
     let join: JoinState | undefined;
     if (asked.join !== undefined) {
+        // The open door is no choice an owner makes: refused in the words the door has always given (config/door.ts).
+        if (asked.join === 'open') {
+            const open = doorSettingRefusal('open')!;
+            throw new ShapeChangeError(open.status as 409, open.code, open.error, 'join');
+        }
         if (asked.join !== 'members' && asked.join !== 'admins' && asked.join !== 'paused') {
             bad('join', "join is 'members', 'admins' or 'paused'. The open door is set by this server's kind.");
         }

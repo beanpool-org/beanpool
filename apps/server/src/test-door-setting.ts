@@ -7,9 +7,10 @@
  *
  *   1. As it ships: /api/community/info and /api/node/config say `members`, no row is stored, and a member makes a code
  *      and answers a knock as before. A code Mel makes now, and a knock Mel answers now, are kept for section 3.
- *   2. Setting it: unsigned is 401; an admin's key session is 403 (an owner's choice), and nothing in that request is
- *      written; `open` is 409 (a community with Beans can't open its door), anything else 400. The owner's own key sets
- *      `admins`: the row, the info, the config read.
+ *   2. Setting it, under How this community works (POST /api/local/admin/community-shape `join`, slice S2; node/config's
+ *      old `door` is refused 400 and writes nothing): unsigned is 401; an admin's key session is 403 (an owner's choice),
+ *      and nothing in that request is written; `open` is 409 (a community with Beans can't open its door), anything else
+ *      400. The owner's own key sets `admins`: the row, the info, the config read.
  *   3. Only admins invite: a member's generate is 403 `admins_only` and writes nothing, nor counts toward a limit; a
  *      moderator's too; an admin's and the owner's work, and a member signing as an admin is refused by the middleware.
  *      Knocks: a member reads none and answers none (403, the knock still pending), an admin reads, declines and
@@ -18,7 +19,7 @@
  *      pre-flight and the redeem, nobody joins and it stays unused; an admin's ticket joins. The seed invite works.
  *      Underneath the routes, the engine refuses the same.
  *   4. Back to `members`: the row goes, Mel invites and reads knocks again, and the ticket refused before now joins.
- *   5. The global profile: the door reads `open`, and Settings can set none (409), `open` included.
+ *   5. The global profile: the door reads `open`, and no owner can set one (409 `profile`), `open` included.
  *
  * A standby's copy and a take-over keep it: test-standby-community-settings (the `door` row).
  *
@@ -118,8 +119,14 @@ async function keySession(id: Id): Promise<string | null> {
     // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
     return ex.cookie.match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
 }
+// Who may invite is set under How this community works: `door` as its `join`, and a directory switch beside it as the
+// shape's (publishHealth is shareHealth there).
 const setDoorAs = (headers: Record<string, string> | null, body: Record<string, unknown>) =>
-    call(null, 'POST', '/api/local/admin/node/config', body, headers ?? {});
+    call(null, 'POST', '/api/local/admin/community-shape', { changes: {
+        ...('door' in body ? { join: body.door } : {}),
+        ...('publishHealth' in body ? { shareHealth: body.publishHealth } : {}),
+    } }, headers ?? {});
+const doorOf = (r: { body: any }) => r.body?.shape?.settings?.join?.value;
 
 // ── the database ─────────────────────────────────────────────────────────────────────────────────
 const memberRow = (pk: string) => db.prepare('SELECT * FROM members WHERE public_key = ?').get(pk) as any;
@@ -183,6 +190,10 @@ async function main(): Promise<void> {
     console.log('\n── 2. who may set it ──');
     const unsigned = await setDoorAs(null, { door: 'admins' });
     assert(unsigned.status === 401 && doorRow() === null, `unsigned → 401, nothing stored (${show(unsigned)})`);
+    const storedBefore = publishHealthNow();
+    const oldWay = await call(null, 'POST', '/api/local/admin/node/config', { door: 'admins', publishHealth: false }, PASSWORD());
+    assert(oldWay.status === 400 && oldWay.body?.code === 'moved_to_community_shape' && doorRow() === null && publishHealthNow() === storedBefore,
+        `node/config's old door is refused, and nothing in that request is written (${show(oldWay)})`);
     const adaSession = await keySession(ada);
     require_(!!adaSession, "Ada's own key opens Settings as admin");
     const before = publishHealthNow();
@@ -194,14 +205,14 @@ async function main(): Promise<void> {
         `the owner asking for an open door on a community with Beans → 409, and why (${show(open)})`);
     for (const bad of ['everyone', 'ADMINS', 1, null, true]) {
         const r = await setDoorAs(PASSWORD(), { door: bad });
-        assert(r.status === 400 && r.body?.code === 'bad_door' && doorRow() === null, `door ${JSON.stringify(bad)} → 400 (${show(r)})`);
+        assert(r.status === 400 && r.body?.code === 'bad_setting' && r.body?.setting === 'join' && doorRow() === null, `door ${JSON.stringify(bad)} → 400 (${show(r)})`);
     }
     const owenSession = await keySession(owen);
     require_(!!owenSession, "Owen's own key opens Settings as owner");
     const set = await setDoorAs({ 'x-admin-session': owenSession! }, { door: 'admins' });
     const nowInfo = await info();
     const nowConfig = await nodeConfig();
-    assert(set.status === 200 && set.body?.door === 'admins' && doorRow() === 'admins' && nowInfo?.features?.door === 'admins' && nowConfig?.door === 'admins',
+    assert(set.status === 200 && doorOf(set) === 'admins' && doorRow() === 'admins' && nowInfo?.features?.door === 'admins' && nowConfig?.door === 'admins',
         `the owner's own key sets admins: stored, and info and config say so (${show(set)})`);
 
     // ── 3. only admins invite ────────────────────────────────────────────────────────────────────
@@ -290,7 +301,7 @@ async function main(): Promise<void> {
     // ── 4. back to members ───────────────────────────────────────────────────────────────────────
     console.log('\n── 4. back to any member ──');
     const back = await setDoorAs(PASSWORD(), { door: 'members' });
-    assert(back.status === 200 && back.body?.door === 'members' && doorRow() === null && (await info())?.features?.door === 'members',
+    assert(back.status === 200 && doorOf(back) === 'members' && doorRow() === null && (await info())?.features?.door === 'members',
         `the owner (password) sets members again: the row goes, and info says members (${show(back)})`);
     const melAgain = await generate(mel);
     const melReads = await knocks(mel);
@@ -308,8 +319,8 @@ async function main(): Promise<void> {
     const gOpen = await setDoorAs(PASSWORD(), { door: 'open' });
     assert(g?.features?.door === 'open' && g?.features?.invites === false && gConfig?.door === 'open',
         `info and config say open (${JSON.stringify({ door: g?.features?.door, invites: g?.features?.invites, config: gConfig?.door })})`);
-    assert(gSet.status === 409 && gSet.body?.code === 'door_set_by_profile' && gOpen.status === 409 && doorRow() === null,
-        `Settings can set no door there, open included (${show(gSet)} | ${show(gOpen)})`);
+    assert(gSet.status === 409 && gSet.body?.code === 'profile' && gOpen.status === 409 && doorRow() === null,
+        `no owner can set a door there, open included (${show(gSet)} | ${show(gOpen)})`);
     delete process.env.NODE_PROFILE;
 
     console.log(`\n${passed}/${run} checks passed.`);

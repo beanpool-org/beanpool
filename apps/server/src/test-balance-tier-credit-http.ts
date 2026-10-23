@@ -174,8 +174,8 @@ async function main(): Promise<void> {
 
     // ── 4. the known floor ─────────────────────────────────────────────────────────────────────
     console.log('── 4. the known floor ──');
-    const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
-    assert(on.status === 200 && on.body?.confirmation === true, `the owner turns the known floor on (${show(on)})`);
+    const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the known floor on (${show(on)})`);
     createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', 40, 'fixed', kim.pk);
     await setTier(kim, 'Resident');
     confirm(kim, ada);

@@ -362,7 +362,7 @@ async function main(): Promise<void> {
         await refusedClean(`${key}: the server's, not changed here`, () => change({ [key]: false }), 400, 'not_changeable');
     }
     await refusedClean('12 words at the door of a community with no open door', () => change({ wordsDoor: true }), 400, 'not_changeable');
-    await refusedClean("the open door as who can join", () => change({ join: 'open' }), 400, 'bad_setting');
+    await refusedClean('the open door as who can join, in the door\'s own words', () => change({ join: 'open' }), 409, 'door_open_refused', /strangers would hold credit/);
     await refusedClean('a switch that is no true or false', () => change({ knocks: 'no' }), 400, 'bad_setting');
     await refusedClean('a good change beside a bad one (all or nothing)', () => change({ decisions: false, autoMute: 'yes' }), 400, 'bad_setting');
     await refusedClean(`a note longer than ${SHAPE_NOTE_MAX}`, () => change({ decisions: false }, 'x'.repeat(SHAPE_NOTE_MAX + 1)), 400, 'bad_note');

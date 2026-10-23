@@ -3259,6 +3259,79 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/treasury-manage', params: { publicKey: 'ent1', name: 'Mullum Ceramics' } });
     });
 
+    it('enterprise card: latest line shows "to {who}" when amount is negative and names Commons/deal when who is null', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    lifecycle: 'ongoing',
+                    keepers: 2,
+                    balance: 200,
+                    latest: { amount: -20, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        let card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('Latest: −20 Beans to Ana');
+
+        // Commons line (who: null, kind: 'commons')
+        act(() => root?.unmount());
+        host?.remove();
+        root = null;
+        host = null;
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    keepers: 2,
+                    balance: 180,
+                    latest: { amount: -5, at: iso(now - 1 * H), kind: 'commons', who: null },
+                },
+            },
+        };
+        await render();
+        card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('Latest: −5 Beans to the Commons');
+
+        // Deal line (who: null, kind: 'deal', incoming)
+        act(() => root?.unmount());
+        host?.remove();
+        root = null;
+        host = null;
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    keepers: 2,
+                    balance: 230,
+                    latest: { amount: 50, at: iso(now - 30 * 60_000), kind: 'deal', who: null },
+                },
+            },
+        };
+        await render();
+        card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('Latest: +50 Beans from a deal');
+    });
+
     it('decide card: draws open decisions with closesIn and voting status, poll, and Decide link', async () => {
         const now = Date.now();
         const base = localMember();

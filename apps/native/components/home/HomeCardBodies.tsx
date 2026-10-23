@@ -197,14 +197,30 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
             const sign = card.latest.amount > 0 ? '+' : '';
             const amountStr = `${sign}${beansAmount(card.latest.amount)}`;
             const when = timeAgoInWords(card.latest.at);
-            if (card.latest.who && when) {
-                latestLine = t('Latest: {amount} from {who} · {when}', { amount: amountStr, who: card.latest.who, when });
-            } else if (card.latest.who) {
-                latestLine = t('Latest: {amount} from {who}', { amount: amountStr, who: card.latest.who });
-            } else if (when) {
-                latestLine = t('Latest: {amount} · {when}', { amount: amountStr, when });
+            const who = card.latest.who
+                ?? (card.latest.kind === 'commons' ? t('the Commons')
+                    : card.latest.kind === 'deal' ? t('a deal')
+                    : null);
+            if (card.latest.amount < 0) {
+                if (who && when) {
+                    latestLine = t('Latest: {amount} to {who} · {when}', { amount: amountStr, who, when });
+                } else if (who) {
+                    latestLine = t('Latest: {amount} to {who}', { amount: amountStr, who });
+                } else if (when) {
+                    latestLine = t('Latest: {amount} · {when}', { amount: amountStr, when });
+                } else {
+                    latestLine = t('Latest: {amount}', { amount: amountStr });
+                }
             } else {
-                latestLine = t('Latest: {amount}', { amount: amountStr });
+                if (who && when) {
+                    latestLine = t('Latest: {amount} from {who} · {when}', { amount: amountStr, who, when });
+                } else if (who) {
+                    latestLine = t('Latest: {amount} from {who}', { amount: amountStr, who });
+                } else if (when) {
+                    latestLine = t('Latest: {amount} · {when}', { amount: amountStr, when });
+                } else {
+                    latestLine = t('Latest: {amount}', { amount: amountStr });
+                }
             }
         }
 

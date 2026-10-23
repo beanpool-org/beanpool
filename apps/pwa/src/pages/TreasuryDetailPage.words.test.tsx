@@ -7,6 +7,9 @@
  * Not drawn here: the keepers' votes (EnterpriseDecisions, its own words test), the map-pin picker (the same), the
  * report box (sweep W1), and Example Valley's sample page, whose marker (LocalCommunityMark, core's word() keys drawn
  * as they are on the phone too) and sample header (ShowcasePreviews, sweep W3) are not this sweep's.
+ *
+ * The page is its shopfront and its keepers' controls are its Manage tab (DESIGN-shops-round3-enterprise-shopfront-fable.md
+ * §3, slice S8): each check reads its words where they now are, on the page, behind Money and backing, or in Manage.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -100,12 +103,12 @@ const THREAD = {
     ],
 };
 
-/** What members wrote, shown as written: names (and the initials the thread draws for them), titles, memos, messages. */
+/** What members wrote, shown as written: names (and the initials the thread and the keepers' rows draw for them), titles, memos, messages. */
 const OTHERS = [
     'Community Eggs', 'Eggs for the street', 'Clean the coop', 'Egg delivery', 'Fix the fence', 'Dozen eggs', 'Free range', 'Coop cleaning',
     'Egg sale', 'Veggie box', 'Hello keepers', 'Alice', 'Bob', 'Cara', 'Dan', 'Eve', 'Fay', 'Gus', 'Hal', 'New Roof', 'A roof for the hall',
 ];
-const INITIALS = ['D', 'E', 'H'];
+const INITIALS = ['D', 'E', 'H', 'A', 'B', 'C'];
 
 let said: string[] = [];
 
@@ -127,6 +130,15 @@ async function draw(identity: any, props: Record<string, unknown> = {}) {
 }
 
 const clean = (extra: readonly string[] = []) => bypassing(document.body, { others: [...OTHERS, ...extra], said });
+/** Opens the money behind "Money and backing" (round 3 §0 row 9). */
+const openMoney = () => fireEvent.click(screen.getByTestId('shopfront-money-toggle'));
+/** Opens the keepers' Manage tab, by its words in the language shown. */
+async function openManage(name = 'Manage') {
+    fireEvent.click(screen.getByRole('tab', { name }));
+    return screen.findByTestId('manage-panel');
+}
+/** A keeper's row on the shopfront. */
+const keeperRow = (name: string) => screen.getByText(name).closest('[data-testid^="shopfront-keeper-"]') as HTMLElement;
 
 beforeEach(() => {
     vi.restoreAllMocks();
@@ -144,13 +156,21 @@ describe('the enterprise page in the pseudo-locale', () => {
         await draw(BOB_ID);
         expect(await screen.findByRole('heading', { level: 1, name: 'Community Eggs' })).toBeInTheDocument();
         await screen.findByText('Hello keepers');
+        // The page: its money behind Money and backing, its keepers, its discussion.
+        openMoney();
         expect(screen.getByText(xx('Enterprise Balance'))).toBeInTheDocument();
-        expect(screen.getByText(xx('Keepers ({n})').replace('{n}', '3'))).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: xx('Kept by') })).toBeInTheDocument();
         expect(screen.getByText(xx('removed by a keeper'))).toBeInTheDocument();
         expect(screen.getByText(xx('This message was deleted'))).toBeInTheDocument();
+        const onPage = bracketed();
+        expect(clean(INITIALS)).toEqual([]);
+
+        // Manage: the keepers, the votes and changes, the controls.
+        await openManage(xx('Manage'));
+        expect(screen.getByText(xx('Keepers ({n})').replace('{n}', '3'))).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('Yes, make {name} lead keeper').replace('{name}', 'Cara') })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('Object: {change}').replace('{change}', xx('Adding {name} as a keeper, backing {n} beans').replace('{name}', 'Gus').replace('{n}', '4')) })).toBeInTheDocument();
-        expect(bracketed()).toBeGreaterThan(60);
+        expect(onPage + bracketed()).toBeGreaterThan(60);
         expect(clean(INITIALS)).toEqual([]);
 
         // Each season control's confirmation, in turn.
@@ -173,8 +193,8 @@ describe('the enterprise page in the pseudo-locale', () => {
 
         // What a keeper is asked before acting, and what a refusal with no words of its own says.
         fireEvent.click(screen.getByRole('button', { name: xx('Step down as a keeper') }));
-        // The bid's Decline (the operator controls come before the requests to join, which have one each too).
-        fireEvent.click(screen.getAllByRole('button', { name: xx('Decline') })[0]);
+        // The bid's Decline, named for its bid (a request to join has its own Decline, named for its member).
+        fireEvent.click(screen.getByRole('button', { name: xx('Decline the bid on {title}').replace('{title}', 'Clean the coop') }));
         fireEvent.click(screen.getByRole('button', { name: xx('Release Payment ({amount} 🫘)').replace('{amount}', '15') }));
         fireEvent.click(screen.getAllByRole('button', { name: xx('Remove message from {name}').replace('{name}', 'Dan') })[0]);
         expect(said).toHaveLength(4);
@@ -199,6 +219,8 @@ describe('the enterprise page in the pseudo-locale', () => {
         expect(screen.getByText(xx('Pause credit floor snapshot expires in {n} days').replace('{n}', '3'))).toBeInTheDocument();
         expect(screen.getAllByText(xx('⏸️ Paused')).length).toBe(2);
         expect(clean(INITIALS)).toEqual([]);
+        await openManage(xx('Manage'));
+        expect(clean(INITIALS)).toEqual([]);
         fireEvent.click(screen.getByRole('button', { name: new RegExp(xx('Resume Enterprise').replace(/[[\]~]/g, '.')) }));
         expect(screen.getByText(xx('Confirm Resume Enterprise'))).toBeInTheDocument();
         expect(clean(INITIALS)).toEqual([]);
@@ -213,6 +235,8 @@ describe('the enterprise page in the pseudo-locale', () => {
         await draw(ALICE_ID);
         expect(await screen.findByText(xx('Winding up ({n} days left · started by {name})').replace('{n}', '0').replace('{name}', 'Alice'))).toBeInTheDocument();
         expect(screen.getByText(xx('The 7-day grace period has elapsed. Ready to be finalised.'))).toBeInTheDocument();
+        expect(clean(INITIALS)).toEqual([]);
+        await openManage(xx('Manage'));
         expect(clean(INITIALS)).toEqual([]);
         fireEvent.click(screen.getByRole('button', { name: new RegExp(xx('Stop Wind-Up').replace(/[[\]~]/g, '.')) }));
         expect(screen.getByText(xx('Stop Enterprise Wind-Up'))).toBeInTheDocument();
@@ -233,7 +257,9 @@ describe('the enterprise page in the pseudo-locale', () => {
         await draw(DAN_ID);
         expect(await screen.findByText(xx('raised of {goal} 🫘 goal').replace('{goal}', '500'))).toBeInTheDocument();
         expect(screen.getByText(xx('Ask to join as a collaborator'))).toBeInTheDocument();
-        expect(screen.getByText(xx('Collaborators ({n})').replace('{n}', '2'))).toBeInTheDocument();
+        // Its people, on the shopfront: "Run by", each with their part.
+        expect(screen.getByRole('heading', { name: xx('Run by') })).toBeInTheDocument();
+        expect(keeperRow('Bob')).toHaveTextContent(xx('{name} · {role}').replace('{role}', xx('Collaborator')).replace('{name}', 'Bob'));
         expect(screen.getByRole('slider', { name: xx('Back this project with your standing: 0 to {n}').replace('{n}', '30') })).toBeInTheDocument();
         expect(clean(INITIALS)).toEqual([]);
         fireEvent.change(screen.getByPlaceholderText(xx('Amount (🫘)')), { target: { value: '0' } });
@@ -264,6 +290,8 @@ describe('the enterprise page in the pseudo-locale', () => {
 
         node(busy({ keeperRequests: [], keeperChanges: [], leadInactivity: null, succession: null }), { ledger: new Error(''), thread: new Error('') });
         await draw(DAN_ID, { isMember: false });
+        await screen.findByRole('heading', { level: 1, name: 'Community Eggs' });
+        openMoney();
         expect(await screen.findByText(xx('The full income and spend record is visible to members.'))).toBeInTheDocument();
         expect(screen.getByText(xx('The discussion is open to members.'))).toBeInTheDocument();
         expect(clean(INITIALS)).toEqual([]);
@@ -294,10 +322,35 @@ describe('the enterprise page in English', () => {
         await draw(BOB_ID);
         await screen.findByText('Hello keepers');
         expect(bracketed()).toBe(0);
+
+        // The page: its keepers, its listings, its money behind Money and backing, its activity and discussion.
+        expect(screen.getByRole('heading', { name: 'Kept by' })).toBeInTheDocument();
+        expect(keeperRow('Alice')).toHaveTextContent('Alice · Lead keeper');
+        expect(keeperRow('Cara')).toHaveTextContent('Suspended');
+        expect(screen.getByText('Book a time (1)')).toBeInTheDocument();
+        expect(screen.getByText('Looking for (1)')).toBeInTheDocument();
+        expect(screen.getByText('6 🫘 an hour')).toBeInTheDocument();
+        openMoney();
+        expect(bracketed()).toBe(0);
         expect(screen.getByText('Enterprise Balance')).toBeInTheDocument();
         expect(screen.getByRole('alert').textContent).toBe('⚠️ In Deficit: This enterprise is currently in deficit (-12.5 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.');
         expect(screen.getByText('Uncapped')).toBeInTheDocument();
         expect(screen.getByText('Pending Wage Claims (1)')).toBeInTheDocument();
+        expect(screen.getByTestId('enterprise-backing').textContent).toContain('Bob · 20 🫘');
+        expect(screen.getByTestId('ledger-fee-note').textContent).toBe('Came in is before fees: 2.00 🫘 in fees came off it.');
+        // Came in and went out, and the rows they came in and went out on.
+        expect(screen.getAllByText('+120.00 🫘')).toHaveLength(2);
+        expect(screen.getAllByText('-40.00 🫘')).toHaveLength(2);
+        expect(screen.getAllByText('Starting balance:', { exact: false })[0].textContent).toBe('Starting balance: -90.50 🫘');
+        expect(screen.getAllByText('Transfer')).toHaveLength(2);
+        expect(screen.getByText('removed by a keeper')).toBeInTheDocument();
+        expect(screen.getByText('This message was deleted')).toBeInTheDocument();
+        expect(screen.getByRole('textbox', { name: 'Message the enterprise' })).toHaveAttribute('placeholder', 'Message the enterprise...');
+        expect(screen.getByRole('button', { name: /Report Enterprise/ }).textContent).toBe('🛡️ Report Enterprise');
+
+        // Manage: what its keepers do.
+        await openManage();
+        expect(bracketed()).toBe(0);
         expect(screen.getByText('Clean the coop').parentElement!.nextElementSibling!.textContent).toBe('Bidder: Dan');
         expect(screen.getByRole('button', { name: 'Approve Bid (10 🫘)' })).toBeInTheDocument();
         expect(screen.getByText('6 🫘 in escrow')).toBeInTheDocument();
@@ -312,25 +365,7 @@ describe('the enterprise page in English', () => {
         expect(screen.getByText(/^Active Succession Proposal:/).textContent).toBe('Active Succession Proposal: Move the lead keeper role to Cara');
         expect(screen.getByRole('button', { name: 'No, do not make Cara lead keeper' })).toBeInTheDocument();
         expect(screen.getByText('Keepers (3)')).toBeInTheDocument();
-        expect(screen.getByText('Lead keeper')).toBeInTheDocument();
-        expect(screen.getByText('Suspended')).toBeInTheDocument();
-        expect(screen.getByText('+20 🫘')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Step down as a keeper' })).toBeInTheDocument();
-        expect(screen.getByTestId('ledger-fee-note').textContent).toBe('Came in is before fees: 2.00 🫘 in fees came off it.');
-        // Came in and went out, and the rows they came in and went out on.
-        expect(screen.getAllByText('+120.00 🫘')).toHaveLength(2);
-        expect(screen.getAllByText('-40.00 🫘')).toHaveLength(2);
-        expect(screen.getAllByText('Starting balance:', { exact: false })[0].textContent).toBe('Starting balance: -90.50 🫘');
-        expect(screen.getByText('Enterprise Listings (2)')).toBeInTheDocument();
-        expect(screen.getByText('offer')).toBeInTheDocument();
-        expect(screen.getByText('need')).toBeInTheDocument();
-        expect(screen.getByText('/hourly')).toBeInTheDocument();
-        expect(screen.getByText('🔄 recurring')).toBeInTheDocument();
-        expect(screen.getAllByText('Transfer')).toHaveLength(2);
-        expect(screen.getByText('removed by a keeper')).toBeInTheDocument();
-        expect(screen.getByText('This message was deleted')).toBeInTheDocument();
-        expect(screen.getByRole('textbox', { name: 'Message the enterprise' })).toHaveAttribute('placeholder', 'Message the enterprise...');
-        expect(screen.getByRole('button', { name: /Report Enterprise/ }).textContent).toBe('🛡️ Report Enterprise');
 
         fireEvent.click(screen.getByRole('button', { name: 'Step down as a keeper' }));
         fireEvent.click(screen.getByRole('button', { name: 'Release Payment (15 🫘)' }));
@@ -360,8 +395,10 @@ describe('the enterprise page in English', () => {
         expect(screen.getByText('Help run this project. You can back it with your earned trading standing to expand its credit floor.')).toBeInTheDocument();
         expect(screen.getByText('Back this project with your standing: 0 … 30')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Request to join as a collaborator' })).toBeInTheDocument();
-        expect(screen.getByText('Collaborators (2)')).toBeInTheDocument();
-        expect(screen.getByText('Leader')).toBeInTheDocument();
-        expect(screen.getByText('Project Listings (2)')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Run by' })).toBeInTheDocument();
+        expect(keeperRow('Alice')).toHaveTextContent('Alice · Leader');
+        expect(keeperRow('Bob')).toHaveTextContent('Bob · Collaborator');
+        expect(screen.getByText('Book a time (1)')).toBeInTheDocument();
+        expect(screen.getByText('Looking for (1)')).toBeInTheDocument();
     });
 });

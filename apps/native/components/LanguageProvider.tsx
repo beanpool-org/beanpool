@@ -85,6 +85,17 @@ function wordsIn(lang: UiLang): Words {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
+/** Who hears a member's pick once it is the language in use ({@link whenLanguagePicked}). */
+let pickedListener: ((lang: UiLang) => void) | null = null;
+
+/**
+ * Hear each pick of a language once it is the one in use (core's too, so `languageForNode()` reads it): app/_layout.tsx
+ * tells the community at once, so its next push is written in it, not after the next app start. Null: nobody.
+ */
+export function whenLanguagePicked(listener: ((lang: UiLang) => void) | null): void {
+    pickedListener = listener;
+}
+
 export function LanguageProvider({ children, deviceTags, initial }: {
     children: React.ReactNode;
     /** The phone's tags; read from the OS when not given (tests give them). */
@@ -103,6 +114,13 @@ export function LanguageProvider({ children, deviceTags, initial }: {
     // A pick made before the stored choice is read wins over that read when it lands (review of #1954, N3): the read is
     // what this phone chose before, the pick is what the member chose now (and what is now stored).
     const picked = useRef(false);
+    // The language a pick last made the one in use, so a pick tells it once.
+    const told = useRef<UiLang | null>(null);
+    useEffect(() => {
+        if (!picked.current || told.current === lang) return;
+        told.current = lang;
+        pickedListener?.(lang);
+    }, [lang]);
 
     useEffect(() => {
         let live = true;

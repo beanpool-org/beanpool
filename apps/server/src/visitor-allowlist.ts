@@ -57,6 +57,11 @@ export const VISITOR_WRITES: readonly VisitorWrite[] = [
         own: (b, s) => isVisitorsDirectLine(b.messageId, s) },
     { method: 'POST', path: '/api/messages/mark-read', why: 'a DM it is in', own: (b, s) => isVisitorsDirectConversation(b.conversationId, s) },
     { method: 'POST', path: '/api/messages/mute', why: 'a DM it is in', own: (b, s) => isVisitorsDirectConversation(b.conversationId, s) },
+    // A message request sent to it, in a DM it is in, and all of them at once (the director's option b on PR #2392 review
+    // 4355750376): a stranger's first line to it waits as a member's does, so it decides it as a member does.
+    { method: 'POST', path: '/api/messages/request', why: 'accepting or ignoring a message request sent to it, in a DM it is in (decideRequest holds it to its own)',
+        own: (b, s) => isVisitorsDirectConversation(b.conversationId, s) },
+    { method: 'POST', path: '/api/messages/request/ignore-all', why: 'ignoring every message request waiting for it (ignoreAllRequests acts for the signer alone)' },
     // Its phone, so a message sent to it reaches it, and stops when it leaves the phone. Each is written for the signer only,
     // and a key with no row may make it too.
     { method: 'POST', path: '/api/push-tokens', why: "its phone's push token: its messages and Beans reach it" },

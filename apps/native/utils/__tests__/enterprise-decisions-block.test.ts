@@ -8,10 +8,14 @@ import path from 'node:path';
  */
 const ROOT = path.join(__dirname, '..', '..');
 const block = fs.readFileSync(path.join(ROOT, 'components', 'EnterpriseDecisions.tsx'), 'utf-8');
-const screen = fs.readFileSync(path.join(ROOT, 'app', 'treasury-detail.tsx'), 'utf-8');
+// The keepers' console (slice S7): the keepers' votes are theirs, so the block left the public page with every other
+// keeper action.
+const screen = fs.readFileSync(path.join(ROOT, 'app', 'treasury-manage.tsx'), 'utf-8');
+const page = fs.readFileSync(path.join(ROOT, 'app', 'treasury-detail.tsx'), 'utf-8');
 
 describe("an enterprise's Decisions block", () => {
-    it('the enterprise screen draws it, and reads it again on each focus (where a Needs-you vote line lands)', () => {
+    it('its keepers\' console draws it, and reads it again on each focus (where a Needs-you vote line lands); its public page does not', () => {
+        expect(page).not.toMatch(/<EnterpriseDecisions\s/);
         expect(screen).toContain("import { EnterpriseDecisions } from '../components/EnterpriseDecisions';");
         expect(screen).toMatch(/<EnterpriseDecisions\s/);
         expect(screen).toContain('useFocusEffect(useCallback(() => { setDecisionsRefresh(n => n + 1); }, []));');

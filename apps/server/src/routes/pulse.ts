@@ -11,6 +11,7 @@ import Router from '@koa/router';
 import { getPulseFeed, setPulseItemMute, PulseError } from '../engine/pulse-resolver.js';
 import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 export interface PulseRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
@@ -110,7 +111,7 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 

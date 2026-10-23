@@ -41,7 +41,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { getGroupLead, isVisitorKey } from '@beanpool/engine';
-import { formatDate } from '@beanpool/core';
+import { formatDate, word } from '@beanpool/core';
 import { postGroupSystemLine, callsignOf, GroupSystemType, loadGroupForThread } from './group-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
 
@@ -408,8 +408,8 @@ export function proposeGroupConvenor(
     }
 
     const silence = getConvenorSilence(groupId);
-    if (!silence.convenorPubkey) throw new Error('Only a group with a lead convenor can choose a new one this way');
-    if (!silence.isSilent) throw new Error('The convenor has been active on the node within the last 30 days');
+    if (!silence.convenorPubkey) throw new Error(word('Only a group with a lead convenor can choose a new one this way'));
+    if (!silence.isSilent) throw new Error(word('The convenor has been active on the node within the last 30 days'));
     // Convenors when the lead has fellow convenors appointed by the end of the lead's last active day, members when
     // none was — in both cases only those who were there by then. Both the proposer and the candidate
     // come from that set, so the error says which one it is, and says when someone is in the group but came too late.
@@ -423,7 +423,7 @@ export function proposeGroupConvenor(
             ? `Only ${electorateWords(elect)} can propose a new lead convenor${lateConvenorsWords(elect, "can't")}`
             : `Only an active ${voterWord} of this group may propose a convenor`);
     }
-    if (candidatePubkey === silence.convenorPubkey) throw new Error('The candidate cannot be the current convenor');
+    if (candidatePubkey === silence.convenorPubkey) throw new Error(word('The candidate cannot be the current convenor'));
     if (!electorate.includes(candidatePubkey)) {
         throw new Error(cameLate(candidatePubkey)
             ? `The candidate must be one of the ${electorateWords(elect)}${lateConvenorsWords(elect, "can't be chosen")}`
@@ -493,11 +493,11 @@ export function voteGroupConvenor(
     assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;
-    if (!prop) throw new Error('Convenor proposal not found');
+    if (!prop) throw new Error(word('Convenor proposal not found'));
     tickGroupSuccession(cb, Date.now(), prop.group_id);
     const nowIso = new Date().toISOString();
     const cur = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;
-    if (cur.status !== 'active' || settle(cb, cur, false, nowIso) !== 'open') throw new Error('This vote has closed');
+    if (cur.status !== 'active' || settle(cb, cur, false, nowIso) !== 'open') throw new Error(word('This vote has closed'));
 
     const elect = electorateOf(prop.group_id, prop.convenor_pubkey);
     if (!elect.voters.includes(voterPubkey)) {

@@ -103,7 +103,8 @@ vi.mock('../node-claim', async (importOriginal) => {
 import { Alert } from 'react-native';
 import ClaimCommunityScreen from '../../app/claim-community';
 import { CLAIM_CODE_PLACEHOLDER } from '../claim-link';
-import { claimCodeDigits, claimCodeFromDigits, readClaimStatus } from '../node-claim';
+import { claimCodeDigits, claimCodeFromDigits, claimCommunity, readClaimStatus } from '../node-claim';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 
 const ORIGIN = 'https://beans.example.org';
@@ -389,5 +390,158 @@ describe('claimed at the server\'s number, the owner is told a name follows the 
         document.body.innerHTML = '';
         server.addresses = ['beans.example.org'];
         expect(q(await claimAt(ORIGIN), '[data-testid="claim-number-nudge"]')).toBeNull();
+    });
+});
+
+describe('the QR on a phone with no account yet (Dax, 23 Oct): a way on, not a dead end', () => {
+    const KEPT = 'beanpool_pending_claim';
+    const signedIn = who.identity;
+    const storage = () => vi.mocked(AsyncStorage);
+    beforeEach(() => {
+        storage().setItem.mockClear();
+        storage().removeItem.mockClear();
+        nav.router.replace.mockClear();
+        nav.router.back.mockClear();
+        vi.mocked(claimCommunity).mockClear();
+    });
+    const withNoAccount = async (run: () => Promise<void>) => {
+        (who as { identity: unknown }).identity = null;
+        try { await run(); } finally { (who as { identity: unknown }).identity = signedIn; }
+    };
+
+    it('says the account comes first and offers Make my account: no code box, no Claim button, never the code', async () => {
+        await withNoAccount(async () => {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            const host = await render();
+            expect(host.textContent).toContain('Claim Beans Town');
+            expect(host.textContent).toContain(ORIGIN);
+            expect(q(host, '[data-testid="claim-no-account"]')?.textContent)
+                .toBe('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here, with the code filled in.');
+            expect(button(host, 'Make my account')).toBeDefined();
+            expect(codeField(host)).toBeNull();
+            expect(button(host, 'Claim and become owner')).toBeUndefined();
+            expect(host.textContent).not.toContain(CODE.slice(6));
+        });
+    });
+
+    it('Make my account keeps the claim on the phone, then opens the first screen; nothing is claimed', async () => {
+        await withNoAccount(async () => {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            const host = await render();
+            await act(async () => { button(host, 'Make my account')!.click(); });
+            await act(async () => {});
+            const kept = storage().setItem.mock.calls.filter(([k]) => k === KEPT);
+            expect(kept).toHaveLength(1);
+            expect(JSON.parse(kept[0][1] as string)).toMatchObject({ node: ORIGIN, codeId: CODE_ID, code: CODE });
+            expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
+            // Kept before the screen goes.
+            expect(storage().setItem.mock.invocationCallOrder[0]).toBeLessThan(nav.router.replace.mock.invocationCallOrder[0]);
+            expect(claimCommunity).not.toHaveBeenCalled();
+        });
+    });
+
+    it('a QR with no address: the same way on, in the words for no code when it had none', async () => {
+        await withNoAccount(async () => {
+            nav.params = {};
+            const host = await render();
+            expect(host.textContent).toContain('Claim a community');
+            expect(q(host, '[data-testid="claim-no-account"]')?.textContent)
+                .toBe('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here.');
+            expect(button(host, 'Make my account')).toBeDefined();
+        });
+    });
+
+    it('a server that already has an owner says so, and offers no account for it', async () => {
+        await withNoAccount(async () => {
+            vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            const host = await render();
+            expect(host.textContent).toContain('This community already has an owner');
+            expect(button(host, 'Make my account')).toBeUndefined();
+        });
+    });
+
+    it('with an account, the claim done: the claim kept for it is taken off the phone', async () => {
+        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+        const host = await render();
+        // The screen up with the account took it off already (below): this is the claim's own.
+        storage().removeItem.mockClear();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        expect(host.textContent).toContain('You own Beans Town');
+        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+    });
+
+    it('refused because the server has an owner by now, or a new code: taken off too', async () => {
+        for (const kind of ['already-claimed', 'code-changed'] as const) {
+            document.body.innerHTML = '';
+            storage().removeItem.mockClear();
+            vi.mocked(claimCommunity).mockResolvedValueOnce({ kind } as Awaited<ReturnType<typeof claimCommunity>>);
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            const host = await render();
+            storage().removeItem.mockClear();
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(storage().removeItem, kind).toHaveBeenCalledWith(KEPT);
+        }
+    });
+
+    it('Back leaves the claim: taken off the phone, and the screen goes back', async () => {
+        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+        const host = await render();
+        storage().removeItem.mockClear();
+        await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+        expect(nav.router.back).toHaveBeenCalled();
+    });
+
+    it('Back before the account: taken off the phone too', async () => {
+        await withNoAccount(async () => {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            const host = await render();
+            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+            await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+            expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+            expect(nav.router.back).toHaveBeenCalled();
+        });
+    });
+
+    // PR #2412 review: only the header's arrow took the claim off. Left by the system back, a closed app or a notification,
+    // the guard's landing from welcome (every cold start, every community switch) came back to this screen for a day.
+    it('up with an account, the screen takes the kept claim off the phone at once: however it is left, it is not the landing again', async () => {
+        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+        const host = await render();
+        // Nothing tapped: no Back, no claim. The screen is simply up, as the guard's landing brought it.
+        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+        expect(nav.router.back).not.toHaveBeenCalled();
+        expect(nav.router.replace).not.toHaveBeenCalled();
+        expect(claimCommunity).not.toHaveBeenCalled();
+        // The claim is in the route now: the code is still filled in, and the claim still works from here.
+        expect(codeField(host)!.value).toBe(claimCodeDigits(CODE));
+        storage().removeItem.mockClear();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        expect(host.textContent).toContain('You own Beans Town');
+    });
+
+    it('a join half done keeps it: the guard sends the screen back to welcome, and the claim is wanted when the join ends', async () => {
+        const join = { step: 'seedBackup', inviteCode: '', anchorUrl: ORIGIN, callsign: 'marty' };
+        storage().getItem.mockImplementation(async (k: string) => (k === 'beanpool_pending_onboarding' ? JSON.stringify(join) : null));
+        try {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            await render();
+            expect(storage().getItem).toHaveBeenCalledWith('beanpool_pending_onboarding');
+            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+        } finally {
+            storage().getItem.mockImplementation(async () => null);
+        }
+    });
+
+    it('no account yet: the screen up keeps it, through any restart, for the account', async () => {
+        await withNoAccount(async () => {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            await render();
+            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+        });
     });
 });

@@ -34,6 +34,8 @@ class FakeNode {
      * `tool_copy_off`, nothing written; the member's switch-on writes.
      */
     refusesOff = false;
+    /** The `max` each GET and PUT answers: 65536, every tool's on a node from before a tool could name more. */
+    max = 65536;
     /** Runs once as the next PUT arrives, before the node reads it (another browser's request landing first). */
     beforePut: (() => void) | null = null;
     mode: 'up' | 'down' | 'refusing' | 'older' = 'up';
@@ -60,11 +62,12 @@ class FakeNode {
         const now = (this.clock += 1000);
         const row = this.rows.get(key);
         if (method === 'GET') {
-            return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, bytes: 0, max: 65536, ...(this.sendsDeletedAt || this.refusesOff ? { deletedAt: row ? null : this.tombs.get(key) ?? null } : {}) } };
+            return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, bytes: 0, max: this.max, ...(this.sendsDeletedAt || this.refusesOff ? { deletedAt: row ? null : this.tombs.get(key) ?? null } : {}) } };
         }
         if (method === 'PUT') {
             const doc = (body as { doc?: unknown } | null)?.doc;
             if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { status: 400, json: { error: "Send the tool's document as doc, a JSON object." } };
+            if (JSON.stringify(doc).length > this.max) return { status: 413, json: { error: "This tool's copy is too big.", code: 'tool_doc_too_large' } };
             const tomb = this.tombs.get(key);
             if (this.refusesOff && (body as { turnOn?: unknown }).turnOn !== true && !row && tomb) {
                 return { status: 410, json: { error: "This tool's copy was switched off, so nothing was kept. Switch it on again in Settings to keep one.", code: 'tool_copy_off', deletedAt: tomb } };
@@ -72,7 +75,7 @@ class FakeNode {
             let at = now;
             for (const t of [row?.updatedAt, this.tombs.get(key)]) if (t && Date.parse(t) >= at) at = Date.parse(t) + 1;
             this.rows.set(key, { doc: doc as Record<string, unknown>, updatedAt: iso(at) });
-            return { status: 200, json: { success: true, tool, updatedAt: iso(at), bytes: 0, max: 65536 } };
+            return { status: 200, json: { success: true, tool, updatedAt: iso(at), bytes: 0, max: this.max } };
         }
         if (method === 'DELETE') {
             if (row || this.refusesOff) {
@@ -170,6 +173,39 @@ function holdNextGet() {
     });
     return { asked, release };
 }
+
+describe("the most the server keeps of a tool's document (its answers' `max`)", () => {
+    /** A tool that names 128 KB, as the Tool shed does. */
+    const BIG: ToolManifest<Doc> = { ...KIT, doc: { ...KIT.doc, maxBytes: 131_072 } };
+    const bigCopy = (b: Browser): WebToolCopy => ({ manifest: BIG, owner: { kind: 'member', publicKey: b.signer }, node: NODE });
+    const sized = (bytes: number): Doc => ({ v: 2, items: ['x'.repeat(bytes - '{"v":2,"items":[""]}'.length)] });
+
+    it('kept beside the setting once heard, and moved by the next answer that says another', async () => {
+        use(A);
+        expect(await keepToolDoc(ME, 'kit', JSON.stringify(sized(1_000)), iso(t0))).toBe(true);
+        expect((await readToolSettings(ME, 'kit')).nodeMax).toBeUndefined();
+        expect(await openToolCopy(bigCopy(A))).toBe('put');
+        expect((await readToolSettings(ME, 'kit')).nodeMax).toBe(65536);
+        node.max = 131_072;
+        expect(await openToolCopy(bigCopy(A))).toBe('nothing');
+        expect((await readToolSettings(ME, 'kit')).nodeMax).toBe(131_072);
+        expect(await keepToolDoc(ME, 'kit', JSON.stringify(sized(70_000)), iso(t0 + 60_000))).toBe(true);
+        expect(await openToolCopy(bigCopy(A))).toBe('put');
+        expect(JSON.stringify(node.doc(ME, 'kit')).length).toBe(70_000);
+    });
+
+    it('a browser that holds more than an older server keeps sends none of it: switching on there is too big, never "failed", and nothing is written over', async () => {
+        use(A);
+        await patchToolSettings(ME, 'kit', { nodeCopy: false });
+        expect(await keepToolDoc(ME, 'kit', JSON.stringify(sized(70_000)), iso(t0))).toBe(true);
+        node.log.length = 0;
+        expect(await switchToolCopy(bigCopy(A), true)).toBe('too-big');
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        expect(await setting(A)).toBe(false);
+        expect((await readToolSettings(ME, 'kit')).nodeMax).toBe(65536);
+        expect((await record(A))?.body.length).toBe(70_000);
+    });
+});
 
 describe('two browsers, one server: the open rule', () => {
     it('only a tool that asks for node-copy keeps a copy at all', () => {
@@ -565,7 +601,7 @@ describe('the delete rule: what the node is told and when', () => {
         node.log.length = 0;
         expect(await open(A)).toBe('off');
         expect(node.log).toEqual([]);
-        expect(await readToolSettings(ME, 'kit')).toEqual({ nodeCopyMarks: OLD, nodeCopy: false });
+        expect(await readToolSettings(ME, 'kit')).toEqual({ nodeCopyMarks: OLD, nodeCopy: false, nodeMax: 65536 });
     });
 
     it("12. the enterprise's copy: keeper 1 off, keeper 2's open switches off", async () => {
@@ -661,7 +697,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await off).toBe('off');
         expect(line.signal()!.aborted).toBe(true);
         expect(methods()).toEqual(['GET', 'DELETE']);
-        expect(await settingsOf(A)).toEqual({ nodeCopy: false });
+        expect(await settingsOf(A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         // Off: the next open asks nothing at all.
         line.arrive();
         node.log.length = 0;
@@ -690,7 +726,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             node.log.length = 0;
             expect(await open(A)).toBe('off');
             expect(methods()).toEqual([]);
-            expect(await settingsOf(A)).toEqual({ nodeCopy: false });
+            expect(await settingsOf(A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         }
     });
 
@@ -709,7 +745,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect([await put, await off]).toEqual(['put', 'off']);
         expect(methods()).toEqual(['GET', 'PUT', 'DELETE']);
         expect(node.rows.size).toBe(0);
-        expect(await settingsOf(A)).toEqual({ nodeCopy: false });
+        expect(await settingsOf(A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         expect(asked).toEqual([KEY, KEY]);
     });
 
@@ -725,7 +761,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await put).toBe('switched-off');
         expect(methods()).toEqual(['GET', 'DELETE', 'PUT']);
         expect(node.rows.size).toBe(0);
-        expect(await settingsOf(A)).toEqual({ nodeCopy: false });
+        expect(await settingsOf(A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         expect(readDoc(KIT, (await readToolRecord(ME, KIT.id))?.body ?? null)).toEqual(doc('Ladder'));
         // The next open, in either tab, with the setting off: nothing at all.
         node.log.length = 0;
@@ -770,7 +806,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
             expect(await sync).toBe('later');
             expect(await switchToolCopy(ent, false)).toBe('off');
-            expect(await entSettings(k1)).toEqual({ nodeCopy: false });
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false, nodeMax: 65536 });
             return line;
         }
 
@@ -807,7 +843,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             use(k1);
             expect(await openToolCopy(ent)).toBe('off');
             expect(node.log).toEqual([]);
-            expect(await entSettings(k1)).toEqual({ nodeCopy: false });
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         });
     });
 });

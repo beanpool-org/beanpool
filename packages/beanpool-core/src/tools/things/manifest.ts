@@ -12,6 +12,7 @@ import {
     type ToolPermission,
 } from '../manifest.js';
 import {
+    THINGS_DOC_BYTES,
     THINGS_DOC_VERSION,
     emptyThingsDoc,
     isLentTo,
@@ -19,6 +20,7 @@ import {
     readThingsDoc,
     type ThingsDoc,
 } from './doc.js';
+import { shedTooBig } from './shed.js';
 
 export const THINGS_PERMISSIONS = [
     'photos',
@@ -44,7 +46,7 @@ export interface ThingsCounts {
 
 /**
  * Counts of things in the shed:
- * - things: active things you own (!gone, {@link isLiveThing}: the number THINGS_MAX_ITEMS caps)
+ * - things: active things you own (!gone, {@link isLiveThing})
  * - out: things currently lent out (a lentTo this build reads, {@link isLentTo})
  * - listed: things in your shop ready to lend (a string postId, not out)
  * - shelf: things at home not listed or lent (neither)
@@ -141,13 +143,14 @@ export const THINGS: ToolManifest<ThingsDoc> = {
         version: THINGS_DOC_VERSION,
         empty: emptyThingsDoc,
         read: readThingsDoc,
-        maxBytes: TOOL_LIMITS.docBytes,
+        maxBytes: THINGS_DOC_BYTES,
     },
     screens: ['main', 'thing', 'edit', 'loans'],
     row: (d, now) => {
         const { things, listed, out } = thingsCounts(d, now);
         return { key: wordn('{n} thing · {listed} in your shop · {out} out', '{n} things · {listed} in your shop · {out} out'), n: things, values: { listed, out } };
     },
+    tooBig: shedTooBig,
     examples: [word('a drill'), word('a ladder'), word('a tent')],
     guide: 'lending-and-borrowing',
     homeCard: {

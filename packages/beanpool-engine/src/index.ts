@@ -31,3 +31,4 @@ export * from './like.js';
 export * from './known-floor.js';
 export * from './event-time.js';
 export * from './event-series.js';
+export * from './refusal-code.js';

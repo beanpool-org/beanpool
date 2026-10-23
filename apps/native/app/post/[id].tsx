@@ -46,6 +46,7 @@ import { ShopToggle, shopIdForEdit, shopToggleState, type ShopToggleState } from
 import { readListingShopId, readMyShop } from '../../utils/shop';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
+import { changedElsewhere } from '../../utils/changed-elsewhere';
 import { signedRequestWords } from '../../components/signed-request-lines';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
@@ -1353,7 +1354,7 @@ export default function PostDetailModal() {
                                             await cancelMarketplaceTransaction(txToCancel, identity.publicKey);
                                             if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                         } catch(e:any) { 
-                                            if (e.message?.includes('not found') || e.message?.includes('not authorized')) {
+                                            if (changedElsewhere(e, 'transaction_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
@@ -1643,7 +1644,7 @@ export default function PostDetailModal() {
                                             // Fallback if chat fails
                                             router.replace({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
                                         } catch (e: any) {
-                                            if (e.message?.includes('not found') || e.message?.includes('not active')) {
+                                            if (changedElsewhere(e, 'post_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This post was already accepted or modified elsewhere. Refreshing your screen...'));
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);

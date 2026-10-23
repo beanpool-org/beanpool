@@ -2783,8 +2783,9 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
     public_key TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     -- The tool's id: 1 to 24 of a-z, 0-9 and '-' (engine/tool-state.ts TOOL_ID).
     tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
-    -- The document as JSON text, at most 64 KB as UTF-8 (TOOL_STATE_MAX_BYTES).
-    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 65536),
+    -- The document as JSON text, at most 128 KB as UTF-8, the most any tool may name (TOOL_STATE_CEILING_BYTES); each
+    -- tool's own bound is the engine's (toolStateMaxBytes). db.ts rebuilds a table made with the 64 KB CHECK of before.
+    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
     -- The replication watermark (a plain table), and the copy's time the apps reconcile by: engine/tool-state.ts stamps it.
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, tool)
@@ -2849,9 +2850,13 @@ CREATE TABLE IF NOT EXISTS dm_requests (
     requested_at    TEXT NOT NULL,
     decided_at      TEXT,
     -- Whose act accepted it: the person it is for (their Accept, line, open of the chat or friend add), or the opener (their
-    -- line once the rule lets them through: a role, a trade); null for a trade's opening. An opener who blocked the person
-    -- it is for reads one that person accepted after the block as not made, while the block holds (engine/dm-requests.ts).
+    -- line or reaction once the rule lets them through: a role, a trade); null for a trade's opening, or once each of the
+    -- two has accepted it. Either of them who blocked the other reads one the other accepted after the block as not made,
+    -- while the block holds (engine/dm-requests.ts acceptanceHiddenFrom).
     accepted_by     TEXT,
+    -- The state it had when it was accepted ('pending', 'ignored' or 'expired'): what the person it is for reads while an
+    -- acceptance of the opener's own act stays hidden from them, and 'ignored' once they ignore it then.
+    state_before    TEXT CHECK (state_before IN ('pending', 'ignored', 'expired')),
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
     updated_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (from_pubkey != to_pubkey)

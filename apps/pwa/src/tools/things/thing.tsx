@@ -19,7 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     BACK_AROUND_DAYS, THINGS_NAME_CHARS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack,
-    isShopClosedRefusal, offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedTooBigLine, shopClosedLine, t,
+    isShopClosedRefusal, offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedFullLine, shopClosedLine, t,
     takeOutOfShop, thingCategory,
     thingConditionName, thingListDraft, thingState, thingStateLine, tn,
     type ThingsDoc, type ThingsScreenProps, type ToolOwnOffer, type ToolPostStatus, type ToolPriceHint,
@@ -129,16 +129,17 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     /** Keep a changed document: true once kept; else the screen says why not (the shed is full, or it wasn't kept). */
     const write = async (next: ThingsDoc) => {
         const why = await keep(host, next);
-        if (why) setRefused(why === 'too-big' ? shedTooBigLine() : notKept());
+        if (why) setRefused(why === 'too-big' ? shedFullLine() : notKept());
         return why === null;
     };
     /**
-     * Whether a change that makes the document bigger fits the store's bound, checked before the server is asked anything
-     * (as Edit checks): one that doesn't says the shed is full, and nothing changes, here or in the Market.
+     * Whether a change that makes the document bigger fits the host's bound, checked before the server is asked anything
+     * (as Edit checks): one that doesn't says the shed is full, and nothing changes, here or in the Market. One that makes
+     * it no bigger always fits, so a shed already past the bound can be made smaller (core shedFits).
      */
     const fits = (next: ThingsDoc) => {
-        if (shedFits(next)) return true;
-        setRefused(shedTooBigLine());
+        if (shedFits(next, host.doc.maxBytes(), host.doc.get())) return true;
+        setRefused(shedFullLine());
         return false;
     };
     /**

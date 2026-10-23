@@ -25,7 +25,7 @@
 import crypto from 'node:crypto';
 import {
     adminSigninText, bytesOfSignedText, inviteTicketText, reEnrollText, settingsSigninText, signedRequestBytes,
-    signedRequestText, unboundRequestText,
+    signedRequestText, unboundRequestText, word,
 } from '@beanpool/core';
 import { isLiveVisitor, isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -89,9 +89,9 @@ export function unboundSignaturesUntilDay(): string | null {
 }
 
 export const APP_TOO_OLD_CODE = 'app_too_old';
-export const APP_TOO_OLD_ERROR = 'This version of BeanPool is too old for this community. Please update BeanPool from the app store.';
+export const APP_TOO_OLD_ERROR = word('This version of BeanPool is too old for this community. Please update BeanPool from the app store.');
 export const WRONG_COMMUNITY_CODE = 'wrong_community';
-export const WRONG_COMMUNITY_ERROR = 'This was signed for another community, so this one does not accept it. If you opened this community from a link, open it in the BeanPool app instead.';
+export const WRONG_COMMUNITY_ERROR = word('This was signed for another community, so this one does not accept it. If you opened this community from a link, open it in the BeanPool app instead.');
 
 // ─── Nonces ─────────────────────────────────────────────────────────────────────────────────
 
@@ -496,7 +496,7 @@ export const STORE_FULL_CODE = 'store_full';
 /** The rows' region is full: every account's new request waits. */
 export const STORE_FULL_ERROR = 'This community is very busy right now. Please try again in a minute.';
 /** One key, either class, is at its own share. */
-export const KEY_SHARE_FULL_ERROR = 'Your app has sent more requests than this community holds at once. Please wait a minute and try again.';
+export const KEY_SHARE_FULL_ERROR = word('Your app has sent more requests than this community holds at once. Please wait a minute and try again.');
 /** The rows' region holds the newcomers' line: a newcomer's new request waits. */
 export const NEWCOMERS_FULL_ERROR = 'This community is busy with new members right now. Please try again in a minute.';
 /** The strangers' region is full, or one address's share of it. */
@@ -1084,8 +1084,8 @@ export function resetSignatureCountsForTests(): void {
 
 // ─── Offline tickets ────────────────────────────────────────────────────────────────────────
 
-export const TICKET_WRONG_COMMUNITY_ERROR = 'This invite was made for another community, so it can’t be used here. Ask a member of this community for an invite.';
-export const TICKET_TOO_OLD_ERROR = 'This invite was made by an old version of BeanPool and no longer works. Ask the member who gave it to you for a new one.';
+export const TICKET_WRONG_COMMUNITY_ERROR = word('This invite was made for another community, so it can’t be used here. Ask a member of this community for an invite.');
+export const TICKET_TOO_OLD_ERROR = word('This invite was made by an old version of BeanPool and no longer works. Ask the member who gave it to you for a new one.');
 
 /**
  * Whether an offline ticket may be used here (the engine's verifyOfflineTicket asks, once the inviter's signature has

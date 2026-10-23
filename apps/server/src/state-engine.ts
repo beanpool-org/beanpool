@@ -232,7 +232,7 @@ import {
     previewAdmitsInvite,
 } from './engine/invites.js';
 import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -348,7 +348,7 @@ import {
     type ListGroupsFilter,
     exactPlaceReaders,
     neighbourhoodOf,
-    placeForOthers,
+    placeForOthers, unauthorized,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -1421,6 +1421,9 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr, tn: trn } = wordsFor('en');
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
@@ -1575,22 +1578,23 @@ export function socketStanding(pubkey: string): SocketStanding {
 }
 
 /** Event types carrying a direct conversation's id (`conversationId`, or `conversation.id`), and a transfer's. */
-const VISITOR_CHAT_EVENTS: ReadonlySet<string> = new Set(['new_message', 'message_edited', 'message_reaction', 'conversation_created']);
+const VISITOR_CHAT_EVENTS: ReadonlySet<string> = new Set(['new_message', 'message_edited', 'message_reaction', 'conversation_created', 'dm_request_updated']);
 
 /**
  * Whether an event sent to a visitor's socket as a party is one it may have: a line, an edit, a reaction or the
- * opening of a direct conversation (a DM) it is in, or a transfer of its Beans. Anything else addressed to it is not
- * delivered: a group's chat, an event's chat, a post's update, a trade. Its HTTP reads are held to the same
- * (https-server.ts visitorsOwnRead).
+ * opening of a direct conversation (a DM) it is in, a message request in one decided (engine/dm-requests.ts; the visitor
+ * decides one sent to it, PR #2392 review 4355750376), or its Ignore all, every one of whose chats is a DM, or a transfer
+ * of its Beans. Anything else addressed to it is not delivered: a group's chat, an event's chat, a post's update, a trade.
+ * Its HTTP reads are held to the same (https-server.ts visitorsOwnRead).
  */
 function visitorMayReceive(event: any): boolean {
     const type = event?.type;
     if (type === 'transaction') return true;
+    const isDm = (id: unknown) => typeof id === 'string'
+        && (db.prepare('SELECT type FROM conversations WHERE id = ?').get(id) as { type: string } | undefined)?.type === 'dm';
+    if (type === 'dm_requests_ignored') return Array.isArray(event.conversationIds) && event.conversationIds.every(isDm);
     if (!VISITOR_CHAT_EVENTS.has(type)) return false;
-    const conversationId = typeof event.conversationId === 'string' ? event.conversationId : event.conversation?.id;
-    if (typeof conversationId !== 'string') return false;
-    const conv = db.prepare('SELECT type FROM conversations WHERE id = ?').get(conversationId) as { type: string } | undefined;
-    return conv?.type === 'dm';
+    return isDm(typeof event.conversationId === 'string' ? event.conversationId : event.conversation?.id);
 }
 
 /**
@@ -1941,10 +1945,10 @@ export function assertMemberActive(publicKey: string): void {
     // (pruned by an operator, say) and refuse the member whose key it is.
     const statusOf = db.prepare("SELECT status FROM members WHERE public_key = ?");
     const member = (statusOf.get(publicKey) ?? statusOf.get(cleanKey)) as any;
-    if (!member) throw new Error('Member not found');
-    if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
-    if (member.status === 'pruned') throw new Error('Account has been pruned');
-    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    if (!member) throw new Error(word('Member not found'));
+    if (member.status === 'disabled' || member.status === 'suspended') throw new Error(word('Account is suspended or disabled'));
+    if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
 }
 
 
@@ -1989,11 +1993,11 @@ export function searchMemberDirectoryRows(prefix: string, limit: number): Direct
 export { generateInvite, adminGenerateInvite };
 
 /** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
-export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
 }
 
-export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign, joinerSigned);
 }
 
@@ -2154,7 +2158,7 @@ export function isDeletedByOwner(pubkey: string | null | undefined): boolean {
 }
 
 /** The answer to bringing back an account its owner deleted (isDeletedByOwner), in the words the apps show. */
-export const OWNER_DELETED_REFUSAL = 'This account was deleted by its owner; they can rejoin with a new invite';
+export const OWNER_DELETED_REFUSAL = word('This account was deleted by its owner; they can rejoin with a new invite');
 
 /**
  * purgeMemberSelf's answer to an account the community closed that still has a deal in escrow or a payment between
@@ -2622,7 +2626,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (!isSyntheticAccount(to) && to !== 'genesis' && to !== 'COMMONS_POOL') {
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
-        if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+        if (dest?.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
     }
     // Not an amount of Beans (NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so it is
     // a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
@@ -3253,13 +3257,13 @@ const MAX_PHOTO_BASE64_CHARS = 600_000; // ≈ 440 KB of binary image data
 function validatePostPhotos(photos: string[] | undefined): void {
     if (photos === undefined) return;
     if (!Array.isArray(photos)) throw new Error('photos must be an array');
-    if (photos.length > MAX_POST_PHOTOS) throw new Error(`A post can have at most ${MAX_POST_PHOTOS} photos`);
+    if (photos.length > MAX_POST_PHOTOS) throw new Error(tr('A post can have at most {n} photos', { n: MAX_POST_PHOTOS }));
     for (const p of photos) {
         if (typeof p !== 'string' || !/^data:image\/(jpeg|jpg|png|webp);base64,/.test(p)) {
-            throw new Error('Each photo must be a base64 data URL (JPEG, PNG, or WebP)');
+            throw new Error(word('Each photo must be a base64 data URL (JPEG, PNG, or WebP)'));
         }
         if (p.length > MAX_PHOTO_BASE64_CHARS) {
-            throw new Error('Photo too large — resize to 800px JPEG before uploading');
+            throw new Error(word('Photo too large — resize to 800px JPEG before uploading'));
         }
     }
 }
@@ -3279,14 +3283,12 @@ function floorLockedError(publicKey: string, postBalance: number): Error {
     const more = Math.max(1, need - live);
     const unlockedAt = offerCapForCount(live);
     const wouldReach = offerCapForCount(need);
-    // Machine-parseable prefix + fields, then a human sentence the client can also show verbatim.
-    return new Error(
-        `${FLOOR_LOCKED_PREFIX}:${live}:${need}:${unlockedAt}:${wouldReach}: ` +
-        (live === 0
-            ? `Post an Offer to open your credit line — your first Offer lets you spend down to −200.`
-            : `Your ${live} active Offer${live === 1 ? '' : 's'} unlock a −${unlockedAt} credit line. ` +
-              `Post ${more} more Offer${more === 1 ? '' : 's'} to spend down to −${wouldReach}.`)
-    );
+    // Machine-parseable prefix + fields, then a human sentence the client can also show verbatim (in the member's language
+    // on the way out, the prefix as it is).
+    const unlocked = trn(live, 'Your {n} active Offer unlock a −{unlockedAt} credit line.', 'Your {n} active Offers unlock a −{unlockedAt} credit line.', { unlockedAt });
+    const toReach = trn(more, 'Post {n} more Offer to spend down to −{wouldReach}.', 'Post {n} more Offers to spend down to −{wouldReach}.', { wouldReach });
+    const said = live === 0 ? word('Post an Offer to open your credit line — your first Offer lets you spend down to −200.') : `${unlocked} ${toReach}`;
+    return new Error(`${FLOOR_LOCKED_PREFIX}:${live}:${need}:${unlockedAt}:${wouldReach}: ${said}`);
 }
 
 /**
@@ -3809,9 +3811,10 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
     if (amount > earnedRoom + knownRoom) {
         // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
         if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
-            throw new Error(`Pledge amount (${amount}) exceeds available earned credit (${earnedRoom} available to add across all enterprises)`);
+            throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({earnedRoom} available to add across all enterprises)', { amount, earnedRoom }));
         }
-        throw new Error(`Pledge amount (${amount}) exceeds what you can pledge (${earnedRoom + knownRoom} available: ${earnedRoom} earned credit, ${knownRoom} from your known floor)`);
+        throw new Error(tr('Pledge amount ({amount}) exceeds what you can pledge ({room} available: {earnedRoom} earned credit, {knownRoom} from your known floor)',
+            { amount, room: earnedRoom + knownRoom, earnedRoom, knownRoom }));
     }
     const earnedPart = Math.min(amount, earnedRoom);
     return { earnedPart, knownPart: amount - earnedPart };
@@ -3826,7 +3829,7 @@ function assertKeeperOwnDebtCovered(keeperPubkey: string, othersRefusal?: string
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
         // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
-        throw new KeeperChangeRefused(othersRefusal ?? `Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+        throw new KeeperChangeRefused(othersRefusal ?? tr('Your own balance ({balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor ({floor} beans); pay down first or pledge less.', { balance, floor }));
     }
 }
 
@@ -4084,26 +4087,26 @@ export function pledgeEnterpriseBacking(
     assertPledgeWritable();
     const res = db.transaction(() => {
         const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-        if (!t?.is_treasury) throw new Error('Not an enterprise');
+        if (!t?.is_treasury) throw new Error(word('Not an enterprise'));
         if (t.status === 'disabled' || t.status === 'pruned') {
-            throw new Error('This enterprise has been closed, so no backing can be pledged to it.');
+            throw new Error(word('This enterprise has been closed, so no backing can be pledged to it.'));
         }
 
         const km = db.prepare("SELECT status, can_operate, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
         if (!km || km.status === 'disabled' || km.status === 'pruned') {
-            throw new Error('Your account is not active, so you cannot back this enterprise.');
+            throw new Error(word('Your account is not active, so you cannot back this enterprise.'));
         }
         if (km.credit_frozen === 1) {
-            throw new Error('Your credit is frozen, so you cannot back this enterprise.');
+            throw new Error(word('Your credit is frozen, so you cannot back this enterprise.'));
         }
 
         if (!canOperateTreasury(keeperPubkey, enterprisePubkey)) {
-            throw new Error('You are not an authorized keeper of this enterprise');
+            throw new Error(word('You are not an authorized keeper of this enterprise'));
         }
 
         const parsedAmount = Number(amount);
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-            throw new Error('Pledge amount must be a positive number');
+            throw new Error(word('Pledge amount must be a positive number'));
         }
 
         // Earned credit first (main's Rule 3), then half the keeper's known grant (engine known-floor.ts, the bound).
@@ -4136,7 +4139,7 @@ export function releaseEnterpriseBacking(
     assertPledgeWritable();
     const res = db.transaction(() => {
         const t = db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-        if (!t?.is_treasury) throw new Error('Not an enterprise');
+        if (!t?.is_treasury) throw new Error(word('Not an enterprise'));
 
         const activeRow = db.prepare(
             "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
@@ -4147,16 +4150,16 @@ export function releaseEnterpriseBacking(
         const hasActivePledge = currentKeeperPledge > 0;
         // A visitor's row is neither, whatever it holds from before visitors were refused a keeper's row.
         if (((!bound && !hasActivePledge) || isVisitorKey(keeperPubkey)) && !isAdminPubkey(keeperPubkey)) {
-            throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
+            throw new Error(word('You are not an authorized keeper or pledge holder of this enterprise'));
         }
 
         if (currentKeeperPledge <= 0) {
-            throw new Error('No active backing pledge found for this enterprise');
+            throw new Error(word('No active backing pledge found for this enterprise'));
         }
 
         let toRelease = (amountToRelease !== undefined && amountToRelease !== null) ? Number(amountToRelease) : currentKeeperPledge;
         if (!Number.isFinite(toRelease) || toRelease <= 0) {
-            throw new Error('Release amount must be a positive number');
+            throw new Error(word('Release amount must be a positive number'));
         }
         toRelease = Math.min(toRelease, currentKeeperPledge);
 
@@ -4189,7 +4192,7 @@ export function releaseEnterpriseBacking(
         // earned pledges + known pledges as the floor counts them, whichever is bigger); refused, the transaction writes nothing.
         const newAllowance = engine.enterpriseAllowance(db, enterprisePubkey).allowance;
         if (newAllowance < deficit) {
-            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
+            throw new Error(tr('Cannot release backing: enterprise is in deficit ({deficit} beans) and remaining allowance ({allowance} beans) would not cover it', { deficit, allowance: newAllowance }));
         }
 
         return { releasedAmount: toRelease, remainingPledge };
@@ -4243,49 +4246,49 @@ export function requestToJoinEnterprise(
     assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) {
-        throw new Error('Not an enterprise');
+        throw new Error(word('Not an enterprise'));
     }
     if (ent.status === 'completed') {
-        throw new Error('Completed enterprise accepts no requests');
+        throw new Error(word('Completed enterprise accepts no requests'));
     }
     if (ent.status === 'disabled' || ent.status === 'pruned') {
-        throw new Error('This enterprise has been closed');
+        throw new Error(word('This enterprise has been closed'));
     }
 
     // A visitor's row is refused as a key with no row is.
     const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
     if (!km || km.is_visitor || km.status !== 'active') {
-        throw new Error('Your account is not active, so you cannot join as a keeper');
+        throw new Error(word('Your account is not active, so you cannot join as a keeper'));
     }
     if (km.credit_frozen === 1) {
-        throw new Error('Your credit is frozen, so you cannot join as a keeper');
+        throw new Error(word('Your credit is frozen, so you cannot join as a keeper'));
     }
     if (isOperatorSwitchedOff(memberPubkey)) {
-        throw new Error('Your operator access is switched off by a node admin, so you cannot join as a keeper');
+        throw new Error(word('Your operator access is switched off by a node admin, so you cannot join as a keeper'));
     }
 
     const existingOp = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?"
     ).get(enterprisePubkey, memberPubkey);
     if (existingOp) {
-        throw new Error('Already a keeper of this enterprise');
+        throw new Error(word('Already a keeper of this enterprise'));
     }
 
     const pending = db.prepare(
         "SELECT 1 FROM enterprise_keeper_requests WHERE enterprise_pubkey = ? AND member_pubkey = ? AND status = 'pending'"
     ).get(enterprisePubkey, memberPubkey);
     if (pending) {
-        throw new Error('A pending request already exists for this enterprise');
+        throw new Error(word('A pending request already exists for this enterprise'));
     }
 
     const parsedAmount = Number(pledgedBacking);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
-        throw new Error('Pledge amount must be non-negative');
+        throw new Error(word('Pledge amount must be non-negative'));
     }
 
     const available = getAvailableBacking(memberPubkey);
     if (parsedAmount > available) {
-        throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${available} available to back across all enterprises)`);
+        throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({available} available to back across all enterprises)', { amount: parsedAmount, available }));
     }
 
     const id = crypto.randomUUID();
@@ -4389,7 +4392,7 @@ export class KeeperChangeRefused extends Error {
  * words only: their figure, balance, floor, known grant and any freeze are theirs alone (they see the detail in their own
  * view), and a failed change keeps this as its reason.
  */
-const APPLICANT_STANDING_REFUSAL = "The applicant's standing doesn't cover this pledge right now, so they can't be approved yet.";
+const APPLICANT_STANDING_REFUSAL = word("The applicant's standing doesn't cover this pledge right now, so they can't be approved yet.");
 
 /**
  * Whether approving this applicant with this pledge would go through now, as far as their own standing goes: their
@@ -4427,21 +4430,21 @@ function applicantCanBackPledge(_enterprisePubkey: string, memberPubkey: string,
  */
 function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: string, pledged: number): void {
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!ent || !ent.is_treasury) throw new KeeperChangeRefused('Not an enterprise');
-    if (ent.status === 'completed') throw new KeeperChangeRefused('Completed enterprise accepts no requests');
-    if (ent.status === 'disabled' || ent.status === 'pruned') throw new KeeperChangeRefused('This enterprise has been closed');
+    if (!ent || !ent.is_treasury) throw new KeeperChangeRefused(word('Not an enterprise'));
+    if (ent.status === 'completed') throw new KeeperChangeRefused(word('Completed enterprise accepts no requests'));
+    if (ent.status === 'disabled' || ent.status === 'pruned') throw new KeeperChangeRefused(word('This enterprise has been closed'));
 
     // A visitor's row, as when it asks (requestToJoinEnterprise): a request it made before visitors were refused one lands on nobody.
     const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
     if (!km || km.is_visitor || km.status !== 'active') {
-        throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
+        throw new KeeperChangeRefused(word('Applicant account is not active, so they cannot be approved as a keeper'));
     }
     // A lead's approval must never reverse an admin suspension (PR #838 B3).
     if (isOperatorSwitchedOff(memberPubkey)) {
-        throw new KeeperChangeRefused("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
+        throw new KeeperChangeRefused(word("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper"));
     }
     if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, memberPubkey)) {
-        throw new KeeperChangeRefused('Already a keeper of this enterprise');
+        throw new KeeperChangeRefused(word('Already a keeper of this enterprise'));
     }
     // A freeze, a pledge beyond what they can back, or the own-debt lock: one refusal in words, never which or by how much.
     if (!applicantCanBackPledge(enterprisePubkey, memberPubkey, pledged)) {
@@ -4504,14 +4507,14 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
 } {
     assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
-    if (!req) throw new Error('Keeper request not found');
-    if (req.status !== 'pending') throw new Error('Request is no longer pending');
+    if (!req) throw new Error(word('Keeper request not found'));
+    if (req.status !== 'pending') throw new Error(word('Request is no longer pending'));
 
     if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
-        throw new Error('Only the lead keeper, sole keeper, or admin may approve keeper requests');
+        throw new Error(word('Only the lead keeper, sole keeper, or admin may approve keeper requests'));
     }
     if (db.prepare("SELECT 1 FROM enterprise_keeper_changes WHERE request_id = ? AND status = 'pending'").get(requestId)) {
-        throw new Error('This request is already approved and waiting out its objection window');
+        throw new Error(word('This request is already approved and waiting out its objection window'));
     }
 
     const pledged = Number(req.pledged_backing || 0);
@@ -4529,7 +4532,7 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
                 SET status = 'approved', decided_at = ?, decided_by = ?
                 WHERE id = ? AND status = 'pending'
             `).run(now, actorPubkey, requestId);
-            if (updateRes.changes === 0) throw new Error('Request is no longer pending');
+            if (updateRes.changes === 0) throw new Error(word('Request is no longer pending'));
             bindApprovedKeeper(req.enterprise_pubkey, req.member_pubkey, pledged, actorPubkey);
         })();
         broadcastKeeperBound(req.enterprise_pubkey, req.member_pubkey);
@@ -4555,14 +4558,14 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
 export function declineKeeperRequest(requestId: string, actorPubkey: string): { ok: true } {
     assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
-    if (!req) throw new Error('Keeper request not found');
-    if (req.status !== 'pending') throw new Error('Request is no longer pending');
+    if (!req) throw new Error(word('Keeper request not found'));
+    if (req.status !== 'pending') throw new Error(word('Request is no longer pending'));
 
     if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
-        throw new Error('Only the lead keeper, sole keeper, or admin may decline keeper requests');
+        throw new Error(word('Only the lead keeper, sole keeper, or admin may decline keeper requests'));
     }
     if (db.prepare("SELECT 1 FROM enterprise_keeper_changes WHERE request_id = ? AND status = 'pending'").get(requestId)) {
-        throw new Error('This request is already approved and waiting out its objection window');
+        throw new Error(word('This request is already approved and waiting out its objection window'));
     }
 
     const now = new Date().toISOString();
@@ -4741,23 +4744,23 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
 } {
     assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
-    if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
+    if (!ent || !ent.is_treasury) throw new Error(word('Not an enterprise'));
+    if (ent.status === 'completed') throw new Error(word('Enterprise has already wound up'));
     if (!isLeadOrSoleKeeperOrAdmin(enterprisePubkey, actorPubkey)) {
-        throw new Error('Only the lead keeper may remove a keeper');
+        throw new Error(word('Only the lead keeper may remove a keeper'));
     }
-    if (actorPubkey === memberPubkey) throw new Error('To leave this enterprise yourself, step down instead');
+    if (actorPubkey === memberPubkey) throw new Error(word('To leave this enterprise yourself, step down instead'));
 
     const target = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .get(enterprisePubkey, memberPubkey) as any;
-    if (!target) throw new Error('That member is not a keeper of this enterprise');
+    if (!target) throw new Error(word('That member is not a keeper of this enterprise'));
     if (target.role === 'lead') {
-        throw new Error('The lead keeper cannot be removed this way — the lead can step down, or the community can decide');
+        throw new Error(word('The lead keeper cannot be removed this way — the lead can step down, or the community can decide'));
     }
     applyDueKeeperChanges(enterprisePubkey);
     if (db.prepare("SELECT 1 FROM enterprise_keeper_changes WHERE enterprise_pubkey = ? AND member_pubkey = ? AND status = 'pending'")
         .get(enterprisePubkey, memberPubkey)) {
-        throw new Error('A change for this keeper is already waiting out its objection window');
+        throw new Error(word('A change for this keeper is already waiting out its objection window'));
     }
 
     const actorIsKeeper = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
@@ -4787,16 +4790,16 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
 export function objectToKeeperChange(changeId: string, actorPubkey: string): { ok: true; change: KeeperChangeInfo } {
     assertPlainTablesWritable();
     const c = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
-    if (!c) throw new Error('Keeper change not found');
+    if (!c) throw new Error(word('Keeper change not found'));
     applyDueKeeperChanges(c.enterprise_pubkey);
     const cur = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
-    if (cur.status !== 'pending') throw new Error('The objection window for this change has closed');
+    if (cur.status !== 'pending') throw new Error(word('The objection window for this change has closed'));
 
     if (!isActiveKeeperOf(c.enterprise_pubkey, actorPubkey)) {
-        throw new Error('Only an active keeper of this enterprise may object');
+        throw new Error(word('Only an active keeper of this enterprise may object'));
     }
-    if (actorPubkey === c.proposed_by) throw new Error('You made this change — you cannot object to it');
-    if (actorPubkey === c.member_pubkey) throw new Error('You cannot object to your own removal');
+    if (actorPubkey === c.proposed_by) throw new Error(word('You made this change — you cannot object to it'));
+    if (actorPubkey === c.member_pubkey) throw new Error(word('You cannot object to your own removal'));
 
     const now = new Date().toISOString();
     db.transaction(() => {
@@ -4804,7 +4807,7 @@ export function objectToKeeperChange(changeId: string, actorPubkey: string): { o
             UPDATE enterprise_keeper_changes SET status = 'objected', resolved_at = ?, resolved_by = ?, reason = 'A keeper objected'
             WHERE id = ? AND status = 'pending'
         `).run(now, actorPubkey, changeId);
-        if (res.changes === 0) throw new Error('The objection window for this change has closed');
+        if (res.changes === 0) throw new Error(word('The objection window for this change has closed'));
         if (c.request_id) {
             db.prepare(`UPDATE enterprise_keeper_requests SET status = 'declined', decided_at = ?, decided_by = ?
                         WHERE id = ? AND status = 'pending'`).run(now, actorPubkey, c.request_id);
@@ -4825,7 +4828,7 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
     let failReason: string | null = null;
     try {
         db.transaction(() => {
-            if (!isLeadOrSoleKeeperOrAdmin(c.enterprise_pubkey, c.proposed_by)) throw new KeeperChangeRefused('The keeper who made this change is no longer the lead');
+            if (!isLeadOrSoleKeeperOrAdmin(c.enterprise_pubkey, c.proposed_by)) throw new KeeperChangeRefused(word('The keeper who made this change is no longer the lead'));
 
             if (c.kind === 'add') {
                 assertApplicantStillEligible(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing || 0));
@@ -4837,8 +4840,8 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             } else {
                 const target = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
                     .get(c.enterprise_pubkey, c.member_pubkey) as any;
-                if (!target) throw new KeeperChangeRefused('They are no longer a keeper of this enterprise');
-                if (target.role === 'lead') throw new KeeperChangeRefused('They have since become the lead keeper');
+                if (!target) throw new KeeperChangeRefused(word('They are no longer a keeper of this enterprise'));
+                if (target.role === 'lead') throw new KeeperChangeRefused(word('They have since become the lead keeper'));
                 // Mark this change applied first: unbindKeeper closes whatever else is still pending for this member.
                 db.prepare("UPDATE enterprise_keeper_changes SET status = 'applied', resolved_at = ? WHERE id = ?").run(nowIso, c.id);
                 unbindKeeper(c.enterprise_pubkey, c.member_pubkey);
@@ -4969,16 +4972,16 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
 } {
     assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
-    if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
+    if (!ent || !ent.is_treasury) throw new Error(word('Not an enterprise'));
+    if (ent.status === 'completed') throw new Error(word('Enterprise has already wound up'));
 
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .get(enterprisePubkey, memberPubkey) as any;
     // A visitor's row keeps nothing to step down from, as a key with no row keeps nothing: its row stays until it joins, the
     // lead removes it, or an admin or the community does.
-    if (!op || isVisitorKey(memberPubkey)) throw new Error('You are not a keeper of this enterprise');
+    if (!op || isVisitorKey(memberPubkey)) throw new Error(word('You are not a keeper of this enterprise'));
     if (keeperBindingCount(enterprisePubkey) <= 1) {
-        throw new Error('You are the only keeper. Add another keeper first, or wind the enterprise up.');
+        throw new Error(word('You are the only keeper. Add another keeper first, or wind the enterprise up.'));
     }
 
     const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
@@ -4988,10 +4991,9 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
         const gap = Math.round((deficit - othersCover) * 100) / 100;
         const dr = Math.round(deficit * 100) / 100;
         const oc = Math.round(othersCover * 100) / 100;
-        throw new Error(
-            `This enterprise is ${dr} beans in debt and your pledge is part of what covers it. ` +
-            `You can step down once the debt is down to ${oc} beans, or once the other keepers pledge ${gap} beans more.`
-        );
+        const inDebt = tr('This enterprise is {debt} beans in debt and your pledge is part of what covers it.', { debt: dr });
+        const whenFree = tr('You can step down once the debt is down to {covered} beans, or once the other keepers pledge {gap} beans more.', { covered: oc, gap });
+        throw new Error(`${inDebt} ${whenFree}`);
     }
 
     let result = { promoted: null as string | null, paused: false };
@@ -5272,36 +5274,36 @@ export function proposeLeadSuccession(
 ): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
     assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
-    if (ent.status === 'completed') throw new Error('Completed enterprise cannot have succession');
+    if (!ent || !ent.is_treasury) throw new Error(word('Not an enterprise'));
+    if (ent.status === 'completed') throw new Error(word('Completed enterprise cannot have succession'));
 
     const inactivity = getLeadInactivity(enterprisePubkey);
     if (!inactivity.leadPubkey) {
-        throw new Error('No lead keeper found for this enterprise');
+        throw new Error(word('No lead keeper found for this enterprise'));
     }
     const leadPubkey = inactivity.leadPubkey;
 
     if (!inactivity.isEligible) {
-        throw new Error('Lead keeper has recorded node activity within the last 30 days');
+        throw new Error(word('Lead keeper has recorded node activity within the last 30 days'));
     }
 
     // A visitor's lead's row is no lead to itself (getLeadInactivity): it is answered below as any key that keeps nothing.
     if (proposerPubkey === leadPubkey && !isVisitorKey(leadPubkey)) {
-        throw new Error('Lead keeper cannot propose succession against themselves');
+        throw new Error(word('Lead keeper cannot propose succession against themselves'));
     }
     if (candidatePubkey === leadPubkey) {
-        throw new Error('Candidate cannot be the current lead keeper');
+        throw new Error(word('Candidate cannot be the current lead keeper'));
     }
     if (!isActiveKeeperOf(enterprisePubkey, proposerPubkey)) {
-        throw new Error('Only an active keeper of this enterprise may propose succession');
+        throw new Error(word('Only an active keeper of this enterprise may propose succession'));
     }
     if (!isActiveKeeperOf(enterprisePubkey, candidatePubkey)) {
-        throw new Error('Candidate must be an active keeper of this enterprise');
+        throw new Error(word('Candidate must be an active keeper of this enterprise'));
     }
 
     const otherKeepers = otherActiveKeepers(enterprisePubkey, leadPubkey);
     if (otherKeepers.length === 0) {
-        throw new Error('No other keepers available for succession');
+        throw new Error(word('No other keepers available for succession'));
     }
 
     expireSuccessionProposals(enterprisePubkey);
@@ -5311,9 +5313,9 @@ export function proposeLeadSuccession(
     if (existingActive) {
         if (leadReturnedSince(existingActive)) {
             closeSuccession(existingActive, 'lead_returned');
-            throw new Error('Lead keeper has returned to activity; active proposal cancelled');
+            throw new Error(word('Lead keeper has returned to activity; active proposal cancelled'));
         }
-        throw new Error('An active succession proposal already exists for this enterprise');
+        throw new Error(word('An active succession proposal already exists for this enterprise'));
     }
 
     const proposalId = crypto.randomUUID();
@@ -5360,7 +5362,7 @@ export function voteLeadSuccession(
     assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
-    if (!prop) throw new Error('Succession proposal not found');
+    if (!prop) throw new Error(word('Succession proposal not found'));
     expireSuccessionProposals(prop.enterprise_pubkey);
     const cur = db.prepare("SELECT status, closed_reason FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
     if (cur.status !== 'active') {
@@ -5371,17 +5373,17 @@ export function voteLeadSuccession(
 
     if (leadReturnedSince(prop)) {
         closeSuccession(prop, 'lead_returned');
-        throw new Error('Lead keeper has returned to activity; succession proposal was cancelled');
+        throw new Error(word('Lead keeper has returned to activity; succession proposal was cancelled'));
     }
 
     if (voterPubkey === prop.lead_pubkey && !isVisitorKey(prop.lead_pubkey)) {
-        throw new Error('Lead keeper cannot vote on succession');
+        throw new Error(word('Lead keeper cannot vote on succession'));
     }
     if (!isActiveKeeperOf(prop.enterprise_pubkey, voterPubkey)) {
-        throw new Error('Only active keepers of this enterprise may vote on succession');
+        throw new Error(word('Only active keepers of this enterprise may vote on succession'));
     }
     if (db.prepare("SELECT 1 FROM enterprise_succession_votes WHERE proposal_id = ? AND voter_pubkey = ?").get(proposalId, voterPubkey)) {
-        throw new Error('You have already voted on this proposal');
+        throw new Error(word('You have already voted on this proposal'));
     }
 
     const now = new Date().toISOString();
@@ -5398,7 +5400,7 @@ export function voteLeadSuccession(
     const proposal = toSuccessionInfo(row, otherActiveKeepers(prop.enterprise_pubkey, prop.lead_pubkey).length);
     broadcastSuccessionOutcome(prop, outcome, voterPubkey, proposal);
     if (outcome === 'candidate_gone') {
-        throw new Error('Succession candidate is no longer an active keeper of this enterprise; proposal cancelled');
+        throw new Error(word('Succession candidate is no longer an active keeper of this enterprise; proposal cancelled'));
     }
     return { ok: true, executed: outcome === 'passed', proposal };
 }
@@ -5451,18 +5453,18 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
  * (a re-vouch can raise or lower the level).
  */
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
-    if (voucherPubkey === targetPubkey) throw new Error('You cannot vouch for yourself');
+    if (voucherPubkey === targetPubkey) throw new Error(word('You cannot vouch for yourself'));
     // A visitor's row is no voucher, as a key with no row is none (getActingMember).
-    if (!getActingMember(voucherPubkey)) throw new Error('Voucher not found');
+    if (!getActingMember(voucherPubkey)) throw new Error(word('Voucher not found'));
     // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
     assertNodeMember(voucherPubkey);
     const target = getMember(targetPubkey);
-    if (!target) throw new Error('Member not found');
+    if (!target) throw new Error(word('Member not found'));
     // An enterprise or a project is kept by its keepers, not vouched for (DESIGN-shops-round3 §0 row 11): its credit line
     // is its keepers' pledges, so a vouch's floor does nothing for it, and the profile it opened showed one as trust. A
     // vouch an enterprise already has is left as it is.
-    if (target.isTreasury) throw new Error('An enterprise is kept, not vouched for.');
-    if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
+    if (target.isTreasury) throw new Error(word('An enterprise is kept, not vouched for.'));
+    if (!canVouch(voucherPubkey)) throw new Error(word('Only appointed vouchers can vouch for members'));
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);
     // profile_updated_at too: the member directory names who vouched, and a phone's delta read carries only the rows whose
@@ -5481,12 +5483,12 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
  */
 export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
     const target = getMember(targetPubkey);
-    if (!target) throw new Error('Member not found');
+    if (!target) throw new Error(word('Member not found'));
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
     const isAdmin = isAdminPubkey(actorPubkey);
-    if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
+    if (!isAdmin && actorPubkey !== vouchedBy) throw new Error(word('Only the voucher who vouched, or an admin, can withdraw a vouch'));
     // Nor a pruned voucher, nor the old key of one being re-keyed (whose node role, if any, waits on the old key
     // until the re-key completes). An admin key with no member row at all, the legacy single-admin setting, is as before.
     if (!isAdmin || getMember(actorPubkey)) assertNodeMember(actorPubkey);
@@ -5494,7 +5496,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     // getMemberTrustProfile returns before it reads vouch_credit): withdrawing one leaves its floor where it was, so its
     // voucher is not held until it is back at 0 (an enterprise trades below 0 as a matter of course).
     if (!isAdmin && !target.isTreasury && getBalance(targetPubkey).balance < 0) {
-        throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
+        throw new Error(word('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.'));
     }
     // profile_updated_at too, for the directory's delta (vouchMember).
     db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0, profile_updated_at = ? WHERE public_key = ?`)
@@ -5872,7 +5874,7 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     }
     const m = getMember(memberPubkey);
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
-        throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
+        throw Object.assign(new Error(word('Only an active member pays the Commons.')), { status: 403 });
     }
     if (!isWholeCents(amount)) {
         throw Object.assign(new Error(WHOLE_CENTS_ERROR), { status: 400 });
@@ -5885,11 +5887,11 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     const raw = ledger.getAccount(memberPubkey).balance;
     if (raw - beans < 0) {
         const held = Math.max(0, Math.floor(raw * 100) / 100);
-        throw Object.assign(new Error(`You hold ${held} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+        throw Object.assign(new Error(tr('You hold {held} Beans: you can pay the Commons only what you hold.', { held })), { status: 409 });
     }
     const answer = conservingTransaction(() => {
         const t = moveToCommons(memberPubkey, beans, PAID_TO_COMMONS_MEMO, { allowMemberDebit: true, authSigner: memberPubkey });
-        if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
+        if (!t) throw Object.assign(new Error(word('The Commons refused the payment.')), { status: 409 });
         // Made for a debt: it pays that much off at once, and settles the debt when nothing is left.
         const leftAfter = debt ? countDebtPayment(debt.id, t.id, memberPubkey, beans) : undefined;
         const paid: PaidToCommons = { transactionId: t.id, amount: t.amount, ...(debt ? { left: debt.left, leftAfter, settled: leftAfter === 0 } : {}) };
@@ -5931,10 +5933,10 @@ export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): 
     alreadyPaused?: boolean;
 } {
     const member = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
-    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
     if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
-        throw new Error('Not authorised to pause this enterprise');
+        throw new Error(word('Not authorised to pause this enterprise'));
     }
 
     if (member.paused === 1) {
@@ -5982,10 +5984,10 @@ export function resumeEnterprise(enterprisePubkey: string, actorPubkey: string):
     alreadyActive?: boolean;
 } {
     const member = db.prepare("SELECT is_treasury, paused, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
-    if (member.status === 'completed') throw new Error('Enterprise has wound up — cannot be resumed');
+    if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has wound up — cannot be resumed'));
     if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
-        throw new Error('Not authorised to resume this enterprise');
+        throw new Error(word('Not authorised to resume this enterprise'));
     }
 
     if (member.paused === 0 || member.paused == null) {
@@ -6031,10 +6033,10 @@ export function setEnterpriseLocation(
     locationUpdatedAt: string;
 } {
     const member = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
-    if (member.status === 'completed') throw new Error('Enterprise has wound up — cannot update location');
+    if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has wound up — cannot update location'));
     if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
-        throw new Error('Only a keeper of this enterprise (or node admin) may set its location');
+        throw new Error(word('Only a keeper of this enterprise (or node admin) may set its location'));
     }
 
     let latVal: number | null = null;
@@ -6121,16 +6123,16 @@ export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
     alreadyInitiated?: boolean;
 } {
     const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at, wind_up_initiated_by FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
-    if (member.status === 'completed') throw new Error('Enterprise has already wound up');
+    if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has already wound up'));
 
     if (!isLeadOrSoleKeeperOrAdmin(enterprisePubkey, actorPubkey)) {
-        throw new Error('Only the lead keeper may initiate wind-up');
+        throw new Error(word('Only the lead keeper may initiate wind-up'));
     }
 
     const currentBal = getBalance(enterprisePubkey).balance;
     if (currentBal < 0) {
-        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+        throw new Error(word('Cannot wind up an enterprise in deficit — debt must be resolved or written off first'));
     }
 
     if (member.status === 'winding_up') {
@@ -6179,12 +6181,12 @@ export function cancelWindUp(enterprisePubkey: string, actorPubkey: string): {
     status: 'active';
 } {
     const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
-    if (member.status === 'completed') throw new Error('Enterprise has already wound up');
-    if (member.status !== 'winding_up') throw new Error('Enterprise is not winding up');
+    if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has already wound up'));
+    if (member.status !== 'winding_up') throw new Error(word('Enterprise is not winding up'));
 
     if (!canOperateTreasury(actorPubkey, enterprisePubkey) && !isAdminPubkey(actorPubkey)) {
-        throw new Error('Only a keeper of this enterprise may cancel wind-up');
+        throw new Error(word('Only a keeper of this enterprise may cancel wind-up'));
     }
 
     db.prepare(`
@@ -6218,7 +6220,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
     alreadyCompleted?: boolean;
 } {
     const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at, wind_up_finalised_at FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
     if (member.status === 'completed') {
         return {
             ok: true,
@@ -6229,22 +6231,22 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         };
     }
     if (member.status !== 'winding_up') {
-        throw new Error('Enterprise must be in winding_up state to finalise');
+        throw new Error(word('Enterprise must be in winding_up state to finalise'));
     }
 
     if (!isLeadOrSoleKeeperOrAdmin(enterprisePubkey, actorPubkey)) {
-        throw new Error('Only the lead keeper may finalise wind-up');
+        throw new Error(word('Only the lead keeper may finalise wind-up'));
     }
 
     const initiatedAt = member.wind_up_initiated_at ? new Date(member.wind_up_initiated_at).getTime() : 0;
     const gracePeriodMs = 7 * 24 * 60 * 60 * 1000;
     if (Date.now() - initiatedAt < gracePeriodMs) {
-        throw new Error('Cannot finalise wind-up before 7-day grace period has elapsed');
+        throw new Error(word('Cannot finalise wind-up before 7-day grace period has elapsed'));
     }
 
     const currentBal = getBalance(enterprisePubkey).balance;
     if (currentBal < 0) {
-        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+        throw new Error(word('Cannot wind up an enterprise in deficit — debt must be resolved or written off first'));
     }
 
     // Deliberately OUTSIDE conservingTransaction. This is an ordinary precondition — a keeper
@@ -6260,7 +6262,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested', 'pending', 'disputed')
     `).get(enterprisePubkey, enterprisePubkey) as any;
     if ((openEscrows?.c ?? 0) > 0) {
-        throw new Error(`Cannot finalise wind-up: ${openEscrows.c} open transaction(s) pending settlement`);
+        throw new Error(tr('Cannot finalise wind-up: {n} open transaction(s) pending settlement', { n: openEscrows.c }));
     }
 
     let sweptAmount = 0;
@@ -6271,7 +6273,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         const bal = ledger.getAccount(enterprisePubkey).balance;
         if (bal > 0) {
             const swept = moveToCommons(enterprisePubkey, bal, `Final wind-up sweep from ${enterprisePubkey.slice(0, 8)}`, { authSigner: actorPubkey });
-            if (!swept) throw new Error('Failed to sweep remaining balance to Commons');
+            if (!swept) throw new Error(word('Failed to sweep remaining balance to Commons'));
             sweptAmount = bal;
         }
 
@@ -6390,7 +6392,7 @@ export function getEnterpriseLedger(
     opts?: { since?: string; until?: string; limit?: number }
 ): EnterpriseLedgerResponse {
     const member = db.prepare("SELECT callsign, purpose, status, paused FROM members WHERE public_key = ? AND is_treasury = 1").get(enterprisePubkey) as any;
-    if (!member) throw new Error('Not an enterprise');
+    if (!member) throw new Error(word('Not an enterprise'));
 
     const allTxns = db.prepare(`
         SELECT id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer
@@ -8240,8 +8242,8 @@ export function createTreasury(
     } = {},
 ): { publicKey: string } {
     const trimmed = (name || '').trim();
-    if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
-    if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
+    if (trimmed.length < 2) throw new Error(word('Treasury name must be at least 2 characters'));
+    if (!avatar && !opts.systemCreated) throw new Error(word('Treasury needs an avatar image'));
     // Bare base64 is judged by the photo rule in both routes that pass a sender's value (POST /api/treasury and
     // /api/enterprise, POST /api/local/admin/treasury); the other callers pass a bundled:// name or nothing.
     const avatarRefusal = avatarValueRefusal(avatar);
@@ -8257,7 +8259,7 @@ export function createTreasury(
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
     // the index happily allowed it — a treasury name refused for a member the node has let go.
     if (db.prepare("SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')").get(engine.foldName(trimmed))) {
-        throw new Error('That name is already taken');
+        throw new Error(word('That name is already taken'));
     }
     if (opts.leadKeeperPubkey && isOperatorSwitchedOff(opts.leadKeeperPubkey)) {
         throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
@@ -8608,7 +8610,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
     const member = getMember(publicKey);
     if (!member) {
-        throw new Error('Member not found');
+        throw new Error(word('Member not found'));
     }
     if (isDeletedByOwner(publicKey)) {
         return { ok: true, message: 'Account is already pruned' };
@@ -8623,7 +8625,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
              WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ?`
         ).get(publicKey) as any)?.c || 0;
         if (ownerCount === 0) {
-            throw new Error('Cannot purge the sole node owner; appoint another owner first');
+            throw new Error(word('Cannot purge the sole node owner; appoint another owner first'));
         }
     }
 
@@ -9269,11 +9271,11 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
 
     const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
     if (acc && Math.abs(acc.balance) > 1e-9) {
-        throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+        throw new Error(tr('Cannot delete enterprise account with non-zero balance ({balance} Beans). Sweep or refund funds first.', { balance: acc.balance }));
     }
     const acct = ledger.getAccount(projectId);
     if (acct && Math.abs(acct.balance) > 0.0001) {
-        throw new Error('Cannot delete project with non-zero balance: would violate ledger conservation');
+        throw new Error(word('Cannot delete project with non-zero balance: would violate ledger conservation'));
     }
 
     projects.splice(index, 1);
@@ -9826,8 +9828,8 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 }
 
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
-    "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
-export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = 'Only a member of this community shows as a connection in common.';
+    word("Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.");
+export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = word('Only a member of this community shows as a connection in common.');
 /** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
     `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
@@ -9957,10 +9959,11 @@ export function assertNotOnHoliday(publicKey: string): void {
  * set when blocked so the client can name the count.
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
-    if (!getActingMember(publicKey)) throw new Error('Member not found');
+    if (!getActingMember(publicKey)) throw new Error(word('Member not found'));
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
-        const err: any = new Error(`You have ${open} active trade${open === 1 ? '' : 's'} in progress. Complete or cancel ${open === 1 ? 'it' : 'them'} before switching on holiday mode.`);
+        const err: any = new Error(trn(open, 'You have {n} active trade in progress. Complete or cancel it before switching on holiday mode.',
+            'You have {n} active trades in progress. Complete or cancel them before switching on holiday mode.'));
         err.openTrades = open;
         throw err;
     }
@@ -10376,7 +10379,7 @@ export function isGroupLead(groupId: string, memberPubkey: string): boolean {
  * already asks for members.status = 'active', engine/group-succession.ts.)
  */
 function assertGroupActorIsMember(actorPubkey: string): void {
-    if (!isNodeMember(actorPubkey)) throw new Error(`UNAUTHORIZED: ${NOT_A_MEMBER_ERROR}`);
+    if (!isNodeMember(actorPubkey)) throw new Error(unauthorized(NOT_A_MEMBER_ERROR));
 }
 
 export function handOverGroupLead(groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {

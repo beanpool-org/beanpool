@@ -12,6 +12,9 @@
  *   device's. The sync after a write reconciles as an open does, so an off made on another device is heard before
  *   anything is sent.
  * - Switching it on is a GET, the step and a PUT; off is a DELETE. The setting moves only once the node has answered.
+ * - The node says how much of the tool's document it keeps (`max`, on every GET and PUT it answers): the device keeps it
+ *   beside the setting (heardMax), its store refuses a write past it while the copy is on (toolDocMaxBytes), and nothing
+ *   past it is sent: switching the copy on with more is `too-big`, said as that, never as no answer.
  * - Remove my data takes the node's copy first ({@link removeToolCopy}); if that fails, the host removes nothing.
  * - A request the node hasn't answered in {@link TOOL_COPY_ANSWER_MS} is no answer, so nothing waits on it for ever; the
  *   hosts let it go then ({@link withinAnswerTime}), and nothing else on that tool starts until it has (the queue).
@@ -24,6 +27,7 @@
  * ({@link toolCopyPath}), and a PUT carries the document alone, under `doc`. Nothing here needs any address but the
  * member's own community's. Pure but for what the host hands in: no platform imports (the barrel is bundled for the phone).
  */
+import { toolDocBytes } from './check.js';
 import type { ToolManifest } from './manifest.js';
 import { reconcile, type ToolLocalCopy, type ToolRemoteCopy, type ToolSyncIntent, type ToolSyncStep } from './reconcile.js';
 
@@ -73,11 +77,17 @@ export interface ToolCopyDevice {
     /** The setting as this device last heard it: false is off; true or never set (undefined) is on. */
     setting(): Promise<boolean | undefined>;
     setSetting(on: boolean): Promise<void>;
+    /**
+     * The node said it keeps at most `max` bytes of this tool's document (a GET's or a PUT's `max`): kept beside the
+     * setting, it is the host's bound from then on (toolDocMaxBytes), so a newer app on an older node says the truth.
+     */
+    heardMax(max: number): Promise<void>;
 }
 
 /**
  * How long the node has to answer one request: past it, no answer (offline), so a request that never comes back (a
- * browser's fetch waits minutes) never holds the tool's queue. Long enough for a 64 KB copy on a slow mobile line.
+ * browser's fetch waits minutes) never holds the tool's queue. Long enough for a 128 KB copy on a slow mobile line
+ * (about 16 s at 64 kbit/s).
  */
 export const TOOL_COPY_ANSWER_MS = 30_000;
 
@@ -156,8 +166,10 @@ export function readTakenBody<D>(manifest: ToolManifest<D>, body: string): strin
  * - `older-node`: this server keeps no copies yet: on this device only, and nothing sent.
  * - `later`: no answer, a refusal, or a write landed meanwhile: tried again on the next open, or after the next write.
  * - `unreadable`: the node's copy is no tool's document: the device's is kept, and the next write here replaces it.
+ * - `too-big`: the device's copy is more than the node said it keeps (its `max`: an older node's 64 KB), so nothing was
+ *   sent; the device keeps it, and it is sent once it is made smaller. The node answered: never said as offline.
  */
-export type ToolCopyOutcome = 'off' | 'nothing' | 'taken' | 'put' | 'switched-off' | 'older-node' | 'later' | 'unreadable';
+export type ToolCopyOutcome = 'off' | 'nothing' | 'taken' | 'put' | 'switched-off' | 'older-node' | 'later' | 'unreadable' | 'too-big';
 
 /** The `updatedAt` of a PUT the node kept, or null. */
 function keptAt(answer: ToolNodeAnswer | null): string | null {
@@ -172,7 +184,19 @@ function keptAt(answer: ToolNodeAnswer | null): string | null {
  */
 const copyOff = (answer: ToolNodeAnswer | null): boolean => answer?.status === 410;
 
-async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode, local: ToolLocalCopy | null, step: ToolSyncStep, intent: ToolSyncIntent): Promise<ToolCopyOutcome> {
+/**
+ * The most the node said it keeps of this tool's document, handed to the device (heardMax), or null when its answer
+ * says none a node would: every GET and PUT the node answers carries it (apps/server/src/routes/tools.ts).
+ */
+async function heardMax(device: ToolCopyDevice, answer: ToolNodeAnswer | null): Promise<number | null> {
+    if (!ok(answer) || !isObject(answer.json)) return null;
+    const max = answer.json.max;
+    if (typeof max !== 'number' || !Number.isInteger(max) || max <= 0) return null;
+    await device.heardMax(max);
+    return max;
+}
+
+async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode, local: ToolLocalCopy | null, step: ToolSyncStep, intent: ToolSyncIntent, max: number | null): Promise<ToolCopyOutcome> {
     switch (step.do) {
         case 'later': return 'later';
         case 'device-only': return 'older-node';
@@ -190,8 +214,12 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
             let doc: unknown;
             try { doc = JSON.parse(body); } catch { doc = null; }
             if (!isObject(doc)) return 'later';
+            // Never past what the node said it keeps (an older node's 64 KB): it would refuse it, after a slow upload for
+            // nothing. The device keeps it, and its store holds it to that bound from now on, while the copy is on.
+            if (max !== null && toolDocBytes(doc) > max) return 'too-big';
             // Every PUT of the member's switch-on is one (the kind is the flow's, not the step's why); every other is ordinary.
             const answer = await answered(() => node.put(doc as Record<string, unknown>, intent === 'turn-on'));
+            await heardMax(device, answer);
             if (copyOff(answer)) {
                 await device.setSetting(false);
                 return 'switched-off';
@@ -207,8 +235,9 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
 
 async function syncWith<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode, intent: ToolSyncIntent): Promise<ToolCopyOutcome> {
     const local = await device.read();
-    const remote = toolRemoteOf(await answered(() => node.get()));
-    return runStep(manifest, device, node, local, reconcile(local, remote, intent), intent);
+    const answer = await answered(() => node.get());
+    const max = await heardMax(device, answer);
+    return runStep(manifest, device, node, local, reconcile(local, toolRemoteOf(answer), intent), intent, max);
 }
 
 /**
@@ -224,11 +253,13 @@ export async function syncToolCopy<D>(manifest: ToolManifest<D>, device: ToolCop
  * The member switches the copy on: the GET and the step as for turning on (the device's copy is sent, or the empty one
  * when it holds none, unless the node holds a newer one, which is taken), and only then the setting, on. Its PUT is the
  * one that writes over a copy its owner removed (`turnOn`). `older-node`:
- * this server keeps no copies yet; `failed`: no answer or a refusal. Either way the setting is not written.
+ * this server keeps no copies yet; `too-big`: the device's copy is more than this server keeps (its `max`), so nothing
+ * was sent, and trying again changes nothing until it is smaller (the tool's `tooBig` says how); `failed`: no answer or a
+ * refusal. Whichever, the setting is not written.
  */
-export async function turnToolCopyOn<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode): Promise<'on' | 'older-node' | 'failed'> {
+export async function turnToolCopyOn<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode): Promise<'on' | 'older-node' | 'too-big' | 'failed'> {
     const done = await syncWith(manifest, device, node, 'turn-on');
-    if (done === 'older-node') return 'older-node';
+    if (done === 'older-node' || done === 'too-big') return done;
     if (done === 'later' || done === 'switched-off') return 'failed';
     await device.setSetting(true);
     return 'on';

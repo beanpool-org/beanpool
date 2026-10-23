@@ -18,12 +18,13 @@
  * server-side later without another app-store release.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { REQUEST_SIGNING_VERSION, signedPathOf } from '@beanpool/core';
+import { LANGUAGE_HEADER, REQUEST_SIGNING_VERSION, signedPathOf } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
 import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { getSavedNodes, loadSavedRequestSigning } from './nodes';
 import { APP_VERSION_HEADER } from './force-update';
+import { languageForNode } from './language-choice';
 import { fellBackToOldFormat, OLD_SERVER_SIGNATURE_REFUSAL, settledRequestSigning } from './request-signing-version';
 
 let installed = false;
@@ -102,23 +103,25 @@ function hasHeader(headers: any, name: string): boolean {
 }
 
 /**
- * The app's version on a request to its own community (`X-BeanPool-App: 1.2.57 android`), for the community's counts of
- * who runs what: an operator reads them before raising the floor (apps/server/src/app-version-counts.ts). Added to a
- * plain headers object only, never over one the caller set: a Headers instance or a Request carries its own, and adding
- * to those here would replace them.
+ * A header on a request to the phone's own community: the app's version (`X-BeanPool-App: 1.2.57 android`), for the
+ * community's counts of who runs what (an operator reads them before raising the floor:
+ * apps/server/src/app-version-counts.ts), and the language this phone writes in (`X-Language: pt`, Marty's M6: not
+ * signed, not stored), so a refusal comes back in it whichever helper made the request. Added to a plain headers object
+ * only, never over one the caller set: a Headers instance or a Request carries its own, and adding to those here would
+ * replace them.
  */
-function withAppVersionHeader(input: any, init: any, value: string): any {
+function withHeader(input: any, init: any, name: string, value: string): any {
     if (typeof input !== 'string') return init;
     const headers = init?.headers;
     if (headers !== undefined && (typeof headers !== 'object' || headers === null || Array.isArray(headers) || typeof headers.get === 'function')) return init;
-    if (hasHeader(headers, APP_VERSION_HEADER)) return init;
-    return { ...(init || {}), headers: { ...(headers || {}), [APP_VERSION_HEADER]: value } };
+    if (hasHeader(headers, name)) return init;
+    return { ...(init || {}), headers: { ...(headers || {}), [name]: value } };
 }
 
 /**
  * Wrap global.fetch once so GET requests to the anchor node carry a replay-proof
- * member signature, and every request to it the app's version when `appVersionHeader` is given (a phone build: see
- * utils/force-update.ts appVersionHeaderValue). Call once at app startup.
+ * member signature, every request to it the phone's language, and the app's version when `appVersionHeader` is given
+ * (a phone build: see utils/force-update.ts appVersionHeaderValue). Call once at app startup.
  */
 export function installNodeRequestSigning(options: { appVersionHeader?: string | null } = {}): void {
     if (installed) return;
@@ -147,10 +150,11 @@ export function installNodeRequestSigning(options: { appVersionHeader?: string |
                 init?.method ?? (typeof input !== 'string' ? input?.method : undefined) ?? 'GET',
             ).toUpperCase();
 
-            if (url && (method === 'GET' || appVersionHeader)) {
+            if (url) {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 const toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
-                if (toAnchor && appVersionHeader) init = withAppVersionHeader(input, init, appVersionHeader);
+                if (toAnchor && appVersionHeader) init = withHeader(input, init, APP_VERSION_HEADER, appVersionHeader);
+                if (toAnchor) init = withHeader(input, init, LANGUAGE_HEADER, languageForNode());
                 // Only sign requests to our own node, and never double-sign. Nor the read of a node's info while this
                 // phone doesn't know it reads format 2: that read is how it learns, an older node refuses a format-2
                 // signature even on its public info, a request signed meanwhile waits for this answer

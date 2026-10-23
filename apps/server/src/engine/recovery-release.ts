@@ -47,7 +47,7 @@
 // points at, and the reason the check is here rather than left to the caller.
 
 import crypto from 'node:crypto';
-import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
+import { TWO_LAYER_THRESHOLD, word, wordsFor } from '@beanpool/core';
 
 import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
@@ -59,6 +59,9 @@ import {
     releaseRowAad,
     sealRecoveryFields,
 } from '../services/recovery-seal-key.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 /** How long a collection stays open. Long enough to text a friend and wait for the hub's 24h. */
 export const COLLECTION_TTL_MS = 72 * 60 * 60 * 1000;
@@ -358,7 +361,7 @@ export function openCollection(ownerPubkey: string, requesterEphemeralPubkey: st
 
     const generation = getCurrentGeneration(ownerPubkey);
     if (generation === 0) {
-        throw new RecoveryReleaseError('That account has no recovery fragments to collect.');
+        throw new RecoveryReleaseError(word('That account has no recovery fragments to collect.'));
     }
 
     const id = crypto.randomBytes(32).toString('base64url');
@@ -379,7 +382,7 @@ export function openCollection(ownerPubkey: string, requesterEphemeralPubkey: st
     if (!opened) {
         // Unreachable while eviction is oldest-first, and checked anyway: silently returning a
         // session that is not in the table would hand the caller an id that answers nothing.
-        throw new RecoveryReleaseError('The recovery session could not be opened.');
+        throw new RecoveryReleaseError(word('The recovery session could not be opened.'));
     }
     return opened;
 }
@@ -434,14 +437,13 @@ export function collectionState(id: string): {
 
 function requireLive(id: string): Collection {
     const state = collectionState(id);
-    if (!state) throw new RecoveryReleaseError('No such recovery session.');
+    if (!state) throw new RecoveryReleaseError(word('No such recovery session.'));
     if (!state.live) {
         const why = {
-            expired: 'That recovery session has expired. Start a new one.',
-            'stale-generation': 'The account was re-split since this session started, so the '
-                + 'fragments it was collecting no longer fit together. Start a new one.',
-            cancelled: 'That recovery session was cancelled.',
-            complete: 'That recovery session is already complete.',
+            expired: word('That recovery session has expired. Start a new one.'),
+            'stale-generation': word('The account was re-split since this session started, so the fragments it was collecting no longer fit together. Start a new one.'),
+            cancelled: word('That recovery session was cancelled.'),
+            complete: word('That recovery session is already complete.'),
         }[state.reason!];
         throw new RecoveryReleaseError(why);
     }
@@ -509,7 +511,7 @@ export function releasesForLiveSession(collectionId: string): ReleasedFragment[]
  */
 export function hubReleaseEligibleAt(collectionId: string): { eligibleAt: number; reason: 'human-approved' | 'sso-approved' | 'delay' } {
     const collection = getCollection(collectionId);
-    if (!collection) throw new RecoveryReleaseError('No such recovery session.');
+    if (!collection) throw new RecoveryReleaseError(word('No such recovery session.'));
 
     const humanReleases = db.prepare(`
         SELECT MIN(released_at) AS first FROM recovery_releases
@@ -616,7 +618,7 @@ function recordRelease(args: {
     );
 
     const released = listReleases(args.collectionId).find(r => r.shareId === args.shareId);
-    if (!released) throw new RecoveryReleaseError('The fragment could not be recorded as released.');
+    if (!released) throw new RecoveryReleaseError(word('The fragment could not be recorded as released.'));
     return released;
 }
 
@@ -648,7 +650,7 @@ export async function releaseSsoFragmentForIdentity(
     sub: string,
 ): Promise<ReleasedFragment> {
     const collection = requireLive(collectionId);
-    if (!sub) throw new RecoveryReleaseError('That sign-in did not identify an account.');
+    if (!sub) throw new RecoveryReleaseError(word('That sign-in did not identify an account.'));
 
     const rows = db.prepare(`
         SELECT sso_lookup_hash, sso_lookup_salt FROM recovery_shares
@@ -670,7 +672,7 @@ export async function releaseSsoFragmentForIdentity(
     const b = Buffer.from(targetRow.sso_lookup_hash!, 'utf-8');
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         throw new RecoveryReleaseError(
-            'That sign-in account is not the keeper for this recovery.',
+            word('That sign-in account is not the keeper for this recovery.'),
         );
     }
 
@@ -680,7 +682,7 @@ export async function releaseSsoFragmentForIdentity(
 export function releaseSsoFragment(collectionId: string, ssoLookupHash: string): ReleasedFragment {
     assertPlainTablesWritable();
     const collection = requireLive(collectionId);
-    if (!ssoLookupHash) throw new RecoveryReleaseError('No sign-in fragment was identified.');
+    if (!ssoLookupHash) throw new RecoveryReleaseError(word('No sign-in fragment was identified.'));
 
     const share = db.prepare(`
         SELECT * FROM recovery_shares
@@ -692,7 +694,7 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
         // Scoped to THIS session's owner and generation, so a valid sign-in for a different member
         // cannot release anything here. The hash alone is not a claim on an account.
         throw new RecoveryReleaseError(
-            'That sign-in account is not a keeper for this recovery, in the generation being collected.',
+            word('That sign-in account is not a keeper for this recovery, in the generation being collected.'),
         );
     }
 
@@ -744,11 +746,7 @@ export function releaseHubFragment(collectionId: string): ReleasedFragment {
     if (Date.now() < eligibleAt) {
         const waitMs = eligibleAt - Date.now();
         const hours = Math.ceil(waitMs / 3_600_000);
-        throw new RecoveryReleaseError(
-            `The hub's fragment is held for ${hours}h. `
-            + 'Signing in with a connected provider releases it immediately; '
-            + 'otherwise your twelve words recover the account without waiting.',
-        );
+        throw new RecoveryReleaseError(tr("The hub's fragment is held for {hours}h. Signing in with a connected provider releases it immediately; otherwise your twelve words recover the account without waiting.", { hours }));
     }
 
     const copy = openShareRow(share);
@@ -847,9 +845,9 @@ export function collectionProgress(collectionId: string): {
  */
 export function cancelCollection(collectionId: string, byPubkey: string): boolean {
     const collection = getCollection(collectionId);
-    if (!collection) throw new RecoveryReleaseError('No such recovery session.');
+    if (!collection) throw new RecoveryReleaseError(word('No such recovery session.'));
     if (collection.ownerPubkey !== byPubkey) {
-        throw new RecoveryReleaseError('Only the account being recovered can cancel its recovery.');
+        throw new RecoveryReleaseError(word('Only the account being recovered can cancel its recovery.'));
     }
     if (collection.status !== 'open') return false;
     db.prepare(`UPDATE recovery_collections SET status = 'cancelled',

@@ -1173,6 +1173,10 @@ export function App() {
                                 navigateToTab('marketplace', postId);
                             }}
                             onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                            onMessage={(pubkey) => {
+                                closePagesOver();
+                                navigateToTab('messages', pubkey);
+                            }}
                         />
                     )}
                     {/* Public Profile Overlay — after the enterprise page: both stack at z-[110], so document order puts a

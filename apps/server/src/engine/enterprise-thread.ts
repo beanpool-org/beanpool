@@ -99,7 +99,7 @@ export function ensureEnterpriseThread(enterprisePubkey: string): Conversation {
         "SELECT public_key, callsign, is_treasury, status, paused, joined_at FROM members WHERE public_key = ?"
     ).get(enterprisePubkey) as any;
     if (!enterprise || !enterprise.is_treasury) {
-        throw new Error('Enterprise not found');
+        throw new Error(word('Enterprise not found'));
     }
     let conv = getConversation(db, enterprisePubkey);
     if (!conv) {
@@ -170,7 +170,7 @@ export function assertThreadMemberCanPost(authorPubkey: string): void {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
     }
     const member = db.prepare("SELECT status, COALESCE(credit_frozen, 0) as credit_frozen, is_visitor FROM members WHERE public_key = ?").get(cleanKey) as any;
-    if (!member || member.is_visitor) throw new Error('Member not found');
+    if (!member || member.is_visitor) throw new Error(word('Member not found'));
     if (member.status === 'disabled') throw new Error(word('Account is disabled'));
     if (member.status === 'suspended') throw new Error(word('Account is suspended'));
     if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
@@ -189,7 +189,7 @@ export function postEnterpriseThreadMessage(
         "SELECT public_key, callsign, is_treasury, status, paused FROM members WHERE public_key = ?"
     ).get(enterprisePubkey) as any;
     if (!enterprise || !enterprise.is_treasury || isEnterpriseThreadHidden(enterprise.status)) {
-        throw new Error('Enterprise not found');
+        throw new Error(word('Enterprise not found'));
     }
     if (enterprise.status === 'completed') {
         throw new Error(word('Enterprise has wound up — discussion thread is read-only'));
@@ -277,7 +277,7 @@ export function removeEnterpriseThreadMessage(
         "SELECT public_key, callsign, is_treasury FROM members WHERE public_key = ?"
     ).get(enterprisePubkey) as any;
     if (!enterprise || !enterprise.is_treasury) {
-        throw new Error('Enterprise not found');
+        throw new Error(word('Enterprise not found'));
     }
 
     if (!isKeeperOfEnterprise(actorPubkey, enterprisePubkey)) {
@@ -286,7 +286,7 @@ export function removeEnterpriseThreadMessage(
 
     const msgRow = db.prepare("SELECT * FROM messages WHERE id = ? AND conversation_id = ?").get(messageId, enterprisePubkey) as any;
     if (!msgRow) {
-        throw new Error('Message not found');
+        throw new Error(word('Message not found'));
     }
 
     const removedText = 'removed by a keeper';

@@ -5,6 +5,7 @@ import { postIdFromLink } from '../utils/event-extras';
 import { isAuthReturnLink } from '../utils/auth-return';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
 import { pairRouteFromSystemPath } from '../utils/pair-link';
+import { holdStartUpLinkRoute } from '../utils/member-landing';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
 import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
 
@@ -96,9 +97,14 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
 
     // The web app's pairing QR, scanned with the phone's camera app (utils/pair-link.ts): the pairing screen, given the
     // whole link to read as a scan would. Before the sign-in checks below, so a pair link is never taken for a
-    // provider's return. Cold start and warm alike: the screen is pushed over wherever the member is, or opens on it.
+    // provider's return. Cold start and warm alike: the screen is pushed over wherever the member is, or opens on it. On a
+    // cold start the root guard is told, so its first look, before the router reports the route, doesn't land the member
+    // on the tabs over it (utils/member-landing.ts holdStartUpLinkRoute).
     const pairRoute = pairRouteFromSystemPath(path);
-    if (pairRoute) return pairRoute;
+    if (pairRoute) {
+        if (initial) holdStartUpLinkRoute();
+        return pairRoute;
+    }
 
     // The global community's smart link, `https://beanpool.org/global` or `beanpool://global` (utils/global-link.ts): the
     // first screen's door with no account; for one, what the phone's one rule for the global community offers it (the

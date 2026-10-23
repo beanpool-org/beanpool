@@ -58,7 +58,10 @@ export function webToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode {
     return { get: () => ask('GET'), put: (doc, turnOn) => ask('PUT', turnOn ? { doc, turnOn: true } : { doc }), delete: () => ask('DELETE') };
 }
 
-/** The browser's side of one tool's copy: its record, and its setting, the one writer of `nodeCopy`. */
+/**
+ * The browser's side of one tool's copy: its record, and its setting, the one writer of `nodeCopy` and of `nodeMax`
+ * (the server's bound on the document, which the page's store holds to).
+ */
 export function webToolDevice(owner: string, tool: string): ToolCopyDevice {
     return {
         read: () => readToolRecord(owner, tool),
@@ -67,6 +70,10 @@ export function webToolDevice(owner: string, tool: string): ToolCopyDevice {
         setting: async () => (await readToolSettings(owner, tool)).nodeCopy,
         // A browser that keeps nothing (no IndexedDB) asks the server again on each open, and its answer corrects it.
         setSetting: async (on) => { await patchToolSettings(owner, tool, { nodeCopy: on }); },
+        // The server's bound on this document, beside the setting: written when it says something new.
+        heardMax: async (max) => {
+            if ((await readToolSettings(owner, tool)).nodeMax !== max) await patchToolSettings(owner, tool, { nodeMax: max });
+        },
     };
 }
 
@@ -103,6 +110,7 @@ function heldTo(c: WebToolCopy, epoch: number) {
             take: async (body, at, was) => holds() && device.take(body, at, was),
             sent: async (was, body, at) => { if (holds()) await device.sent(was, body, at); },
             setSetting: async (on) => { if (holds()) await device.setSetting(on); },
+            heardMax: async (max) => { if (holds()) await device.heardMax(max); },
         } satisfies ToolCopyDevice,
         node: queue.held(keyOf(c), {
             get: async () => (holds() ? node.get() : null),
@@ -135,8 +143,11 @@ export function toolCopyAfterWrite(c: WebToolCopy, then: (outcome: ToolCopyOutco
     queue.later(keyOf(c), async () => then(await sync(c, epoch)));
 }
 
-/** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
-export function switchToolCopy(c: WebToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
+/**
+ * The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered.
+ * `too-big`: this browser holds more than the server keeps, so nothing was sent.
+ */
+export function switchToolCopy(c: WebToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'too-big' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
     const epoch = accountEpoch();
     return queue.run(keyOf(c), async () => {

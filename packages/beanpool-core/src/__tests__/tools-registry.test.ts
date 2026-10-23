@@ -130,7 +130,7 @@ describe('the host, narrowed to the manifest (narrowHost)', () => {
     const base: ToolHostBase<{ v: number }> = {
         owner: { kind: 'member', publicKey: 'pk', name: 'Ana' },
         node: { url: null, profile: 'local', features: null },
-        doc: { get: () => ({ v: 1 }), set: async () => undefined },
+        doc: { get: () => ({ v: 1 }), set: async () => undefined, maxBytes: () => 65_536 },
         navigate: () => undefined,
         back: () => undefined,
         now: () => 0,

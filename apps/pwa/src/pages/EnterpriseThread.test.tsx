@@ -252,6 +252,11 @@ describe('Enterprise Discussion Thread (PWA)', () => {
         await waitFor(() => {
             expect(screen.getByText('Off-topic note')).toBeInTheDocument();
         });
+        // The page's thread offers no Remove: a keeper removes from the Manage tab (DESIGN-shops-round3-enterprise-shopfront §3, S8).
+        expect(screen.queryByTitle('Remove message')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: 'Manage' }));
+        const manageThread = await screen.findByTestId('manage-thread');
+        expect(manageThread).toHaveTextContent('Off-topic note');
 
         const removeButton = screen.getByTitle('Remove message');
         expect(removeButton).toBeInTheDocument();

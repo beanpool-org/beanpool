@@ -37,7 +37,7 @@
  */
 
 import Router from '@koa/router';
-import { TWO_LAYER_THRESHOLD, isSingleBlobSso } from '@beanpool/core';
+import { TWO_LAYER_THRESHOLD, isSingleBlobSso, word } from '@beanpool/core';
 
 import { getActingMember } from '../state-engine.js';
 import {
@@ -229,7 +229,7 @@ function activeSigner(ctx: any): string | null {
 
 function unauthenticated(ctx: any): void {
     ctx.status = 401;
-    ctx.body = { error: 'This request must be signed by an active member of this node.' };
+    ctx.body = { error: word('This request must be signed by an active member of this node.') };
 }
 
 /**

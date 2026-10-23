@@ -338,7 +338,7 @@ export function readShape(): Shape {
             : rows.door !== null && isCommunityDoor(rows.door) ? 'owner' : 'default',
         lock: preview ? lock('private_preview', LOCK_WORDS.previewJoin, UNLOCK_PREVIEW)
             : door === 'open' ? lock('profile', LOCK_WORDS.openByKind(kind, features.wordsDoor, sourceOf('openJoin') === 'owner' || sourceOf('invites') === 'owner'))
-            : configuredJoin === 'open' && !s.openJoin ? lock('ledger_moved', LOCK_WORDS.doorStaysShut(history ?? 'its ledger has moved'))
+            : configuredJoin === 'open' && !s.openJoin ? lock('ledger_moved', LOCK_WORDS.doorStaysShut(history ?? 'a trade, a balance or a pledge'))
             : null,
     };
 

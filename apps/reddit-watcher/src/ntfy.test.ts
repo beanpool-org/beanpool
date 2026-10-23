@@ -1,20 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { deliver, ntfyRequest, SEEN_S, SEND_TIMEOUT_MS, topicUrl, type Deps } from './ntfy';
+import { agentRequest, deliver, deliverAgent, ntfyRequest, SEEN_S, SEND_TIMEOUT_MS, topicUrl, type Deps } from './ntfy';
 import type { Notice } from './notice';
 
 // Stand-ins: never a real topic, token or send.
 const TOPIC = 'https://ntfy.sh/bp-control-room-TEST0secret0topic';
 const TOKEN = 'tk_TEST0secret0token';
+const INBOX = 'https://ntfy.sh/bp-inbox-TEST0secret0inbox';
 
 const post = {
     type: 'PostCreate',
-    post: { id: 't3_abc123', title: 'How do I start a node?', permalink: '/r/beanpool/comments/abc123/x/' },
+    post: { id: 't3_abc123', title: 'How do I start a node?', selftext: 'My old laptop?', permalink: '/r/beanpool/comments/abc123/x/' },
     author: { name: 'Some_Member', accountType: 1 },
     subreddit: { name: 'beanpool' },
 };
 const comment = {
     type: 'CommentCreate',
-    comment: { id: 't1_def456', postId: 't3_abc123', permalink: '/r/beanpool/comments/abc123/x/def456/' },
+    comment: { id: 't1_def456', postId: 't3_abc123', parentId: 't3_abc123', body: 'Try the guide', permalink: '/r/beanpool/comments/abc123/x/def456/' },
     post: post.post,
     author: { name: 'Other_Person', accountType: 1 },
     subreddit: { name: 'beanpool' },
@@ -22,7 +23,7 @@ const comment = {
 
 type World = Deps & { sent: { url: string; init: RequestInit }[]; logs: string[]; seen: Map<string, number>; expires: Map<string, number> };
 
-function world(opts: { url?: unknown; token?: unknown; quiet?: string; status?: number | 'throw'; redis?: 'throw'; settings?: 'throw' } = {}): World {
+function world(opts: { url?: unknown; token?: unknown; agent?: unknown; quiet?: string; status?: number | 'throw'; redis?: 'throw'; settings?: 'throw' } = {}): World {
     const sent: World['sent'] = [];
     const logs: string[] = [];
     const seen = new Map<string, number>();
@@ -35,6 +36,7 @@ function world(opts: { url?: unknown; token?: unknown; quiet?: string; status?: 
         setting: async (name) => {
             if (opts.settings === 'throw') throw new Error('settings down');
             if (name === 'ntfyUrl') return 'url' in opts ? opts.url : TOPIC;
+            if (name === 'agentNtfyUrl') return opts.agent;
             return name === 'ntfyToken' ? opts.token : opts.quiet;
         },
         firstTime: async (key) => {
@@ -231,6 +233,148 @@ describe('deliver', () => {
         const all = logs.join('\n');
         expect(logs.length).toBeGreaterThan(0);
         for (const secret of ['TEST0secret0', 'bp-control-room', 'Some_Member', 'Other_Person', 'How do I start', 'ntfy.sh/a/b']) {
+            expect(all).not.toContain(secret);
+        }
+    });
+});
+
+describe('agentRequest', () => {
+    const topic = topicUrl(INBOX)!;
+
+    it('POSTs the JSON as the message, with no title, tap or token, and not through Firebase', () => {
+        const { url, init } = agentRequest('{"v":1}', topic);
+        expect(url).toBe(INBOX);
+        expect(init.method).toBe('POST');
+        expect(init.body).toBe('{"v":1}');
+        expect(init.headers).toEqual({ 'Content-Type': 'text/plain; charset=utf-8', Firebase: 'no' });
+    });
+
+    it('never follows a redirect, and gives up on a send that stalls', () => {
+        const { init } = agentRequest('{}', topic);
+        expect(init.redirect).toBe('manual');
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        expect(init.signal?.aborted).toBe(false);
+    });
+});
+
+describe('deliverAgent', () => {
+    it('does nothing at all while agentNtfyUrl is unset', async () => {
+        for (const agent of [undefined, null, '', '   ']) {
+            const w = world({ agent });
+            expect(await deliverAgent(post, w)).toBe('no-channel');
+            expect(w.sent).toHaveLength(0);
+            expect(w.logs).toEqual([]);
+            expect(w.seen.size).toBe(0);
+        }
+    });
+
+    it('sends a new post once to the inbox topic, as the JSON item', async () => {
+        const w = world({ agent: INBOX, token: TOKEN });
+        expect(await deliverAgent(post, w)).toBe('sent');
+        expect(await deliverAgent(post, w)).toBe('repeat');
+        expect(w.sent).toHaveLength(1);
+        expect(w.sent[0]?.url).toBe(INBOX);
+        expect(w.sent[0]?.init.headers).not.toHaveProperty('Authorization');
+        expect(JSON.parse(String(w.sent[0]?.init.body))).toEqual({
+            v: 1,
+            kind: 'post',
+            id: 't3_abc123',
+            permalink: 'https://www.reddit.com/r/beanpool/comments/abc123/x/',
+            title: 'How do I start a node?',
+            body: 'My old laptop?',
+            flair: '',
+            createdAt: null,
+        });
+        expect(w.expires.get('inbox:t3_abc123')).toBe(SEEN_S);
+        expect(w.logs).toEqual(['[reddit-watcher] the inbox: a new post, told (HTTP 200)', '[reddit-watcher] the inbox: a new post, already told']);
+    });
+
+    it('a comment goes too, with its parent', async () => {
+        const w = world({ agent: INBOX });
+        expect(await deliverAgent(comment, w)).toBe('sent');
+        expect(JSON.parse(String(w.sent[0]?.init.body))).toMatchObject({
+            kind: 'comment',
+            id: 't1_def456',
+            body: 'Try the guide',
+            parentPermalink: 'https://www.reddit.com/r/beanpool/comments/abc123/x/',
+        });
+    });
+
+    it('keeps its own mark, apart from the phone\'s: each is sent once, and one failing never stops the other', async () => {
+        const w = world({ agent: INBOX });
+        expect(await deliver(post, w)).toBe('sent');
+        expect(await deliverAgent(post, w)).toBe('sent');
+        expect(w.sent.map((s) => s.url)).toEqual([TOPIC, INBOX]);
+        expect([...w.seen.keys()].sort()).toEqual(['inbox:t3_abc123', 'seen:t3_abc123']);
+
+        const down = world({ agent: INBOX });
+        down.fetch = async (url, init) => {
+            down.sent.push({ url, init });
+            return { status: url === INBOX ? 500 : 200 };
+        };
+        expect(await deliver(post, down)).toBe('sent');
+        expect(await deliverAgent(post, down)).toBe('failed');
+        expect(down.seen.has('seen:t3_abc123')).toBe(true);
+        expect(down.seen.has('inbox:t3_abc123')).toBe(false);
+        expect(down.logs.at(-1)).toBe('[reddit-watcher] the inbox: a new post, not told: ntfy HTTP 500');
+        expect(await deliverAgent(post, down)).toBe('failed');
+        expect(down.sent).toHaveLength(3);
+    });
+
+    it('skips what the phone notice skips, the team\'s own accounts included, and marks nothing', async () => {
+        const w = world({ agent: INBOX, quiet: 'u/Other_Person' });
+        expect(await deliverAgent({ ...post, post: { ...post.post, spam: true } }, w)).toBe('skipped');
+        expect(await deliverAgent({ type: 'ModAction' }, w)).toBe('skipped');
+        expect(await deliverAgent(null, w)).toBe('skipped');
+        expect(await deliverAgent(comment, w)).toBe('skipped');
+        expect(w.sent).toHaveLength(0);
+        expect(w.seen.size).toBe(0);
+        expect(await deliverAgent(post, w)).toBe('sent');
+    });
+
+    it('sends nothing to a topic it cannot use, and says how to set one', async () => {
+        for (const agent of ['http://ntfy.sh/topic', 'https://ntfy.example/topic', 'https://ntfy.sh/a/b', 42]) {
+            const w = world({ agent });
+            expect(await deliverAgent(post, w)).toBe('no-channel');
+            expect(w.sent).toHaveLength(0);
+            expect(w.logs.join('\n')).toContain('npx devvit settings set agentNtfyUrl');
+            expect(w.logs.join('\n')).not.toContain('ntfy.example');
+        }
+    });
+
+    it('never sends the inbox to the phone\'s topic, where every message would show on the phone', async () => {
+        const w = world({ agent: ` ${TOPIC}\n` });
+        expect(await deliverAgent(post, w)).toBe('no-channel');
+        expect(w.sent).toHaveLength(0);
+        expect(w.logs.at(-1)).toContain('agentNtfyUrl is the phone\'s topic');
+    });
+
+    it('an unreachable ntfy is a failed send that takes its mark off', async () => {
+        const w = world({ agent: INBOX, status: 'throw' });
+        expect(await deliverAgent(comment, w)).toBe('failed');
+        expect(w.seen.size).toBe(0);
+        expect(w.logs.at(-1)).toBe('[reddit-watcher] the inbox: a new comment, not told: ntfy unreachable');
+    });
+
+    it('tells it anyway when the repeat check is down; sends nothing when the settings cannot be read', async () => {
+        expect(await deliverAgent(post, world({ agent: INBOX, redis: 'throw' }))).toBe('sent');
+        const down = world({ agent: INBOX, settings: 'throw' });
+        expect(await deliverAgent(post, down)).toBe('no-channel');
+        expect(down.sent).toHaveLength(0);
+    });
+
+    it('never logs either topic, the token, who wrote it or what they wrote', async () => {
+        const logs: string[] = [];
+        for (const opts of [{}, { status: 403 }, { status: 'throw' as const }, { redis: 'throw' as const }, { agent: 'https://ntfy.sh/a/b' }, { agent: TOPIC }]) {
+            const w = world({ token: TOKEN, agent: INBOX, ...opts });
+            await deliverAgent(post, w);
+            await deliverAgent(post, w);
+            await deliverAgent(comment, w);
+            logs.push(...w.logs);
+        }
+        const all = logs.join('\n');
+        expect(logs.length).toBeGreaterThan(0);
+        for (const secret of ['TEST0secret0', 'bp-inbox', 'bp-control-room', 'Some_Member', 'Other_Person', 'How do I start', 'My old laptop', 'Try the guide', 'ntfy.sh/a/b']) {
             expect(all).not.toContain(secret);
         }
     });

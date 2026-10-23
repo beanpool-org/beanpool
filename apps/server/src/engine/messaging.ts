@@ -38,7 +38,7 @@ import {
     overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
 } from './withheld-lines.js';
 import {
-    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, reactionRefusal,
+    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal,
     requestPushDue, requestPushBody, DM_REQUEST_PENDING_CODE,
 } from './dm-requests.js';
 
@@ -536,7 +536,9 @@ export function sendMessage(
     opts.beforeStore?.({ ciphertext, metadata });
     // A message request (engine/dm-requests.ts): its opener's second line while it waits is refused here, after every other
     // refusal and before the line is stored or kept for them alone, so the answer is the same whether or not they are
-    // blocked. The person it waits for writing in it accepts it. The node's own words are never held.
+    // blocked. The person it waits for writing in it accepts it. The node's own words are never held, but written as the
+    // admin a request waits for, they are that admin's line and accept it too.
+    if (opts.nodeAuthored) nodeLineInRequest(effectiveConvId, authorPubkey);
     const through = opts.nodeAuthored ? undefined : lineThroughRequest(effectiveConvId, authorPubkey);
     if (through?.kind === 'refused') throw new MessagingError(through.message, 403, DM_REQUEST_PENDING_CODE);
     const requestLine = through?.kind === 'request';

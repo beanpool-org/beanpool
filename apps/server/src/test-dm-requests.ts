@@ -13,7 +13,8 @@
  *      open with no line yet asks nothing (not listed, counted or ignorable), and the 30 days run from the line
  *   2. someone the person has added, and a node role, go straight through (R3, R6)
  *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17)
- *   4. the person's own first line accepts it, and so does adding the sender as a friend (R11)
+ *   4. the person's own first line accepts it (an owner's answer from the node's inbox too), and so does adding the sender
+ *      as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
  *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
  *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance never rings
@@ -421,6 +422,27 @@ async function globalRun(): Promise<void> {
     assert(annAsks.status === 200 && annAsks.body?.conversation?.id === niaConv && annAsks.body?.conversation?.request?.state === 'accepted'
         && rowOf(niaConv)?.state === 'accepted' && inChats(await listOf(ann), niaConv) && (await send(niaConv, nia)).status === 200,
         `Ann asking for the chat with Nia herself accepts Nia's request (${show(annAsks)})`);
+    // The owner's answer from the node's inbox (POST /api/local/admin/inbox/send, the node's own line, written as her) is her
+    // line in the chat as much as one from her app: it accepts a request waiting for her (PR #2392 review 4355066390).
+    const tam = member('Tam');
+    const tamSock = await socket(tam);
+    await sleep(50);
+    const tamConv: string = (await open(tam, owner)).body?.conversation?.id;
+    await send(tamConv, tam);
+    assert(rowOf(tamConv)?.state === 'pending' && inRequests(await listOf(owner), tamConv), 'Tam\'s request waits for Olive, the owner');
+    const tamHeard = tamSock.events.length;
+    const inboxReply = await call('POST', null, '/api/local/admin/inbox/send', { targetPubkey: tam.pk, message: 'Welcome, Tam' },
+        ownerTokenHeaders('admin', owner.pk));
+    await sleep(150);
+    // Read before Tam writes again, as above: his next line would be let through by the rule all the same.
+    const oliveTam = await listOf(owner);
+    assert(inboxReply.status === 200 && linesBy(tamConv, owner) === 1 && rowOf(tamConv)?.state === 'accepted' && rowOf(tamConv)?.accepted_by === owner.pk
+        && inChats(oliveTam, tamConv) && !inRequests(oliveTam, tamConv),
+        `Olive's answer from the node's inbox accepts it, and the chat is in her chats (${show(inboxReply)}; ${rowOf(tamConv)?.state})`);
+    assert(entryOf(await listOf(tam), tamConv)?.request?.state === 'accepted'
+        && heardOf(tamSock, tamConv, tamHeard).some(e => e.type === 'dm_request_updated' && e.request?.state === 'accepted'),
+        'Tam reads it accepted, and hears it: his app can write again');
+    tamSock.ws.close();
 
     // ── 5. Ignore ───────────────────────────────────────────────────────────────────────────────
     console.log('── 5. Ignore tells the sender nothing ──');

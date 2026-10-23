@@ -21,9 +21,10 @@
  *   that line, not by the open: until the opener writes, nobody is asked anything (the apps open the chat when someone
  *   taps Message, before they type), so it isn't listed, counted or ignored, and its 30 days start at the line.
  * - The person it is for has it in their list apart (`requests`, newest first), not in their chats, their unread count or
- *   the badge their pushes carry. They accept or ignore it (routes/messaging.ts), or Ignore all. Their own line in it, their
- *   own open of the chat (Message on the opener's profile), adding the opener as a friend, or a trade between the two
- *   opening, each accepts it too. Accepting makes nobody a friend.
+ *   the badge their pushes carry. They accept or ignore it (routes/messaging.ts), or Ignore all. Their own line in it (an
+ *   admin's answer from the node's inbox too, nodeLineInRequest), their own open of the chat (Message on the opener's
+ *   profile), adding the opener as a friend, or a trade between the two opening, each accepts it too. Accepting makes
+ *   nobody a friend.
  * - Neither side's read marker reaches the other until it is accepted.
  * - 30 days after it was made, a request nobody accepted is over (expireOldRequests): the opener's next line is a new
  *   request, from then.
@@ -347,6 +348,20 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
         db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
     }
     return requestLine;
+}
+
+/**
+ * The node's own line in a direct conversation (engine/messaging.ts sendMessage `nodeAuthored`: the admin page's message,
+ * written as the node admin it is sent as). It is never held or refused, and is no request's line; but in the chat it is
+ * that admin's line, which requestNeeded counts as their having written to the opener. So a request waiting for them is
+ * accepted by it, as their own line accepts it (lineThroughRequest), and its opener reads it answered (PR #2392 review
+ * 4355066390).
+ */
+export function nodeLineInRequest(conversationId: string, author: string, now: number = Date.now()): void {
+    const row = rowOf(conversationId);
+    if (!acceptable(row) || row.to_pubkey !== author) return;
+    if (requestsOn()) accept(row, now, author);
+    else lineWhileOff(row, author, now);
 }
 
 /**

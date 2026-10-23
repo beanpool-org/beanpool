@@ -217,10 +217,27 @@ describe('the document', () => {
         expect(isEmptyDoc(tool, { v: 1, items: ['a'] })).toBe(false);
     });
 
-    it("a tool's bound, never past the node's 64 KB", () => {
+    it("a tool's bound: its own (64 KB when it names none), never past 128 KB, and never past what the node said it keeps", () => {
         expect(docMaxBytes(tool as ToolManifest<unknown>)).toBe(200);
         expect(docMaxBytes({ ...tool, doc: { ...tool.doc, maxBytes: undefined } } as ToolManifest<unknown>)).toBe(TOOL_LIMITS.docBytes);
-        expect(docMaxBytes({ ...tool, doc: { ...tool.doc, maxBytes: 10_000_000 } } as ToolManifest<unknown>)).toBe(TOOL_LIMITS.docBytes);
+        expect(docMaxBytes({ ...tool, doc: { ...tool.doc, maxBytes: 10_000_000 } } as ToolManifest<unknown>)).toBe(TOOL_LIMITS.docBytesMax);
+        expect(docMaxBytes({ ...tool, doc: { ...tool.doc, maxBytes: 131_072 } } as ToolManifest<unknown>, 65_536)).toBe(65_536);
+    });
+
+    it("set() holds to the node's max once heard: an older node's 64 KB refuses a 70 KB document of a tool that names 128 KB", async () => {
+        const big = { ...tool, doc: { ...tool.doc, maxBytes: 131_072 } } as typeof tool;
+        const seventy = { v: 1, items: ['x'.repeat(70_000)] };
+        const { result, rerender } = renderHook(({ nodeMax }: { nodeMax?: number }) => useToolDoc(big, 'ana', undefined, nodeMax), { initialProps: {} });
+        await waitFor(() => expect(result.current.state.status).toBe('ready'));
+        expect(result.current.maxBytes()).toBe(131_072);
+        await act(async () => { await result.current.set(seventy); });
+        rerender({ nodeMax: 65_536 });
+        expect(result.current.maxBytes()).toBe(65_536);
+        let refused: unknown = null;
+        await act(async () => { await result.current.set({ v: 1, items: ['y'.repeat(70_000)] }).catch((e) => { refused = e; }); });
+        expect(refused).toBeInstanceOf(ToolDocTooBig);
+        expect((refused as ToolDocTooBig).max).toBe(65_536);
+        expect(JSON.parse((await readToolRecord('ana', 'notes'))!.body)).toEqual(seventy);
     });
 
     it('set() writes whole; one over the bound is refused whole, nothing written, and the tool is told why', async () => {
@@ -244,7 +261,7 @@ describe('the host', () => {
         back: vi.fn(),
         openComposer: vi.fn(),
     };
-    const doc = { get: () => ({ v: 1, items: [] }), set: async () => {} };
+    const doc = { get: () => ({ v: 1, items: [] }), set: async () => {}, maxBytes: () => 200 };
 
     it('given only what the manifest declared: an undeclared door is absent, and the web grants none it has not built', () => {
         expect(Object.keys(webHostFor(tool, ctx, doc)).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);

@@ -207,6 +207,12 @@ export async function toolRecordSent(owner: string, tool: string, was: ToolRecor
 export interface ToolSettings {
     /** "Keep a private copy on your community's server": the node's answer, kept here (tools/node-copy.ts). */
     nodeCopy?: boolean;
+    /**
+     * The most the community's server said it keeps of this tool's document (its GET's or PUT's `max`), written only by
+     * the node copy (tools/node-copy.ts heardMax). The document's bound is never past it (core toolDocMaxBytes), so a
+     * newer app on an older server says the truth. Absent: never heard, and the tool's own bound.
+     */
+    nodeMax?: number;
 }
 
 const settingsKeyOf = (owner: string, tool: string) => `${toolRecordKey(owner, tool)}|settings`;

@@ -220,16 +220,22 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     const noteRef = useRef<CopyView['note']>(null);
     noteRef.current = copy.note;
     const reloadRef = useRef<() => Promise<void>>(async () => {});
-    /** What a sync with the server did: its copy taken (read again), switched off elsewhere (the line, once), an older server. */
+    /** The most the server said it keeps of the document (the settings' `nodeMax`): the store's bound, and the room's. */
+    const [nodeMax, setNodeMax] = useState<number | undefined>(undefined);
+    /**
+     * What a sync with the server did: its copy taken (read again), switched off elsewhere (the line, once), an older
+     * server. And, whatever it did, the server's bound as it last said it.
+     */
     const heard = useCallback((outcome: ToolCopyOutcome) => {
+        if (copyOf) void readToolSettings(owner, copyOf.manifest.id).then((s) => setNodeMax(s.nodeMax)).catch(() => {});
         if (outcome === 'taken') void reloadRef.current();
         else if (outcome === 'switched-off') setCopy((c) => ({ ...c, setting: false, note: 'removed' }));
         else if (outcome === 'older-node') setCopy((c) => ({ ...c, note: 'older-node' }));
-    }, []);
+    }, [copyOf, owner]);
     const afterWrite = useCallback(() => {
         if (copyOf && noteRef.current !== 'older-node') toolCopyAfterWrite(copyOf, heard);
     }, [copyOf, heard]);
-    const store = useToolDoc(here, owner, afterWrite);
+    const store = useToolDoc(here, owner, afterWrite, nodeMax);
     reloadRef.current = store.reload;
     const info = useCommunityInfo();
     const [stack, setStack] = useState<Step[]>(() => [{ screen: open.screen, params: open.key ? { key: open.key } : {} as Record<string, string> }]);
@@ -243,6 +249,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
             const s = await readToolSettings(owner, copyOf.manifest.id);
             if (gone) return;
             setCopy((c) => ({ ...c, setting: s.nodeCopy }));
+            setNodeMax(s.nodeMax);
             const outcome = await openToolCopy(copyOf).catch(() => 'later' as const);
             if (!gone) heard(outcome);
         })();
@@ -253,6 +260,8 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         if (!copyOf) return;
         setCopy((c) => ({ ...c, busy: true, failed: null }));
         const done = await switchToolCopy(copyOf, on).catch(() => 'failed' as const);
+        // Its answers say the server's bound too, whether or not it switched.
+        void readToolSettings(owner, copyOf.manifest.id).then((s) => setNodeMax(s.nodeMax)).catch(() => {});
         if (done === 'on' || done === 'off') {
             setCopy((c) => ({ ...c, busy: false, failed: null, setting: done === 'on', note: null }));
             // Switching on may have taken the server's copy.
@@ -260,7 +269,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         } else {
             setCopy((c) => ({ ...c, busy: false, failed: done }));
         }
-    }, [copyOf]);
+    }, [copyOf, owner]);
     // Remove my data: the server's copy first, or nothing. It leaves the document empty, so the doors are back, as on a
     // first open, and the copy off (the one setting kept, so Settings says what is true). On a later screen (a record),
     // back to the first, where the doors are: what it showed has gone (the phone's host route does the same).
@@ -269,13 +278,14 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         const gone = await store.remove();
         if (!gone) return 'not-kept';
         if (copyOf) {
-            await writeToolSettings(owner, copyOf.manifest.id, { nodeCopy: false });
+            // And the server's bound, which is the server's, not the member's data.
+            await writeToolSettings(owner, copyOf.manifest.id, { nodeCopy: false, ...(nodeMax !== undefined ? { nodeMax } : {}) });
             setCopy({ setting: false, note: null, busy: false, failed: null });
         }
         setPastDoors(false);
         if (manifest) setStack([{ screen: manifest.screens[0], params: {} }]);
         return 'removed';
-    }, [store.remove, copyOf, owner, manifest]);
+    }, [store.remove, copyOf, owner, manifest, nodeMax]);
 
     const step = stack[stack.length - 1];
     /** The tool's own back (a Save, a Delete that lands): its screens', even under a panel, which stays where it is. */
@@ -298,7 +308,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         now,
         nodeCopy: !!copyOf && copy.setting !== false && copy.note !== 'older-node',
     }), [owner, identity.callsign, info, toolBack, onComposer, now, copyOf, copy.setting, copy.note]);
-    const docHandle = useMemo(() => ({ get: store.get, set: store.set }), [store.get, store.set]);
+    const docHandle = useMemo(() => ({ get: store.get, set: store.set, maxBytes: store.maxBytes }), [store.get, store.set, store.maxBytes]);
     const host = useMemo(() => (manifest ? webHostFor(manifest, ctx, docHandle) : null), [manifest, ctx, docHandle]);
 
     if (!manifest || !loader) return <NotInThisVersion onBack={onBack} />;

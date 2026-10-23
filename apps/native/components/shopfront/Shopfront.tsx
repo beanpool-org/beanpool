@@ -18,7 +18,7 @@ import { useStyles, useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { MemberAvatar } from '../MemberAvatar';
 import { Sentence } from '../Sentence';
-import { categoryEmoji, categoryLabel } from '../../constants/categories';
+import { categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { SHOP_KIND_WORDS, shopKindLabel } from '../../utils/shop';
 import {
     keeperBadgeLine, listingPriceLine, listingStateLine, type ShopfrontKeeper, type ShopfrontListing, type ShopSection,
@@ -259,15 +259,19 @@ export function ShopfrontFeatured({ listings, showsBeans, onOpen = openListing }
     );
 }
 
-/** "What we do together": the categories of its keepers' live Offers and its own, as chips (round 3 §0 row 8). */
+/**
+ * "What we do together": the categories of its keepers' live Offers and its own, as chips (round 3 §0 row 8), each once:
+ * an older listing's id (tools_hardware) and today's (tools) are one category.
+ */
 export function ShopfrontTogether({ categories }: { categories: string[] }) {
     const s = useStyles(makeStyles);
-    if (categories.length === 0) return null;
+    const ids = [...new Set(categories.map((c) => normalizeCategory(c)))];
+    if (ids.length === 0) return null;
     return (
         <View style={s.block} testID="shopfront-together">
             <Text style={s.heading} accessibilityRole="header">{t('What we do together')}</Text>
             <View style={s.chips}>
-                {categories.map((c) => (
+                {ids.map((c) => (
                     <View key={c} style={s.chip}>
                         <Text style={s.chipText}>{t('{emoji} {category}', { emoji: categoryEmoji(c), category: categoryLabel(c) }, 'a category, after its emoji')}</Text>
                     </View>

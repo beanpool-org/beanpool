@@ -1471,21 +1471,21 @@ export default function TreasuryDetailScreen() {
                                 <View style={styles.balanceMetaRow}>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Credit line'))}</Text>
-                                        <Text style={styles.metaValue}>{formatNumber(Number(detail.creditLine ?? 0))} 🫘</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatNumber(Number(detail.creditLine ?? 0))} 🫘</Text>
                                     </View>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Live offers'))}</Text>
-                                        <Text style={styles.metaValue}>{formatNumber(Number(detail.liveOffers ?? 0))}</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatNumber(Number(detail.liveOffers ?? 0))}</Text>
                                     </View>
                                 </View>
                                 <View style={styles.balanceMetaRow}>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Earned surplus'))}</Text>
-                                        <Text style={styles.metaValue}>{formatNumber(Number(detail.earnedSurplus ?? 0))} 🫘</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{formatNumber(Number(detail.earnedSurplus ?? 0))} 🫘</Text>
                                     </View>
                                     <View style={styles.metaBox}>
                                         <Text style={styles.metaLabel}>{inCapitalsOf(t('Capital ceiling'))}</Text>
-                                        <Text style={styles.metaValue}>{detail.workingCapitalCeiling != null ? `${formatNumber(Number(detail.workingCapitalCeiling))} 🫘` : t('Uncapped')}</Text>
+                                        <Text style={styles.metaValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{detail.workingCapitalCeiling != null ? `${formatNumber(Number(detail.workingCapitalCeiling))} 🫘` : t('Uncapped')}</Text>
                                     </View>
                                 </View>
                                 {balance < 0 && (
@@ -2096,7 +2096,7 @@ export default function TreasuryDetailScreen() {
                         {!isEffectivePreview && (
                             <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <Pressable style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={project ? t('Report Project') : t('Report Enterprise')}>
+                                    <Pressable style={{ flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={project ? t('Report Project') : t('Report Enterprise')}>
                                         <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
                                         <Text style={{ flexShrink: 1, color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>{project ? t('Report Project') : t('Report Enterprise')}</Text>
                                     </Pressable>

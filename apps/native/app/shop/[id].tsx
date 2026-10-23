@@ -128,9 +128,16 @@ export default function ShopPageScreen() {
                             fallbackEmoji="🏪"
                             lines={[kindSinceLine(shop.kind, sinceLine(shop.openedAt)), shop.paused ? shopStateLine(shop) : null]}
                         />
-                        <View style={styles.trust} testID="shop-page-owner">
-                            <PostAuthorTrust pubkey={shop.ownerPublicKey} callsign={shop.ownerName} avatarUrl={logo} energyCycled={tier ?? 0} showTier={showsBeans && tier !== null} />
-                        </View>
+                        {/* The owner's trust line, a 48 dp target to their profile (the line on its own is a card's 30 dp). */}
+                        <Pressable
+                            style={styles.trust}
+                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: shop.ownerPublicKey, callsign: shop.ownerName } })}
+                            accessibilityRole="button"
+                            accessibilityLabel={t("View {name}'s profile", { name: shop.ownerName })}
+                            testID="shop-page-owner"
+                        >
+                            <PostAuthorTrust pubkey={shop.ownerPublicKey} callsign={shop.ownerName} avatarUrl={logo} energyCycled={tier ?? 0} showTier={showsBeans && tier !== null} navigable={false} />
+                        </Pressable>
                         {shop.blurb ? <ShopfrontText title={t('About')} text={shop.blurb} testID="shopfront-about" /> : null}
                         {listings ? <ShopfrontFeatured listings={featuredOf(listings)} showsBeans={showsBeans} /> : null}
                         {listings === undefined ? <Text style={[styles.note, { color: colors.text.secondary }]}>{t('Reading what is in it…')}</Text> : null}
@@ -166,7 +173,7 @@ const styles = StyleSheet.create({
     scroll: { paddingTop: 12 },
     body: { paddingHorizontal: 16 },
     reading: { paddingVertical: 32, alignItems: 'center' },
-    trust: { marginTop: -8, marginBottom: 16 },
+    trust: { minHeight: HOME_TARGET_DP, justifyContent: 'center', marginTop: -8, marginBottom: 8 },
     note: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
     mine: { gap: 8, marginBottom: 16 },
 });

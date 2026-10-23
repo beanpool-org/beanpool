@@ -233,6 +233,15 @@ for (const dark of [false, true]) {
             expect(nav.pushes).toContainEqual('/chat/dm-dave');
         });
 
+        it("the owner's line is a 48 dp target to their profile", async () => {
+            await renderIn();
+            const owner = byId('shop-page-owner');
+            expect(styleOf(owner).minHeight).toBeGreaterThanOrEqual(48);
+            expect(owner?.getAttribute('aria-label')).toBe("View Dave's profile");
+            await click(owner, 'the owner line');
+            expect(nav.pushes).toEqual([{ pathname: '/public-profile', params: { publicKey: DAVE, callsign: 'Dave' } }]);
+        });
+
         it('a tile and a row open their listing', async () => {
             await renderIn();
             await click(byId('shopfront-featured-l1'), 'the ladder tile');

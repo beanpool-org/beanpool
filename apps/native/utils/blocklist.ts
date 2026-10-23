@@ -351,8 +351,13 @@ const COMMUNITY_BLOCKS_MAX = 500;
 const BLOCKS_WAIT_MS = 24 * 60 * 60 * 1000;
 /** A key as every community keeps it (apps/server engine/member-key.ts): one in any other spelling, or the owner's own, has the whole list refused. */
 const MEMBER_KEY = /^[0-9a-f]{64}$/;
-/** A change's 403 from a community the account is no member of (yet): apps/server engine/members.ts NOT_A_MEMBER_CODE. */
-const NOT_A_MEMBER_CODE = 'not_a_member';
+/**
+ * A change's 403 from a community the account is no member of: none yet (routes/blocks.ts, apps/server engine/members.ts
+ * NOT_A_MEMBER_CODE), or none now, its account there closed (`account_closed`, the signature gate's, https-server.ts:
+ * removed, or deleted by its owner). Such a community keeps no list for the account: a closed account's went with it
+ * (state-engine.ts adminPruneUser, purgeMemberSelf: dropBlocksOf).
+ */
+const NO_MEMBER_CODES: ReadonlySet<string> = new Set(['not_a_member', 'account_closed']);
 /**
  * At most this many block requests a minute: a quarter of what a community takes from one member (the gateway's 120 a
  * minute, apps/server gateway-rate-limit.ts), so a first sync with many keys the community has no row for, each sent on
@@ -376,11 +381,12 @@ interface BlocksAt {
 }
 
 /**
- * What a change met: the keys on the community's list after it; `later`, ask again at the next sync (no answer, or no
- * member there yet); `no list`, a node with no block list (404, 405), where no change can land; `refused`, any other
- * refusal (another 403, the community's limit).
+ * What a change met: the keys on the community's list after it; `later`, ask again at the next sync (no answer);
+ * `no member`, the account is no member there, yet or now ({@link NO_MEMBER_CODES}), so it keeps no list for it; `no
+ * list`, a node with no block list (404, 405), where no change can land; `refused`, any other refusal (another 403, the
+ * community's limit).
  */
-type ChangeAnswer = string[] | 'later' | 'no list' | 'refused';
+type ChangeAnswer = string[] | 'later' | 'no member' | 'no list' | 'refused';
 
 let syncing: Promise<void> = Promise.resolve();
 /** When each block request of the last minute went, oldest first. */
@@ -401,10 +407,12 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
  * - A community the phone visits as a guest (nodes.ts markGuestNode: "Guest view first", Add & Connect) is sent nothing:
  *   the account is no member there, and the list is the member's own business. Joining there clears the mark, and the
  *   next sync sends the list.
- * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429), or a community that has the account as no
- *   member yet (403 not_a_member): asked again at the next sync, so a member who joins there has the list sent then, not
- *   a day later. A block whose answer never came may be on the list, so it is taken off all the same when the member
- *   unblocks.
+ * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429): asked again at the next sync. A block whose
+ *   answer never came may be on the list, so it is taken off all the same when the member unblocks.
+ * - A community that has the account as no member, yet or now (403 not_a_member, or account_closed: removed, or deleted by
+ *   its owner), keeps no list for it: nothing this phone sent counts as on its list any more
+ *   ({@link communityKeepsNoBlocks}), and it is asked again at the next sync. So a member who joins there, or whom a
+ *   vote brings back, has the whole list sent then, not a day later and not never.
  * - A node with no block list (404, 405): that community is not asked again for a day. Any other refusal (a 403, the
  *   community's limit) of a block: it is sent no blocks for a day, but unblocks still go, so the blocked member's lines
  *   are withheld no longer than the member wants (the limit's own answer is "Unblock someone to block another"); of an
@@ -455,6 +463,10 @@ async function syncBlocksOnce(): Promise<void> {
         };
         // A refused block holds back the blocks only; a node with no block list, everything.
         const addRefused = (answer: 'no list' | 'refused') => waitADay(answer === 'no list' ? 'waitUntil' : 'addsWaitUntil');
+        const noMember = async () => {
+            keepsNone(at);
+            await save();
+        };
         const took = (keys: string[]) => {
             at.on = [...new Set([...at.on, ...keys])];
             at.sent = at.sent.filter(k => !keys.includes(k));
@@ -464,6 +476,7 @@ async function syncBlocksOnce(): Promise<void> {
             if (list.includes(key)) continue;
             const answer = await sendBlockChange(owner, community, BLOCKS_REMOVE_PATH, { targetPubkey: key });
             if (answer === 'later') return;
+            if (answer === 'no member') return noMember();
             if (answer === 'no list' || answer === 'refused') return waitADay('waitUntil');
             at.on = at.on.filter(k => k !== key);
             at.sent = at.sent.filter(k => k !== key);
@@ -481,6 +494,7 @@ async function syncBlocksOnce(): Promise<void> {
             const batch = adds.slice(i, i + COMMUNITY_BLOCKS_MAX);
             const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkeys: batch });
             if (answer === 'later') return;
+            if (answer === 'no member') return noMember();
             if (answer === 'no list' || answer === 'refused') return addRefused(answer);
             took(batch.filter(k => answer.includes(k)));
             alone.push(...batch.filter(k => !answer.includes(k)));
@@ -490,6 +504,7 @@ async function syncBlocksOnce(): Promise<void> {
         for (const key of alone) {
             const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkey: key });
             if (answer === 'later') return;
+            if (answer === 'no member') return noMember();
             if (answer === 'no list' || answer === 'refused') return addRefused(answer);
             took([key]);
             await save();
@@ -536,8 +551,9 @@ async function sendBlockChange(owner: string, community: string, path: string, b
         return 'later';
     }
     if (res.status === 404 || res.status === 405) return 'no list';
-    // No member there yet: nothing about the change itself, and a member who joins has it sent at the next sync.
-    if (res.status === 403 && changeErrorCode(text) === NOT_A_MEMBER_CODE) return 'later';
+    // No member there, yet or now: nothing about the change itself.
+    const code = changeErrorCode(text);
+    if (res.status === 403 && code !== null && NO_MEMBER_CODES.has(code)) return 'no member';
     return res.status >= 400 && res.status < 500 && ![401, 408, 425, 429].includes(res.status) ? 'refused' : 'later';
 }
 
@@ -560,6 +576,53 @@ function roomForARequest(): boolean {
         }, requestsSentAt[0] + MINUTE_MS - now);
     }
     return false;
+}
+
+/**
+ * The community keeps no list for the account now: nothing this phone sent counts as on it, so the next sync sends every
+ * block again. Each key sent stays one it may hold, so an unblock still takes it off. A wait stays: it was about the node
+ * (no block list, its limit), not about the account.
+ */
+function keepsNone(at: BlocksAt): void {
+    at.sent = [...new Set([...at.on, ...at.sent])];
+    at.on = [];
+}
+
+/**
+ * The phone has heard, for certain, that the account `publicKey` is no member of `community`, so that community keeps no
+ * block list for it: its membership check answered that the key is a stranger there or its account closed
+ * (app/NodeStatusContext.tsx), or the account has just joined there as a new member (db.ts `redeemInvite`). A list the
+ * community had is gone: removed accounts' and deleted ones' go with them (server adminPruneUser, purgeMemberSelf), and a
+ * node set up again at the address never had one. So nothing this phone sent there counts as on its list any more, and
+ * the next sync there, once the account is a member (it joins, or a vote brings it back), sends the whole list again.
+ *
+ * After any sync under way, as a sync is, so none writes back what it read before. Never throws, and never waited for by
+ * those callers: they go on at once.
+ */
+export function communityKeepsNoBlocks(publicKey: string, community: string): Promise<void> {
+    const forget = async () => {
+        try {
+            const here = sameCommunity(community);
+            const storeKey = communityBlocksStoreKey(publicKey);
+            const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
+            const entries = Object.entries(record).filter(([url, at]) => here(url) && at.on.length > 0);
+            if (entries.length === 0) return;
+            for (const [, at] of entries) keepsNone(at);
+            await AsyncStorage.setItem(storeKey, JSON.stringify(record));
+        } catch (e) {
+            console.warn('[blocklist] Could not forget what a community that keeps no list held; the next refusal there does', e);
+        }
+    };
+    const run = syncing.then(forget, forget);
+    syncing = run;
+    return run;
+}
+
+/** Whether a record's address is `community`'s: the same, whatever its case and trailing slash. */
+function sameCommunity(community: string): (url: string) => boolean {
+    const plain = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
+    const address = plain(community);
+    return (url) => plain(url) === address;
 }
 
 /** The `code` in a block route's JSON refusal (routes/blocks.ts), or null for anything else. */

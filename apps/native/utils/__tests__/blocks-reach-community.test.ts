@@ -726,6 +726,31 @@ describe('a community that lost the member\'s list (review 4354749552)', () => {
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
     });
+
+    it('heard while a sync is under way: that sync never writes back what it read before', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        // A block whose request waits at the community.
+        let release!: () => void;
+        net.hold = new Promise<void>((resolve) => { release = resolve; });
+        net.sent = [];
+        await app.blockUser(SPAMMER, ana.publicKey);
+        await vi.waitFor(() => expect(blockChanges()).toHaveLength(1));
+        // Meanwhile the community lost her list, and the phone hears she is no member there.
+        listAt(NODE, ana.publicKey).clear();
+        const heard = app.communityKeepsNoBlocks(ana.publicKey, NODE);
+        release();
+        await heard;
+        await app.blockSyncsEndedForTests();
+
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [HARASSER, SPAMMER] } }]);
+        expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
+    });
 });
 
 describe('the blocks the phone held before this build', () => {

@@ -6692,6 +6692,14 @@ export async function redeemInvite(
             console.log('[DB] ℹ️ User is already a registered member of this community.');
         } else {
             console.log('[DB] ✅ Invite redeemed successfully!');
+            // A new member here keeps no block list here yet, whatever the phone once sent to this address (a node set up
+            // again there): the next sync sends the phone's blocks (blocklist.ts). Not waited for; never fails the join.
+            try {
+                const { communityKeepsNoBlocks } = await import('./blocklist');
+                void communityKeepsNoBlocks(identity.publicKey, anchorUrl);
+            } catch (e) {
+                console.warn('[DB] Could not tell the block list this is a new member here', e);
+            }
         }
         return { success: true, alreadyMember, nodeHasPhoto };
     } catch (e: any) {

@@ -298,7 +298,7 @@ beforeEach(() => {
     yours.error = null;
     picked.date = null;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { vi.useRealTimers(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: ReturnType<typeof createElement> = createElement(ProjectsScreen)) {
@@ -558,8 +558,16 @@ describe('the start-a-project form and the new-poll form in the pseudo-locale', 
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start an Enterprise / Project')));
         expect(host.textContent).toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
         expect(bypassing(), 'form').toEqual([]);
-        await click(byLabel(pseudoLocalise('Start initiative')), 'Start');
+        // The missing-fields line hides itself 3 s later on a bare timer in propose-project.tsx, run here on a fake clock so it
+        // never outlives the test: left running, it can fire after the file's jsdom is gone ("window is not defined").
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const start = byLabel(pseudoLocalise('Start initiative'));
+        expect(start, 'Start').toBeTruthy();
+        await act(async () => { (start as HTMLElement).click(); });
         expect(host.textContent).toContain(pseudoLocalise('⚠️ Please complete all required fields'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+        vi.useRealTimers();
+        expect(host.textContent).not.toContain(pseudoLocalise('⚠️ Please complete all required fields'));
         picked.date = new Date(2026, 10, 30, 12);
         await click(byLabel(pseudoLocalise('Select funding deadline date')), 'the deadline');
         expect(host.textContent).toContain(pseudoLocalise('30 Nov 2026'));

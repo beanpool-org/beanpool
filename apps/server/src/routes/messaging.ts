@@ -34,6 +34,7 @@ import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member
 import {
     withheldConversationOwnedBy, withheldConversationById, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
 } from '../engine/withheld-lines.js';
+import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
  *  thread is readable by any member (it is public), but only its keepers get it in "Your groups", so only they may
@@ -178,7 +179,7 @@ router.post('/api/messages/conversation', async (ctx) => {
             () => assertMayReachNewPeople(createdBy, uniqueParticipants));
         if (!conv) {
             ctx.status = 400;
-            ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
+            ctx.body = { error: word('Failed to create conversation — check all participants are registered') };
             return;
         }
         ctx.body = { success: true, conversation: conv };
@@ -313,7 +314,7 @@ router.post('/api/messages/edit', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     // The answer is the message with its reactions, each naming who reacted (as are delete's and react's). The chat
@@ -356,7 +357,7 @@ router.post('/api/messages/delete', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!isVisitorsDirectLine(messageId, actor) && !membersOnlyHere(ctx)) return; // the message and who reacted to it, as edit's answer
@@ -386,12 +387,12 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     // anyone, unsigned too, read who a member talks with and every chat's id.
     if (!ctx.state.actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (ctx.state.actor !== publicKey) {
         ctx.status = 403;
-        ctx.body = { error: 'You may only read your own conversations' };
+        ctx.body = { error: word('You may only read your own conversations') };
         return;
     }
     // An event hidden by reports (G3) is not there for anyone but its author, nor a group's event for someone no longer in
@@ -423,7 +424,7 @@ router.post('/api/messages/mark-read', async (ctx) => {
     const { conversationId } = (ctx as any).requestBody || {};
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!conversationId) {
@@ -442,7 +443,7 @@ router.post('/api/messages/mark-read', async (ctx) => {
         // Someone else's: refused as a non-participant of a real conversation is (#1403 re-review).
         if (withheldConversationById(conversationId)) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not a participant in this conversation' };
+            ctx.body = { error: word('You are not a participant in this conversation') };
             return;
         }
         ctx.status = 404;
@@ -458,7 +459,7 @@ router.post('/api/messages/mark-read', async (ctx) => {
     } else if (conv.type === 'enterprise_thread') {
         if (!isKeeperOfEnterprise(actor, conversationId)) {
             ctx.status = 403;
-            ctx.body = { error: 'Only the keepers of this enterprise have a read marker on its thread' };
+            ctx.body = { error: word('Only the keepers of this enterprise have a read marker on its thread') };
             return;
         }
         // On a standby, 409 `standby`: the read marks are the main server's (a plain table, design G4).
@@ -477,7 +478,7 @@ router.post('/api/messages/mark-read', async (ctx) => {
         return;
     } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
-        ctx.body = { error: 'You are not a participant in this conversation' };
+        ctx.body = { error: word('You are not a participant in this conversation') };
         return;
     }
     markConversationRead(actor, conversationId);
@@ -492,7 +493,7 @@ router.post('/api/messages/mute', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     const { conversationId, duration } = (ctx as any).requestBody || {};
@@ -519,7 +520,7 @@ router.post('/api/messages/mute', async (ctx) => {
         // Someone else's: refused as a non-participant of a real conversation is (#1403 re-review).
         if (withheldConversationById(conversationId)) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not in this conversation' };
+            ctx.body = { error: word('You are not in this conversation') };
             return;
         }
         ctx.status = 404;
@@ -534,7 +535,7 @@ router.post('/api/messages/mute', async (ctx) => {
     }
     if (conv.type !== GROUP_THREAD_TYPE && !canOpenChat(conv, actor)) {
         ctx.status = 403;
-        ctx.body = { error: 'You are not in this conversation' };
+        ctx.body = { error: word('You are not in this conversation') };
         return;
     }
     if (duration === 'off') {
@@ -564,7 +565,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         const other = withheldConversationById(conversationId);
         if (other) {
             ctx.status = 403;
-            ctx.body = { error: 'You are not a participant in this conversation' };
+            ctx.body = { error: word('You are not a participant in this conversation') };
             return;
         }
         ctx.status = 404;
@@ -599,7 +600,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         // Going to an event whose host hasn't let them in yet (no seat until they do): the event chat route's words and code.
         ctx.body = conv.type === 'event_thread' && eventWaitingFor(conversationId, ctx.state.actor as string | undefined)
             ? { error: EVENT_CHAT_WAITING, code: EVENT_CHAT_WAITING_CODE }
-            : { error: 'You are not a participant in this conversation' };
+            : { error: word('You are not a participant in this conversation') };
         return;
     }
     // An event chat is the host plus everyone Going, re-checked against the RSVP rather than the
@@ -637,7 +638,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
             ctx.status = 403;
             ctx.body = waiting
                 ? { error: EVENT_CHAT_WAITING, code: EVENT_CHAT_WAITING_CODE }
-                : { error: 'Only the host and people going can open this event chat' };
+                : { error: word('Only the host and people going can open this event chat') };
             return;
         }
     }
@@ -665,7 +666,7 @@ router.post('/api/messages/react', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!isVisitorsDirectLine(messageId, actor) && !membersOnlyHere(ctx)) return; // who reacted, by key, as edit's answer

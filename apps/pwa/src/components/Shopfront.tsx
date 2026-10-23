@@ -23,7 +23,7 @@ const SECTION_ROWS = 5;
 const card = 'bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm';
 const heading = 'm-0 mb-2 text-base font-extrabold text-nature-900 dark:text-white';
 const muted = 'text-sm text-nature-600 dark:text-nature-300';
-const linkButton = 'min-h-[44px] px-1 -mx-1 bg-transparent border-none cursor-pointer text-sm font-bold text-bp-ink-brand hover:underline';
+const linkButton = 'min-h-[44px] px-1 -mx-1 bg-transparent border-none cursor-pointer text-sm font-bold text-bp-ink-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded';
 
 /** "More" / "Less" under a text that runs past its lines. */
 function MoreLess({ open, onClick, testID }: { open: boolean; onClick: () => void; testID?: string }) {

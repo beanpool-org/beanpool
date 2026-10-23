@@ -262,3 +262,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-21 - FormerAddressBanner ARIA Live Region & Internationalization
 **Learning:** `FormerAddressBanner.tsx` displayed community migration alerts using `role="status"` without explicit `aria-live="polite"` or `aria-label`, preventing screen readers from describing the alert context, and hardcoded text strings without `t(...)` translation wrappers.
 **Action:** Added `aria-live="polite"` and `aria-label={t('Community address change alert')}` to the status container, wrapped text strings with `t(...)`, and verified test suite passing.
+
+## 2026-10-22 - Shopfront Link Buttons & AddressSearch Focus Ring Styling
+**Learning:** `Shopfront.tsx`'s `linkButton` (used in `MoreLess` text toggles and "Show all") used `border-none` without explicit focus-visible ring indicators, and `AddressSearch.tsx`'s search input used `focus:outline-none focus:ring-2` which applied focus styling on mouse click rather than restricting ring highlights to keyboard users.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded` to `linkButton` in `Shopfront.tsx`, updated `AddressSearch.tsx` input to `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400`, and created unit test in `Shopfront.test.tsx`.

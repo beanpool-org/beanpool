@@ -3159,6 +3159,52 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(comm).toHaveTextContent('37 listings · 3 events coming up');
     });
 
+    it('global community card: 3 figure tiles on wide (members, communities listed, listings); 3 lines on narrow; no fabricated zeroes', async () => {
+        const globalAnswer: HomeAnswer = {
+            generatedAt: NOW, profile: 'global', welcome: true, me: null, layout: null,
+            features: { beans: false, guestListingsOnly: true, exampleListings: true, invites: false },
+            cards: {
+                find: { point: null, communities: [], communityCount: 38, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null },
+                market: { items: [], total14d: 0, more: false },
+                events: { items: [], radiusKm: null },
+                community: { name: null, members: 2310, communities: 38, listings: 42 },
+            },
+        };
+
+        // Narrow: 3 lines
+        pageWidth = 360;
+        cardWidth = 320;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer));
+        const { unmount } = render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const commNarrow = screen.getByTestId('home-card-community');
+        expect(within(commNarrow).getByTestId('home-community-body')).toHaveAttribute('data-layout', 'rows');
+        expect(commNarrow).toHaveTextContent('2,310 members');
+        expect(commNarrow).toHaveTextContent('38 communities listed');
+        expect(commNarrow).toHaveTextContent('42 listings');
+        expect(commNarrow.textContent).not.toMatch(/joined this week|trades this month|Commons pot|events coming up/);
+
+        unmount();
+
+        // Wide: 3 tiles
+        pageWidth = 600;
+        cardWidth = 544;
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const commWide = screen.getByTestId('home-card-community');
+        expect(within(commWide).getByTestId('home-community-body')).toHaveAttribute('data-layout', 'tiles');
+        const tiles = within(commWide).getAllByTestId('home-community-tile');
+        expect(tiles).toHaveLength(3);
+        expect(tiles[0]).toHaveTextContent('2,310');
+        expect(tiles[0]).toHaveTextContent('members');
+        expect(tiles[1]).toHaveTextContent('38');
+        expect(tiles[1]).toHaveTextContent('communities listed');
+        expect(tiles[2]).toHaveTextContent('42');
+        expect(tiles[2]).toHaveTextContent('listings');
+    });
+
     it('navigation: listing tile opens listing, group line opens chat, Pulse tile opens Pulse, deal opens deal', async () => {
         pageWidth = 600;
         cardWidth = 544;

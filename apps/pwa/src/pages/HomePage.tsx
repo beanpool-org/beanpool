@@ -812,26 +812,18 @@ function CommunityBody({
     onEditHome: () => void;
 }) {
     const { wide } = useCardContainer();
-    const hasDetailedStats = typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number';
+    const isGlobal = profile === 'global';
+    const hasDetailedStats = !isGlobal
+        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
+        : typeof cm.listings === 'number';
 
-    const line1 = (cm.members === 1 && !isVisitor && !hasDetailedStats)
-        ? t("1 member. You're first. Invite someone.")
-        : [
-            tn(cm.members, '{n} member', '{n} members'),
-            typeof cm.joined7d === 'number' ? tn(cm.joined7d, '{n} joined this week', '{n} joined this week') : null,
-        ].filter(Boolean).join(' · ');
+    const globalTiles = [
+        { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
+        ...(typeof cm.communities === 'number' ? [{ figure: formatCount(cm.communities), label: tn(cm.communities, 'community listed', 'communities listed') }] : []),
+        ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
+    ];
 
-    const line2 = [
-        typeof cm.tradesThisMonth === 'number' ? tn(cm.tradesThisMonth, '{n} trade this month', '{n} trades this month') : null,
-        typeof cm.commonsPot === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot) }) : null,
-    ].filter(Boolean).join(' · ');
-
-    const line3 = [
-        typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings') : null,
-        typeof cm.eventsSoon === 'number' ? tn(cm.eventsSoon, '{n} event coming up', '{n} events coming up') : null,
-    ].filter(Boolean).join(' · ');
-
-    const tiles = [
+    const localTiles = [
         { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
         { figure: formatCount(cm.joined7d ?? 0), label: t('joined this week') },
         { figure: formatCount(cm.tradesThisMonth ?? 0), label: t('trades this month') },
@@ -840,10 +832,37 @@ function CommunityBody({
         { figure: formatCount(cm.eventsSoon ?? 0), label: tn(cm.eventsSoon ?? 0, 'event coming up', 'events coming up') },
     ];
 
+    const tiles = isGlobal ? globalTiles : localTiles;
+
+    const globalLine1 = tn(cm.members, '{n} member', '{n} members');
+    const globalLine2 = typeof cm.communities === 'number' ? tn(cm.communities, '{n} community listed', '{n} communities listed') : null;
+    const globalLine3 = typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings') : null;
+
+    const localLine1 = (cm.members === 1 && !isVisitor && !hasDetailedStats)
+        ? t("1 member. You're first. Invite someone.")
+        : [
+            tn(cm.members, '{n} member', '{n} members'),
+            typeof cm.joined7d === 'number' ? tn(cm.joined7d, '{n} joined this week', '{n} joined this week') : null,
+        ].filter(Boolean).join(' · ');
+
+    const localLine2 = [
+        typeof cm.tradesThisMonth === 'number' ? tn(cm.tradesThisMonth, '{n} trade this month', '{n} trades this month') : null,
+        typeof cm.commonsPot === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot) }) : null,
+    ].filter(Boolean).join(' · ');
+
+    const localLine3 = [
+        typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings') : null,
+        typeof cm.eventsSoon === 'number' ? tn(cm.eventsSoon, '{n} event coming up', '{n} events coming up') : null,
+    ].filter(Boolean).join(' · ');
+
+    const line1 = isGlobal ? globalLine1 : localLine1;
+    const line2 = isGlobal ? globalLine2 : localLine2;
+    const line3 = isGlobal ? globalLine3 : localLine3;
+
     return (
         <div>
             {wide && hasDetailedStats ? (
-                <div data-testid="home-community-body" data-layout="tiles" className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+                <div data-testid="home-community-body" data-layout="tiles" className={isGlobal ? "grid grid-cols-3 gap-2 mb-3" : "grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3"}>
                     {tiles.map((tile, i) => (
                         <div key={i} data-testid="home-community-tile" className="p-2 rounded-xl bg-bg-hover text-center flex flex-col justify-center min-w-0">
                             <span className="text-base font-bold text-text-primary break-words leading-tight">{tile.figure}</span>

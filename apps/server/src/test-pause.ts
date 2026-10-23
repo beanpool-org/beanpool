@@ -679,7 +679,9 @@ async function main() {
         `Hugo reads his own card, with the reason and not who paused (${hugoReads.status} ${JSON.stringify(hugoCard?.params)})`);
     for (const v of [gen, otto, ada, rae, bea, vic, olive, rita, bob, cleo, wes]) de.castDecisionVote(hugoRecord.id, v.pubKeyHex, true);
     for (const v of [bob, cleo, wes]) de.castDecisionVote(ruthRecord.id, v.pubKeyHex, false);
-    de.tickDecisions(Date.parse(hugoRecord.closes_at) + MIN);
+    // Both votes close now, and the tick runs at the real time: a tick a week ahead would also see Hugo's grace window end.
+    db.prepare('UPDATE decisions SET closes_at = ? WHERE id IN (?, ?)').run(new Date(Date.now() - 1000).toISOString(), hugoRecord.id, ruthRecord.id);
+    de.tickDecisions();
     const hugoAfter = db.prepare('SELECT status, grace_period_ends_at FROM decisions WHERE id = ?').get(hugoRecord.id) as { status: string; grace_period_ends_at: string | null };
     assert(hugoAfter.status === 'execution_pending_grace' && !!hugoAfter.grace_period_ends_at && statusOf(hugo) === 'disabled' && row(hugo.pubKeyHex)?.credit_frozen === 1,
         `the community says Yes: Hugo's grace window starts, his account still paused, his credit frozen (${hugoAfter.status} ${statusOf(hugo)})`);

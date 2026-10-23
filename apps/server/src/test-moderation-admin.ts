@@ -98,11 +98,12 @@ assert.strictEqual(actionResult, true, 'E. actionReport must return true');
 const postAfterAction = getPosts({ includeInactive: true }).find(p => p.id === offensivePost.id);
 assert.strictEqual(Boolean(postAfterAction?.active), false, 'E. Actioning report with deletePost=true must soft-delete post');
 
-// A report's suspension is the pause an admin's is (removal by vote S1): 'disabled', and the record opened.
+// A report's suspension is the pause an admin's is (removal by vote S1): 'disabled', and the record opened, the
+// community's vote on removing them (S2).
 const offenderMember = getMember(offenderKey);
 assert.strictEqual(offenderMember?.status, 'disabled', 'E. Actioning report with suspendUser=true must pause offender');
-assert.ok(db.prepare("SELECT 1 FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'").get(offenderKey),
-    'E. The pause opens its record');
+assert.ok(db.prepare("SELECT 1 FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM' AND effect = 'remove_member' AND status = 'open'").get(offenderKey),
+    'E. The pause opens its record: the vote on removing them');
 
 // G. Verify assertMemberActive rejects suspended member
 import { assertMemberActive } from './state-engine.js';

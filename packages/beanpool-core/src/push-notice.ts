@@ -45,6 +45,7 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { word } from './words.js';
 
 /** The title of every push a community sends. */
 export const PUSH_NOTICE_TITLE = 'BeanPool';
@@ -54,31 +55,33 @@ export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings';
 
 /**
  * Every kind of push a community sends, with the one sentence its lock screen shows. A server never sends free text in a
- * push: the sender names a kind, and the words come from here.
+ * push: the sender names a kind, and the words come from here. Each sentence is a word() key: the server sends it in
+ * English, and the phone shows it through t() where it writes a notice in a push's place (apps/native
+ * utils/push-notice-check.ts), so the check against what came stays on the English.
  */
 export const PUSH_NOTICE_KINDS = {
-    'chat.message': { body: 'You have a new message.', tab: 'chats' },
-    'chat.group': { body: 'New message in one of your groups.', tab: 'chats' },
-    'chat.mention': { body: 'You were mentioned in a group.', tab: 'chats' },
-    'group.lead': { body: 'There is news about a group you lead.', tab: 'chats' },
+    'chat.message': { body: word('You have a new message.'), tab: 'chats' },
+    'chat.group': { body: word('New message in one of your groups.'), tab: 'chats' },
+    'chat.mention': { body: word('You were mentioned in a group.'), tab: 'chats' },
+    'group.lead': { body: word('There is news about a group you lead.'), tab: 'chats' },
     // Home, whose Needs-you line opens the enterprise: Talk shows nothing of a keepers' vote.
-    'decision.open': { body: 'A vote opened in one of your groups.', tab: 'home' },
-    'market.request': { body: 'Someone answered one of your listings.', tab: 'market' },
-    'market.answer': { body: 'There is news on one of your requests.', tab: 'market' },
-    'market.listing': { body: 'There is news on one of your listings.', tab: 'market' },
-    'trade.update': { body: 'There is news on one of your trades.', tab: 'market' },
-    'review.new': { body: 'You have a new review.', tab: 'market' },
-    'event.reminder': { body: "An event you're going to starts soon.", tab: 'market' },
-    'event.update': { body: "There is news about an event you're going to.", tab: 'market' },
-    'community.notice': { body: 'Your community has a notice for you.', tab: 'home' },
-    'community.near': { body: 'A community has started near you.', tab: 'home' },
-    'account.recovery-started': { body: "Someone is trying to recover your account. If this isn't you, open BeanPool and stop it.", tab: 'settings' },
-    'account.restored': { body: "Your account was just restored on another device. If that wasn't you, open BeanPool now.", tab: 'settings' },
+    'decision.open': { body: word('A vote opened in one of your groups.'), tab: 'home' },
+    'market.request': { body: word('Someone answered one of your listings.'), tab: 'market' },
+    'market.answer': { body: word('There is news on one of your requests.'), tab: 'market' },
+    'market.listing': { body: word('There is news on one of your listings.'), tab: 'market' },
+    'trade.update': { body: word('There is news on one of your trades.'), tab: 'market' },
+    'review.new': { body: word('You have a new review.'), tab: 'market' },
+    'event.reminder': { body: word("An event you're going to starts soon."), tab: 'market' },
+    'event.update': { body: word("There is news about an event you're going to."), tab: 'market' },
+    'community.notice': { body: word('Your community has a notice for you.'), tab: 'home' },
+    'community.near': { body: word('A community has started near you.'), tab: 'home' },
+    'account.recovery-started': { body: word("Someone is trying to recover your account. If this isn't you, open BeanPool and stop it."), tab: 'settings' },
+    'account.restored': { body: word("Your account was just restored on another device. If that wasn't you, open BeanPool now."), tab: 'settings' },
     // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a
     // member gets of an admin moving their account without them.
-    'account.rekey-started': { body: "An admin started moving your account to a new phone. If you still have this phone and didn't ask for this, tell an owner now.", tab: 'settings' },
-    'owner.standby': { body: "Your community's standby server needs you.", tab: 'settings' },
-    'owner.alert': { body: "Your community's server needs you.", tab: 'settings' },
+    'account.rekey-started': { body: word("An admin started moving your account to a new phone. If you still have this phone and didn't ask for this, tell an owner now."), tab: 'settings' },
+    'owner.standby': { body: word("Your community's standby server needs you."), tab: 'settings' },
+    'owner.alert': { body: word("Your community's server needs you."), tab: 'settings' },
 } as const satisfies Record<string, { body: string; tab: PushNoticeTab }>;
 
 export type PushNoticeKind = keyof typeof PUSH_NOTICE_KINDS;

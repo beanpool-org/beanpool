@@ -537,13 +537,17 @@ export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans
                 <Text style={[s.badgeText, { color: trustToken.fg }]} maxFontSizeMultiplier={1.2}>{tier}</Text>
             </View>
         ) : undefined;
+        const operationalSub = (card.frozen || !card.activated) ? sub : undefined;
         return (
             <>
                 <HomeRow
                     colors={colors}
                     text={main}
+                    sub={operationalSub}
                     strong
-                    a11y={t('{main} Opens your Ledger.', { main: sentence(main) })}
+                    a11y={operationalSub
+                        ? t('{main} {sub} Opens your Ledger.', { main: sentence(main), sub: sentence(operationalSub) })
+                        : t('{main} Opens your Ledger.', { main: sentence(main) })}
                     onPress={() => router.push('/(tabs)/ledger')}
                     testID="home-beans-line"
                 />

@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const TOPIC = 'https://ntfy.sh/bp-control-room-TEST0secret0topic';
+const INBOX = 'https://ntfy.sh/bp-inbox-TEST0secret0inbox';
 const store = vi.hoisted(() => ({ values: new Map<string, number>(), secrets: {} as Record<string, string> }));
 
 vi.mock('@devvit/web/server', () => ({
@@ -86,6 +87,18 @@ describe('the trigger endpoint', () => {
     it('answers {} to a body that is not JSON, and sends nothing', async () => {
         expect(await call('POST', NEW_ITEM, '{not json')).toEqual({ status: 200, body: '{}' });
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('with the inbox set, also sends the item to the inbox topic, once', async () => {
+        store.secrets = { ntfyUrl: TOPIC, agentNtfyUrl: INBOX };
+        expect(await call('POST', NEW_ITEM, newPost)).toEqual({ status: 200, body: '{}' });
+        await call('POST', NEW_ITEM, newPost);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+        const sentTo = new Map(calls.map(([url, init]) => [url, String(init.body)]));
+        expect(sentTo.get(TOPIC)).toBe('Hello\nhttps://www.reddit.com/r/beanpool/comments/abc123/hello/');
+        expect(JSON.parse(sentTo.get(INBOX) ?? '')).toMatchObject({ v: 1, kind: 'post', id: 't3_abc123', title: 'Hello' });
+        expect(sentTo.get(INBOX)).not.toContain('Some_Member');
     });
 
     it('serves nothing else', async () => {

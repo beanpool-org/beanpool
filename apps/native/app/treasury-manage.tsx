@@ -52,7 +52,8 @@ const SEASON_LINES = { resume: RESUME_CONFIRM_TEXT };
  * initiative), the keepers' votes, removing a keeper and stepping down, the season and the wind-up, and removing a
  * message from its discussion. Each still shows only what the node lets this member do.
  *
- * Opened by someone who keeps none of it: a sentence, nothing offered. Example Valley's (a sample id), or an enterprise
+ * Opened by someone who keeps none of it: a sentence, nothing offered, and under it the votes still on their roll (a keeper
+ * removed while a vote is open), which the node answers no one else. Example Valley's (a sample id), or an enterprise
  * where this reader's community has none: nothing asked of the node. Not here: its banner (no photo kept for a shop yet)
  * and its tool shelves (a tool opens as the member only).
  */
@@ -193,6 +194,8 @@ export default function TreasuryManageScreen() {
 
         emptyNote: { fontSize: 13, color: colors.text.muted, fontStyle: 'italic', paddingVertical: 12, textAlign: 'center' },
         centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+        // The sentence centred as centerFill has it; a vote under it takes the console's 16 dp sides and scrolls.
+        notKeeper: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 24 },
         retryBtn: { minHeight: 48, paddingHorizontal: 20, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
         retryText: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
     }));
@@ -666,7 +669,20 @@ export default function TreasuryManageScreen() {
             );
         }
         if (!mayManage(detail, isKeeperOfThis)) {
-            return <View style={styles.centerFill}><Text style={styles.emptyNote} testID="manage-not-keeper">{notKeeperLine(project)}</Text></View>;
+            // A keeper removed while a vote is open stays on its roll and votes here, where Needs you and the vote's push
+            // land (PR #2405 review 4356209582). The block draws nothing for anyone else: the node answers them a 404.
+            return (
+                <ScrollView contentContainerStyle={styles.notKeeper}>
+                    <Text style={styles.emptyNote} testID="manage-not-keeper">{notKeeperLine(project)}</Text>
+                    {treasuryKey && (
+                        <EnterpriseDecisions
+                            treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                            earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
+                            lifecycle={detail?.lifecycle} refreshKey={decisionsRefresh}
+                        />
+                    )}
+                </ScrollView>
+            );
         }
         return (
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={48}>

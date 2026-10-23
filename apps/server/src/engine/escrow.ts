@@ -253,7 +253,7 @@ function tellWaitingBorrowers(cb: EscrowCallbacks, waiting: Array<{ buyer_pubkey
  * How often a new deal from the same member on the same listing pushes the listing's author: a request, or a 1-step
  * accept, cancelled by its maker and made again, over and over, is one push an hour, not one each time (the push audit's
  * item 2: 100 pushes in 0.7 s to an author who had blocked nobody, before the 100 a day stopped it; with a 1-step accept
- * and its cancel, two a turn). Anyone could, and a block made in the phone app never reaches the node to stop it. The
+ * and its cancel, two a turn). Anyone could, and a block made in the phone app may not have reached the node yet. The
  * deal itself is as any other's: in the author's deals, with its SYSTEM lines and its escrow. Kept in memory, as the
  * host's "people are waiting" push is (engine/posts.ts): a restart may send one more.
  */

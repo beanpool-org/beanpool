@@ -158,6 +158,8 @@ function reducedMotion(): boolean {
 
 /** A card that spans the grid's row: Needs you at the top, the community card at the bottom, and the notes under the first card. */
 const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
+/** Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3). */
+const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST;
 
 /**
  * How many columns Home's cards stand in (DESIGN-home-wide-and-content-fable.md D1, slice W2; Auto only): the page's own
@@ -1181,9 +1183,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const id = card.type as HomeCardId;
         const c = a.cards;
         const title = nameOf(card);
-        // Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3).
-        const wide = card.type === FIXED_FIRST || card.type === FIXED_LAST;
-        const common = { id: card.id, title, menu: menuFor(card), style: wide ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
+        const common = { id: card.id, title, menu: menuFor(card), style: spansRow(card.type) ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
         switch (card.type) {
             case 'needs':
                 return c.needs && (
@@ -1634,6 +1634,33 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;
     const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
+    // The fewer-cards note and the one-time hint go under the first card, the row's full width. Side by side that holds
+    // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
+    // a one-cell card would push the cards beside it to the next row, leaving the first row empty (PR #2411 review). There
+    // the notes stand above the grid, as wide as it. One column keeps them under the first card, as before.
+    const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+    const firstNotes = (under: boolean) => (
+        <>
+            {fewerOpen && !isVisitor && (
+                <p data-testid="home-fewer" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                    <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
+                    <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
+                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                        ✕
+                    </button>
+                </p>
+            )}
+            {hintOpen && !isVisitor && !startUp && (
+                <p data-testid="home-hint" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                    <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
+                    <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
+                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                        ✕
+                    </button>
+                </p>
+            )}
+        </>
+    );
 
     return (
         <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
@@ -1659,6 +1686,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
                     </p>
                 )}
+                {!notesUnderFirst && firstNotes(false)}
                 {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
                     own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
                     Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}
@@ -1669,24 +1697,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     {shown.map((card, i) => (
                         <Fragment key={card.id}>
                             {renderCard(card, i)}
-                            {i === 0 && fewerOpen && !isVisitor && (
-                                <p data-testid="home-fewer" style={FULL_ROW} className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                                    <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
-                                    <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
-                                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                        ✕
-                                    </button>
-                                </p>
-                            )}
-                            {i === 0 && hintOpen && !isVisitor && !startUp && (
-                                <p data-testid="home-hint" style={FULL_ROW} className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                                    <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
-                                    <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
-                                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                        ✕
-                                    </button>
-                                </p>
-                            )}
+                            {i === 0 && notesUnderFirst && firstNotes(true)}
                         </Fragment>
                     ))}
                 </div>

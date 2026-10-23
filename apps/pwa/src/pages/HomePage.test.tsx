@@ -2478,9 +2478,9 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     const grid = () => screen.getByTestId('home-grid');
     const columns = () => grid().style.gridTemplateColumns;
     const span = (id: string) => screen.getByTestId(`home-card-${id}`).style.gridColumn;
-    async function landAt(w: number) {
+    async function landAt(w: number, cards: HomeAnswer['cards'] = { needs: NEEDS }) {
         width = w;
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { needs: NEEDS })));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, cards)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-community');
     }
@@ -2536,6 +2536,51 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(hint.parentElement).toBe(grid());
         expect(hint.style.gridColumn).toBe('1 / -1');
         expect(hint.previousElementSibling).toBe(screen.getByTestId('home-card-needs'));
+    });
+
+    // With nothing waiting the node sends no Needs you, so the first card is one cell: a full-row note after it would push
+    // the cards after it to the next row and leave the rest of the first row empty (PR #2411 review). jsdom lays nothing
+    // out, so these check where the note sits in the page.
+    const aboveTheGrid = (note: HTMLElement) => {
+        expect(grid().contains(note)).toBe(false);
+        expect(note.parentElement).toBe(grid().parentElement);
+        expect(note.compareDocumentPosition(grid()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(note.previousElementSibling?.getAttribute('data-testid') ?? '').not.toMatch(/^home-card-/);
+        // Only cards in the grid: the first card's row is the first card and the cards after it.
+        for (const el of Array.from(grid().children)) expect(el.getAttribute('data-testid') ?? '').toMatch(/^home-card-/);
+    };
+
+    it('with no Needs you, the one-time hint stands above the grid at its full width, and the first card keeps its row', async () => {
+        await landAt(1400, {});
+        const hint = await screen.findByTestId('home-hint');
+        expect(cardIds()[0]).toBe('tips');
+        aboveTheGrid(hint);
+        expect(span('tips')).toBe('');
+    });
+
+    it('with no Needs you, the fewer-cards note also stands above the grid, and so does the hint with it', async () => {
+        width = 800;
+        nodeV2(answer(), null);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const fewer = await screen.findByTestId('home-fewer');
+        expect(cardIds()[0]).not.toBe('needs');
+        aboveTheGrid(fewer);
+        aboveTheGrid(screen.getByTestId('home-hint'));
+    });
+
+    it('in one column the hint stays straight under the first card, with or without Needs you, as before', async () => {
+        await landAt(360, {});
+        const hint = await screen.findByTestId('home-hint');
+        expect(hint.parentElement).toBe(grid());
+        expect(hint.previousElementSibling).toBe(screen.getByTestId('home-card-tips'));
+    });
+
+    it('a page that narrows to one column takes the hint back under the first card', async () => {
+        await landAt(1400, {});
+        aboveTheGrid(await screen.findByTestId('home-hint'));
+        width = 360;
+        act(() => { for (const r of resized) r(); });
+        expect(screen.getByTestId('home-hint').previousElementSibling).toBe(screen.getByTestId('home-card-tips'));
     });
 
     it('side by side, the "…" says Move earlier · Move later (up can be left), and moves the card in the saved list', async () => {

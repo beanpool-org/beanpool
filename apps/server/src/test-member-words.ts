@@ -20,7 +20,8 @@
  *      sentence), the same notice data either way; the standby's copy never carries `lang`.
  *   5. Nothing marked for translation is a sentence an app matches on, or starts with a code the apps read: the hand-kept
  *      list (APP_MATCHES), and every match the apps' sources hold today, found where it is written (appMatchers), so a
- *      new `e.message.includes('…')` on a marked sentence fails here.
+ *      new `e.message.includes('…')` on a marked sentence fails here. The post screen's trade steps, whose older-node
+ *      English the phone keeps in a list (changed-elsewhere.ts), answer each sentence that holds it with a code.
  *   6. Each family a member meets (the gate, join and profile, ledger, …): one of its refusals in English as before, and
  *      in French with the same status, code and fields; the suite's French is every marked sentence after a sign.
  *
@@ -545,7 +546,8 @@ const neverWhereMatched = (text: string, matcher: string) => NEVER_WHERE_MATCHED
 const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i, where: 'apps/native/app/(tabs)/people.tsx, public-profile.tsx (offline)' },
     // apps/native/app/post/[id].tsx reads a deal that changed elsewhere by its code (transaction_gone, post_gone), and an
-    // older node's English only when the answer has none (utils/changed-elsewhere.ts): "not found" is free to translate.
+    // older node's English only when the answer has none (utils/changed-elsewhere.ts): "not found" is free to translate
+    // where the screen's trade steps give it a code (TRADE_STEPS, below).
     { phrase: /already been used|already used|already a member|already been redeemed/i, where: 'apps/native/app/welcome.tsx, utils/invite-next.ts, apps/pwa WelcomePage.tsx (invites)' },
     { phrase: /set a profile photo/i, where: 'apps/native/utils/db.ts (the profile heal)' },
     { phrase: /relationship not found/i, where: 'apps/native/utils/db.ts' },
@@ -627,6 +629,68 @@ function appMatchers(root: string, words: any): AppMatcher[] {
     return found;
 }
 
+/**
+ * The post screen's "already updated elsewhere" (apps/native/utils/changed-elsewhere.ts) reads the code beside a refusal
+ * of its trade steps, and an older node's English (OLDER_NODES_WORDS) only when there is none. It looks for those words in
+ * a list (`message.includes(words)`), which appMatchers can't see, so the list is read from the module: a sentence the
+ * steps are refused with that holds one of them and is marked goes with a code, or a member reading another language gets
+ * the node's sentence where English gets the screen's own words and a refresh. The steps are the routes the screen calls
+ * and the escrow functions behind them, with the functions of their own file they call.
+ */
+const TRADE_STEPS: { file: string; steps: string[] }[] = [
+    { file: 'apps/server/src/routes/marketplace.ts', steps: ['/api/marketplace/posts/accept', '/api/marketplace/posts/request', '/api/marketplace/transactions/cancel'] },
+    { file: 'apps/server/src/engine/escrow.ts', steps: ['acceptPost', 'requestPost', 'cancelPostTransaction'] },
+];
+/** A sentence on those steps that holds the older words but is not the post or the deal moving on: no code, the node's words. */
+const NOT_MOVED_ON: { sentence: string; why: string }[] = [
+    { sentence: 'Member not found', why: "the one acting, or the listing's author, has no member's row here (escrow.ts assertMemberActive, assertAccountOpen)" },
+];
+
+/** Each string written in the trade steps, and whether a code goes beside it (`{ error, code }`, `Object.assign(err, { code })`). */
+function tradeStepStrings(root: string): { found: string[]; strings: { at: string; text: string; coded: boolean }[] } {
+    const found: string[] = [];
+    const strings: { at: string; text: string; coded: boolean }[] = [];
+    for (const { file, steps } of TRADE_STEPS) {
+        const sf = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+        const own = new Map<string, ts.Node>();
+        const starts: ts.Node[] = [];
+        const index = (n: ts.Node): void => {
+            if (ts.isFunctionDeclaration(n) && n.name) own.set(n.name.text, n);
+            // router.post('/api/…', handler)
+            if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'post'
+                && n.arguments[0] && ts.isStringLiteral(n.arguments[0]) && steps.includes(n.arguments[0].text)) {
+                starts.push(n);
+                found.push(n.arguments[0].text);
+            }
+            ts.forEachChild(n, index);
+        };
+        index(sf);
+        for (const step of steps) if (own.has(step)) { starts.push(own.get(step)!); found.push(step); }
+        const withCode = (n: ts.Node) => ts.isObjectLiteralExpression(n)
+            && n.properties.some(p => !!p.name && ts.isIdentifier(p.name) && p.name.text === 'code');
+        const coded = (n: ts.Node): boolean => {
+            for (let up = n.parent; up && !ts.isBlock(up) && !ts.isSourceFile(up); up = up.parent) {
+                if (withCode(up)) return true;
+                if (ts.isCallExpression(up) && up.expression.getText(sf) === 'Object.assign' && up.arguments.some(withCode)) return true;
+            }
+            return false;
+        };
+        const seen = new Set<ts.Node>(starts);
+        const walk = (n: ts.Node): void => {
+            if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+                const fn = own.get(n.expression.text);
+                if (fn && !seen.has(fn)) { seen.add(fn); walk(fn); }
+            }
+            if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
+                strings.push({ at: `${file}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`, text: n.text, coded: coded(n) });
+            }
+            ts.forEachChild(n, walk);
+        };
+        starts.forEach(walk);
+    }
+    return { found, strings };
+}
+
 async function testNothingMatchedIsMarked(): Promise<void> {
     console.log('\n--- 5. Nothing an app matches on is marked for translation ---');
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -656,6 +720,24 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     assert(caught.length === 0, `no marked sentence is one an app's source matches on${caught.length ? `: ${caught.join('; ')}` : ''}`);
     assert(NEVER_A_NODES_WORDS.every(n => matchers.some(m => m.file === n.file && m.looksFor === n.looksFor)),
         "each match set aside as never a node's words is still in its file (else it comes off the list)");
+
+    // The post screen's trade steps: each marked sentence they are refused with that holds an older node's words goes
+    // with a code (TRADE_STEPS).
+    const { OLDER_NODES_WORDS } = await import(path.join(root, 'apps/native/utils/changed-elsewhere.ts'));
+    const older = [...new Set(Object.values(OLDER_NODES_WORDS as Record<string, string[]>).flat())];
+    const { found, strings } = tradeStepStrings(root);
+    const steps = TRADE_STEPS.flatMap(t => t.steps);
+    const codedSentences = ['Post not found or not active', 'Post not found', 'Post is not active', 'Cannot request — post not found or unauthorized',
+        'Cannot cancel — transaction not found or not authorized'];
+    assert(older.length >= 3 && steps.every(s => found.includes(s)) && codedSentences.every(c => strings.some(s => s.text === c && s.coded)),
+        `the screen's trade steps are found where they are written (${found.length} of ${steps.length}), their coded refusals among them, and the older words read from the phone (${older.join(', ')})`);
+    const markedText = new Set(marked.map((c: any) => c.text));
+    const uncoded = strings.filter(s => !s.coded && markedText.has(s.text) && older.some(w => s.text.includes(w))
+        && !NOT_MOVED_ON.some(n => n.sentence === s.text));
+    assert(uncoded.length === 0, `each marked sentence the screen's trade steps are refused with that holds an older node's words goes with a code${
+        uncoded.length ? `: ${uncoded.map(s => `${s.at} "${s.text}"`).join('; ')}` : ''}`);
+    assert(NOT_MOVED_ON.every(n => strings.some(s => s.text === n.sentence && !s.coded)),
+        'each sentence set aside as not the trade moving on is still one of the steps\' (else it comes off the list)');
     // The push sentences are core's keys, so the drafting lane finds them where the apps' own are.
     const core = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'core'))[0];
     const coreKeys = new Set(core.calls.filter((c: any) => c.fn === 'word').map((c: any) => wordKey(c.text)));

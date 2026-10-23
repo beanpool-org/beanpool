@@ -19,7 +19,7 @@ import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
-import { chatLineWords } from '../lib/chat-line-words';
+import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
@@ -1225,7 +1225,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const g = groupShown?.get(parent.id);
         if (g) {
             // The name and words of a line that is nobody's, or a tombstone's, are the app's own: in the member's language.
-            const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : chatLineWords(g.name ?? GROUP_LINE_UNVERIFIED_NAME);
+            const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : chatAuthorWords(g.name ?? GROUP_LINE_UNVERIFIED_NAME);
             const text = g.text === null ? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId) : g.unattributed || g.nodeLine ? chatLineWords(g.text) : g.text;
             return { author, text, note: null, named: false };
         }
@@ -1840,7 +1840,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.5rem 0', maxWidth: '90%',
                                 }}>
                                     {groupLine.name && (
-                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{chatLineWords(groupLine.name)}</div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{chatAuthorWords(groupLine.name)}</div>
                                     )}
                                     <div style={{
                                         background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '16px', padding: '0.4rem 0.8rem',
@@ -2004,7 +2004,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 {!isMe && activeConv.type === 'group_thread' && (
                                     <div data-testid="group-line-author" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
                                         {groupLine
-                                            ? <>{chatLineWords(groupLine.name)}{groupLine.nameHint && <span style={{ opacity: 0.75 }}> · {chatLineWords(groupLine.nameHint)}</span>}</>
+                                            ? <>{chatAuthorWords(groupLine.name)}{groupLine.nameHint && <span style={{ opacity: 0.75 }}> · {chatLineWords(groupLine.nameHint)}</span>}</>
                                             : (membersByPublicKey.get(msg.authorPubkey)?.callsign || msg.authorPubkey.substring(0, 8))}
                                     </div>
                                 )}

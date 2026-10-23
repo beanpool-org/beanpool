@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, dmLineMarkText, dmQuoteLabel, pseudoLocalise, setLanguage } from '@beanpool/core';
-import { chatLineWords, knownChatLines } from './chat-line-words';
+import { chatAuthorWords, chatLineWords, knownChatLines } from './chat-line-words';
 import {
     GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_UNOPENABLE_TEXT, GROUP_KEY_MISSING_TEXT, GROUP_KEY_ROLLBACK_TEXT, GROUP_KEY_ROSTER_TEXT,
     GROUP_KEY_ROSTER_UNREAD_TEXT, GROUP_KEY_STORE_UNREAD_TEXT, GROUP_KEY_WAITING_TEXT,
@@ -94,5 +94,26 @@ describe('the web\'s chat lines with a name, a date or a number in them', () => 
         for (const file of ['group-chat-keys.ts', 'group-chat-lines.ts']) {
             expect(fs.readFileSync(path.resolve(__dirname, file), 'utf8'), file).toContain('`The node answered ${res.status}.`');
         }
+    });
+});
+
+describe("who a group chat line is from (chatAuthorWords)", () => {
+    it('only the two stand-ins are the app\'s: in English as written, in the pseudo-locale translated', () => {
+        for (const name of [GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_FORMER_MEMBER]) expect(chatAuthorWords(name)).toBe(name);
+        setLanguage('xx');
+        expect(chatAuthorWords(GROUP_LINE_UNVERIFIED_NAME)).toBe(chatLineWords(GROUP_LINE_UNVERIFIED_NAME));
+        expect(chatAuthorWords(GROUP_LINE_FORMER_MEMBER)).toBe(chatLineWords(GROUP_LINE_FORMER_MEMBER));
+        expect(outsideBrackets(chatAuthorWords(GROUP_LINE_UNVERIFIED_NAME))).toBe(false);
+        expect(outsideBrackets(chatAuthorWords(GROUP_LINE_FORMER_MEMBER))).toBe(false);
+    });
+
+    it('a member called "Notice", or anything else the table knows, keeps the name as written in every language', () => {
+        setLanguage('xx');
+        expect(chatAuthorWords('Notice')).toBe('Notice');
+        const spelledLikeALine = knownChatLines().filter((line) => line !== GROUP_LINE_UNVERIFIED_NAME && line !== GROUP_LINE_FORMER_MEMBER);
+        expect(spelledLikeALine.filter((line) => chatAuthorWords(line) !== line)).toEqual([]);
+        expect(chatAuthorWords('Ana')).toBe('Ana');
+        expect(chatAuthorWords(null)).toBeNull();
+        expect(chatAuthorWords(undefined)).toBeUndefined();
     });
 });

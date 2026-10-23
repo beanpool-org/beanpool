@@ -11,7 +11,8 @@
  * it stands for, so a sentence changed there fails a test rather than quietly showing English.
  *
  * Anything else, a member's words above all and the node's own, is shown exactly as given. Only what the code writes is
- * passed here (the screens never pass a line a member wrote).
+ * passed here (the screens never pass a line a member wrote); a line's author goes through chatAuthorWords, never
+ * chatLineWords, since a member's callsign can be spelled like a line the table knows.
  */
 import { t, word, type WordKey } from '@beanpool/core';
 
@@ -97,4 +98,20 @@ export function chatLineWords(english: string | null | undefined): string | null
         if (m) return f.words(m);
     }
     return english;
+}
+
+/** lib/group-line-display.ts: who a sealed line is from when the browser has no name for it. */
+const STAND_IN_AUTHORS: ReadonlySet<string> = new Set(['Unverified', 'A former member']);
+
+/**
+ * Who a group chat line is from, as the screen shows it (over a bubble, a quote, a line that names nobody): only the
+ * line code's two stand-ins are translated. Any other name is a member's callsign or the node's name for someone, exactly
+ * as written, even one spelled like a line this table knows ("Notice", "Not confirmed"). The "no longer in this group"
+ * hint beside a name is the app's own: that goes through chatLineWords.
+ */
+export function chatAuthorWords(name: string): string;
+export function chatAuthorWords(name: string | null | undefined): string | null | undefined;
+export function chatAuthorWords(name: string | null | undefined): string | null | undefined {
+    if (typeof name !== 'string') return name;
+    return STAND_IN_AUTHORS.has(name) ? t(FIXED[name]) : name;
 }

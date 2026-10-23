@@ -42,7 +42,7 @@ vi.mock('../components/ReportModal', () => ({
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 
 /** The node: each member's list, and each conversation as GET /api/messages/:id reads it. */
-const node = vi.hoisted(() => ({ list: null as any, reads: {} as Record<string, { conversation: any; messages: any[] }>, gates: {} as Record<string, Promise<void>> }));
+const node = vi.hoisted(() => ({ list: null as any, reads: {} as Record<string, { conversation: any; messages: any[] }>, gates: {} as Record<string, Promise<void> | undefined> }));
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => node.list),
     getConversationMessages: vi.fn(async (id: string) => {

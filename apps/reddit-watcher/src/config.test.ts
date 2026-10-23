@@ -31,10 +31,10 @@ describe('devvit.json', () => {
         expect(json.triggers).toEqual({ onPostCreate: served, onCommentCreate: served });
     });
 
-    it('keeps the topic and token as secrets with nothing in the repo', () => {
+    it('keeps the topic, the token and the inbox topic as secrets with nothing in the repo', () => {
         const global = json.settings.global;
-        expect(Object.keys(global).sort()).toEqual(['ntfyToken', 'ntfyUrl']);
-        for (const name of ['ntfyUrl', 'ntfyToken']) {
+        expect(Object.keys(global).sort()).toEqual(['agentNtfyUrl', 'ntfyToken', 'ntfyUrl']);
+        for (const name of ['ntfyUrl', 'ntfyToken', 'agentNtfyUrl']) {
             expect(global[name]).toMatchObject({ type: 'string', isSecret: true });
             // The 0.15.0 schema refuses a default on a secret (the docs' example has one; the CLI would refuse it).
             expect(global[name]).not.toHaveProperty('defaultValue');

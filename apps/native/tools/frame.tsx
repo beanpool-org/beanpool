@@ -85,6 +85,16 @@ export const olderNodeLine = () => t("Your community's server can't keep a copy 
 /** The toggle or Remove my data, when the server couldn't be reached or refused: nothing changed. */
 export const copyFailedLine = () => t("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
 
+/**
+ * The toggle, when switching on found the document more than the server keeps (its `max`, `maxBytes`): nothing changed,
+ * and trying again won't either until it is smaller. The tool's own words for how to make room (its manifest's tooBig),
+ * or the template's.
+ */
+export function copyTooBigLine(manifest: Pick<ToolManifest, 'tooBig'>, doc: unknown, maxBytes: number | undefined): string {
+    if (manifest.tooBig && maxBytes !== undefined) return toolLineText(manifest.tooBig(doc, maxBytes));
+    return t("This is more than your community's server keeps for now, so nothing changed and it stays on this phone only. Make it smaller, then switch the copy on again.");
+}
+
 /** Remove my data's question: with the copy on, it says the server's copy goes too, and what another phone does. */
 export function removeQuestion(manifest: Pick<ToolManifest, 'permissions'>, settings: ToolSettings): string {
     if (keepsNodeCopy(manifest) && settings.nodeCopy !== false) {
@@ -237,8 +247,11 @@ export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null
     settings: ToolSettings;
     copyNote?: ToolCopyNote;
     ownerKind?: 'member' | 'enterprise';
-    /** The toggle's round trip: under way (the switch waits), or the last one failed (its line, the switch unchanged). */
-    copy?: { busy: boolean; failed: 'failed' | 'older-node' | null };
+    /**
+     * The toggle's round trip: under way (the switch waits), or the last one failed (its line, the switch unchanged);
+     * `tooBig` is what a `too-big` one says (copyTooBigLine).
+     */
+    copy?: { busy: boolean; failed: 'failed' | 'older-node' | 'too-big' | null; tooBig?: string };
     /** Null while unknown; false shows the line and the button that asks. */
     notificationsAllowed: boolean | null;
     colors: AppColors;
@@ -277,6 +290,11 @@ export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null
                                 {copy.failed === 'failed' ? (
                                     <Text style={[editHomeStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-failed">
                                         {copyFailedLine()}
+                                    </Text>
+                                ) : null}
+                                {copy.failed === 'too-big' ? (
+                                    <Text style={[editHomeStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-too-big">
+                                        {copy.tooBig ?? copyTooBigLine(manifest, undefined, undefined)}
                                     </Text>
                                 ) : null}
                             </>

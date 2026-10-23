@@ -1088,6 +1088,37 @@ export function rebuildSystemLogsCheck(d: Database.Database): boolean {
 }
 
 /**
+ * Rebuilds member_tool_state when its CHECK on `body` is the 64 KB of before, not the 128 KB any tool may now name
+ * (engine/tool-state.ts TOOL_STATE_CEILING_BYTES: the Tool shed's, Marty, 23 Oct 2026), keeping every row and its stamp;
+ * true when it rebuilt. Idempotent. Its replication watermark (a plain table's: idx_member_tool_state_updated_at and the
+ * two triggers that stamp updated_at) is dropped with the old table and made again by schema.sql and stampPlainTables,
+ * so this must run before them in initSchema, as it does (test-tool-state-check-migration.ts checks the boot leaves all
+ * three and a write still stamped). Foreign keys are off on this database, so nothing is checked or cascaded while the
+ * table is briefly missing. Each tool's own bound stays the engine's.
+ */
+export function rebuildToolStateBodyCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='member_tool_state'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes('<= 131072)')) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS member_tool_state_migration;
+            CREATE TABLE member_tool_state_migration (
+                public_key TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
+                body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
+                updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                PRIMARY KEY (public_key, tool)
+            );
+            INSERT INTO member_tool_state_migration (public_key, tool, body, updated_at)
+                SELECT public_key, tool, body, updated_at FROM member_tool_state;
+            DROP TABLE member_tool_state;
+            ALTER TABLE member_tool_state_migration RENAME TO member_tool_state;
+        `);
+    })();
+    return true;
+}
+
+/**
  * Adds health_access_log's `token_id` and `token_name` (the automation token behind a look, #1613's actor survey) to a
  * table from before them: ALTER TABLE ADD COLUMN, so every row is kept as it was, NULL in both (a person's look, or one
  * from before the token was recorded). Nothing on a table that has them, or none; true when it added. Idempotent.
@@ -1739,6 +1770,14 @@ export function initSchema() {
         if (rebuildSystemLogsCheck(db)) console.log("[DB] ✅ Migrated system_logs CHECK constraint to allow the AI assistants' AGENT category");
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate system_logs for the AGENT category:', err?.message || err);
+    }
+    // member_tool_state: its CHECK lets in 128 KB, the most a tool may name (a table from before has 64 KB, so the Tool
+    // shed's bigger copy would fail to write). Before schema.sql, as the logs above, and before stampPlainTables, which
+    // makes its watermark index and triggers again after the rebuild drops them.
+    try {
+        if (rebuildToolStateBodyCheck(db)) console.log('[DB] ✅ Migrated member_tool_state CHECK constraint to let in 128 KB copies');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate member_tool_state for 128 KB copies:', err?.message || err);
     }
     try {
         if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');

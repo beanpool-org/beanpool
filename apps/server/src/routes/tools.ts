@@ -7,6 +7,9 @@
  *                                                   or 410 { error, code: 'tool_copy_off', deletedAt } (below)
  *   DELETE /api/tools/:tool                       → { success: true, tool, removed }
  *
+ * `max` is the most this tool's document may take here (engine/tool-state.ts toolStateMaxBytes: the Tool shed's 128 KB,
+ * 64 KB for a tool that names none), which the apps hold to; a node from before it answers 65536 for every tool.
+ *
  * and the same for an enterprise's tools, by a keeper of it, with the enterprise as the owner:
  *
  *   GET | PUT | DELETE /api/treasury/:treasury/tools/:tool
@@ -47,7 +50,7 @@ import { db } from '../db/db.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import {
-    readToolState, writeToolState, deleteToolState, toolStateDeletedAt, toolIdRefusal, ToolStateRefusal, TOOL_STATE_MAX_BYTES,
+    readToolState, writeToolState, deleteToolState, toolStateDeletedAt, toolIdRefusal, ToolStateRefusal, toolStateMaxBytes,
 } from '../engine/tool-state.js';
 import type Koa from 'koa';
 import type { RouteDeps } from './types.js';
@@ -140,7 +143,7 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => string | undefined) {
                 updatedAt: state?.updatedAt ?? null,
                 deletedAt,
                 bytes: state?.bytes ?? 0,
-                max: TOOL_STATE_MAX_BYTES,
+                max: toolStateMaxBytes(tool),
             });
         },
         put: async (ctx: Ctx) => {
@@ -149,7 +152,7 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => string | undefined) {
             if (!owner || !tool) return;
             try {
                 const state = writeToolState(owner, tool, ctx.requestBody?.doc, { turnOn: ctx.requestBody?.turnOn === true });
-                answer(ctx, { success: true, tool, updatedAt: state.updatedAt, bytes: state.bytes, max: TOOL_STATE_MAX_BYTES });
+                answer(ctx, { success: true, tool, updatedAt: state.updatedAt, bytes: state.bytes, max: toolStateMaxBytes(tool) });
             } catch (e) {
                 if (!answeredRefusal(ctx, e)) throw e;
             }

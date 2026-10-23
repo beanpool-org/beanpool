@@ -19,7 +19,9 @@
  *      enterprise or a member's key in the path 404; a second keeper of the same enterprise shares them; the keeper's own
  *      and the enterprise's are apart; one keeper's removal refuses another keeper's ordinary upload, and that keeper's
  *      switch-on writes (test 5)
- *   3. the bounds: 64 KB as stored taken, a byte over refused in a sentence and nothing written (UTF-8 counted as bytes);
+ *   3. the bounds: 64 KB as stored taken for a tool that names none, a byte over refused in a sentence and nothing
+ *      written (UTF-8 counted as bytes); the Tool shed's own 128 KB (its manifest's), taken to the byte and a byte over
+ *      refused the same way; every answer says the tool's bound (`max`);
  *      a body far over refused unread; a document that is no JSON object; bad tool ids and the reserved `community:`;
  *      32 different tools, the 33rd refused, a deleted one still counting and its own place still its own switch-on's;
  *      at the cap a delete of a tool never held writes nothing (test 2)
@@ -32,7 +34,7 @@
  *      to read; a re-key moves the copies to the new key, and the old key reads nothing; a removal under the old key
  *      refuses the new key's ordinary upload, 410 (test 7); a recovery onto a key that already holds a copy or a removal
  *      of a tool keeps the new key's, and the old key's removal goes, hiding nothing
- *   7. replication: a whole copy carries every row verbatim and a new standby holds them exactly; a delta carries a new
+ *   7. replication: a whole copy carries every row verbatim (a 128 KB shed among them) and a new standby holds them exactly; a delta carries a new
  *      copy, a delete's tombstone and a delete of nothing's, and the standby follows them, answering the removal with no
  *      row as the main server does (test 6); a delete and a write again in one millisecond, and a
  *      write then a delete, order on the standby as on the main server; a delete and then a re-key between two pulls,
@@ -197,8 +199,11 @@ async function main(): Promise<void> {
     const feedBefore = feedCount();
     const none = await call('GET', ann, own('things'));
     assert(none.status === 200 && none.body?.tool === 'things' && none.body?.doc === null && none.body?.updatedAt === null
-        && none.body?.deletedAt === null && none.body?.max === 65_536,
-        `none kept yet: 200, doc, updatedAt and deletedAt null, and the bound (${show(none)})`);
+        && none.body?.deletedAt === null && none.body?.max === 131_072,
+        `none kept yet: 200, doc, updatedAt and deletedAt null, and the bound: the Tool shed's own 128 KB (${show(none)})`);
+    const otherNone = await call('GET', ann, own('garden'));
+    assert(otherNone.status === 200 && otherNone.body?.max === 65_536,
+        `a tool this build doesn't have keeps the 64 KB of a tool that names no bound (${show(otherNone)})`);
     const doc1 = { v: 1, things: [{ id: 't1', name: 'Drill', note: 'Lent to Steve since 3 Oct' }], ownerPubkey: bo.pk, unicode: 'ñ 🌱 漢' };
     const w1 = await put(ann, own('things'), doc1);
     const r1 = rowOf(ann.pk, 'things');
@@ -406,13 +411,31 @@ async function main(): Promise<void> {
     const sized = (bytes: number, ch = 'a') => ({ v: 1, p: ch.repeat(Math.floor((bytes - 14) / Buffer.byteLength(ch, 'utf8'))) });
     const full = sized(65_536);
     assert(Buffer.byteLength(JSON.stringify(full), 'utf8') === 65_536 && Buffer.byteLength(JSON.stringify(sized(65_537)), 'utf8') === 65_537, 'setup: the sizes are exact');
-    const atMax = await put(eve, own('things'), full);
-    assert(atMax.status === 200 && atMax.body?.bytes === 65_536 && Buffer.byteLength(rowOf(eve.pk, 'things')?.body ?? '', 'utf8') === 65_536,
-        `64 KB as stored is taken (${show(atMax)})`);
-    const over = await put(eve, own('things'), sized(65_537));
+    // A tool this build doesn't have (no manifest names its bound): 64 KB. Kim's, so Eve's count of tools below is as it was.
+    const kim = member('Kim');
+    const atMax = await put(kim, own('kit'), full);
+    assert(atMax.status === 200 && atMax.body?.bytes === 65_536 && atMax.body?.max === 65_536 && Buffer.byteLength(rowOf(kim.pk, 'kit')?.body ?? '', 'utf8') === 65_536,
+        `64 KB as stored is taken, for a tool that names no bound (${show(atMax)})`);
+    const over = await put(kim, own('kit'), sized(65_537));
     assert(over.status === 413 && over.body?.code === 'tool_doc_too_large' && /at most 64 KB/.test(over.body?.error ?? '') && /\.$/.test(over.body?.error ?? ''),
         `a byte over is refused in a sentence (${show(over)})`);
-    assert(Buffer.byteLength(rowOf(eve.pk, 'things')?.body ?? '', 'utf8') === 65_536, 'and nothing is written: the copy before stays');
+    assert(Buffer.byteLength(rowOf(kim.pk, 'kit')?.body ?? '', 'utf8') === 65_536, 'and nothing is written: the copy before stays');
+    // The Tool shed names 128 KB (@beanpool/core THINGS_DOC_BYTES): past 64 KB taken, to the byte, and a byte over refused as before.
+    const shedFull = sized(131_072);
+    assert(Buffer.byteLength(JSON.stringify(shedFull), 'utf8') === 131_072 && Buffer.byteLength(JSON.stringify(sized(131_073)), 'utf8') === 131_073, 'setup: the shed sizes are exact');
+    const shedPast64 = await put(eve, own('things'), sized(65_537));
+    assert(shedPast64.status === 200 && shedPast64.body?.max === 131_072, `the shed takes a byte past 64 KB (${show(shedPast64)})`);
+    const shedAtMax = await put(eve, own('things'), shedFull);
+    assert(shedAtMax.status === 200 && shedAtMax.body?.bytes === 131_072 && shedAtMax.body?.max === 131_072
+        && Buffer.byteLength(rowOf(eve.pk, 'things')?.body ?? '', 'utf8') === 131_072,
+        `128 KB as stored is taken for the shed, and the CHECK lets it in (${show(shedAtMax)})`);
+    const shedOver = await put(eve, own('things'), sized(131_073));
+    assert(shedOver.status === 413 && shedOver.body?.code === 'tool_doc_too_large' && /at most 128 KB/.test(shedOver.body?.error ?? '') && /\.$/.test(shedOver.body?.error ?? ''),
+        `a byte over 128 KB is refused in the same sentence (${show(shedOver)})`);
+    assert(Buffer.byteLength(rowOf(eve.pk, 'things')?.body ?? '', 'utf8') === 131_072, 'and nothing is written: the shed before stays');
+    const shedRead = await call('GET', eve, own('things'));
+    assert(shedRead.status === 200 && shedRead.body?.bytes === 131_072 && shedRead.body?.max === 131_072 && same(shedRead.body?.doc, shedFull),
+        `and read back whole (${shedRead.status}, ${shedRead.body?.bytes} bytes)`);
     const wide = sized(65_536, 'é'); // 32,775 characters, 65,536 bytes
     const wideOver = await put(eve, own('garden'), { ...wide, p: wide.p + 'é' });
     assert(Buffer.byteLength(JSON.stringify(wide), 'utf8') === 65_536 && JSON.stringify(wide).length < 40_000 && wideOver.status === 413 && rowOf(eve.pk, 'garden') === undefined,
@@ -632,6 +655,9 @@ async function main(): Promise<void> {
     setNodeRole('primary');
     reconcileLedgerFromDb();
     assert(importError === '' && same(everyRow(), mainRows), `the standby holds them exactly, row for row and stamp for stamp (${importError || `${everyRow().length} rows`})`);
+    // Eve's shed of section 3, on her new key since section 6.
+    const eveShedBytes = Buffer.byteLength(rowOf(eveNew.pk, 'things')?.body ?? '', 'utf8');
+    assert(eveShedBytes === 131_072, `a 128 KB shed among them, whole: the standby's CHECK lets it in (${eveShedBytes} bytes)`);
     const standbyRead = await call('GET', ann, own('things'));
     assert(standbyRead.status === 200 && standbyRead.body?.doc?.v === 7, `and answers its owner from them (${show(standbyRead)})`);
 
@@ -829,10 +855,10 @@ async function main(): Promise<void> {
         }
     };
     for (const dir of ['apps/server/src', 'packages']) walk(path.join(root, dir));
-    const EXPECTED = ['apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+    const EXPECTED = ['apps/server/src/db/db.ts', 'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
         'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts'];
     assert(same(named.sort(), EXPECTED),
-        `only the store, its schema, its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
+        `only the store, its schema and its one rebuild (db.ts, a CHECK raised, rows copied across unread), its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

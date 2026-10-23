@@ -134,9 +134,12 @@ const server = vi.hoisted(() => {
         clock: Date.parse('2026-10-21T08:00:00.000Z'),
         seen: null as null | (() => number),
         before: null as null | ((method: string) => void),
+        /** The `max` its answers say it keeps of a tool's document; none: today's fake, which says none. */
+        max: undefined as number | undefined,
         reset() {
             s.rows.clear(); s.tombs.clear(); s.log.length = 0; s.mode = 'up'; s.sendsDeletedAt = false; s.refusesOff = false; s.seen = null; s.before = null;
             s.clock = Date.parse('2026-10-21T08:00:00.000Z');
+            s.max = undefined;
         },
         answer(method: string, path: string, body?: unknown): { status: number; json: unknown } | null {
             s.before?.(method);
@@ -147,7 +150,7 @@ const server = vi.hoisted(() => {
             const tool = m[1];
             const row = s.rows.get(tool);
             const now = (s.clock += 1000);
-            if (method === 'GET') return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(s.sendsDeletedAt || s.refusesOff ? { deletedAt: row ? null : s.tombs.get(tool) ?? null } : {}) } };
+            if (method === 'GET') return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(s.sendsDeletedAt || s.refusesOff ? { deletedAt: row ? null : s.tombs.get(tool) ?? null } : {}), ...(s.max ? { max: s.max } : {}) } };
             if (method === 'PUT') {
                 if (s.refusesOff && (body as { turnOn?: unknown }).turnOn !== true && !row && s.tombs.has(tool)) {
                     return { status: 410, json: { error: "This tool's copy was switched off, so nothing was kept. Switch it on again in Settings to keep one.", code: 'tool_copy_off', deletedAt: s.tombs.get(tool) } };
@@ -795,7 +798,7 @@ describe('the route around a tool', () => {
 describe('the host given to a tool has only what its manifest declared', () => {
     const ctx = (manifest: ToolManifest<any>): PhoneHostContext<any> => ({
         manifest, owner: { kind: 'member', publicKey: ME.publicKey, name: ME.callsign }, node: { url: null, profile: 'local', features: null },
-        doc: { get: () => manifest.doc.empty(), set: async () => {} }, navigate: () => {}, back: () => {}, now: () => NOW, openListSheet: () => {},
+        doc: { get: () => manifest.doc.empty(), set: async () => {}, maxBytes: () => 65_536 }, navigate: () => {}, back: () => {}, now: () => NOW, openListSheet: () => {},
     });
 
     it('a tool with no permissions: the base and nothing else; an undeclared call is undefined', () => {
@@ -1037,6 +1040,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
     const KEEPER = 'A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.';
     const OLDER = "Your community's server can't keep a copy yet, so for now it stays on this phone only.";
     const FAILED = "Couldn't reach your community's server, so nothing changed. Try again when you're online.";
+    const TOO_BIG = "This is more than your community's server keeps for now, so nothing changed and it stays on this phone only. Make it smaller, then switch the copy on again.";
     const ONE_PHONE = 'One phone at a time: the copy you changed last is the one kept.';
     const REMOVE_ON = "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.";
     const SYNCED_AT = '2026-10-21T07:00:00.000Z';
@@ -1162,6 +1166,29 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         // A whole-settings save (a reminder's switch) never writes the copy's setting back over the server's answer.
         await click(byTestId('tool-settings-reminder-weekly'), "a reminder's switch");
         expect(stored()).toMatchObject({ nodeCopy: true, reminders: { weekly: true } });
+    });
+
+    it("switching on with more than the server keeps: the template's own sentence, never the offline one, and the switch stays off", async () => {
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { nodeCopy: false });
+        await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
+        // A server that keeps less than this tool's document (an older one keeps 64 KB; the fixture is smaller than that).
+        server.max = 16;
+        await drawTool('fixture-kit', {}, 'xx');
+        await openSettings();
+        server.log.length = 0;
+        await click(byTestId('tool-settings-node-copy'), 'the toggle, on');
+        expect(server.log.map((r) => r.method)).toEqual(['GET']);
+        expect(byTestId('tool-settings-node-copy-too-big')?.textContent).toBe(pseudoLocalise(TOO_BIG));
+        expect(byTestId('tool-settings-node-copy-failed')).toBeNull();
+        expect(bypassing(true)).toEqual([]);
+        expect(tooWide()).toEqual([]);
+        expect(stored()).toMatchObject({ nodeCopy: false, nodeMax: 16 });
+        expect(byTestId('tool-backup-line')?.textContent).toBe(pseudoLocalise(PHONE_ONLY));
+        // Tried again with the server unreachable: the offline line, and not this one.
+        server.mode = 'down';
+        await click(byTestId('tool-settings-node-copy'), 'the toggle, on');
+        expect(byTestId('tool-settings-node-copy-too-big')).toBeNull();
+        expect(byTestId('tool-settings-node-copy-failed')?.textContent).toBe(pseudoLocalise(FAILED));
     });
 
     it('Remove my data with the copy on: the question says the server copy goes too; the server first, or nothing', async () => {

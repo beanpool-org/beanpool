@@ -22,7 +22,7 @@ export interface PhoneHostContext<D> {
     manifest: ToolManifest<D>;
     owner: { kind: 'member' | 'enterprise'; publicKey: string; name: string };
     node: { url: string | null; profile: string; features: Record<string, unknown> | null };
-    doc: { get(): D; set(next: D): Promise<void> };
+    doc: ToolHostBase<D>['doc'];
     navigate(screen: string, params?: Record<string, string>): void;
     back(): void;
     now(): number;

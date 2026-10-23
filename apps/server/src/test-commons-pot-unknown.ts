@@ -69,6 +69,12 @@ async function child(): Promise<void> {
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(k[name], epoch);
             }
             se.reconcileLedgerFromDb();
+            // Fay proposes below. Her standing is a trade (her earned_credit badge is none), from before this month: this
+            // month's trades between members who all joined today are an insular cluster the wash rule counts for nothing.
+            const daysAgo = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
+            db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(daysAgo(60), k.fay);
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                        VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k.fay, k.cara, daysAgo(40), daysAgo(40));
             se.transfer('genesis', k.ben, 30, 'seed Ben', 'direct', true);
             se.transfer('genesis', k.dan, 3, 'seed Dan', 'direct', true);
             // Ben buys from Cara twice: one deal completed, one held in escrow.

@@ -252,6 +252,10 @@ async function main() {
     const carolSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
     const strangerSock = await openSocket(wsBase);
     await sleep(200);
+    // A completed trade is Alice's standing to propose (her earned_credit badge is none).
+    const tradedAt = new Date().toISOString();
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), alice.pk, carol.pk, tradedAt, tradedAt);
     const proposed = await post('/api/commons/decisions', {
         title: 'Remove PrivBob', description: 'A privacy test Decision about Bob', touches: 'member', effect: 'remove_member', subject: bob.pk,
     }, alice);

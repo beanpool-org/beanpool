@@ -56,10 +56,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     // utils/door-work.ts DOOR_WORK_MESSAGES.solverUnavailable.
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
     // utils/db.ts redeemInvite: the invite join's redeem with no answer in time (REDEEM_NO_ANSWER), a node that is down (a
-    // page came back in place of its answer), and an answer that didn't say the join was taken.
+    // page came back in place of its answer), an answer that didn't say the join was taken, and no key to redeem with.
     'No answer from the community node in time. Check your connection and try again.': word('No answer from the community node in time. Check your connection and try again.'),
     'Relay Node Offline: The selected community node is currently unreachable.': word('Relay Node Offline: The selected community node is currently unreachable.'),
     'The community node did not confirm the invite. Please try again.': word('The community node did not confirm the invite. Please try again.'),
+    'No identity to register': word('No identity to register'),
     // utils/sso-recovery.ts recoverAccountWithSso: its progress, and why it stopped.
     'Connecting to node recovery session...': word('Connecting to node recovery session...'),
     'Requesting secure sign-in challenge...': word('Requesting secure sign-in challenge...'),

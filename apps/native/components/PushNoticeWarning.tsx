@@ -7,9 +7,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { t } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { FORGED_NOTICE_LINE, onNoticeWarning, takeNoticeWarning } from '../utils/push-notice-check';
 import { PUSH_NOTICE_WARNING_INSET, PUSH_NOTICE_WARNING_OK, pushNoticeWarningStyleSpec } from '../utils/push-notice-warning-style';
+
+/** The card's words: word() keys from utils, in the member's language where they are drawn. */
+const WORDS = { line: FORGED_NOTICE_LINE, ok: PUSH_NOTICE_WARNING_OK } as const;
 
 export function PushNoticeWarning() {
     const styles = useStyles(({ colors }) => StyleSheet.create(pushNoticeWarningStyleSpec(colors)));
@@ -27,10 +31,10 @@ export function PushNoticeWarning() {
 
     return (
         <View style={[styles.card, { top: insets.top + PUSH_NOTICE_WARNING_INSET }]} accessibilityRole="alert" accessibilityLiveRegion="polite">
-            <Text style={styles.line}>{FORGED_NOTICE_LINE}</Text>
+            <Text style={styles.line}>{t(WORDS.line)}</Text>
             <View style={styles.buttonRow}>
                 <Pressable style={styles.okBtn} onPress={() => setShown(false)} accessibilityRole="button">
-                    <Text style={styles.okBtnText}>{PUSH_NOTICE_WARNING_OK}</Text>
+                    <Text style={styles.okBtnText}>{t(WORDS.ok)}</Text>
                 </Pressable>
             </View>
         </View>

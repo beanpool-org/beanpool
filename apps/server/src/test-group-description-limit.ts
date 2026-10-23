@@ -357,7 +357,10 @@ async function rulesOnLocal(): Promise<void> {
         `a 501-character note with Beans, and with a pledge: 400 "${short(send.body?.error)}", nothing moved (${send.status}, ${pledge.status})`);
     assert(send500.body?.error !== noteWords, `a 500-character note passes the note's limit (${send500.status} ${short(send500.body?.error)})`);
 
-    db.prepare('UPDATE members SET earned_credit = 10 WHERE public_key = ?').run(R.pk);
+    // A completed trade is R's standing to propose (a trust badge, earned_credit, is none).
+    const tradedAt = new Date().toISOString();
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), R.pk, Q.pk, tradedAt, tradedAt);
     const propose = (title: string, description: string) => call(base, 'POST', '/api/commons/decisions', R, { title, description, touches: 'member', effect: 'grant_voucher', subject: Q.pk });
     const titleOver = await propose('t'.repeat(201), 'Ten or more characters of reasons');
     const descOver = await propose('A voucher for Quin', 'd'.repeat(5_001));

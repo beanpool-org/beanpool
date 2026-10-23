@@ -2811,7 +2811,6 @@
   "Voice credits come from your {trades} — the beans you have traded with other members, counted up to a cap per trading partner. You get the full amount again on every Decision about community money; they are never used up. Voting on community money opens after your first completed trade.": "Οι πιστώσεις ψήφου προέρχονται από τις {trades} σου — τα φασόλια που έχεις ανταλλάξει με άλλα μέλη, υπολογισμένα μέχρι ένα όριο ανά συναλλασσόμενο. Λαμβάνεις ξανά ολόκληρο το ποσό σε κάθε Απόφαση για κοινοτικά χρήματα· δεν εξαντλούνται ποτέ. Η ψηφοφορία για κοινοτικά χρήματα ανοίγει μετά την πρώτη σου ολοκληρωμένη συναλλαγή.",
   "completed trades": "ολοκληρωμένες συναλλαγές",
   "PROCESS": "ΔΙΑΔΙΚΑΣΙΑ",
-  "1. Members with a completed trade or earned standing, and node admins, can open a binding Decision": "1. Μέλη με ολοκληρωμένη συναλλαγή ή κερδισμένο κύρος, καθώς και οι διαχειριστές κόμβου, μπορούν να ανοίξουν μια δεσμευτική Απόφαση",
   "2. Voting opens at once and runs for 7 days; members who joined before it opened can vote": "2. Η ψηφοφορία ανοίγει αμέσως και διαρκεί 7 ημέρες· τα μέλη που εγγράφηκαν πριν από την έναρξή της μπορούν να ψηφίσουν",
   "3. Ballots are secret — everyone sees the totals and their own vote": "3. Οι ψηφοφορίες είναι μυστικές — όλοι βλέπουν τα σύνολα και τη δική τους ψήφο",
   "4. Votes on community money cost voice credits; other Decisions are one member, one vote": "4. Οι ψήφοι για κοινοτικά χρήματα κοστίζουν πιστώσεις ψήφου· οι άλλες Αποφάσεις είναι ένα μέλος, μία ψήφος",
@@ -2878,7 +2877,6 @@
   "Decisions History": "Ιστορικό Αποφάσεων",
   "🌱 Propose Community Action": "🌱 Πρόταση κοινοτικής δράσης",
   "No bond required": "Δεν απαιτείται εγγύηση",
-  "Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.": "Οι δεσμευτικές αποφάσεις εκτελούνται αυτόματα μετά την έγκρισή τους (§3.7). Δικαίωμα πρότασης έχουν τα μέλη με ολοκληρωμένη συναλλαγή ή κερδισμένο κύρος, καθώς και οι διαχειριστές κόμβου.",
   "+ Propose a Decision": "+ Πρότεινε μια Απόφαση",
   "Propose a Community Decision": "Πρότεινε μια κοινοτική Απόφαση",
   "⚠️ You can propose once you have completed a trade.": "⚠️ Μπορείς να υποβάλεις πρόταση μόλις ολοκληρώσεις μια συναλλαγή.",
@@ -3069,7 +3067,6 @@
   "Recipient Member Public Key": "Δημόσιο κλειδί μέλους-παραλήπτη",
   "Enter recipient pubkey...": "Εισάγαγε το δημόσιο κλειδί παραλήπτη...",
   "Hardship Amount (Beans)": "Ποσό έκτακτου βοηθήματος (φασόλια)",
-  "{bond} Open to members with a completed trade or earned standing, and to node admins. Open for 7 days. Closes and executes automatically.": "{bond} Ανοιχτή σε μέλη με ολοκληρωμένη συναλλαγή ή αποκτηθέν κύρος, καθώς και σε διαχειριστές του διακομιστή. Ανοιχτή για 7 ημέρες. Κλείνει και εκτελείται αυτόματα.",
   "No bond required.": "Δεν απαιτείται εγγύηση.",
   "Proposing decision": "Υποβολή πρότασης απόφασης",
   "Submit Community Decision": "Υποβολή απόφασης κοινότητας",
@@ -6163,7 +6160,7 @@
   "{mark}: why?": "{mark}: γιατί;",
   "{name} is blocked": "Έχει αποκλειστεί: {name}",
   "{name}'s shop": "Κατάστημα: {name}",
-  "{n} out\u0004things lent out now": "{n} δανεισμένα",
+  "{n} out\u0004things lent out now": "{n} σε δανεισμό",
   "{n} thing|{n} things": {
     "one": "{n} πράγμα",
     "other": "{n} πράγματα"

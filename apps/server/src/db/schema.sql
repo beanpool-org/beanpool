@@ -1851,6 +1851,23 @@ CREATE TABLE IF NOT EXISTS known_floor_log (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Every change to how this community works (config/community-shape.ts; DESIGN-community-shape-settings-fable.md §2.5): one
+-- row per setting changed, newest the highest id, which the owners' page reads as the shape's `version`. Every owner and
+-- admin reads it. `actor_pubkey` is the key behind the session, or `owner:password`; `note` is the owner's own sentence to
+-- the members, if any. Nothing writes it yet: the write path is slice S2. Known-floor changes keep their own log too.
+CREATE TABLE IF NOT EXISTS community_settings_log (
+    id             INTEGER PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    actor_role     TEXT NOT NULL,
+    setting        TEXT NOT NULL,
+    old_value      TEXT,
+    new_value      TEXT,
+    note           TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
 -- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
 -- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`). A phone taking
@@ -2766,8 +2783,9 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
     public_key TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     -- The tool's id: 1 to 24 of a-z, 0-9 and '-' (engine/tool-state.ts TOOL_ID).
     tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
-    -- The document as JSON text, at most 64 KB as UTF-8 (TOOL_STATE_MAX_BYTES).
-    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 65536),
+    -- The document as JSON text, at most 128 KB as UTF-8, the most any tool may name (TOOL_STATE_CEILING_BYTES); each
+    -- tool's own bound is the engine's (toolStateMaxBytes). db.ts rebuilds a table made with the 64 KB CHECK of before.
+    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
     -- The replication watermark (a plain table), and the copy's time the apps reconcile by: engine/tool-state.ts stamps it.
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, tool)
@@ -2808,3 +2826,41 @@ CREATE TABLE IF NOT EXISTS shops (
 );
 -- An account's shop (shopOf).
 CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);
+
+-- 30. Message requests (scratch/fable-design/DESIGN-message-a-friend-fable.md §4, slice S1; Marty, 23 Oct 2026): where the
+-- `dmRequests` switch is on, a direct conversation a member opened with someone who hasn't added them, written to them or
+-- traded with them waits as a request from the opener until the other accepts (engine/dm-requests.ts). One row per such
+-- conversation, keyed by its id; a conversation with no row is an ordinary one. A conversation kept for its opener alone,
+-- because the other had blocked them (engine/withheld-lines.ts), has its row too, under the id it keeps when it becomes
+-- the real one, so the opener's answers are the same either way. Its own table, not columns on `conversations`: a delta
+-- picks conversations by `created_at`, so a decision made later would reach a standby only in a whole copy. Copied
+-- verbatim (a plain table, engine/replication-manifest.ts), but only for a conversation that is real; a removal of the
+-- opener or of the person it is for deletes it with a tombstone, except the opener's own that nobody accepted, in a real
+-- conversation, which is ignored instead, so it never becomes an ordinary chat.
+CREATE TABLE IF NOT EXISTS dm_requests (
+    conversation_id TEXT PRIMARY KEY,
+    -- Who opened it, and who it waits for.
+    from_pubkey     TEXT NOT NULL,
+    to_pubkey       TEXT NOT NULL,
+    -- 'pending' until the person it is for accepts it ('accepted'; or writes, adds the opener, opens the chat themselves, or
+    -- a trade between them opens), ignores it ('ignored'), or 30 days pass ('expired', engine/dm-requests.ts
+    -- expireOldRequests). The opener's next line after the 30 days is a new request: 'pending' again, from then.
+    state           TEXT NOT NULL CHECK (state IN ('pending', 'accepted', 'ignored', 'expired')),
+    -- When it was made (or made again after the 30 days), and when it was last decided.
+    requested_at    TEXT NOT NULL,
+    decided_at      TEXT,
+    -- Whose act accepted it: the person it is for (their Accept, line, open of the chat or friend add), or the opener (their
+    -- line or reaction once the rule lets them through: a role, a trade); null for a trade's opening, or once each of the
+    -- two has accepted it. Either of them who blocked the other reads one the other accepted after the block as not made,
+    -- while the block holds (engine/dm-requests.ts acceptanceHiddenFrom).
+    accepted_by     TEXT,
+    -- The state it had when it was accepted ('pending', 'ignored' or 'expired'): what the person it is for reads while an
+    -- acceptance of the opener's own act stays hidden from them, and 'ignored' once they ignore it then.
+    state_before    TEXT CHECK (state_before IN ('pending', 'ignored', 'expired')),
+    -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
+    updated_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK (from_pubkey != to_pubkey)
+);
+-- The requests waiting for a member (their list, Ignore all, the folded push), and a member's own (a removal, a re-key).
+CREATE INDEX IF NOT EXISTS idx_dm_requests_to ON dm_requests(to_pubkey, state);
+CREATE INDEX IF NOT EXISTS idx_dm_requests_from ON dm_requests(from_pubkey);

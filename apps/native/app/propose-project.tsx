@@ -17,6 +17,7 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { amountRefusalWords, ANY_DECIMALS, formatDate, formatNumber, inCapitalsOf, isAmbiguousAmount, parseAmount, t } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
+import { signedRequestWords } from '../components/signed-request-lines';
 
 export default function ProposeProjectModal() {
     const { theme, colors } = useTheme();
@@ -122,7 +123,7 @@ export default function ProposeProjectModal() {
             );
         } catch (e: any) {
             // The node's own words as it sent them (slice S4).
-            Alert.alert(t('Creation Failed'), e.message || t('Could not start enterprise.'));
+            Alert.alert(t('Creation Failed'), e.message ? signedRequestWords(e.message) : t('Could not start enterprise.'));
         } finally {
             setSubmitting(false);
             submittingRef.current = false;

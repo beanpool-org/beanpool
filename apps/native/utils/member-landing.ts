@@ -47,13 +47,33 @@ export function landNextOn(to: MemberLanding, publicKey: string | null = null): 
 }
 
 /**
+ * The screen a start-up link opened (app/+native-intent.ts): the pairing screen, when the web's QR was scanned with the
+ * camera app while BeanPool was closed. On Android the router answers the start-up link later than iOS, and has no route
+ * to report until the root layout's navigator takes it: the guard's first look, in the commit that draws the navigator,
+ * reads `useSegments()` as `[]`, the bare root's own value. It landed the member on the tabs over the pairing screen
+ * (Damo, 23 Oct: "it just opens the BeanPool app but nothing happens"; measured on the emulator). Held until the router
+ * reports any route; while held, `[]` is not the bare root.
+ */
+let startUpLinkPending = false;
+
+/** The router is opening a screen for the start-up link: the guard leaves it be until the router says where it is. */
+export function holdStartUpLinkRoute(): void {
+    startUpLinkPending = true;
+}
+
+/**
  * The root guard's last check, for a member with an identity whose node has not said otherwise: on welcome or the bare
  * root, where to go (a waiting claim's screen, {@link landOnClaim}; else a landing asked for with `landNextOn`, taken
- * once; else the tabs' index). Anywhere else, null: stay, and leave a landing asked for untouched.
+ * once; else the tabs' index). Anywhere else, null: stay, and leave a landing asked for untouched. Before the router
+ * has reported the route a start-up link opened ({@link holdStartUpLinkRoute}), null too: that `[]` is no route yet, not
+ * the bare root.
  */
 export function memberRedirect(segments: readonly string[], publicKey: string | null = null, now: number = Date.now()): MemberLanding | null {
     // Asked for another account than the one now on the phone: never used, whatever the route.
     if (next && next.publicKey !== null && next.publicKey !== publicKey) next = null;
+    // The router has said where it is (the link's screen, or wherever the member went since): nothing left to wait for.
+    if (segments.length !== 0) startUpLinkPending = false;
+    else if (startUpLinkPending) return null;
     if (segments.length !== 0 && segments[0] !== 'welcome') return null;
     if (claim && !(now < claim.until)) claim = null;
     const to = claim?.to ?? next?.to ?? DEFAULT_MEMBER_LANDING;

@@ -85,6 +85,25 @@ describe('every sentence the key and line code writes is in the table', () => {
         expect(db).toContain("`${dmQuoteLabel('notice')}: ${displayMsg}`");
     });
 
+    it('utils/db.ts: why a line wasn\'t sent or changed and why a chat didn\'t open, as the chat screen shows them (read from its source)', () => {
+        const db = source('db.ts');
+        for (const s of [
+            'You are off-grid. Please connect to a BeanPool Node to send messages.', 'You are off-grid. Please connect to a BeanPool Node to edit messages.',
+            'You are off-grid. Please connect to a BeanPool Node.', 'Failed to deliver message.', 'Failed to send image.',
+            'Photos can only be sent in direct messages.', 'Could not open this group chat.', 'Could not open this enterprise chat.',
+            'This phone has switched community since this chat was opened.',
+        ]) {
+            expect(db, s).toContain(`'${s}'`);
+            expect(chatLineWords(s), s).toBe(s);
+            expect(known(s), s).toBe(true);
+        }
+        // signedRequestWithMethod's refusal with no words of the node's, by its status.
+        expect(db).toContain('`Request failed: ${res.status}`');
+        expect(known('Request failed: 502')).toBe(true);
+        setLanguage('pt', [{ 'You are off-grid. Please connect to a BeanPool Node to send messages.': 'Está sem ligação. Ligue-se a um nó BeanPool para enviar mensagens.' }]);
+        expect(chatLineWords('You are off-grid. Please connect to a BeanPool Node to send messages.')).toBe('Está sem ligação. Ligue-se a um nó BeanPool para enviar mensagens.');
+    });
+
     it('the sentences with a number, a name or a date in them, from the functions that write them', () => {
         for (const n of [1, 3]) expect(known(lockedHistoryRowText(n)), lockedHistoryRowText(n)).toBe(true);
         expect(known(earlierKeyDetails('Ana', '2026-10-03T00:00:00Z'))).toBe(true);

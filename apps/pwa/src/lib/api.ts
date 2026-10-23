@@ -6,6 +6,7 @@
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
+import { t } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -78,9 +79,9 @@ export async function testNodeConnection(url: string): Promise<{ ok: boolean; ca
             return { ok: false, error: `HTTP ${res.status}: ${res.statusText}` };
         }
         const data = await res.json();
-        return { ok: true, callsign: data.communityName || data.callsign || 'BeanPool Node', latencyMs };
+        return { ok: true, callsign: data.communityName || data.callsign || t('BeanPool Node'), latencyMs };
     } catch (e: any) {
-        return { ok: false, error: e.message || 'Connection failed' };
+        return { ok: false, error: e.message || t('Connection failed') };
     }
 }
 
@@ -214,7 +215,7 @@ export const groupKeysNet = {
 async function refusalError(res: Response): Promise<Error> {
     let unsaid = false;
     const err = await res.json().catch(() => { unsaid = true; return { error: res.statusText }; });
-    const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
+    const error = new Error(err.message || err.error || t('Request failed: {status}', { status: res.status }));
     // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
     if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;
     // The status travels with the error: a node older than a route answers 404, and a screen that can
@@ -244,7 +245,7 @@ export async function signedRequestWithKey<T>(
     const res = await signedFetchWithKey(method, path, body, privateKeyHex, publicKeyHex);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `Request failed: ${res.status}`);
+        throw new Error(err.error || t('Request failed: {status}', { status: res.status }));
     }
     return res.json();
 }
@@ -2056,7 +2057,7 @@ export interface MyPoolVoting {
     hasCompletedTrade: boolean;
 }
 
-/** canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule. */
+/** canPropose: whether the signer may propose (a completed trade, or a node admin), per the node's own rule. */
 export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose?: boolean | null }> {
     return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
 }
@@ -2263,6 +2264,29 @@ export async function setEnterpriseLocation(treasury: string, location: { lat: n
 
 export async function clearEnterpriseLocation(treasury: string): Promise<EnterpriseLocationResponse> {
     return request('DELETE', `/api/enterprise/${encodeURIComponent(treasury)}/location`);
+}
+
+// An enterprise's face and shop, by its keepers (DESIGN-shops-round3-enterprise-shopfront-fable.md §4; routes/treasury.ts
+// profileHandler, routes/shops.ts). The node says why it refuses, in a sentence with a code; `request` throws it as said.
+
+/** Its name and purpose (the lead's), About and logo (any keeper's); only the fields sent change. */
+export async function changeEnterpriseFace(treasury: string, changes: { name?: string; purpose?: string; about?: string; avatar?: string }): Promise<{ success: boolean; name: string; purpose: string | null; about: string | null; avatarUrl?: string | null }> {
+    return request('PUT', `/api/treasury/${encodeURIComponent(treasury)}/profile`, changes);
+}
+
+/** Its shop's kind and how it deals; opens the shop when it has none (an empty change opens it as it is). */
+export async function changeEnterpriseShop(treasury: string, changes: { kind?: string | null; howToDeal?: string | null }): Promise<{ success: boolean; shop: any }> {
+    return request('PUT', `/api/treasury/${encodeURIComponent(treasury)}/shop`, changes);
+}
+
+/** Puts its live Offers in its shop ("Add my live Offers"), so they can be featured. */
+export async function addEnterpriseShopOffers(treasury: string, postIds: string[]): Promise<{ success: boolean; added: unknown }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/shop/offers`, { postIds });
+}
+
+/** One of a shop's Offers on its shelf, or taken off it: by its author or a keeper of the enterprise that posted it; six at most. */
+export async function featureOffer(postId: string, featured: boolean): Promise<{ success: boolean; postId: string; featuredAt: string | null }> {
+    return request('PUT', `/api/marketplace/posts/${encodeURIComponent(postId)}/feature`, { featured });
 }
 
 export async function getEnterpriseLedger(treasury: string, opts?: { since?: string; until?: string; limit?: number }): Promise<EnterpriseLedgerResponse> {

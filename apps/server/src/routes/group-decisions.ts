@@ -20,6 +20,7 @@ import { FEATURE_OFF } from '../config/node-profile.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 function notFound(ctx: any): void {
     ctx.status = 404;
@@ -61,7 +62,7 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
 
     router.get('/api/groups/:id/decisions', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         try {
             const decisions = getGroupDecisions(ctx.params.id, actor);
             const roll = groupRollNow(ctx.params.id);
@@ -91,7 +92,7 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
 
     router.get('/api/groups/:id/decisions/:decisionId', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required') }; return; }
         try {
             const d = getGroupDecision(ctx.params.id, ctx.params.decisionId, actor);
             ctx.body = { decision: card(d, actor) };
@@ -103,7 +104,7 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
 
     router.post('/api/groups/:id/decisions', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required to propose a vote' }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required to propose a vote') }; return; }
         const { title, description, effect, subject, params } = (ctx as any).requestBody || {};
         try {
             // A muted member (G3) proposes nothing other members read.
@@ -129,7 +130,7 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
 
     router.post('/api/groups/:id/decisions/:decisionId/vote', async (ctx) => {
         const actor = (ctx.state as any)?.actor as string | undefined;
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required to vote' }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: word('Authentication required to vote') }; return; }
         const { support, signature } = (ctx as any).requestBody || {};
         if (typeof support !== 'boolean') { ctx.status = 400; ctx.body = { error: 'support (true or false) is required' }; return; }
         try {

@@ -23,10 +23,10 @@
  * JSON parse did (perf in test-sample-id-guard step 5). test-sample-id-guard also reads every body field the server's
  * routes read and fails on one that names an id the guard skips.
  */
-import { isSampleId } from '@beanpool/core';
+import { isSampleId, word } from '@beanpool/core';
 
 export const SAMPLE_ID_REFUSAL = 'sample_id';
-export const SAMPLE_ID_MESSAGE = 'That is from the example community, Example Valley, which only shows what a local community does: nothing in it can be changed, sent or answered.';
+export const SAMPLE_ID_MESSAGE = word('That is from the example community, Example Valley, which only shows what a local community does: nothing in it can be changed, sent or answered.');
 
 /** No route reads a body this deep; one that goes deeper is refused, not walked. */
 export const MAX_DEPTH = 32;

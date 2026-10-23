@@ -83,6 +83,8 @@ import {
     deleteFailedWords, deletePlanFailedWords, deletedButWords, keepsKeyWords, lastCommunityWords, listNameWords, reminderBeforeWords,
     settingsLineWords, vaultCopyStaysWords,
 } from '../../components/settings/settings-lines';
+import { signedRequestWords } from '../../components/signed-request-lines';
+import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -727,7 +729,7 @@ export default function SettingsScreen() {
             );
         } catch (e: any) {
             // Server blocks turning it on while trades are in progress — surface that message.
-            Alert.alert(next ? t("Can't start holiday yet") : t('Update failed'), e?.message || t('Please try again.'));
+            Alert.alert(next ? t("Can't start holiday yet") : t('Update failed'), e?.message ? signedRequestWords(e.message) : t('Please try again.'));
         } finally {
             setHolidayLoading(false);
         }
@@ -1238,7 +1240,7 @@ export default function SettingsScreen() {
             Alert.alert(t('Success'), t('Invite redeemed successfully on current node! Syncing data...'));
             setRedeemInviteCode('');
         } catch (e: any) {
-            Alert.alert(t('Redemption Failed'), e.message);
+            Alert.alert(t('Redemption Failed'), welcomeLineWords(e.message));
         } finally {
             setRedeemLoading(false);
         }
@@ -2016,7 +2018,7 @@ export default function SettingsScreen() {
                                     if (identity?.publicKey) await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { show_as_connection_in_common: next } });
                                 } catch (e: any) {
                                     setShowAsConnection(!next);
-                                    Alert.alert(t('Not saved'), e?.message || t('Your community could not save that.'));
+                                    Alert.alert(t('Not saved'), e?.message ? signedRequestWords(e.message) : t('Your community could not save that.'));
                                 }
                             }}>
                                 <View style={[styles.toggleThumb, showAsConnection && styles.toggleThumbOn]} />

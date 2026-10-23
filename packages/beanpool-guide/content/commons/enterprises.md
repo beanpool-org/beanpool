@@ -22,7 +22,7 @@ Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each
 
 ## What an enterprise page shows
 
-An enterprise's page is its shop front. On the phone, every member sees, from the top:
+An enterprise's page is its shop front. Every member sees, from the top:
 
 - its picture, its name, what kind of shop it is and since when it has been here;
 - what it is for;
@@ -39,8 +39,6 @@ An enterprise's page is its shop front. On the phone, every member sees, from th
 
 Where a community lets people who are not members read its pages, they see its picture, name and kind, what it is for, its keepers' names, About and a project's goal, but not its listings, badges or money. Most communities don't: there, only members can open the page.
 
-In the web app the page still shows the balance and its keepers near the top.
-
 At the bottom, **Report Enterprise** (**Report Project** on a project) if something is wrong.
 
 ## Backing an enterprise
@@ -51,13 +49,22 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 
 ## If you keep it
 
-If you keep an enterprise, or help run a project, its page has **Operator controls**:
+If you keep an enterprise, or help run a project, everything you do for it is in one place. In the web app, its page has two tabs, **Page** and **Manage**: **Page** is what members see, and **Manage** holds the rest. A community admin sees **Manage** too, for the requests to join. On the phone it is all still on the page.
 
-- **Post Offer** and **Post Need:** post in its name.
-- **To Commons:** send some of its surplus to the Commons.
-- In the web app, **Set map pin** puts it on the map.
+In **Manage** (on the phone, on the page):
 
-Pausing and closing it are in the same panel in the web app. On the phone they are in a card of their own below it, **Season & lifecycle controls**, which shows only the buttons you can use:
+- requests to join, and keeper changes waiting for an objection;
+- **Operator controls**: **Post Offer** and **Post Need** post in its name; **To Commons** sends some of its surplus to the Commons; bids on its Needs and its deals, to approve and pay;
+- in the web app, **Set map pin** puts it on the map;
+- its keepers' votes, choosing a new lead when the lead has gone quiet, removing a keeper and stepping down;
+- in the web app, removing a message from its **Discussion**.
+
+Only in the web app's **Manage**, for now:
+
+- **Its shopfront: what members see**: any keeper can change its picture, **About**, the kind of shop and **How we deal**. Only the lead keeper (the leader of a project) can change its name and what it is for; the others see them, and why. **Save** sends only what you changed, and if the community says no, it says why.
+- **Featured**: tick up to six of its Offers in its shop to show first on its page. An Offer that isn't in its shop yet can't be featured: **Put them in its shop** puts them there. If it has no shop yet, **Open its shop** opens one.
+
+Pausing and closing it are with the operator controls in the web app. On the phone they are in a card of their own below them, **Season & lifecycle controls**, which shows only the buttons you can use:
 
 - **Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.
 - **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
@@ -78,4 +85,4 @@ It starts straight away, and you are its leader (a project) or its lead keeper (
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 
-The name, purpose and photo cannot be changed in the app yet.
+Its keepers can change its picture, About, kind of shop and how they deal in the web app's **Manage**; its lead keeper can change its name and purpose there too. The phone app can't change them yet.

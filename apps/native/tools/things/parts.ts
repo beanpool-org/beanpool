@@ -31,17 +31,18 @@ export const newThingId = (now: number) => `${now.toString(36)}-${Math.random().
 export type NotKept = 'too-big' | 'not-kept';
 
 /**
- * Keep a changed document: null once the host has it, else why not (the screen says which). One past the store's bound
- * (core's shedFits, the bound the host refuses at) is never handed to the host, so the shed is said to be full, never
- * "Try again".
+ * Keep a changed document: null once the host has it, else why not (the screen says which). One past the host's bound
+ * (host.doc.maxBytes(): the shed's 128 KB, or less on a server that keeps less) is never handed to the host, so the shed
+ * is said to be full, never "Try again"; unless it is no bigger than what the host holds (core shedFits), so a shed already
+ * past the bound can still be made smaller.
  */
 export async function keep(host: Host, next: ThingsDoc): Promise<NotKept | null> {
-    if (!shedFits(next)) return 'too-big';
+    if (!shedFits(next, host.doc.maxBytes(), host.doc.get())) return 'too-big';
     try {
         await host.doc.set(next);
         return null;
     } catch (e) {
-        // The host's own size refusal (ToolDocTooBigError in tools/store.ts), should its bound ever be tighter than core's.
+        // The host's own size refusal (ToolDocTooBigError in tools/store.ts): a bound it heard since this screen asked.
         return e instanceof Error && e.name.startsWith('ToolDocTooBig') ? 'too-big' : 'not-kept';
     }
 }

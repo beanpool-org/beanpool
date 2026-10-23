@@ -374,24 +374,25 @@ export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2
     return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
 }
 
-export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
+/** These three are word() keys: Home shows them through t(). */
+export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
-export const SEARCH_OFFLINE_LINE = 'Shows when your community answers';
-
-/** "within 5 km", or nothing where the node had no point (it ignored the distance). */
-const within = (km: number | null): string => (km ? `within ${km} km` : '');
+export const SEARCH_OFFLINE_LINE = word('Shows when your community answers');
 
 /** A saved search's first line: the words and the distance ("eggs · within 5 km"); just the words with no point. */
 export function searchFirstLine(q: string, km: number | null): string {
-    return [q.trim().replace(/\s+/g, ' ') || 'Every listing', within(km)].filter(Boolean).join(' · ');
+    const words = q.trim().replace(/\s+/g, ' ') || t('Every listing');
+    // "within 5 km", or nothing where the node had no point (it ignored the distance). The phone's sentences.
+    return km ? t('{words} · within {km} km', { words, km }) : words;
 }
 
 /** A search that finds nothing says so in its own words: "No eggs within 5 km right now". */
 export function searchEmptyLine(q: string, km: number | null): string {
     const words = q.trim().replace(/\s+/g, ' ');
-    return ['No', words || 'listings', within(km), 'right now'].filter(Boolean).join(' ');
+    if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
+    return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). A word() key: shown through t(). */
 export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
@@ -476,3 +477,28 @@ export function cardsToAsk(
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
     });
 }
+
+// ── The columns on a wide screen (DESIGN-home-wide-and-content-fable.md D1, slice W2) ─────────────────────────────
+
+/** A column is never narrower than the phone's floor, which every card's body is proven at (320 dp × 1.3)… */
+export const HOME_COLUMN_MIN = 320;
+/**
+ * …nor wider than 576 px (D1): the old one column's box (`max-w-xl`), not its cards, which were 544 px inside the box's
+ * 16 px gutters, as the App.tsx banners above Home still are. So one column on a page over 576 px (a 577–687 px window,
+ * or 833–943 px with the sidebar) is up to 32 px wider than before (review of #2411).
+ */
+export const HOME_COLUMN_MAX = 576;
+export const HOME_COLUMN_GAP = 16;
+
+/**
+ * How many columns the cards stand in on a page `width` px wide inside its gutters: as many as fit at 320 px or more,
+ * up to `most` (Auto is three), so two from 656 px and three from 992 px. The page's width, never the window's: the
+ * sidebar takes 256 px of it from 768 px. Not measured yet, or measured as nothing: one, as a phone draws it.
+ */
+export function columnsFor(width: number, most = 3): number {
+    if (!Number.isFinite(width)) return 1;
+    return Math.max(1, Math.min(most, Math.floor((width + HOME_COLUMN_GAP) / (HOME_COLUMN_MIN + HOME_COLUMN_GAP))));
+}
+
+/** The widest the grid of `cols` columns is drawn, gaps included: what the notes and the Join card above it line up with. */
+export const gridWidth = (cols: number) => cols * HOME_COLUMN_MAX + (cols - 1) * HOME_COLUMN_GAP;

@@ -166,7 +166,8 @@ export async function requireDeviceUnlock(communityName: string, promptMessage?:
         const passCounts = timeDoorPrompt();
         const res = await phoneLockPrompt({
             promptMessage: promptMessage ?? `Confirm it's you to manage ${communityName}`,
-            cancelLabel: 'Cancel',
+            // No cancel label of ours: iOS writes its own in the phone's language, and Android shows one only where the
+            // device fallback is off (LocalAuth.ts askPhoneLock).
             disableDeviceFallback: false,
         });
         return res.success && passCounts() ? 'ok' : 'failed';

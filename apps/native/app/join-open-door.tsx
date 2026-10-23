@@ -28,8 +28,8 @@ import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { FROM_LINK } from '../utils/global-link';
 import { doorNodeFromParam, takeDoorTap, type DoorNode } from '../utils/open-door';
 import {
-    doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, phoneDoorLineWords, placeAt,
-    type DoorPlace,
+    doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedGlobalBodyWords, joinedTitle,
+    phoneDoorLineWords, placeAt, type DoorPlace,
 } from '../utils/open-door-words';
 import { askCommunityName } from '../utils/community-name';
 import { getSavedNodes } from '../utils/nodes';
@@ -449,7 +449,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             // of the community it left (a stranger, when the door was opened from the not-recognised screen) can't send the
             // member back there on the way to the profile step.
             await recheck().catch(() => 'unknown');
-            Alert.alert(joinedTitle(place, joined.title), phoneDoorLineWords(joined.body), [{
+            Alert.alert(joinedTitle(place, joined.title), joinedGlobalBodyWords(joined.body), [{
                 text: t('Next'),
                 // As after any second community: the name and photo for this one, then home.
                 // Started from the pairing screen's refusal (`then=pair-device`): back there to scan again, after the profile.

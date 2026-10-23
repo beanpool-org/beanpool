@@ -3312,7 +3312,7 @@ export interface MyPoolVoting {
 }
 
 /**
- * canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule.
+ * canPropose: whether the signer may propose (a completed trade, or a node admin), per the node's own rule.
  * Null when the list loaded unsigned, so the caller falls back rather than blocking a member who may.
  */
 export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose: boolean | null }> {
@@ -6975,7 +6975,8 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
-    let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
+    // The language this phone writes in, as on a signed POST: a refused read comes back in it too (not signed, not stored).
+    let headers: Record<string, string> = { 'Accept': 'application/json', ...languageHeader(), ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
     let signed = false;
     if (identity?.privateKey && identity?.publicKey) {

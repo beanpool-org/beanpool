@@ -67,6 +67,7 @@ import { parseDistanceQuery } from './distance-query.js';
 import { seesGuestView, VIEW_HEADER } from './viewer.js';
 import type Koa from 'koa';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 /** How far the shops near a place reach when the read names no radius: the landing card's 50 km. */
 export const SHOPS_NEAR_KM_DEFAULT = 50;
@@ -96,7 +97,7 @@ function answeredRefusal(ctx: Ctx, e: unknown): boolean {
 /** The verified signer, or undefined once the refusal is written. */
 function signer(ctx: Ctx): string | undefined {
     const actor = ctx.state.actor as string | undefined;
-    if (!actor) refuse(ctx, 401, 'A signed request is required');
+    if (!actor) refuse(ctx, 401, word('A signed request is required'));
     return actor;
 }
 
@@ -107,7 +108,7 @@ function ownOwner(ctx: Ctx, op: Op): Owner | undefined {
     const actor = signer(ctx);
     if (!actor) return undefined;
     if (op === 'read' ? !passesReadGate(actor) : !isNodeMember(actor)) {
-        if (op === 'read') refuse(ctx, 403, 'Read access requires a member identity');
+        if (op === 'read') refuse(ctx, 403, word('Read access requires a member identity'));
         else refuse(ctx, 403, NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE);
         return undefined;
     }
@@ -124,8 +125,8 @@ function enterpriseOwner(ctx: Ctx, op: Op): Owner | undefined {
     if (!actor) return undefined;
     const treasury = String(ctx.params.treasury ?? '');
     const row = db.prepare('SELECT status FROM members WHERE public_key = ? AND is_treasury = 1').get(treasury) as { status: string | null } | undefined;
-    if (!row) { refuse(ctx, 404, 'Not a treasury'); return undefined; }
-    if (!canOperateTreasury(actor, treasury)) { refuse(ctx, 403, 'You are not a keeper of this enterprise'); return undefined; }
+    if (!row) { refuse(ctx, 404, word('Not a treasury')); return undefined; }
+    if (!canOperateTreasury(actor, treasury)) { refuse(ctx, 403, word('You are not a keeper of this enterprise')); return undefined; }
     const closed = enterpriseShopRefusal(row.status, op);
     if (closed) { answeredRefusal(ctx, closed); return undefined; }
     return { key: treasury, enterprise: true, actor };
@@ -231,7 +232,7 @@ async function feature(ctx: Ctx): Promise<void> {
 async function getShop(ctx: Ctx): Promise<void> {
     const { guest, reader } = readerOf(ctx);
     const shop = shopById(ctx.params.id);
-    if (!shop) { refuse(ctx, 404, 'There is no such shop here.', 'shop_not_found'); return; }
+    if (!shop) { refuse(ctx, 404, word('There is no such shop here.'), 'shop_not_found'); return; }
     answer(ctx, shopFor(shop, guest, reader));
 }
 

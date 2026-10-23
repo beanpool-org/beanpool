@@ -18,7 +18,17 @@
  *   4. Pushes: POST /api/push-tokens keeps the phone's `lang` (one BeanPool writes; anything else, or none, is English)
  *      and follows it when the phone registers again; a push goes to each phone in its language ("BeanPool" and the kind's
  *      sentence), the same notice data either way; the standby's copy never carries `lang`.
- *   5. Nothing marked for translation is a sentence an app matches on, or starts with a code the apps read.
+ *   5. Nothing marked for translation is a sentence an app matches on, or starts with a code the apps read: the hand-kept
+ *      list (APP_MATCHES), and every match the apps' sources hold today, found where it is written (appMatchers), so a
+ *      new `e.message.includes('…')` on a marked sentence fails here. The post screen's trade steps, whose older-node
+ *      English the phone keeps in a list (changed-elsewhere.ts), answer each sentence that holds it with a code.
+ *   6. Each family a member meets (the gate, join and profile, ledger, …): one of its refusals in English as before, and
+ *      in French with the same status, code and fields; the suite's French is every marked sentence after a sign.
+ *   7. A long refusal holds the node's one event loop for no time: one that echoes 160 KB or 1 MB of what a request
+ *      sent, or 1 MB of a catalog sentence again and again, comes back as it came, the way out taking under 100 ms over
+ *      it, with the suite's French, every marked sentence in French, and the shipped catalogs; over HTTP the answer is
+ *      the one without the header, byte for byte. One just under the longest the way out reads, a short catalog sentence
+ *      499 times, still comes in French in the same time.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-words.ts
  */
@@ -29,12 +39,14 @@ delete process.env.NODE_PROFILE;
 delete process.env.EXPO_ACCESS_TOKEN;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Koa from 'koa';
+import ts from 'typescript';
 import { setMemberPhoto } from '@beanpool/engine';
-import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, wordKey } from '@beanpool/core';
+import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, pluralKey, wordKey } from '@beanpool/core';
 import { memberWordsOnTheWayOut, requestLanguage, useCatalogsForTests, wordsIn } from './member-words.js';
 import { scrubServerFaults, SERVER_FAULT_TEXT } from './routes/member-error-text.js';
 
@@ -47,8 +59,18 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const DAY = 24 * 60 * 60 * 1000;
 
 const POLL_CLOSED = 'This poll is closed';
-const FR = {
+const FR: Record<string, unknown> = {
     [POLL_CLOSED]: 'Ce sondage est clos',
+    // Sentences with values in them, a count, and one after a code the apps read.
+    'A post can have at most {n} photos': 'Une annonce peut avoir au plus {n} photos',
+    'You have {n} active trade in progress.|You have {n} active trades in progress.': { one: 'Vous avez {n} échange en cours.', other: 'Vous avez {n} échanges en cours.' },
+    'You hold {held} Beans: you can pay the Commons only what you hold.': 'Vous avez {held} Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
+    'Only {who} can remove this': 'Seul {who} peut retirer ceci',
+    'Only a convenor can do that': 'Seul un animateur peut faire cela',
+    'Post another Offer to spend deeper.': 'Publiez une autre Offre pour aller plus loin.',
+    'The lead cannot be removed. The lead can hand the lead over.': 'Le responsable ne peut pas être retiré. Il peut passer la main.',
+    'Or the group can vote.': 'Ou le groupe peut voter.',
+    'Your {n} active Offer unlock a −{cap} credit line.|Your {n} active Offers unlock a −{cap} credit line.': { one: 'Votre Offre active ouvre un crédit de −{cap}.', other: 'Vos {n} Offres actives ouvrent un crédit de −{cap}.' },
     [SERVER_FAULT_TEXT]: "Une erreur s'est produite sur le serveur. Veuillez réessayer.",
     'You may only read your own conversations': 'Vous ne pouvez lire que vos propres conversations',
     'Membership request already pending': "Une demande d'adhésion est déjà en attente",
@@ -86,6 +108,19 @@ async function testWayOut(): Promise<void> {
             '/api/local/admin/refused': [400, { error: POLL_CLOSED }],
             '/api/admin/refused': [400, { error: POLL_CLOSED }],
             '/api/text': [400, POLL_CLOSED],
+            '/api/valued': [400, { error: 'A post can have at most 6 photos' }],
+            '/api/count-one': [400, { error: 'You have 1 active trade in progress.' }],
+            '/api/count-many': [400, { error: 'You have 3 active trades in progress.' }],
+            '/api/decimal': [400, { error: 'You hold 2.5 Beans: you can pay the Commons only what you hold.' }],
+            '/api/cents': [400, { error: 'You hold 12.50 Beans: you can pay the Commons only what you hold.' }],
+            '/api/odd-value': [400, { error: 'Only Ann (a.k.a. [x]+?) can remove this' }],
+            '/api/no-fit': [400, { error: 'A post can have at most photos' }],
+            '/api/coded-sentence': [403, { error: 'UNAUTHORIZED: Only a convenor can do that' }],
+            '/api/floor': [400, { error: 'FLOOR_LOCKED:1:2:200:500: Post another Offer to spend deeper.' }],
+            '/api/coded-unknown': [403, { error: 'UNAUTHORIZED: A sentence no catalog has' }],
+            '/api/two': [400, { error: 'FLOOR_LOCKED:2:3:500:1000: Your 2 active Offers unlock a −500 credit line. Post another Offer to spend deeper.' }],
+            '/api/two-half-known': [400, { error: 'Your 2 active Offers unlock a −500 credit line. A sentence no catalog has.' }],
+            '/api/runs': [403, { error: 'UNAUTHORIZED: The lead cannot be removed. The lead can hand the lead over. Or the group can vote.' }],
         };
         const [status, body] = answers[ctx.path] ?? [404, { error: 'Not found' }];
         ctx.status = status;
@@ -121,6 +156,20 @@ async function testWayOut(): Promise<void> {
         const regional = await get('/api/refused', 'fr-CA');
         assert(regional.body?.error === FR[POLL_CLOSED], "a device's regional tag (fr-CA) is its language");
 
+        // A language's words are built once, not for each refusal: a catalog changed in place after the first refusal is
+        // not seen by the next one; given again (as a new file read would be), it is.
+        const live: Record<string, unknown> = { ...FR };
+        useCatalogsForTests('fr', { server: live, core: FR_CORE });
+        const before = await get('/api/refused', 'fr');
+        live[POLL_CLOSED] = 'Ce sondage est fermé';
+        const cached = await get('/api/refused', 'fr');
+        assert(before.body?.error === FR[POLL_CLOSED] && cached.body?.error === FR[POLL_CLOSED] && wordsIn('fr') === wordsIn('fr'),
+            `the words of a language are built once and kept (${cached.body?.error})`);
+        useCatalogsForTests('fr', { server: live, core: FR_CORE });
+        const rebuilt = await get('/api/refused', 'fr');
+        assert(rebuilt.body?.error === 'Ce sondage est fermé', `and built again when its catalogs are read again (${rebuilt.body?.error})`);
+        useCatalogsForTests('fr', { server: FR, core: FR_CORE });
+
         const coded = await get('/api/coded', 'fr');
         assert(coded.status === 404 && coded.body?.error === 'not_found' && coded.body?.message === FR[POLL_CLOSED],
             `a code in error stays as it is, the message beside it comes in French (${coded.text})`);
@@ -142,6 +191,45 @@ async function testWayOut(): Promise<void> {
             "the operator's routes stay English (/api/local/…, /api/admin/…)");
         const plain = await get('/api/text', 'fr');
         assert(plain.status === 400 && plain.text === POLL_CLOSED, 'a body that is not a JSON object is left alone');
+
+        // A sentence with values in it: found by the catalog's sentence it fits, its values written into the translation.
+        const valued = await get('/api/valued', 'fr');
+        assert(valued.status === 400 && valued.body?.error === 'Une annonce peut avoir au plus 6 photos', `a sentence with a value in it comes in French (${valued.text})`);
+        const one = await get('/api/count-one', 'fr');
+        const many = await get('/api/count-many', 'fr');
+        assert(one.body?.error === 'Vous avez 1 échange en cours.' && many.body?.error === 'Vous avez 3 échanges en cours.',
+            `a sentence with a count, singular and plural, in French's own forms (${one.body?.error} / ${many.body?.error})`);
+        const decimal = await get('/api/decimal', 'fr');
+        assert(decimal.body?.error === 'Vous avez 2,5 Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
+            `a number read back out of the English is written the language's way (${decimal.body?.error})`);
+        const cents = await get('/api/cents', 'fr');
+        assert(cents.body?.error === 'Vous avez 12,50 Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
+            `with the decimals it was written with (${cents.body?.error})`);
+        const odd = await get('/api/odd-value', 'fr');
+        assert(odd.body?.error === 'Seul Ann (a.k.a. [x]+?) peut retirer ceci', `a value with a pattern's own characters in it is kept as it was (${odd.body?.error})`);
+        const noFit = await get('/api/no-fit', 'fr');
+        assert(noFit.body?.error === 'A post can have at most photos', 'a sentence that fits no sentence of the catalog stays English');
+        const codeFirst = await get('/api/coded-sentence', 'fr');
+        const floor = await get('/api/floor', 'fr');
+        const codedUnknown = await get('/api/coded-unknown', 'fr');
+        assert(codeFirst.status === 403 && codeFirst.body?.error === 'UNAUTHORIZED: Seul un animateur peut faire cela'
+            && floor.body?.error === 'FLOOR_LOCKED:1:2:200:500: Publiez une autre Offre pour aller plus loin.',
+            `a code the apps read before the sentence stays as it came, the sentence after it in French (${codeFirst.body?.error} / ${floor.body?.error})`);
+        assert(codedUnknown.body?.error === 'UNAUTHORIZED: A sentence no catalog has', 'and with a sentence the catalog lacks, all of it stays English');
+        const two = await get('/api/two', 'fr');
+        const halfKnown = await get('/api/two-half-known', 'fr');
+        assert(two.body?.error === 'FLOOR_LOCKED:2:3:500:1000: Vos 2 Offres actives ouvrent un crédit de −500. Publiez une autre Offre pour aller plus loin.',
+            `two sentences each written on its own come in French, each with its own values (${two.body?.error})`);
+        const runs = await get('/api/runs', 'fr');
+        assert(runs.body?.error === 'UNAUTHORIZED: Le responsable ne peut pas être retiré. Il peut passer la main. Ou le groupe peut voter.',
+            `a sentence of two with another after it: each the catalog's, the longest first (${runs.body?.error})`);
+        assert(halfKnown.body?.error === 'Your 2 active Offers unlock a −500 credit line. A sentence no catalog has.',
+            'and when one of them is not the catalog\'s, the whole stays English, never half translated');
+        const valuedEn = await get('/api/valued');
+        const floorEn = await get('/api/floor');
+        assert(valuedEn.text === JSON.stringify({ error: 'A post can have at most 6 photos' })
+            && floorEn.text === JSON.stringify({ error: 'FLOOR_LOCKED:1:2:200:500: Post another Offer to spend deeper.' }),
+            'without the header, those are the English byte for byte');
 
         // The loader reads the real files: core's French catalog is drafted, so a sentence of core's comes in French.
         useCatalogsForTests('fr', null);
@@ -165,7 +253,7 @@ const tokenOf = (name: string) => `ExponentPushToken[${name}-${crypto.randomByte
 
 let BASE = '';
 interface Res { status: number; text: string; body: any }
-async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?: unknown, lang?: string): Promise<Res> {
+async function call(method: 'GET' | 'POST' | 'PATCH', id: Id | null, route: string, body?: unknown, lang?: string): Promise<Res> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
@@ -296,6 +384,8 @@ async function testRealServer(): Promise<void> {
         const copy = exportPlainTables(db as any, PLAIN_TABLES).push_tokens ?? [];
         assert(copy.length >= 1 && copy.every((row: Record<string, unknown>) => !('lang' in row)) && copy.some((row: any) => row.public_key === ann.pk),
             `the standby's copy of the phones never carries their language (${copy.length} rows)`);
+
+        await testFamilies({ owner, ann, bob, cat, se, db });
     } finally {
         useCatalogsForTests('fr', null);
         useCatalogsForTests('ru', null);
@@ -303,14 +393,166 @@ async function testRealServer(): Promise<void> {
     }
 }
 
+// ── 6: each family ────────────────────────────────────────────────────────────────────────────────────────────────
+/** What the suite's French says for every sentence the server and the engine mark: the English after a sign of its own. */
+const FR_SIGN = 'FR› ';
+let markedSentences: any[] | null = null;
+async function marks(): Promise<any[]> {
+    if (!markedSentences) {
+        const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+        const words: any = await import(path.join(root, 'scripts/words/words.mjs'));
+        const extracted = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'server' || p.name === 'engine'));
+        markedSentences = extracted.flatMap((p: any) => p.calls.filter((c: any) => typeof c.text === 'string'));
+    }
+    return markedSentences!;
+}
+async function everyMarkInFrench(): Promise<Record<string, unknown>> {
+    return Object.fromEntries((await marks()).map((c: any) => (typeof c.other === 'string'
+        ? [pluralKey(c.text, c.other), { one: `${FR_SIGN}${c.text}`, other: `${FR_SIGN}${c.other}` }]
+        : [wordKey(c.text, c.context), `${FR_SIGN}${c.text}`])));
+}
+
+interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
+
+/**
+ * One refusal of each family a member meets, asked without X-Language and with `fr`: the English as it was, and in French
+ * the same status, the same code and every other field, only the sentence in French. The suite's French is every marked
+ * sentence after FR_SIGN, so a family whose sentence was never marked fails here.
+ */
+async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> {
+    console.log("\n--- 6. Each family's refusals in the member's language ---");
+    useCatalogsForTests('fr', { server: await everyMarkInFrench(), core: FR_CORE });
+    const family = async (name: string, english: string, method: 'GET' | 'POST', who: Id | null, route: string, body?: unknown,
+        field: 'error' | 'message' = 'error'): Promise<void> => {
+        const en = await call(method, who, route, body);
+        const fr = await call(method, who, route, body, 'fr');
+        const same = (a: any, b: any) => JSON.stringify(Object.keys(a ?? {}).sort()) === JSON.stringify(Object.keys(b ?? {}).sort())
+            && Object.keys(a ?? {}).every(k => k === field || JSON.stringify(a[k]) === JSON.stringify(b[k]));
+        assert(en.status >= 400 && en.body?.[field] === english, `${name}: in English as before (${en.status} ${en.text})`);
+        assert(fr.status === en.status && fr.body?.[field] === `${FR_SIGN}${english}` && same(en.body, fr.body),
+            `${name}: in French, with the same status, code and fields (${fr.status} ${fr.text})`);
+    };
+
+    // A web app served from another origin the operator lists may send the language (CORS): the preflight allows it.
+    const { updateGatewayConfig, getGatewayConfig } = await import('./config/local-config.js');
+    const before = getGatewayConfig().corsAllowedOrigins;
+    updateGatewayConfig({ corsAllowedOrigins: ['https://web.example'] });
+    try {
+        const preflight = await fetch(`${BASE}/api/home`, {
+            method: 'OPTIONS',
+            headers: { Origin: 'https://web.example', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'x-language, x-signature' },
+        });
+        const allowed = (preflight.headers.get('access-control-allow-headers') ?? '').toLowerCase().split(/\s*,\s*/);
+        assert(preflight.headers.get('access-control-allow-origin') === 'https://web.example' && allowed.includes('x-language'),
+            `a listed origin's preflight allows X-Language beside the signature's headers (${preflight.status} ${allowed.join(', ')})`);
+    } finally {
+        updateGatewayConfig({ corsAllowedOrigins: before });
+    }
+
+    // The gate (https-server.ts).
+    await family('the gate, a community\'s listings to a visitor', "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+        'GET', null, '/api/marketplace/posts');
+    await family('the gate, a members-only read to a visitor', "This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+        'GET', null, '/api/home');
+    const stranger = newId('Stranger');
+    await family('the gate, a gated read to a key that is no member', 'Read access requires a member identity', 'GET', stranger, `/api/ledger/balance/${stranger.pk}`);
+
+    // Join, profile, ledger (routes/community.ts).
+    await family('community, invites', 'You may only read your own invites', 'GET', ann, `/api/invite/mine/${bob.pk}`);
+    await family('community, profile', 'Your name needs at least 2 characters.', 'POST', ann, '/api/profile/update', { callsign: 'A' }, 'message');
+    await family('community, preferences', 'You may only read your own preferences', 'GET', ann, `/api/members/preferences?publicKey=${owner.pk}`);
+
+    // The engine's refusals through a route (state-engine.ts): a sentence, and one with a value in it.
+    await family('trust, vouching', 'You cannot vouch for yourself', 'POST', ann, '/api/profile/vouch', { targetPubkey: ann.pk });
+    await family('the Commons, a payment', 'You hold 0 Beans: you can pay the Commons only what you hold.', 'POST', ann, '/api/commons/pay', { amount: 5 });
+
+    // Enterprises, the community's Decisions and a group's votes (routes/treasury.ts, decisions-engine.ts).
+    await family('enterprises, a read of what is none', 'Not a treasury', 'GET', ann, `/api/enterprise/${bob.pk}`);
+    await family("the community's Decisions, standing to propose", 'You can propose a Decision once you have completed a trade',
+        'POST', ann, '/api/commons/decisions', { title: 'Seeds', touches: 'pool', effect: 'grant', description: 'Seeds for the garden beds', subject: ann.pk, params: { amount: 5 } });
+    const tools = se.createGroup({ name: 'Tool Library', joinPolicy: 'open', createdBy: ann.pk });
+    // The names list, creator channels and the open join door (routes/names-list.ts, engine/creator-channels.ts, routes/open-join.ts).
+    await family('the names list, to a member who is no admin', 'Only the community’s owners and admins can open the names list.', 'GET', ann, '/api/names/state');
+    await family('creator channels, a link of another site (a sentence for each article)', 'That is not an Instagram link.',
+        'POST', ann, '/api/member/channels', { platform: 'instagram', url: 'https://example.com/ann', category: 'other' }, 'message');
+    await family('joining, a community that takes invites only', 'This community is invite-only.', 'POST', stranger, '/api/join', { callsign: 'Stranger' });
+    // Blocks, asking to join, invites and recovery (engine/member-blocks.ts, routes/knocks.ts, engine/invites.ts, recovery-release.ts).
+    await family('blocks, oneself', 'You can’t block yourself.', 'POST', ann, '/api/blocks', { targetPubkey: ann.pk });
+    const asker = newId('Asker');
+    await family('asking to join, a name too short', 'Please give a name of at least 2 characters.', 'POST', asker, '/api/join/knock', { callsign: 'A', message: 'Hello there' });
+    await family('invites, a code that is none', 'Invalid invite code', 'POST', asker, '/api/invite/redeem', { code: 'NOPE-NOPE', publicKey: asker.pk, callsign: 'Asker' });
+    await family('recovery, no account named', 'Which account are you recovering?', 'POST', asker, '/api/recovery/collect', {});
+    // A trade step that moved on elsewhere: the sentence in French, the code the phone reads it by (transaction_gone,
+    // post_gone: apps/native/utils/changed-elsewhere.ts) and the 400 as they were.
+    const gone = (r: Res, code: string) => r.status === 400 && r.body?.code === code;
+    const cancelEn = await call('POST', ann, '/api/marketplace/transactions/cancel', { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
+    const acceptEn = await call('POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    assert(gone(cancelEn, 'transaction_gone') && gone(acceptEn, 'post_gone'),
+        `a deal that can't be cancelled and a post that can't be taken say so by code (${cancelEn.status} ${cancelEn.text} / ${acceptEn.status} ${acceptEn.text})`);
+    await family('a deal that moved on', 'Cannot cancel — transaction not found or not authorized', 'POST', ann, '/api/marketplace/transactions/cancel',
+        { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
+    await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    // Asking for one (a Need, a loan) that is gone or no longer active: the same code, from requestPost and its route.
+    const shears = se.createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
+    db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(shears.id);
+    const askGone = await call('POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    const askPaused = await call('POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });
+    assert(gone(askGone, 'post_gone') && gone(askPaused, 'post_gone'),
+        `a post that can't be asked for, gone or no longer active, says so by code (${askGone.status} ${askGone.text} / ${askPaused.status} ${askPaused.text})`);
+    await family('a post asked for that is gone', 'Post not found', 'POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    await family('a post asked for that is no longer active', 'Post is not active', 'POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });
+
+    // A spent invite: its code beside it (invite_used), its sentence English while the apps still match it.
+    const { generateInvite } = await import('./engine/invites.js');
+    const invite = generateInvite(owner.pk);
+    const first = newId('FirstJoiner'), second = newId('SecondJoiner');
+    const redeemed = await call('POST', first, '/api/invite/redeem', { code: invite?.code, publicKey: first.pk, callsign: 'FirstJoiner' });
+    const spent = await call('POST', second, '/api/invite/redeem', { code: invite?.code, publicKey: second.pk, callsign: 'SecondJoiner' }, 'fr');
+    assert(redeemed.status === 200 && spent.status === 400 && spent.text === JSON.stringify({ error: 'This invite has already been used', code: 'invite_used' }),
+        `a spent invite says so by code, in English whatever the language (${redeemed.status} / ${spent.status} ${spent.text})`);
+
+    // Shops and a push's notice (routes/shops.ts, routes/notices.ts).
+    await family('shops, one that is not here', 'There is no such shop here.', 'GET', ann, '/api/shops/no-such-shop');
+    await family('a push notice that is gone', 'This server has no such notice for you. Notices are kept for 7 days.', 'GET', ann, '/api/notices/push/no-such-notice');
+    await family('groups, a vote with nobody to vote with', 'Nobody else in this group can vote, so there is nobody to vote with.',
+        'POST', ann, `/api/groups/${tools.id}/decisions`, { effect: 'close_group', title: 'Close it', description: 'We have finished with the library' });
+
+    // A code the apps read before the sentence (UNAUTHORIZED: …, engine groups.ts): the code as it came, the sentence after
+    // it in French, the status the route chose from the English.
+    const joined = await call('POST', bob, `/api/groups/${tools.id}/join`, {});
+    const editEn = await call('PATCH', bob, `/api/groups/${tools.id}`, { name: 'Bob\'s library' });
+    const editFr = await call('PATCH', bob, `/api/groups/${tools.id}`, { name: 'Bob\'s library' }, 'fr');
+    assert(joined.status === 200 && editEn.status === 403 && editEn.body?.error === 'UNAUTHORIZED: Only a group convenor can update group details',
+        `groups, a member who is no convenor: in English as before (${editEn.status} ${editEn.text})`);
+    assert(editFr.status === 403 && editFr.body?.error === `UNAUTHORIZED: ${FR_SIGN}Only a group convenor can update group details`,
+        `and in French after the code, the code and the status as they were (${editFr.status} ${editFr.text})`);
+}
+
 // ── 5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 /**
  * What the apps match a node's words on (each found where it is written), so a sentence holding one stays English until
  * its branch reads a code: translated, the app's branch would stop matching.
  */
+/**
+ * A sentence that holds an app's match but never reaches the place that matches: what the match reads is named, and the
+ * sentence comes from elsewhere. The offline check on the People, profile, shop and enterprise screens reads those
+ * screens' own actions (a chat started, a profile or a shop loaded: 'Network request failed'), never a join door's,
+ * a request to join's or a price report's limit, which say "your network" or "this network". The web's take-over check
+ * reads the take-over lock's own route, never a member's recovery collection, which says "no recovery".
+ */
+const NEVER_WHERE_MATCHED: { sentence: RegExp; matcher: RegExp; why: string }[] = [
+    { sentence: /from (?:your|this) network/, matcher: /off-grid\|network/,
+        why: "a join's, a request to join's or a price report's limit: the offline checks read their screens' own actions" },
+    { sentence: /^(?:That account has no recovery fragments to collect|No recovery session for this device)\.$/, matcher: /no owner\|no recovery/,
+        why: "a member's recovery collection: the web's take-over check reads the take-over lock's route" },
+];
+const neverWhereMatched = (text: string, matcher: string) => NEVER_WHERE_MATCHED.some(n => n.sentence.test(text) && n.matcher.test(matcher));
+
 const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i, where: 'apps/native/app/(tabs)/people.tsx, public-profile.tsx (offline)' },
-    { phrase: /not found|not authorized|not active/i, where: 'apps/native/app/post/[id].tsx (a deal changed elsewhere)' },
+    // apps/native/app/post/[id].tsx reads a deal that changed elsewhere by its code (transaction_gone, post_gone), and an
+    // older node's English only when the answer has none (utils/changed-elsewhere.ts): "not found" is free to translate
+    // where the screen's trade steps give it a code (TRADE_STEPS, below).
     { phrase: /already been used|already used|already a member|already been redeemed/i, where: 'apps/native/app/welcome.tsx, utils/invite-next.ts, apps/pwa WelcomePage.tsx (invites)' },
     { phrase: /set a profile photo/i, where: 'apps/native/utils/db.ts (the profile heal)' },
     { phrase: /relationship not found/i, where: 'apps/native/utils/db.ts' },
@@ -323,17 +565,184 @@ const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /try again in |^Too many attempts|Your key stays/i, where: 'apps/pwa lib/web-join.ts, components/key-lines.ts' },
 ];
 
+/**
+ * Every place the apps (and core, which they run) test a node's words, read from their sources: a literal looked for in
+ * an error or a message (`e.message.includes('not found')`, `why.startsWith('Top-up refused')`, `msg === '…'`) and a
+ * regex with a word in it tested on one (`/set a profile photo/i.test(msg)`, `reason.match(/^Quorum not met/)`). What
+ * counts as an error or a message is its name (ERRORISH), so a match on something else (a search term, a URL) is not
+ * one; the few on an error that never holds a node's words are in NEVER_A_NODES_WORDS.
+ */
+const APP_SOURCE_DIRS = ['apps/native/app', 'apps/native/components', 'apps/native/utils', 'apps/native/services', 'apps/native/constants',
+    'apps/native/tools', 'apps/pwa/src', 'packages/beanpool-core/src'];
+const ERRORISH = /message|msg|err|why|reason|text|detail|sentence|said|body|str\b|^e$|^String\(e\)$/i;
+const NEVER_A_NODES_WORDS: { file: string; looksFor: string; why: string }[] = [
+    { file: 'apps/native/app/(tabs)/market.tsx', looksFor: 'closed', why: "the phone's own database closing under a wipe or a restore (one more try)" },
+    { file: 'apps/native/utils/db.ts', looksFor: 'closed', why: "the phone's own database closing under a wipe or a restore (one more try)" },
+    { file: 'apps/native/utils/pulse-oauth.ts', looksFor: 'cancel', why: "a sign-in provider's own error in its redirect" },
+];
+
+interface AppMatcher { at: string; file: string; looksFor: string; shown: string; test: (s: string) => boolean }
+
+function appMatchers(root: string, words: any): AppMatcher[] {
+    const found: AppMatcher[] = [];
+    for (const file of words.sourceFiles(root, APP_SOURCE_DIRS) as string[]) {
+        const sf = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true,
+            file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+        const at = (n: ts.Node) => `${file}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
+        const lit = (n: ts.Node | undefined) => (n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null);
+        const add = (n: ts.Node, looksFor: string, shown: string, test: (s: string) => boolean) => found.push({ at: at(n), file, looksFor, shown, test });
+        /** What a regex literal is tested on: `x` in /re/.test(x), x.match(/re/), x.replace(/re/, …). */
+        const testedOn = (n: ts.Node): ts.Node | undefined => {
+            const up = n.parent;
+            if (ts.isPropertyAccessExpression(up) && up.expression === n && ['test', 'exec'].includes(up.name.text) && ts.isCallExpression(up.parent)) {
+                return up.parent.arguments[0];
+            }
+            if (ts.isCallExpression(up) && up.arguments[0] === n && ts.isPropertyAccessExpression(up.expression)
+                && ['match', 'matchAll', 'search', 'replace', 'split'].includes(up.expression.name.text)) return up.expression.expression;
+            return undefined;
+        };
+        const visit = (node: ts.Node): void => {
+            if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+                const how = node.expression.name.text;
+                const looksFor = lit(node.arguments[0]);
+                if (looksFor !== null && ['includes', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'].includes(how)
+                    && ERRORISH.test(node.expression.expression.getText(sf))) {
+                    add(node, looksFor, `${node.expression.getText(sf)}(${JSON.stringify(looksFor)})`,
+                        how === 'startsWith' ? s => s.startsWith(looksFor) : how === 'endsWith' ? s => s.endsWith(looksFor) : s => s.includes(looksFor));
+                }
+            }
+            if (ts.isBinaryExpression(node) && (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken)) {
+                const looksFor = lit(node.left) ?? lit(node.right);
+                const other = lit(node.left) !== null ? node.right : node.left;
+                if (looksFor !== null && /\s/.test(looksFor) && ERRORISH.test(other.getText(sf))) add(node, looksFor, node.getText(sf), s => s === looksFor);
+            }
+            if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+                const on = testedOn(node);
+                const text = node.getText(sf);
+                const source = text.slice(1, text.lastIndexOf('/'));
+                // A word of three letters or more outside an escape or a character class: /set a profile photo/i, not /^\s+$/.
+                const hasWord = /[A-Za-z]{3,}/.test(source.replace(/\\u[0-9a-fA-F]{4}|\\./g, ' ').replace(/\[[^\]]*\]/g, ' '));
+                if (on && ERRORISH.test(on.getText(sf)) && hasWord) {
+                    const re = new RegExp(source, text.slice(text.lastIndexOf('/') + 1).replace(/[gy]/g, ''));
+                    add(node, source, text, s => re.test(s));
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(sf);
+    }
+    return found;
+}
+
+/**
+ * The post screen's "already updated elsewhere" (apps/native/utils/changed-elsewhere.ts) reads the code beside a refusal
+ * of its trade steps, and an older node's English (OLDER_NODES_WORDS) only when there is none. It looks for those words in
+ * a list (`message.includes(words)`), which appMatchers can't see, so the list is read from the module: a sentence the
+ * steps are refused with that holds one of them and is marked goes with a code, or a member reading another language gets
+ * the node's sentence where English gets the screen's own words and a refresh. The steps are the routes the screen calls
+ * and the escrow functions behind them, with the functions of their own file they call.
+ */
+const TRADE_STEPS: { file: string; steps: string[] }[] = [
+    { file: 'apps/server/src/routes/marketplace.ts', steps: ['/api/marketplace/posts/accept', '/api/marketplace/posts/request', '/api/marketplace/transactions/cancel'] },
+    { file: 'apps/server/src/engine/escrow.ts', steps: ['acceptPost', 'requestPost', 'cancelPostTransaction'] },
+];
+/** A sentence on those steps that holds the older words but is not the post or the deal moving on: no code, the node's words. */
+const NOT_MOVED_ON: { sentence: string; why: string }[] = [
+    { sentence: 'Member not found', why: "the one acting, or the listing's author, has no member's row here (escrow.ts assertMemberActive, assertAccountOpen)" },
+];
+
+/** Each string written in the trade steps, and whether a code goes beside it (`{ error, code }`, `Object.assign(err, { code })`). */
+function tradeStepStrings(root: string): { found: string[]; strings: { at: string; text: string; coded: boolean }[] } {
+    const found: string[] = [];
+    const strings: { at: string; text: string; coded: boolean }[] = [];
+    for (const { file, steps } of TRADE_STEPS) {
+        const sf = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+        const own = new Map<string, ts.Node>();
+        const starts: ts.Node[] = [];
+        const index = (n: ts.Node): void => {
+            if (ts.isFunctionDeclaration(n) && n.name) own.set(n.name.text, n);
+            // router.post('/api/…', handler)
+            if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'post'
+                && n.arguments[0] && ts.isStringLiteral(n.arguments[0]) && steps.includes(n.arguments[0].text)) {
+                starts.push(n);
+                found.push(n.arguments[0].text);
+            }
+            ts.forEachChild(n, index);
+        };
+        index(sf);
+        for (const step of steps) if (own.has(step)) { starts.push(own.get(step)!); found.push(step); }
+        const withCode = (n: ts.Node) => ts.isObjectLiteralExpression(n)
+            && n.properties.some(p => !!p.name && ts.isIdentifier(p.name) && p.name.text === 'code');
+        const coded = (n: ts.Node): boolean => {
+            for (let up = n.parent; up && !ts.isBlock(up) && !ts.isSourceFile(up); up = up.parent) {
+                if (withCode(up)) return true;
+                if (ts.isCallExpression(up) && up.expression.getText(sf) === 'Object.assign' && up.arguments.some(withCode)) return true;
+            }
+            return false;
+        };
+        const seen = new Set<ts.Node>(starts);
+        const walk = (n: ts.Node): void => {
+            if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+                const fn = own.get(n.expression.text);
+                if (fn && !seen.has(fn)) { seen.add(fn); walk(fn); }
+            }
+            if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
+                strings.push({ at: `${file}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`, text: n.text, coded: coded(n) });
+            }
+            ts.forEachChild(n, walk);
+        };
+        starts.forEach(walk);
+    }
+    return { found, strings };
+}
+
 async function testNothingMatchedIsMarked(): Promise<void> {
     console.log('\n--- 5. Nothing an app matches on is marked for translation ---');
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
     const words: any = await import(path.join(root, 'scripts/words/words.mjs'));
     const extracted = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'server' || p.name === 'engine'));
-    const marked = extracted.flatMap((p: any) => p.calls.filter((c: any) => c.fn === 'word' && typeof c.text === 'string'));
-    const matched = marked.flatMap((c: any) => APP_MATCHES.filter(m => m.phrase.test(c.text)).map(m => `${c.at} "${c.text}" (${m.where})`));
+    // A sentence of the server's catalog: marked with word() or wordn(), or written with English's own t() / tn() (one with
+    // values in it); a count's both forms.
+    const marked = extracted.flatMap((p: any) => p.calls.filter((c: any) => typeof c.text === 'string')
+        .flatMap((c: any) => (typeof c.other === 'string' ? [c, { ...c, text: c.other }] : [c])));
+    const matched = marked.flatMap((c: any) => APP_MATCHES.filter(m => m.phrase.test(c.text) && !neverWhereMatched(c.text, m.phrase.source))
+        .map(m => `${c.at} "${c.text}" (${m.where})`));
     const prefixed = marked.filter((c: any) => /^[A-Z_]{3,}:/.test(c.text)).map((c: any) => `${c.at} "${c.text}"`);
     assert(marked.length >= 100, `the server and the engine mark their members' refusals (${marked.length} marks)`);
     assert(matched.length === 0, `no marked sentence is one an app matches on${matched.length ? `: ${matched.join('; ')}` : ''}`);
     assert(prefixed.length === 0, `no marked sentence starts with a code the apps read (UNAUTHORIZED: …)${prefixed.length ? `: ${prefixed.join('; ')}` : ''}`);
+
+    // The apps' sources as they are now: every match on an error or a message, against every marked sentence (a value
+    // in it written as a word, as the member would read it).
+    const matchers = appMatchers(root, words);
+    const known = (m: AppMatcher) => NEVER_A_NODES_WORDS.some(n => n.file === m.file && n.looksFor === m.looksFor);
+    const listed = ['set a profile photo', 'nonce already used', '^Quorum not met', 'already a member', 'Epoch record refused'];
+    assert(listed.every(l => matchers.some(m => m.looksFor === l)) && matchers.length >= 40,
+        `the apps' matches are found where they are written (${matchers.length}, the hand-kept list's among them)`);
+    const filled = (s: string) => s.replace(/\{[A-Za-z0-9_]+\}/g, 'Ann');
+    const caught = marked.flatMap((c: any) => matchers.filter(m => !known(m) && m.test(filled(c.text)) && !neverWhereMatched(c.text, m.looksFor))
+        .map(m => `${c.at} "${c.text}" (${m.at} ${m.shown})`));
+    assert(caught.length === 0, `no marked sentence is one an app's source matches on${caught.length ? `: ${caught.join('; ')}` : ''}`);
+    assert(NEVER_A_NODES_WORDS.every(n => matchers.some(m => m.file === n.file && m.looksFor === n.looksFor)),
+        "each match set aside as never a node's words is still in its file (else it comes off the list)");
+
+    // The post screen's trade steps: each marked sentence they are refused with that holds an older node's words goes
+    // with a code (TRADE_STEPS).
+    const { OLDER_NODES_WORDS } = await import(path.join(root, 'apps/native/utils/changed-elsewhere.ts'));
+    const older = [...new Set(Object.values(OLDER_NODES_WORDS as Record<string, string[]>).flat())];
+    const { found, strings } = tradeStepStrings(root);
+    const steps = TRADE_STEPS.flatMap(t => t.steps);
+    const codedSentences = ['Post not found or not active', 'Post not found', 'Post is not active', 'Cannot request — post not found or unauthorized',
+        'Cannot cancel — transaction not found or not authorized'];
+    assert(older.length >= 3 && steps.every(s => found.includes(s)) && codedSentences.every(c => strings.some(s => s.text === c && s.coded)),
+        `the screen's trade steps are found where they are written (${found.length} of ${steps.length}), their coded refusals among them, and the older words read from the phone (${older.join(', ')})`);
+    const markedText = new Set(marked.map((c: any) => c.text));
+    const uncoded = strings.filter(s => !s.coded && markedText.has(s.text) && older.some(w => s.text.includes(w))
+        && !NOT_MOVED_ON.some(n => n.sentence === s.text));
+    assert(uncoded.length === 0, `each marked sentence the screen's trade steps are refused with that holds an older node's words goes with a code${
+        uncoded.length ? `: ${uncoded.map(s => `${s.at} "${s.text}"`).join('; ')}` : ''}`);
+    assert(NOT_MOVED_ON.every(n => strings.some(s => s.text === n.sentence && !s.coded)),
+        'each sentence set aside as not the trade moving on is still one of the steps\' (else it comes off the list)');
     // The push sentences are core's keys, so the drafting lane finds them where the apps' own are.
     const core = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'core'))[0];
     const coreKeys = new Set(core.calls.filter((c: any) => c.fn === 'word').map((c: any) => wordKey(c.text)));
@@ -341,10 +750,88 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     assert(missing.length === 0, `every push sentence is a word of core's (${Object.keys(PUSH_NOTICE_KINDS).length} kinds)${missing.length ? `; not: ${missing.join(', ')}` : ''}`);
 }
 
+// ── 7 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/** What the way out does over far more than a fixed one (100 ms: what it costs is near none, so a slow runner passes). */
+const LONG_REFUSAL_MS = 100;
+
+/** The way out over one refused answer in French, as Koa runs it: the error it left, and how long it held the loop. */
+async function wayOutOver(text: string): Promise<{ error: unknown; ms: number }> {
+    const ctx: any = {
+        status: 400, path: '/api/recovery/collect/sso', body: { error: text },
+        get: (h: string) => (h.toLowerCase() === 'x-language' ? 'fr' : ''), vary: () => {},
+    };
+    const started = performance.now();
+    await memberWordsOnTheWayOut()(ctx, async () => {});
+    return { error: ctx.body.error, ms: performance.now() - started };
+}
+
+async function testLongRefusals(): Promise<void> {
+    console.log('\n--- 7. A long refusal ---');
+    // As recovery-collect.ts wrote a provider it could not verify, the whole of what the request sent.
+    const echoed = (sent: string) => `'${sent}' is not a sign-in provider this node can verify.`;
+    const LONG: [string, string][] = [
+        ['160 KB of a request echoed', echoed('a. B'.repeat(40_000))],
+        ['1 MB of a request echoed', echoed('a. B'.repeat(262_144))],
+        ['1 MB of a catalog sentence again and again', 'Or the group can vote. '.repeat(45_600).trim()],
+    ];
+    const catalogs: [string, Record<string, unknown> | null][] = [
+        ["the suite's French", FR],
+        ['every marked sentence in French', { ...await everyMarkInFrench(), ...FR }],
+        ['the shipped catalogs', null],
+    ];
+    const app = new Koa();
+    app.use(memberWordsOnTheWayOut());
+    app.use(scrubServerFaults());
+    app.use(async (ctx) => { ctx.status = 400; ctx.body = { error: LONG[Number(ctx.query.i)][1] }; });
+    const server = http.createServer(app.callback());
+    await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
+    const base = `http://127.0.0.1:${(server.address() as any).port}`;
+    const timed = async (i: number, lang?: string) => {
+        const started = performance.now();
+        const res = await fetch(`${base}/api/recovery/collect/sso?i=${i}`, { headers: lang ? { 'X-Language': lang } : {} });
+        const text = await res.text();
+        return { status: res.status, text, ms: performance.now() - started };
+    };
+    try {
+        for (const [catalog, words] of catalogs) {
+            useCatalogsForTests('fr', words ? { server: words, core: FR_CORE } : null);
+            for (const [what, text] of LONG) {
+                const out = await wayOutOver(text);
+                assert(out.error === text && out.ms < LONG_REFUSAL_MS,
+                    `${catalog}: a refusal of ${what} comes back as it came, the way out over it in ${out.ms.toFixed(1)} ms (under ${LONG_REFUSAL_MS})`);
+            }
+        }
+        useCatalogsForTests('fr', { server: FR, core: FR_CORE });
+        for (const [i, [what]] of LONG.entries()) {
+            const none = await timed(i);
+            const fr = await timed(i, 'fr');
+            assert(fr.status === 400 && fr.text === none.text && fr.ms < none.ms + LONG_REFUSAL_MS,
+                `over HTTP, ${what}: with X-Language: fr, the answer without it byte for byte, in ${fr.ms.toFixed(1)} ms (${none.ms.toFixed(1)} ms without)`);
+        }
+
+        // Just under the longest the way out reads (member-words.ts LONGEST_REFUSAL_READ, 2,000 characters), with every
+        // marked sentence in French: still read, and in the same time. A short sentence of the catalog's, again and again,
+        // is the most runs it can find: tried from each sentence to the end, this took half a second.
+        useCatalogsForTests('fr', { server: { ...catalogs[1][1]!, 'No.': 'Non.' }, core: FR_CORE });
+        const many = 'No. '.repeat(499).trim();
+        const nearLong = await wayOutOver(many);
+        assert(many.length < 2000 && nearLong.error === 'Non. '.repeat(499).trim() && nearLong.ms < LONG_REFUSAL_MS,
+            `a refusal of ${many.length} characters, a catalog sentence 499 times, comes in French in ${nearLong.ms.toFixed(1)} ms`);
+        const unknown = echoed('a. B'.repeat(480));
+        const nearUnknown = await wayOutOver(unknown);
+        assert(unknown.length < 2000 && nearUnknown.error === unknown && nearUnknown.ms < LONG_REFUSAL_MS,
+            `and one of ${unknown.length} characters, ${unknown.split('. ').length} sentences no catalog has, stays as it came in ${nearUnknown.ms.toFixed(1)} ms`);
+    } finally {
+        useCatalogsForTests('fr', null);
+        await new Promise<void>(r => server.close(() => r()));
+    }
+}
+
 async function main() {
     console.log("The server's words in the member's language...");
     testRequestLanguage();
     await testWayOut();
+    await testLongRefusals();
     await testRealServer();
     await testNothingMatchedIsMarked();
     console.log(`\n${passed}/${run} passed`);

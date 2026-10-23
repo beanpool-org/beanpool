@@ -7,16 +7,15 @@
  *
  * A thing's states (DESIGN-tool-library-fable.md §2.1): on the shelf (private) → in the shop (its Offer live) → out (on a
  * loan through BeanPool, or lent outside it) → back in the shop → taken out of the shop (its Offer paused, kept so listing
- * it again puts the same Offer back) → gone when it is deleted (kept as a tombstone, never shown).
+ * it again puts the same Offer back) → gone when it is deleted (taken out of the document: nothing of it is kept).
  */
-import { formatDate, t, tn } from '../../words.js';
+import { formatDate, t, tn, wordn } from '../../words.js';
 import { PRICING_CATEGORIES, normalizeCategory } from '../../pricing-catalog.js';
 import { toolDocBytes } from '../check.js';
 import type { ToolDealSummary, ToolOfferDraft } from '../host.js';
-import { TOOL_LIMITS } from '../manifest.js';
+import type { ToolLine } from '../manifest.js';
 import {
     THINGS_LEND_TERMS_CHARS,
-    THINGS_MAX_ITEMS,
     THINGS_NAME_CHARS,
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
@@ -288,23 +287,81 @@ export function saveThing(doc: ThingsDoc, input: ThingInput, at: { id: string | 
     return { ...doc, things: [...(doc.things ?? []), made] };
 }
 
-/** Whether another thing can be added: fewer than THINGS_MAX_ITEMS the member still has. */
-export function shedHasRoom(doc: ThingsDoc): boolean {
-    return (doc.things ?? []).filter(isLiveThing).length < THINGS_MAX_ITEMS;
+/**
+ * Whether a document fits `maxBytes`, the host's bound (host.doc.maxBytes(): the shed's 128 KB, or less on a node that
+ * keeps less), so the host will keep it. Size is the shed's one bound: there is no count of things. A change that leaves
+ * it no bigger than `held`, the document as the host has it now, fits too: a shed already past the bound (kept before an
+ * older node said it keeps less) can still be made smaller, a Delete or a shorter note at a time, and nothing makes it
+ * bigger. The node copy sends none of it until it is under the node's bound again.
+ */
+export function shedFits(doc: ThingsDoc, maxBytes: number, held?: ThingsDoc): boolean {
+    const bytes = toolDocBytes(doc);
+    return bytes <= maxBytes || (held !== undefined && bytes <= toolDocBytes(held));
 }
 
-/** Whether a document fits the store's bound (64 KB, as core reports it), so the host will keep it. */
-export function shedFits(doc: ThingsDoc): boolean {
-    return toolDocBytes(doc) <= TOOL_LIMITS.docBytes;
+/**
+ * A thing as most are, for the room of a shed with nothing in it yet: a short name, a category and a condition, a line of
+ * how it is lent, a photo, an id and its two times, as the edit screen saves them (about 240 bytes).
+ */
+const TYPICAL_THING: Thing = {
+    id: 'mh3k9x2a-q8w7e6r5',
+    name: 'Cordless drill',
+    category: 'tools',
+    condition: 'good',
+    lendTerms: 'Back within a week, charged.',
+    photo: 'mh3k9x2a-q8w7e6r5',
+    createdAt: '2026-10-23T08:37:00.000Z',
+    updatedAt: '2026-10-23T08:37:00.000Z',
+};
+
+/** The bytes one more thing takes in the document: its JSON and the comma before it. */
+const thingBytes = (thing: unknown) => toolDocBytes(thing) + 1;
+
+/**
+ * About how many more things fit in `maxBytes` (the host's bound, host.doc.maxBytes()): the bytes left, in things the
+ * size of the member's own on average, or of a typical one while they have none. Never below 0, also for a document
+ * already past the bound (one kept before an older node said it keeps less).
+ */
+export function shedRoom(doc: ThingsDoc, maxBytes: number): number {
+    return Math.max(0, Math.floor((maxBytes - toolDocBytes(doc)) / averageThingBytes(doc)));
 }
 
-/** Said when a new thing would be one too many. */
-export const shedFullLine = () => tn(THINGS_MAX_ITEMS, 'Your Tool shed holds {n} thing. Delete one first.', 'Your Tool shed holds {n} things. Delete one first.');
+/** The bytes one of the member's things takes on average, or a typical thing while they have none. */
+function averageThingBytes(doc: ThingsDoc): number {
+    const live = (doc.things ?? []).filter(isLiveThing);
+    return live.length > 0 ? Math.ceil(live.reduce((sum, thing) => sum + thingBytes(thing), 0) / live.length) : thingBytes(TYPICAL_THING);
+}
 
-/** Said when a save would take the document past the store's bound: the bound as core reports it. */
-export const shedTooBigLine = () => t('Your Tool shed is full: it keeps up to {kb} KB. Delete something you no longer have, or shorten some notes.', {
-    kb: Math.floor(TOOL_LIMITS.docBytes / 1024),
-});
+/**
+ * About how many things to delete for the document to fit `maxBytes` (a server that keeps less than the device holds):
+ * the bytes over, in things the size of the member's own on average, rounded up; 0 when it fits. A Delete gives all of a
+ * thing's bytes back (removeThing).
+ */
+export function shedToDelete(doc: ThingsDoc, maxBytes: number): number {
+    const over = toolDocBytes(doc) - maxBytes;
+    return over > 0 ? Math.ceil(over / averageThingBytes(doc)) : 0;
+}
+
+/**
+ * The manifest's `tooBig`: switching the server's copy on found the shed more than the server keeps, so nothing changed.
+ * How many things to delete, at least one (what the device sends can be a little more than the shed it shows: a tombstone
+ * an earlier build kept goes with the next write), or the copy left off.
+ */
+export function shedTooBig(doc: ThingsDoc, maxBytes: number): ToolLine {
+    return {
+        key: wordn(
+            "Your Tool shed holds more than your community's server keeps for now, so nothing changed. Delete about {n} thing, then switch the copy on again. Or leave it off, and your things stay on this device only.",
+            "Your Tool shed holds more than your community's server keeps for now, so nothing changed. Delete about {n} things, then switch the copy on again. Or leave it off, and your things stay on this device only.",
+        ),
+        n: Math.max(1, shedToDelete(doc, maxBytes)),
+    };
+}
+
+/** The room in a sentence, in things, never bytes: "Room for about 240 more things". */
+export const shedRoomLine = (n: number) => tn(n, 'Room for about {n} more thing', 'Room for about {n} more things');
+
+/** Said when there is no room, or a save would take the document past the host's bound: in words, never bytes. */
+export const shedFullLine = () => t('Your Tool shed is full. Delete something you no longer have, or shorten some notes.');
 
 /**
  * Said when its Offer can't be put back because the member's shop is closed for now (isShopClosedRefusal): nothing goes
@@ -313,14 +370,15 @@ export const shedTooBigLine = () => t('Your Tool shed is full: it keeps up to {k
 export const shopClosedLine = () => t("Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.");
 
 /**
- * The document with a thing deleted: kept as a tombstone (`gone`, its id and name and a newer app's fields) and never
- * shown or counted again; its photo, notes, terms and Offer link go with it.
+ * The document with a thing deleted: taken out of the list, every other item where it was, and nothing of it kept, so
+ * a Delete gives back all the room the thing took and the shed never fills with things that are gone. No tombstone is
+ * needed: the sync takes or sends the document whole, last writer wins (reconcile.ts; node-copy.ts runStep), and nothing
+ * reads one, on a device or on the node. A copy that took this document has no thing to bring back; one that never did
+ * is the older document, which loses to this one or wins whole, tombstone or not ("one device at a time"). The host
+ * removes its photo.
  */
-export function removeThing(doc: ThingsDoc, id: string, now: number): ThingsDoc {
-    return changeThing(doc, id, now, (t) => ({
-        ...without(t, 'category', 'condition', 'replacementValue', 'lendTerms', 'lendMaxDays', 'ownerNote', 'photo', 'postId', 'pausedPostId', 'lentTo'),
-        gone: true,
-    }));
+export function removeThing(doc: ThingsDoc, id: string, _now: number): ThingsDoc {
+    return { ...doc, things: (doc.things ?? []).filter((t) => !(isLiveThing(t) && t.id === id)) };
 }
 
 /** When a thing is due back, `days` from now (the "back around" chips), as an ISO time. */

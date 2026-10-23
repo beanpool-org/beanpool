@@ -1,6 +1,8 @@
 /**
- * Archetype collaboration messages and chat prefill helpers.
+ * Archetype collaboration messages and chat prefill helpers. A prefill starts in the sender's language (the phone's
+ * sentences); they can change it before it goes.
  */
+import { t } from '@beanpool/core';
 
 export interface ChatPrefillPayload {
     recipient?: string;
@@ -12,8 +14,9 @@ export interface ChatPrefillPayload {
  * nothing a member sends or sees about another member carries a type (docs/the-commons.md).
  */
 export function buildSynergyCollabMessage(callsign: string | undefined): string {
-    const name = callsign || 'there';
-    return `Hey ${name}! I saw on your profile that we could work well together. Let's collaborate! 🤝`;
+    return callsign
+        ? t("Hey {name}! I saw on your profile that we could work well together. Let's collaborate! 🤝", { name: callsign })
+        : t("Hey there! I saw on your profile that we could work well together. Let's collaborate! 🤝");
 }
 
 /**
@@ -21,8 +24,9 @@ export function buildSynergyCollabMessage(callsign: string | undefined): string 
  * Matches native copy verbatim.
  */
 export function buildSynergyNudgeMessage(callsign: string | undefined): string {
-    const name = callsign || 'there';
-    return `Hey ${name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡`;
+    return callsign
+        ? t('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡', { name: callsign })
+        : t('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡');
 }
 
 /**

@@ -274,7 +274,7 @@ describe('the examples stay on the Market', () => {
         // answer's listings, never one of them, with no tap, and only while the node says `examples` (checked below).
         expect(users).toEqual(['components/ExampleListings.tsx', 'pages/HomePage.tsx', 'pages/MarketplacePage.tsx']);
         const home = fs.readFileSync(path.join(src, 'pages/HomePage.tsx'), 'utf8');
-        const drawn = home.slice(home.indexOf('data-testid="home-examples"'), home.indexOf('EXAMPLES_NOTE}'));
+        const drawn = home.slice(home.indexOf('data-testid="home-examples"'), home.indexOf('EXAMPLE_WORDS.note)}'));
         expect(drawn).toMatch(/EXAMPLE_LISTINGS\.slice\(0, 2\)\.map/);
         expect(drawn).not.toMatch(/onClick|href=|onKeyDown|tabIndex|onNavigate|HomeLine/);
         expect(home).toMatch(/const examples = m\.examples && /);

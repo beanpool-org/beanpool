@@ -357,7 +357,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 {linkActions()}
                 {withLine && (
                     <div className="mt-5" data-testid="invites-local-line">
-                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites} {...waysForward} />
+                        <LocalCommunityLine feature="invites" text={t(LOCAL_COMMUNITY_LINES.invites)} {...waysForward} />
                     </div>
                 )}
             </div>

@@ -26,6 +26,7 @@ import { router } from 'expo-router';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn } from '../utils/node-profile';
 import { t } from '@beanpool/core';
+import { signedRequestWords } from './signed-request-lines';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
@@ -230,8 +231,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 onClose();
             },
             onInvalidName: () => Alert.alert(t('Invalid Name'), t('Group name must be at least 2 characters long.')),
-            // The node's own reason is shown as it sent it (its words are slice S4).
-            onError: (e: any) => Alert.alert(t('Creation Failed'), e?.message || t('Failed to create group')),
+            // The node's own reason is shown as it sent it (its words are slice S4); db.ts's own sentences are worded.
+            onError: (e: any) => Alert.alert(t('Creation Failed'), e?.message ? signedRequestWords(e.message) : t('Failed to create group')),
         });
     };
 

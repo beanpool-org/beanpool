@@ -24,6 +24,7 @@ import {
 } from '../utils/db';
 import { useTheme } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { signedRequestWords } from './signed-request-lines';
 
 /** Sentences marked in core (scoped-decision.ts), translated here where they are shown. */
 const LINES = { someone: GROUP_SOMEONE, groupNote: GROUP_DECISIONS_NOTE, smallRoll: SMALL_ROLL_BALLOT_NOTE };
@@ -137,7 +138,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
             await load();
             onChanged?.();
         } catch (e: any) {
-            Alert.alert(t('Your vote was not counted'), e?.message || t('Try again in a moment.'));
+            Alert.alert(t('Your vote was not counted'), e?.message ? signedRequestWords(e.message) : t('Try again in a moment.'));
         } finally {
             setBusyId(null);
         }
@@ -233,7 +234,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                 : { title: title.trim(), description: why.trim(), effect, subject: person.pubkey });
             onDone();
         } catch (e: any) {
-            setError(e?.message || t('The vote was not opened. Try again in a moment.'));
+            setError(e?.message ? signedRequestWords(e.message) : t('The vote was not opened. Try again in a moment.'));
         } finally {
             setBusy(false);
         }
@@ -355,7 +356,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
             await proposeGroupDecision(groupId, { title: title.trim(), description: why.trim(), ...proposal });
             onDone();
         } catch (e: any) {
-            setError(e?.message || t('The vote was not opened. Try again in a moment.'));
+            setError(e?.message ? signedRequestWords(e.message) : t('The vote was not opened. Try again in a moment.'));
         } finally {
             setBusy(false);
         }

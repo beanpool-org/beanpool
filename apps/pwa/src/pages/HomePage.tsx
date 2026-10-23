@@ -19,19 +19,22 @@
  *   (components/AddCardDialog.tsx) and Edit home (components/EditHomeDialog.tsx) on the community card; the version-2
  *   list is saved on the account (`home.layout`) with this browser's copy. Which copy stands, what is asked and every edit
  *   are lib/home-layout.ts, the phone's rules (apps/native/utils/home-cards.ts).
+ * - **A wide screen** (scratch/global-node/DESIGN-home-wide-and-content-fable.md D1, slice W2): the cards stand in as many
+ *   320–576 px columns as the page's own width holds, up to three, row first in the saved order; Needs you and the
+ *   community card span the row. A phone's width is one column, as before. Auto only: a saved choice of columns is W0's.
  * - **Interests** (§4.3): the chips save on the account and in this browser's Market (`bp_fav_categories`); a tap reorders
  *   the Market card in place, the same second.
  * - **No dark patterns** (§6.3): real numbers or nothing, amber (never red) only for what waits on the member, nothing
  *   tier-locked, examples always say Example, nothing here blocks the app or waits on the network to draw.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    t, tn, word,
+    currentLanguage, formatCount, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
@@ -43,8 +46,8 @@ import {
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
@@ -67,8 +70,8 @@ import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
 } from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
-import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleLabel } from '../lib/example-listings';
-import { NO_BEANS_TERMS_TEXT, PLACE_AFTER_JOIN, VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
+import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
+import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { CardMenu, HomeCard, HomeLine, HomeMore } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
@@ -76,7 +79,9 @@ import { OneWayBackCard } from '../components/OneWayBack';
 import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult } from '@beanpool/core';
+import {
+    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
+} from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
@@ -117,6 +122,24 @@ export const HOME_NOT_ON_NODE = HOME_WORDS.notOnNode;
 /** Said politely once a card is hidden: where it went, and how it comes back. */
 /** Said politely when Done on the last tip takes the Tips card away. */
 export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
+/**
+ * The lines lib/ (home-cards.ts, home-layout.ts) and core (the town search's) keep as word() keys, in the member's language
+ * where Home draws them.
+ */
+const LIB_LINES = {
+    skyNoPlace: SKY_NO_PLACE_LINE, fewerCards: FEWER_CARDS_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
+    typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN, startCard: START_CARD_WORDS,
+    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
+} as const;
+/** Core's FIND_TOWN_SEARCH_WORDS as the town search draws them, in the member's language (made where drawn). */
+const findTownWords = (): AddressSearchWords => ({
+    label: t(FIND_TOWN_SEARCH_WORDS.label),
+    placeholder: t(FIND_TOWN_SEARCH_WORDS.placeholder),
+    unavailable: t(FIND_TOWN_SEARCH_WORDS.unavailable),
+    noMatches: t(FIND_TOWN_SEARCH_WORDS.noMatches),
+    source: t(FIND_TOWN_SEARCH_WORDS.source),
+    pickLabel: FIND_TOWN_SEARCH_WORDS.pickLabel,
+});
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -153,6 +176,37 @@ function reducedMotion(): boolean {
     try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return true; }
 }
 
+/** A card that spans the grid's row: Needs you at the top, the community card at the bottom, and the notes under the first card. */
+const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
+/** Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3). */
+const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST;
+
+/**
+ * How many columns Home's cards stand in (DESIGN-home-wide-and-content-fable.md D1, slice W2; Auto only): the page's own
+ * width inside its gutters (lib/home-layout.ts columnsFor), measured before the first paint and again whenever it changes
+ * (the window, the sidebar). A browser without ResizeObserver follows the window.
+ */
+function useHomeColumns(): [(el: HTMLDivElement | null) => void, number] {
+    const [el, setEl] = useState<HTMLDivElement | null>(null);
+    const [cols, setCols] = useState(1);
+    useLayoutEffect(() => {
+        if (!el) return;
+        const measure = () => {
+            const cs = getComputedStyle(el);
+            setCols(columnsFor(el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)));
+        };
+        measure();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure);
+            return () => window.removeEventListener('resize', measure);
+        }
+        const observer = new ResizeObserver(measure);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [el]);
+    return [setEl, cols];
+}
+
 /**
  * The point "near you" is measured from: one shared or typed here (`coarse` already), or the centre the Market was given,
  * held as picked with its radius (`radiusKm`) and only ever sent through sentPoint.
@@ -181,6 +235,18 @@ function sentPoint(p: HomePoint | null, list: HomeLayoutV2 | null): { lat: numbe
 
 /** A shared position, rounded to 0.1° (about 11 km): enough for "near you", never a doorstep. */
 const coarse = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * A listing's price in words: Beans to the cent ("33.33", never a float's "20.299999999999997"). English groups thousands
+ * as it always has, a fraction's too ("1,234.5"); every other language writes the digits alone with its own decimal sign
+ * (formatCount: "1.500" reads as 1.5 in pt and es).
+ */
+function priceWords(credits: number): string {
+    const r = Math.round(credits * 100) / 100;
+    const [whole, fraction] = String(r).split('.');
+    const n = currentLanguage() === 'en' && fraction !== undefined ? `${formatCount(Number(whole))}.${fraction}` : formatCount(r);
+    return tn(r, '{n} Beans', '{n} Beans', { n });
+}
 
 export interface HomeVisitor {
     /** The lobby's Join card, drawn first (§3.2 (c)). */
@@ -233,6 +299,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [interests, setInterests] = useState<string[] | null>(null);
     // Once shown or opened from Tune, the interests card stays for this visit: a first tap must not take it away.
     const [interestsOpen, setInterestsOpen] = useState(false);
+    // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
+    const [safetyDrawn, setSafetyDrawn] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     // A card's Settings… (from its "…" or Edit home).
@@ -301,6 +369,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     pointRef.current = point;
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
     const pageRef = useRef<HTMLDivElement | null>(null);
+    const [measurePage, cols] = useHomeColumns();
+    const setPage = useCallback((el: HTMLDivElement | null) => { pageRef.current = el; measurePage(el); }, [measurePage]);
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<string[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
@@ -730,7 +800,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         takenSearch.current = saveSearch;
         onSaveSearchTaken?.();
         setSaveNote(null);
-        if (answer.welcome || !answer.me || visitor) { noteSaveSearch(SAVE_SEARCH_NOT_NOW); return; }
+        if (answer.welcome || !answer.me || visitor) { noteSaveSearch(t(LIB_LINES.saveSearchNotNow)); return; }
         const state = saveSearchState(drawnBase(), saveSearch);
         if (state !== 'add') { noteSaveSearch(saveSearchLine(state, saveSearch.q)!); return; }
         pageRef.current?.scrollIntoView?.({ block: 'start' });
@@ -966,29 +1036,31 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // ── loading and failure: never a blank page, never a block on the other tabs ────────────────────────────────────
     if (!answer) {
         return (
-            <div className="max-w-xl mx-auto px-4 pt-2 pb-6" data-testid="home-page">
-                {visitor?.joinCard}
-                {status === 'signed-out' ? (
-                    <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{t(HOME_WORDS.signedOut)}</p>
-                        <button type="button" onClick={() => window.location.reload()}
-                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Reload')}
-                        </button>
-                    </div>
-                ) : status === 'failed' ? (
-                    <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
-                            {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
-                        </p>
-                        <button type="button" onClick={() => void fetchHome('retry')}
-                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Try again')}
-                        </button>
-                    </div>
-                ) : (
-                    <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your Home…')}</p>
-                )}
+            <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
+                <div className="mx-auto" style={{ maxWidth: gridWidth(cols) }}>
+                    {visitor?.joinCard}
+                    {status === 'signed-out' ? (
+                        <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                            <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{t(HOME_WORDS.signedOut)}</p>
+                            <button type="button" onClick={() => window.location.reload()}
+                                className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                                {t('Reload')}
+                            </button>
+                        </div>
+                    ) : status === 'failed' ? (
+                        <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                            <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
+                                {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
+                            </p>
+                            <button type="button" onClick={() => void fetchHome('retry')}
+                                className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                                {t('Try again')}
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your Home…')}</p>
+                    )}
+                </div>
             </div>
         );
     }
@@ -998,7 +1070,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
     const pins = pinnedCards(a, now);
-    const movable = shown.filter(c => canMoveCard(c.type, pins));
+    // Only the cards on screen: a "Your way back in" with nothing to say is no place to move to, or a press on the card
+    // next to it would swap the two in the saved list and move nothing anyone can see (PR #2411 review).
+    const movable = shown.filter(c => canMoveCard(c.type, pins) && (c.type !== 'safety' || safetyDrawn));
     const nameOf = (c: Pick<HomeCardInstance, 'type'>) => (isHomeCardId(c.type) ? cardTitle(c.type, a) : cardName(c.type, profile));
 
     function menuFor(card: HomeCardInstance) {
@@ -1009,6 +1083,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             ...(card.type === 'search' ? { label: cardLabelName(card, profile) } : {}),
             canMoveUp: i > 0,
             canMoveDown: i >= 0 && i < movable.length - 1,
+            across: cols > 1,
             onRemove: () => removeFromHome(card.id),
             ...(homeCardType(card.type)?.readSettings ? { onSettings: () => setSettingsFor(card) } : {}),
             onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, card.id, d, movable, Date.now(), pins)); },
@@ -1068,7 +1143,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const step = nextTip(tipsRef.current, tipsList, localDay());
         if (!step.view) focusAround('tips');
         keepTips(step.record);
-        setLive(step.view ? step.view.tip.text : t(HOME_WORDS.tipsDone));
+        setLive(step.view ? t(step.view.tip.text) : t(HOME_WORDS.tipsDone));
     }
 
     // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
@@ -1122,8 +1197,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     function marketLine(item: HomeMarketItem, testId: string): ReactNode {
         const photo = resolveImageUrl(item.photoUrl);
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
-        const price = !beansOn ? (isVisitor ? NO_BEANS_TERMS_TEXT : null)
-            : typeof item.credits === 'number' ? (item.credits > 0 ? tn(item.credits, '{n} Beans', '{n} Beans', { n: item.credits.toLocaleString('en') }) : t('Free', undefined, 'price')) : null;
+        const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
+            : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
         const km = distanceText(item.distanceKm);
         const kind = item.type === 'need' ? 'NEED' : 'OFFER';
         return (
@@ -1144,7 +1219,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const id = card.type as HomeCardId;
         const c = a.cards;
         const title = nameOf(card);
-        const common = { id: card.id, title, menu: menuFor(card), style: cardStyle(index) };
+        const common = { id: card.id, title, menu: menuFor(card), style: spansRow(card.type) ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
         switch (card.type) {
             case 'needs':
                 return c.needs && (
@@ -1154,12 +1229,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             case 'safety':
                 // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
-                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕.
+                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕. The cell comes with the card: put away
+                // or checked, it has nothing to say and takes no cell (PR #2411 review). `c.safety` is the node's word that the
+                // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
+                // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
-                    <div key={id} style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
-                        {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
-                        <OneWayBackCard identity={identity} placement="landing" onSeeWords={onSeeWords} />
-                    </div>
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn} frame={(oneWayBack) => (
+                        <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
+                            {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
+                            {oneWayBack}
+                        </div>
+                    )} />
                 );
             case 'find': {
                 const f = c.find!;
@@ -1211,19 +1291,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 {pointProblem && <p role="alert" className="m-0 mt-1 text-xs text-nature-800 dark:text-nature-100">{pointProblem}</p>}
                                 {!townOpen && !townName && (
                                     <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town" className={TOWN_LINK}>
-                                        {TYPE_YOUR_TOWN}
+                                        {t(LIB_LINES.typeYourTown)}
                                     </button>
                                 )}
                             </div>
                         )}
                         {f.point !== null && !townName && !townOpen && (
                             <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town-instead" className={TOWN_LINK}>
-                                {NOT_HERE_TYPE_YOUR_TOWN}
+                                {t(LIB_LINES.notHereTypeYourTown)}
                             </button>
                         )}
                         {townOpen && (
                             <div className="mt-2">
-                                <AddressSearch words={FIND_TOWN_SEARCH_WORDS} onPick={pickTown} />
+                                <AddressSearch words={findTownWords()} onPick={pickTown} />
                                 <button type="button" onClick={() => setTownOpen(false)} data-testid="home-town-cancel" className={TOWN_LINK}
                                     aria-label={townName ? t('Cancel, and keep near {town}', { town: townName }) : t('Cancel the town search')}>
                                     {t('Cancel')}
@@ -1268,7 +1348,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} menu={undefined}>
-                        <p data-testid="home-start-words" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{START_CARD_WORDS}</p>
+                        <p data-testid="home-start-words" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{t(LIB_LINES.startCard)}</p>
                         <div className="flex flex-wrap items-center gap-2">
                             <button type="button" data-testid="home-start-look"
                                 onClick={() => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); }}
@@ -1291,7 +1371,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} title={tipsCaption(v)}>
-                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{v.tip.text}</p>
+                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{t(v.tip.text)}</p>
                         <div className="flex flex-wrap gap-2">
                             {/* The same element on every tip, so focus stays on it after a tap. */}
                             <button type="button" onClick={tipsNext} aria-label={tipsNextLabel(v)} data-testid="home-tips-next"
@@ -1305,9 +1385,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 </button>
                             )}
                         </div>
-                        <button type="button" onClick={() => tipsDontShow()} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
+                        <button type="button" onClick={() => tipsDontShow()} aria-label={t(LIB_LINES.tipsDontShowLabel)} data-testid="home-tips-dont-show"
                             className="w-full min-h-[44px] mt-1 px-2 bg-transparent border-0 rounded-lg text-sm font-bold text-nature-700 dark:text-nature-200 whitespace-normal break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                            {TIPS_DONT_SHOW}
+                            {t(LIB_LINES.tipsDontShow)}
                         </button>
                     </HomeCard>
                 );
@@ -1363,7 +1443,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard key={id} {...common} title={ev.radiusKm ? t('{title} · within {km} km', { title, km: ev.radiusKm }) : title}>
                         {ev.items.map(item => {
                             // An online event has no place and no distance (DESIGN-event-times §4).
-                            const where = item.online ? t('Online') : item.place ?? (isVisitor ? PLACE_AFTER_JOIN : null);
+                            const where = item.online ? t('Online') : item.place ?? (isVisitor ? t(VISITOR_WORDS.placeAfterJoin) : null);
                             const rsvp = item.rsvp === 'going' ? t('Going') : item.rsvp === 'interested' ? t('Interested') : null;
                             const km = item.online ? null : distanceText(item.distanceKm);
                             const when = homeEventWhen(item);
@@ -1402,22 +1482,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         </button>
                     )}>
                         {items.map(item => marketLine(item, 'home-market-item'))}
-                        {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{VISITOR_LIST_NOTE}</p>}
+                        {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{t(VISITOR_WORDS.listNote)}</p>}
                         {examples && (
                             <div data-testid="home-examples" className="mt-2">
-                                <p className="m-0 mb-1 text-xs font-bold text-nature-700 dark:text-nature-200">{EXAMPLES_HEADING}</p>
+                                <p className="m-0 mb-1 text-xs font-bold text-nature-700 dark:text-nature-200">{t(EXAMPLE_WORDS.heading)}</p>
                                 {EXAMPLE_LISTINGS.slice(0, 2).map(ex => (
                                     <p key={ex.key} data-testid="home-example" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 flex items-start gap-2 min-w-0">
                                         {/* "Example" first for a screen reader (lib/example-listings.ts exampleLabel). */}
                                         <span className="sr-only">{exampleLabel(ex)}</span>
                                         <span aria-hidden="true" className="shrink-0">{ex.emoji}</span>
                                         <span aria-hidden="true" className="min-w-0 break-words">
-                                            <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white">{EXAMPLE_BADGE}</span>
-                                            {ex.title}
+                                            <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white">{t(EXAMPLE_WORDS.badge)}</span>
+                                            {t(ex.title)}
                                         </span>
                                     </p>
                                 ))}
-                                <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{EXAMPLES_NOTE}</p>
+                                <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{t(EXAMPLE_WORDS.note)}</p>
                             </div>
                         )}
                         <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
@@ -1526,7 +1606,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common} title={communityName(cm, profile)}>
                         <p className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">
-                            {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : `${communityLine(cm, profile)}.`}
+                            {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : t('{line}.', { line: communityLine(cm, profile) })}
                         </p>
                         {!isVisitor && (
                             <div className="flex flex-wrap justify-end gap-x-4">
@@ -1547,7 +1627,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={card.id} {...common}>
                         <p data-testid="home-search-words" className="m-0 mb-1 text-sm font-semibold text-nature-900 dark:text-white break-words">{first}</p>
-                        {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{SEARCH_OFFLINE_LINE}</p>}
+                        {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{t(LIB_LINES.searchOffline)}</p>}
                         {found && !found.items.length && <p data-testid="home-search-empty" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{searchEmptyLine(q, found.km)}</p>}
                         {found?.items.map(item => marketLine(item, 'home-search-item'))}
                         {found?.more && (
@@ -1589,119 +1669,140 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // A saved search's row is named by its words (cardRowName), so two searches read as two rows.
                 name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
                 label: cardLabelName(c, profile),
-                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? SKY_NO_PLACE_LINE : t('Nothing to show now'),
+                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? t(LIB_LINES.skyNoPlace) : t('Nothing to show now'),
                 hasSettings: !!homeCardType(c.type)?.readSettings,
             }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;
     const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
-
-    return (
-        <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
-            {reveal && <style>{HOME_CARD_IN_STYLE}</style>}
-            <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
-            {status === 'offline' && (
-                <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
-            )}
-            {visitor?.joinCard}
-            {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
-            {saveNote && (
-                <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
-                    <span className="min-w-0 flex-1 break-words">{saveNote}</span>
-                    <button type="button" aria-label={t('Close this note')} onClick={() => setSaveNote(null)}
-                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+    // The fewer-cards note and the one-time hint go under the first card, the row's full width. Side by side that holds
+    // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
+    // a one-cell card would push the cards beside it to the next row, leaving the first row empty (PR #2411 review). There
+    // the notes stand above the grid, as wide as it. One column keeps them under the first card, as before.
+    const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+    const firstNotes = (under: boolean) => (
+        <>
+            {fewerOpen && !isVisitor && (
+                <p data-testid="home-fewer" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                    <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.fewerCards)}</span>
+                    <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
+                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         ✕
                     </button>
                 </p>
             )}
-            {a.me?.standing === 'suspended' && (
-                <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                    {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
+            {hintOpen && !isVisitor && !startUp && (
+                <p data-testid="home-hint" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                    <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.hint)}</span>
+                    <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
+                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                        ✕
+                    </button>
                 </p>
             )}
-            {shown.map((card, i) => (
-                <div key={card.id}>
-                    {renderCard(card, i)}
-                    {i === 0 && fewerOpen && !isVisitor && (
-                        <p data-testid="home-fewer" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                            <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
-                            <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
-                                className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                ✕
-                            </button>
-                        </p>
-                    )}
-                    {i === 0 && hintOpen && !isVisitor && !startUp && (
-                        <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                            <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
-                            <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
-                                className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                ✕
-                            </button>
-                        </p>
-                    )}
+        </>
+    );
+
+    return (
+        <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
+            <div className="mx-auto" style={{ maxWidth: gridWidth(cols) }}>
+                {reveal && <style>{HOME_CARD_IN_STYLE}</style>}
+                <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
+                {status === 'offline' && (
+                    <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
+                )}
+                {visitor?.joinCard}
+                {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
+                {saveNote && (
+                    <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
+                        <span className="min-w-0 flex-1 break-words">{saveNote}</span>
+                        <button type="button" aria-label={t('Close this note')} onClick={() => setSaveNote(null)}
+                            className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            ✕
+                        </button>
+                    </p>
+                )}
+                {a.me?.standing === 'suspended' && (
+                    <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                        {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
+                    </p>
+                )}
+                {!notesUnderFirst && firstNotes(false)}
+                {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
+                    own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
+                    Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}
+                <div data-testid="home-grid" style={{
+                    display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, ${HOME_COLUMN_MAX}px))`, columnGap: HOME_COLUMN_GAP,
+                    rowGap: cols > 1 ? 4 : 0, justifyContent: 'center', alignItems: 'start',
+                }}>
+                    {shown.map((card, i) => (
+                        <Fragment key={card.id}>
+                            {renderCard(card, i)}
+                            {i === 0 && notesUnderFirst && firstNotes(true)}
+                        </Fragment>
+                    ))}
                 </div>
-            ))}
-            {editOpen && !isVisitor && (
-                <EditHomeDialog
-                    rows={editRows}
-                    notOnAccount={notOnAccount}
-                    onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
-                    onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
-                    onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
-                    onRemove={(id) => removeFromHome(id, true)}
-                    // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
-                    // part-way through keeps their place (confirmation 1, finding 2).
-                    onReset={() => {
-                        const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
-                        if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
-                    }}
-                    onClose={() => setEditOpen(false)}
-                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
-                />
-            )}
-            {picker && (
-                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
-                    // Opened from Edit home, which has closed: the community card's Add a card.
-                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
-            )}
-            {addSearch && (
-                <CardSettingsDialog
-                    type="search"
-                    name={cardName('search', profile)}
-                    mode="add"
-                    initial={addSearch}
-                    hasPoint={hasPoint}
-                    onSubmit={(next) => { setAddSearch(null); addToHome('search', next); }}
-                    onClose={() => setAddSearch(null)}
-                    // Its opener, the Market's button, is on another tab: the community card's Add a card.
-                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')}
-                />
-            )}
-            {settingsFor && (
-                <CardSettingsDialog
-                    type={settingsFor.type}
-                    name={cardName(settingsFor.type, profile)}
-                    mode="save"
-                    initial={settingsFor.settings}
-                    hasPoint={hasPoint}
-                    onSubmit={(next) => {
-                        const { id, type } = settingsFor;
-                        setSettingsFor(null);
-                        // Sun and moon's place is worked out here: no read.
-                        changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
-                    }}
-                    onClose={() => setSettingsFor(null)}
-                    // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
-                    // the card's "…".
-                    returnFocus={() => {
-                        const id = settingsFor.id;
-                        return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
-                            ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
-                            ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
-                    }}
-                />
-            )}
+                {editOpen && !isVisitor && (
+                    <EditHomeDialog
+                        rows={editRows}
+                        notOnAccount={notOnAccount}
+                        onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
+                        onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
+                        onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
+                        onRemove={(id) => removeFromHome(id, true)}
+                        // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
+                        // part-way through keeps their place (confirmation 1, finding 2).
+                        onReset={() => {
+                            const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
+                            if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
+                        }}
+                        onClose={() => setEditOpen(false)}
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
+                    />
+                )}
+                {picker && (
+                    <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
+                        // Opened from Edit home, which has closed: the community card's Add a card.
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
+                )}
+                {addSearch && (
+                    <CardSettingsDialog
+                        type="search"
+                        name={cardName('search', profile)}
+                        mode="add"
+                        initial={addSearch}
+                        hasPoint={hasPoint}
+                        onSubmit={(next) => { setAddSearch(null); addToHome('search', next); }}
+                        onClose={() => setAddSearch(null)}
+                        // Its opener, the Market's button, is on another tab: the community card's Add a card.
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')}
+                    />
+                )}
+                {settingsFor && (
+                    <CardSettingsDialog
+                        type={settingsFor.type}
+                        name={cardName(settingsFor.type, profile)}
+                        mode="save"
+                        initial={settingsFor.settings}
+                        hasPoint={hasPoint}
+                        onSubmit={(next) => {
+                            const { id, type } = settingsFor;
+                            setSettingsFor(null);
+                            // Sun and moon's place is worked out here: no read.
+                            changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
+                        }}
+                        onClose={() => setSettingsFor(null)}
+                        // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
+                        // the card's "…".
+                        returnFocus={() => {
+                            const id = settingsFor.id;
+                            return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
+                                ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
+                                ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+                        }}
+                    />
+                )}
+            </div>
         </div>
     );
 }

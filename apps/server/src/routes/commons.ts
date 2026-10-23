@@ -37,6 +37,7 @@ import type { RouteDeps } from './types.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
+import { word } from '@beanpool/core';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -51,14 +52,14 @@ router.get('/api/commons/balance', async (ctx) => {
 // links the payment to the debt record (POST /api/names/debts/:id/settle). Only what they hold: never into debt.
 router.post('/api/commons/pay', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
-    if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
+    if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
     // `requestId` (engine/money-requests.ts): the app's id for this one payment, so a retry is never paid twice.
     const { amount, debtId, requestId } = (ctx as any).requestBody || {};
     try {
         ctx.body = payToCommons(actor, amount, debtId, requestId);
     } catch (e: any) {
         ctx.status = typeof e?.status === 'number' ? e.status : 400;
-        ctx.body = { error: e?.message || 'Could not pay the Commons', ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
+        ctx.body = { error: e?.message || word('Could not pay the Commons'), ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
     }
 });
 
@@ -67,7 +68,7 @@ router.post('/api/commons/pay', async (ctx) => {
 // Their own only (repaymentOf the signed actor); no entry, no name.
 router.get('/api/commons/repayment', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
-    if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
+    if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
     ctx.set('Cache-Control', 'no-store');
     const r = repaymentOf(actor.toLowerCase());
     ctx.body = { repayment: r ? { debtId: r.id, amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
@@ -82,7 +83,7 @@ router.post('/api/commons/projects', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!title || !requestedAmount) {
@@ -105,7 +106,7 @@ router.post('/api/commons/projects', async (ctx) => {
     const project = createProject(actor, title, description || '', Number(requestedAmount));
     if (!project) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed — must be a registered member, title/amount required' };
+        ctx.body = { error: word('Failed — must be a registered member, title/amount required') };
         return;
     }
     ctx.body = { success: true, project };
@@ -116,7 +117,7 @@ router.post('/api/commons/projects/update', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!projectId || !title || !requestedAmount) {
@@ -129,7 +130,7 @@ router.post('/api/commons/projects/update', async (ctx) => {
     const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
     if (!success) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.' };
+        ctx.body = { error: word('Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.') };
         return;
     }
     ctx.body = { success: true };
@@ -140,7 +141,7 @@ router.post('/api/commons/projects/delete', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!projectId) {
@@ -152,7 +153,7 @@ router.post('/api/commons/projects/delete', async (ctx) => {
     const projectExists = getProjects().some(p => p.id === projectId);
     if (!projectExists) {
         ctx.status = 404;
-        ctx.body = { error: 'Project not found' };
+        ctx.body = { error: word('Project not found') };
         return;
     }
 
@@ -160,13 +161,13 @@ router.post('/api/commons/projects/delete', async (ctx) => {
         const success = deleteProject(actor, projectId);
         if (!success) {
             ctx.status = 400;
-            ctx.body = { error: 'Failed to delete project. You might not own it, or it is no longer in a proposed state.' };
+            ctx.body = { error: word('Failed to delete project. You might not own it, or it is no longer in a proposed state.') };
             return;
         }
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to delete project') };
+        ctx.body = { error: memberErrorText(e, word('Failed to delete project')) };
     }
 });
 
@@ -204,7 +205,7 @@ router.get('/api/commons/decisions', async (ctx) => {
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
         myPoolVoting: myPoolVoting(actor),
-        // Whether the signer may propose (earned standing, or a node admin). The one-open-Decision limit is
+        // Whether the signer may propose (a completed trade, or a node admin). The one-open-Decision limit is
         // left to the apps, which already know the signer's open Decisions.
         canPropose: actor && votes ? checkProposalStanding(actor).ok : false,
     };
@@ -215,7 +216,7 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     // An enterprise's keepers' vote is read in that enterprise (routes/enterprise-decisions.ts), by its keepers only.
     if (!decision || decision.scopeKind !== 'community') {
         ctx.status = 404;
-        ctx.body = { error: 'Decision not found' };
+        ctx.body = { error: word('Decision not found') };
         return;
     }
     const tally = tallyDecision(decision.id);
@@ -231,7 +232,7 @@ router.post('/api/commons/decisions', async (ctx) => {
     const actor = (ctx.state as any)?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required to propose a decision' };
+        ctx.body = { error: word('Authentication required to propose a decision') };
         return;
     }
     if (!title || !touches || !effect) {
@@ -275,7 +276,7 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
     const actor = (ctx.state as any)?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required to vote' };
+        ctx.body = { error: word('Authentication required to vote') };
         return;
     }
     if (support === undefined) {
@@ -323,7 +324,7 @@ router.get('/api/crowdfund/projects/:id', async (ctx) => {
     const project = getCrowdfundProject(ctx.params.id);
     if (!project) {
         ctx.status = 404;
-        ctx.body = { error: 'Project not found' };
+        ctx.body = { error: word('Project not found') };
         return;
     }
     ctx.body = { project };
@@ -334,7 +335,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     // A project's id is its enterprise's key, its account's and its escrow's (`escrow_<id>`), so the server makes it and
@@ -369,7 +370,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         }
         if (photos.length > 10) {
             ctx.status = 400;
-            ctx.body = { error: 'A project can have at most 10 photos' };
+            ctx.body = { error: word('A project can have at most 10 photos') };
             return;
         }
         // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
@@ -411,7 +412,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to create project') };
+        ctx.body = { error: memberErrorText(e, word('Failed to create project')) };
         return;
     }
     const project = getCrowdfundProject(projectId);
@@ -425,7 +426,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!id || !title || !goalAmount) {
@@ -451,7 +452,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         }
         if (photos.length > 10) {
             ctx.status = 400;
-            ctx.body = { error: 'A project can have at most 10 photos' };
+            ctx.body = { error: word('A project can have at most 10 photos') };
             return;
         }
         // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
@@ -474,7 +475,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to update project') };
+        ctx.body = { error: memberErrorText(e, word('Failed to update project')) };
     }
 });
 
@@ -483,7 +484,7 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     if (!id) {
@@ -498,7 +499,7 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to delete project') };
+        ctx.body = { error: memberErrorText(e, word('Failed to delete project')) };
     }
 });
 
@@ -508,7 +509,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return;
     }
     const parsedAmount = Number(amount);

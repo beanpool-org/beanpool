@@ -3,9 +3,9 @@ import { pluralKey, setLanguage } from '../../../words.js';
 import { toolDocBytes, toolFixtureProblems, toolManifestProblems } from '../../check.js';
 import { toolLineText } from '../../line.js';
 import {
+    THINGS_DOC_BYTES,
     THINGS_DOC_VERSION,
     THINGS_LEND_TERMS_CHARS,
-    THINGS_MAX_ITEMS,
     THINGS_NAME_CHARS,
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
@@ -56,11 +56,17 @@ describe('Tool shed (things) manifest and fixtures (generic checks)', () => {
         expect(toolFixtureProblems(THINGS, FIXTURES)).toEqual([]);
     });
 
-    it('the 100-thing full fixture document is strictly under 64 KB (65,536 bytes)', () => {
-        expect(FIXTURES.docs.full.things.length).toBe(THINGS_MAX_ITEMS);
-        const bytes = toolDocBytes(FIXTURES.docs.full);
-        expect(bytes).toBeLessThanOrEqual(65_536);
-        expect(bytes).toBeGreaterThan(10_000);
+    it('the shed is bounded by size alone: 128 KB (131,072 bytes), named in its manifest, past the 64 KB of a tool that names none', () => {
+        expect(THINGS_DOC_BYTES).toBe(131_072);
+        expect(THINGS.doc.maxBytes).toBe(THINGS_DOC_BYTES);
+    });
+
+    it('the full fixture document fills the shed: more than 100 things, under 128 KB, and no room for one more like its biggest', () => {
+        const full = FIXTURES.docs.full;
+        expect(full.things.length).toBeGreaterThan(100);
+        expect(toolDocBytes(full)).toBeLessThanOrEqual(THINGS_DOC_BYTES);
+        const biggest = Math.max(...full.things.map((t) => toolDocBytes(t) + 1));
+        expect(THINGS_DOC_BYTES - toolDocBytes(full)).toBeLessThan(biggest);
     });
 });
 
@@ -127,7 +133,7 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         expect(item.lentTo?.name.length).toBe(THINGS_NAME_CHARS);
     });
 
-    it('truncates things array to 100 items on v1 documents', () => {
+    it('keeps every thing of a v1 document, past 100: the shed is bounded by size, never by a count (Marty, 23 Oct)', () => {
         const things: Thing[] = Array.from({ length: 115 }, (_, i) => ({
             id: `t-${i}`,
             name: `Thing ${i}`,
@@ -135,38 +141,36 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
             updatedAt: '2026-10-01T00:00:00.000Z',
         }));
         const read = readThingsDoc({ v: 1, things });
-        expect(read.things.length).toBe(THINGS_MAX_ITEMS);
+        expect(read.things.length).toBe(115);
         expect(ownThings(read)[0].id).toBe('t-0');
-        expect(ownThings(read)[99].id).toBe('t-99');
+        expect(ownThings(read)[114].id).toBe('t-114');
+        expect(thingsCounts(read).things).toBe(115);
     });
 
-    it('the cap counts live things only: gone things ahead of them never push a live thing out', () => {
+    it("an earlier build's gone things (#2373's tombstones) are dropped on read: nothing reads one; the live ones keep their places", () => {
         const at = '2026-10-01T00:00:00.000Z';
         const gone = Array.from({ length: 110 }, (_, i) => ({ id: `g-${i}`, name: `Gone ${i}`, gone: true, createdAt: at, updatedAt: at }));
         const live = Array.from({ length: 10 }, (_, i) => ({ id: `l-${i}`, name: `Live ${i}`, createdAt: at, updatedAt: at }));
-        const read = readThingsDoc({ v: 1, things: [...gone, ...live] });
-        expect(read.things.length).toBe(120);
-        expect(ownThings(read).filter(isLiveThing).map((t) => t.id)).toEqual(live.map((t) => t.id));
+        const read = readThingsDoc({ v: 1, things: [...gone.slice(0, 55), ...live, ...gone.slice(55)] });
+        expect(read.things.length).toBe(10);
+        expect(ownThings(read).map((t) => t.id)).toEqual(live.map((t) => t.id));
         expect(thingsCounts(read)).toEqual({ things: 10, listed: 0, out: 0, shelf: 10 });
         expect(readThingsDoc(read)).toEqual(read);
+        // A gone that isn't true is no tombstone: the thing is kept, and live.
+        expect(ownThings(readThingsDoc({ v: 1, things: [{ ...live[0], gone: false }] })).map((t) => [t.id, isLiveThing(t)])).toEqual([['l-0', true]]);
     });
 
-    it('past the cap, the live things after the 100th are dropped and the gone things keep their places', () => {
+    it('a 101st live thing is kept, each in its place, and the gone things around them are not', () => {
         const at = '2026-10-01T00:00:00.000Z';
         const thing = (id: string, gone = false) => ({ id, name: id, ...(gone ? { gone: true } : {}), createdAt: at, updatedAt: at });
-        const raw = [
-            thing('g-a', true),
-            ...Array.from({ length: THINGS_MAX_ITEMS + 5 }, (_, i) => thing(`l-${i}`)),
-            thing('g-b', true),
-        ];
+        const live = Array.from({ length: 105 }, (_, i) => thing(`l-${i}`));
+        const raw = [thing('g-a', true), ...live.slice(0, 50), thing('g-m', true), ...live.slice(50), thing('g-b', true)];
         const read = readThingsDoc({ v: 1, things: raw });
         const ids = ownThings(read).map((t) => t.id);
-        expect(ids.length).toBe(THINGS_MAX_ITEMS + 2);
-        expect(ids[0]).toBe('g-a');
-        expect(ids[THINGS_MAX_ITEMS]).toBe(`l-${THINGS_MAX_ITEMS - 1}`);
-        expect(ids[THINGS_MAX_ITEMS + 1]).toBe('g-b');
-        expect(ids).not.toContain(`l-${THINGS_MAX_ITEMS}`);
-        expect(thingsCounts(read).things).toBe(THINGS_MAX_ITEMS);
+        expect(ids).toEqual(live.map((t) => t.id));
+        expect(ids).toContain('l-100');
+        expect(thingsCounts(read).things).toBe(105);
+        expect(readThingsDoc(read)).toEqual(read);
     });
 
     it('isLiveThing is a thing this build reads that is not gone', () => {
@@ -861,26 +865,18 @@ describe('Mutation testing on loans maths and size bounds', () => {
     });
 
     describe('size bound mutations', () => {
-        it('mutant: off-by-one on max items in v1 (100 vs 101) is caught', () => {
-            const exactly100: Thing[] = Array.from({ length: 100 }, (_, i) => ({
+        it('mutant: a count put back on the things of a v1 document (100, or any other) is caught', () => {
+            const many = (n: number): Thing[] => Array.from({ length: n }, (_, i) => ({
                 id: `t-${i}`,
                 name: `Item ${i}`,
                 createdAt: '',
                 updatedAt: '',
             }));
-            const exactly101: Thing[] = Array.from({ length: 101 }, (_, i) => ({
-                id: `t-${i}`,
-                name: `Item ${i}`,
-                createdAt: '',
-                updatedAt: '',
-            }));
-
-            const read100 = readThingsDoc({ v: 1, things: exactly100 });
-            expect(read100.things.length).toBe(100);
-
-            const read101 = readThingsDoc({ v: 1, things: exactly101 });
-            expect(read101.things.length).toBe(100);
-            expect(ownThings(read101).some((t) => t.id === 't-100')).toBe(false);
+            for (const n of [100, 101, 500]) {
+                const read = readThingsDoc({ v: 1, things: many(n) });
+                expect(read.things.length).toBe(n);
+                expect(ownThings(read).some((t) => t.id === `t-${n - 1}`)).toBe(true);
+            }
         });
 
         it('mutant: off-by-one on character limits (80, 40, 300, 500) is caught', () => {
@@ -915,21 +911,21 @@ describe('Mutation testing on loans maths and size bounds', () => {
             expect(readOverLimits.ownerNote?.length).toBe(500);
         });
 
-        it('mutant: document size exceeding 65,536 bytes is detected and refused by toolFixtureProblems', () => {
+        it('mutant: document size exceeding 131,072 bytes is detected and refused by toolFixtureProblems', () => {
             const oversizedDoc: ThingsDoc = {
                 v: 1,
                 things: [
                     {
                         id: 'giant',
                         name: 'Big item',
-                        bigPayload: 'x'.repeat(70_000),
+                        bigPayload: 'x'.repeat(140_000),
                         createdAt: '',
                         updatedAt: '',
                     },
                 ],
             };
             const bytes = toolDocBytes(oversizedDoc);
-            expect(bytes).toBeGreaterThan(65_536);
+            expect(bytes).toBeGreaterThan(131_072);
 
             const mutantFixtures = {
                 ...FIXTURES,
@@ -939,7 +935,7 @@ describe('Mutation testing on loans maths and size bounds', () => {
                 },
             };
             const problems = toolFixtureProblems(THINGS, mutantFixtures);
-            expect(problems.some((p) => p.includes('over its 65536'))).toBe(true);
+            expect(problems.some((p) => p.includes('over its 131072'))).toBe(true);
         });
     });
 });

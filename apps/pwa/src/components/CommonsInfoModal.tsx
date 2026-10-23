@@ -309,7 +309,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                 <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>{t('Process')}</div>
                                 <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.5 }}>
                                     {/* One step a line, each whole in the member's language. */}
-                                    <span className="block">{t('1. Members with a completed trade or earned standing, and node admins, can propose a Decision')}</span>
+                                    <span className="block">{t('1. Members who have completed a trade, and node admins, can propose a Decision')}</span>
                                     <span className="block">{t('2. Voting opens at once and runs for 7 days; members who joined before it opened can vote')}</span>
                                     <span className="block">{t('3. Ballots are secret — everyone sees the totals and their own vote')}</span>
                                     <span className="block">{t('4. Votes on community money cost voice credits from your completed trades; other Decisions are one member, one vote')}</span>

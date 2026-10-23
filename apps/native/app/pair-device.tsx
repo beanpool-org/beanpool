@@ -90,15 +90,26 @@ export default function PairDeviceScreen() {
     isTransferringRef.current = isTransferring;
     const confirmCodeRef = useRef(confirmCode);
     confirmCodeRef.current = confirmCode;
+    /** The latest code being read: a read an older code started never opens its sheet over a newer one's. */
+    const readSeqRef = useRef(0);
 
-    // A link opened from outside the app: read like a scan. Not while any sheet is open (a camera scan can't replace one
-    // either): a second link never swaps the session under the member's thumb; they close the sheet first. Then the
-    // link is cleared from the route, so the same link opened again (after Cancel, or "scan again") is read again.
+    // A link opened from outside the app: read like a scan, whatever an earlier code left behind (the camera's pause after
+    // a Cancel or a refusal is the camera's, so it doesn't read the code still in view twice; a read still finishing is
+    // overtaken). Not while any sheet is open (a camera scan can't replace one either): a second link never swaps the
+    // session under the member's thumb (PR #2025 review N2), and it is never dropped unsaid: they're told to close this one
+    // first. Then the link is cleared from the route, so the same link opened again (after Cancel, or "scan again") is read again.
     useEffect(() => {
         if (linkCode === undefined) return;
-        if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current && !isScanningLocked.current) void readCode(linkCode, 'link');
+        if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current) void readCode(linkCode, 'link');
+        else Alert.alert('', t('A new code was opened while this one is still on the screen, so the new one was not read. Close this one first, then open the new code again.'));
         navigation.setParams({ qr: undefined } as never);
     }, [linkCode]);
+
+    /** ✕ and Done: back where the member was, or the tabs when this screen is the only one (a cold start from the camera app). */
+    function leave() {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+    }
 
     // A phone's copy of the account with no name: the sheet shows, and the account carries, the name its member record
     // gives it on the community the code sends to, when that is the one this phone is on (its rows are that one's).
@@ -363,6 +374,7 @@ export default function PairDeviceScreen() {
 
     /** One code, from the camera or from a link (readPairingCode): the same checks, the same sheet. Sends nothing. */
     async function readCode(data: string, source: 'camera' | 'link') {
+        const seq = ++readSeqRef.current;
         // A server's claim QR (`beanpool claim`): the claim screen, which offers the claim only while that server has no owner.
         const claim = source === 'camera' ? parseClaimLink(data) : null;
         if (claim) {
@@ -388,6 +400,8 @@ export default function PairDeviceScreen() {
         // a server that skips the digits. Said at once, and nothing is sent.
         const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
         const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
+        // A newer code came while this one was being read: its sheet, not this one's.
+        if (seq !== readSeqRef.current) return;
         const target = transferTarget(parsed.nodeUrl, anchor, saved);
         setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
         setScannedData({ ...parsed, target, source });
@@ -572,7 +586,7 @@ export default function PairDeviceScreen() {
                             <Text style={styles.sheetSubtitle}>
                                 {t('Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, tap Cancel and the other device gets nothing.')}
                             </Text>
-                            <Pressable style={styles.cancelBtn} onPress={() => router.back()} accessibilityRole="button">
+                            <Pressable style={styles.cancelBtn} onPress={leave} accessibilityRole="button">
                                 <Text style={styles.cancelBtnText}>{t('Done')}</Text>
                             </Pressable>
                             <Pressable style={styles.cancelBtn} onPress={handleDismissSheet} accessibilityRole="button">
@@ -690,7 +704,7 @@ export default function PairDeviceScreen() {
             <SafeAreaView style={styles.permissionCard}>
                 <Pressable
                     style={[styles.closeBtn, { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 20 }]}
-                    onPress={() => router.back()}
+                    onPress={leave}
                     accessibilityRole="button"
                     accessibilityLabel={t('Go back')}
                 >
@@ -719,7 +733,7 @@ export default function PairDeviceScreen() {
             <View style={styles.header}>
                 <Pressable
                     style={styles.closeBtn}
-                    onPress={() => router.back()}
+                    onPress={leave}
                     accessibilityRole="button"
                     accessibilityLabel={t('Close camera scanner')}
                 >

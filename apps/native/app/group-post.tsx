@@ -19,6 +19,7 @@ import { NO_BEANS_EDIT_NOTE } from '../utils/market-global';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, inCapitalsOf, t, word, type WordKey } from '@beanpool/core';
 import { groupPostPrice, groupPostPriceInvalid, groupPostMissingFields } from '../utils/beans-off';
+import { signedRequestWords } from '../components/signed-request-lines';
 
 const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 /** The price box's unit: marked here, translated where shown (the same words as an enterprise's post form). */
@@ -257,7 +258,7 @@ export default function GroupPostScreen() {
             );
         } catch (err: any) {
             hapticWarning();
-            Alert.alert(t('Error Posting'), err.message || t('Failed to create group post'));
+            Alert.alert(t('Error Posting'), err.message ? signedRequestWords(err.message) : t('Failed to create group post'));
         } finally {
             submittingRef.current = false;
             setSubmitting(false);

@@ -32,13 +32,14 @@ import { phoneTool } from '../../tools/index';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { openOfferComposer, unfinishedPostHere, type ToolListFee } from '../../tools/doors';
 import {
-    patchToolSettings, readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToolDoc, writeToolSettings, communityKey, type ToolSettings,
+    patchToolSettings, readToolDoc, readToolSettings, reminderOn, removeToolDataHere, toolDocMaxHere, writeToolDoc, writeToolSettings, communityKey,
+    type ToolSettings,
 } from '../../tools/store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
 import { scheduleToolReminders } from '../../tools/reminders';
 import {
-    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, isEmptyDoc, removeQuestion, safeLine, toolBack,
-    type ToolCopyNote,
+    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, copyTooBigLine, isEmptyDoc, removeQuestion, safeLine,
+    toolBack, type ToolCopyNote,
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
 import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
@@ -103,7 +104,8 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
     const [copyNote, setCopyNote] = useState<ToolCopyNote>(null);
-    const [copyRound, setCopyRound] = useState<{ busy: boolean; failed: 'failed' | 'older-node' | null }>({ busy: false, failed: null });
+    /** The toggle's round trip; a `too-big` one keeps the server's `max` it heard, for its line (copyTooBigLine). */
+    const [copyRound, setCopyRound] = useState<{ busy: boolean; failed: 'failed' | 'older-node' | 'too-big' | null; max?: number }>({ busy: false, failed: null });
     const docRef = useRef<unknown>(undefined);
     const settingsRef = useRef<ToolSettings>({});
     const copyNoteRef = useRef<ToolCopyNote>(null);
@@ -165,9 +167,11 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         settingsRef.current = next;
         setSettings(next);
         tellOpenScreens(shareKey, hear, { settings: next });
-        // Everything but the node copy's setting, which only the server's answer moves (tools/node-copy.ts).
+        // Everything but the node copy's setting and the server's bound, which only the server's answers move
+        // (tools/node-copy.ts).
         const rest: ToolSettings = { ...next };
         delete rest.nodeCopy;
+        delete rest.nodeMax;
         await patchToolSettings(owner, manifest.id, rest, url).catch(() => {});
         reschedule(docRef.current, next);
     }, [owner, manifest.id, reschedule, shareKey, hear, url]);
@@ -175,11 +179,21 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const copy: PhoneToolCopy = useMemo(() => ({ manifest, owner: { kind: 'member', publicKey: owner }, url }), [manifest, owner, url]);
 
     /**
+     * The most the server said it keeps of the document, as the node copy kept it beside the setting, told to every open
+     * screen when it is new: the store's bound, and the screens' room, are counted against it.
+     */
+    const heardMax = useCallback(() => {
+        void readToolSettings(owner, manifest.id, url).then((s) => {
+            if (s.nodeMax !== settingsRef.current.nodeMax) tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeMax: s.nodeMax } });
+        }).catch(() => {});
+    }, [owner, manifest.id, url, shareKey]);
+    /**
      * What a sync with the server did, told to every open screen of the tool (none open: the store already has it): the
      * server's copy taken (the document drawn again, its reminders from it), the copy switched off elsewhere (the
-     * setting off and the line once), or a server that keeps no copies yet.
+     * setting off and the line once), or a server that keeps no copies yet. And, whatever it did, its bound (heardMax).
      */
     const heardCopy = useCallback((outcome: ToolCopyOutcome) => {
+        heardMax();
         if (outcome === 'taken') {
             void readToolDoc(owner, manifest).then((read) => {
                 tellOpenScreens(shareKey, null, { doc: read.doc, stored: read.stored });
@@ -190,7 +204,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         } else if (outcome === 'older-node') {
             tellOpenScreens(shareKey, null, { copyNote: 'older-node' });
         }
-    }, [owner, manifest, shareKey, reschedule]);
+    }, [owner, manifest, shareKey, reschedule, heardMax]);
 
     // The tool's open: once, from its first screen, after the phone's copy and settings are read.
     useEffect(() => {
@@ -204,15 +218,21 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const switchCopy = useCallback(async (on: boolean) => {
         setCopyRound({ busy: true, failed: null });
         const done = await switchToolCopy(copy, on).catch(() => 'failed' as const);
+        // Its answers say the server's bound too, whether or not it switched.
+        heardMax();
         if (done === 'on' || done === 'off') {
             setCopyRound({ busy: false, failed: null });
             tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeCopy: done === 'on' }, copyNote: null });
             // Switching on may have taken the server's copy: the document as the phone holds it now.
             if (done === 'on') heardCopy('taken');
+        } else if (done === 'too-big') {
+            // More than the server keeps: its line counts what to delete against the `max` its GET just said.
+            const s = await readToolSettings(owner, manifest.id, url).catch(() => null);
+            setCopyRound({ busy: false, failed: done, max: s?.nodeMax });
         } else {
             setCopyRound({ busy: false, failed: done });
         }
-    }, [copy, shareKey, heardCopy]);
+    }, [copy, shareKey, heardCopy, heardMax, owner, manifest.id, url]);
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {
@@ -246,6 +266,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 reschedule(next, settingsRef.current);
                 if (copyNoteRef.current !== 'older-node') toolCopyAfterWrite(copy, heardCopy);
             },
+            maxBytes: () => toolDocMaxHere(manifest, settingsRef.current),
         },
         navigate: (screen: string, p?: Record<string, string>) => {
             router.push({ pathname: '/tool/[id]', params: { ...(p ?? {}), id: manifest.id, screen } });
@@ -254,7 +275,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         now: () => Date.now(),
         openListSheet,
         nodeCopy: keepsNodeCopy(manifest) && settings?.nodeCopy !== false && copyNote !== 'older-node',
-    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear, copy, heardCopy, settings?.nodeCopy, copyNote]);
+    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear, copy, heardCopy, settings?.nodeCopy, settings?.nodeMax, copyNote]);
 
     const ungranted = useMemo(() => ungrantedPermissions(manifest, phoneHost(ctx)), [manifest, ctx]);
     const host = useMemo(() => hostFor(manifest, ctx), [manifest, ctx]);
@@ -271,8 +292,10 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                             return;
                         }
                         await removeToolDataHere(owner, manifest.id, url);
-                        // The one setting kept: the copy off, so Settings says what is true.
-                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false } : {};
+                        // The one setting kept: the copy off, so Settings says what is true; and the server's bound,
+                        // which is the server's, not the member's data.
+                        const nodeMax = settingsRef.current.nodeMax;
+                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false, ...(nodeMax !== undefined ? { nodeMax } : {}) } : {};
                         if (keepsNodeCopy(manifest)) await writeToolSettings(owner, manifest.id, left, url);
                         const empty = manifest.doc.empty();
                         docRef.current = empty;
@@ -372,7 +395,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 settings={settings}
                 copyNote={copyNote}
                 ownerKind={ctx.owner.kind}
-                copy={copyRound}
+                copy={copyRound.failed === 'too-big' ? { ...copyRound, tooBig: copyTooBigLine(manifest, doc, copyRound.max) } : copyRound}
                 notificationsAllowed={notificationsAllowed}
                 colors={colors}
                 onChange={(next) => { void saveSettings(next); }}

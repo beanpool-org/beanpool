@@ -101,6 +101,12 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "We couldn't confirm the claim yet. It may have worked. Check again in a minute, or from another network (Wi-Fi or mobile data).": word("We couldn't confirm the claim yet. It may have worked. Check again in a minute, or from another network (Wi-Fi or mobile data)."),
     "The claim didn't reach the server. Try again.": word("The claim didn't reach the server. Try again."),
     'The claim could not be made.': word('The claim could not be made.'),
+    // utils/node-claim.ts buildClaimBody: a claim the phone stops before it is sent (a code typed short, a server's answer
+    // it can't use).
+    "This version of the app can't check claim codes safely.": word("This version of the app can't check claim codes safely."),
+    'That is not a whole claim code.': word('That is not a whole claim code.'),
+    "The server's answer can't be used.": word("The server's answer can't be used."),
+    "This phone's key can't be read.": word("This phone's key can't be read."),
     // utils/delete-here.ts: deleting the account from this phone, from the not-recognised screen.
     "No other community saved on this phone has you as a member. This still erases the key for every community, including any this phone doesn't list.": word("No other community saved on this phone has you as a member. This still erases the key for every community, including any this phone doesn't list."),
     'To take BeanPool off this phone altogether, switch, then use Settings → Account Deletion & Sign Out → Sign Out (Device Only).': word('To take BeanPool off this phone altogether, switch, then use Settings → Account Deletion & Sign Out → Sign Out (Device Only).'),

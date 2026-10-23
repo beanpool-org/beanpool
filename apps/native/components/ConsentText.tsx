@@ -5,6 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Text, View, Pressable } from 'react-native';
+import { t } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import { consentTextParts } from '../utils/known-consent';
 
@@ -32,7 +33,7 @@ export function ConsentText({ text }: { text: string }) {
                     style={{ minHeight: 48, justifyContent: 'center' }}
                     testID="consent-read-all"
                 >
-                    <Text style={{ color: colors.brand.primary, fontSize: 14, fontWeight: '700' }}>{open ? 'Show less' : 'Read all of it'}</Text>
+                    <Text style={{ color: colors.brand.primary, fontSize: 14, fontWeight: '700' }}>{open ? t('Show less') : t('Read all of it')}</Text>
                 </Pressable>
             )}
         </View>

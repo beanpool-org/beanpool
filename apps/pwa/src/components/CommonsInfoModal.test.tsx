@@ -57,4 +57,13 @@ describe('CommonsInfoModal', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
     });
+
+    it('says who can propose a Decision: a completed trade or a node admin, never a badge', () => {
+        render(<CommonsInfoModal isOpen={true} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('tab', { name: /voting/i }));
+
+        expect(screen.getByText('1. Members who have completed a trade, and node admins, can propose a Decision')).toBeInTheDocument();
+        // Badges unlock nothing (Marty, 23 Oct): a trust badge is no way in, so no second route is offered.
+        expect(screen.getByRole('dialog').textContent).not.toMatch(/earned standing|badge/i);
+    });
 });

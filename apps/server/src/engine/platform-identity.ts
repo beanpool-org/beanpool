@@ -20,6 +20,7 @@
 // forbids requesting. Its chip stays a plain claim, so `channelIdentityFromRow` has no Facebook case.
 
 import https from 'node:https';
+import { word } from '@beanpool/core';
 
 export type IdentityPlatform = 'tiktok' | 'instagram' | 'youtube' | 'soundcloud';
 
@@ -182,14 +183,14 @@ export async function readPlatformIdentity(platform: 'tiktok' | 'instagram', acc
         try {
             res = await platformRequestImpl('GET', 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,username', { bearer: accessToken });
         } catch {
-            throw new IdentityUnavailable('TikTok could not be reached to confirm the account. Try again.');
+            throw new IdentityUnavailable(word('TikTok could not be reached to confirm the account. Try again.'));
         }
         const user = res.json?.data?.user;
         const errCode = res.json?.error?.code;
         const accountId = stringId(user?.open_id);
         const handle = foldHandle(user?.username);
         if (res.status >= 400 || (errCode && errCode !== 'ok') || !accountId || !handle) {
-            throw new IdentityUnavailable('TikTok did not say which account this is. Connect again and allow BeanPool to read your profile.');
+            throw new IdentityUnavailable(word('TikTok did not say which account this is. Connect again and allow BeanPool to read your profile.'));
         }
         return { accountId, handle };
     }
@@ -198,7 +199,7 @@ export async function readPlatformIdentity(platform: 'tiktok' | 'instagram', acc
     try {
         res = await platformRequestImpl('GET', `https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${encodeURIComponent(accessToken)}`);
     } catch {
-        throw new IdentityUnavailable('Instagram could not be reached to confirm the account. Try again.');
+        throw new IdentityUnavailable(word('Instagram could not be reached to confirm the account. Try again.'));
     }
     const handle = foldHandle(res.json?.username);
     const accountId = stringId(res.json?.id);

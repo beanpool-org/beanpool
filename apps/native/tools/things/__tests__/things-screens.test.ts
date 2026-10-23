@@ -4,12 +4,12 @@
  * through the one host route (app/tool/[id].tsx) with the tool as the registry ships it (tools/index.ts), its document in
  * a real SQLite table and its photos in a real folder, at 320 dp with 1.3× text:
  *
- * - Your things (`main`): newest first, each with its state; the filters; Add and Loans.
+ * - Your things (`main`): newest first, each with its state; the filters; Add and Loans; the room left, in things.
  * - A thing (`thing`): its buttons by state. List opens the host's List sheet with the thing's draft (no profile photo
  *   says so); link it to the Offer posted from it; take it out of the shop and put the same Offer back; lend it outside
  *   BeanPool and mark it back; delete it. When the server can't be reached nothing changes, and it says so.
- * - Edit (`edit`): a name is needed; the photo is kept on the phone at 800 px; a 101st thing and a save past 64 KB are
- *   refused in one sentence each, nothing written.
+ * - Edit (`edit`): a name is needed; the photo is kept on the phone at 800 px; a 101st small thing is kept (size is the
+ *   one bound); a save past the shed's 128 KB, or past an older server's 64 KB, is refused in one sentence, nothing written.
  * - Loans (`loans`): from host.deals() and the document, overdue first.
  *
  * And every screen in the pseudo-locale `xx`, light and dark: every word through t() (no letters outside a bracket but
@@ -157,6 +157,8 @@ const market = vi.hoisted(() => ({
     requests: [] as string[],
     dealReads: [] as string[],
     copy: null as { doc: unknown; updatedAt: string } | null,
+    /** The `max` the server answers for the shed's copy: none is today's fake; 65536 is a server from before 128 KB. */
+    max: undefined as number | undefined,
     copyGate: null as Promise<void> | null,
     marketGate: null as Promise<void> | null,
     readGate: null as Promise<void> | null,
@@ -234,13 +236,13 @@ vi.mock('../../../utils/db', () => ({
         market.requests.push(`GET ${p}`);
         if (market.down) throw new TypeError('Network request failed');
         if (market.copyGate) await market.copyGate;
-        return { status: 200, json: async () => ({ tool: 'things', doc: market.copy?.doc ?? null, updatedAt: market.copy?.updatedAt ?? null }) };
+        return { status: 200, json: async () => ({ tool: 'things', doc: market.copy?.doc ?? null, updatedAt: market.copy?.updatedAt ?? null, ...(market.max ? { max: market.max } : {}) }) };
     },
     signedRequestWithMethod: async (method: string, p: string, body?: { doc?: unknown }) => {
         market.requests.push(`${method} ${p}`);
         if (method === 'PUT') market.puts.push(body?.doc);
         if (market.down) throw new TypeError('Network request failed');
-        return { success: true, tool: 'things', updatedAt: '2026-10-21T08:00:00.000Z' };
+        return { success: true, tool: 'things', updatedAt: '2026-10-21T08:00:00.000Z', ...(market.max ? { max: market.max } : {}) };
     },
 }));
 vi.mock('expo-file-system/legacy', async () => {
@@ -264,8 +266,8 @@ vi.mock('../index', async () => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, setLanguage, shedThings, thingCategory, toolDocBytes,
-    toolLineText, type Thing, type ThingsDoc,
+    THINGS, THINGS_DOC_BYTES, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, removeThing, setLanguage, shedRoom, shedThings, shedToDelete, thingCategory,
+    toolDocBytes, toolLineText, type Thing, type ThingsDoc,
 } from '@beanpool/core';
 // The Tool shed's fixtures are never shipped: from core's sources, as the template's generic tests read them.
 import { FIXTURES as SOURCE_FIXTURES } from '../../../../../packages/beanpool-core/src/tools/things/fixtures';
@@ -276,7 +278,7 @@ import { TOOL_APPS, phoneTool } from '../../index';
 import { ToolHomeBody, homeLines, safeLine } from '../../frame';
 import { TOOL_DOCS_TABLE } from '../../schema';
 import { openToolCopy } from '../../node-copy';
-import { ToolDocTooBigError, readToolDoc, writeToolDoc } from '../../store';
+import { ToolDocTooBigError, readToolDoc, readToolSettings, writeToolDoc, writeToolSettings } from '../../store';
 import { keep as keepThings } from '../parts';
 import { OFFER_DRAFT_KEY } from '../../doors';
 import { toolPhotoUri } from '../../photos';
@@ -360,6 +362,7 @@ beforeEach(() => {
     market.dealsUnread = false;
     market.dealsGate = null;
     market.copy = null;
+    market.max = undefined;
     market.copyGate = null;
     market.marketGate = null;
     market.readGate = null;
@@ -404,6 +407,22 @@ const kept = async () => (await readToolDoc(ME.publicKey, THINGS)).doc as Things
 const keptThing = async (id: string) => (await kept()).things.find((t) => (t as Thing).id === id) as Thing | undefined;
 /** The rows of the main list, top to bottom, as "name: state". */
 const rows = () => all('[data-testid^="thing-row-"]').map((r) => r.getAttribute('aria-label'));
+/** A thing with every field at its bound (about 1.2 KB). */
+const atCaps = (i: number) => thing(`b-${i}`, 'n'.repeat(80), { lendTerms: 't'.repeat(300), ownerNote: 'o'.repeat(500), replacementValue: 'r'.repeat(40) });
+/** The edit screen's fields typed to their bounds, as atCaps's. */
+async function fillAtCaps() {
+    await type('edit-name', 'n'.repeat(80));
+    await type('edit-terms', 't'.repeat(300));
+    await type('edit-note', 'o'.repeat(500));
+    await type('edit-replacement', 'r'.repeat(40));
+}
+/** The shed full, as every screen says it: in words, never bytes. */
+const FULL_LINE = 'Your Tool shed is full. Delete something you no longer have, or shorten some notes.';
+/** What Your things says of the room in `doc` against `max` (core's shedRoom, drawn in English). */
+function roomLine(doc: ThingsDoc, max: number): string {
+    const n = shedRoom(doc, max);
+    return n === 0 ? FULL_LINE : n === 1 ? 'Room for about 1 more thing' : `Room for about ${n} more things`;
+}
 
 // ── The checks ───────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -748,32 +767,190 @@ describe('Edit', () => {
         expect((await keptThing('t-1'))?.photo).toBe('photo-2');
     });
 
-    it(`a ${THINGS_MAX_ITEMS + 1}st thing is refused in one sentence, and so is a save past the store's bound; nothing is written`, async () => {
-        const many = Array.from({ length: THINGS_MAX_ITEMS }, (_, i) => thing(`t-${i}`, `Thing ${i}`));
-        await keep(shed(...many));
+    it('a 101st small thing is kept: the shed is bounded by its size alone, never by a count', async () => {
+        await keep(shed(...Array.from({ length: 100 }, (_, i) => thing(`t-${i}`, `Thing ${i}`))));
         await open('edit');
         await type('edit-name', 'One more');
         await click('edit-save');
-        expect(text('edit-problem')).toBe('Your Tool shed holds 100 things. Delete one first.');
-        expect((await kept()).things).toHaveLength(THINGS_MAX_ITEMS);
+        expect(byTestId('edit-problem')).toBeNull();
+        expect(shedThings(await kept())).toHaveLength(101);
+        expect(shedThings(await kept())[0].name).toBe('One more');
+        expect(nav.backs).toBe(1);
+    });
+
+    it("a save past the shed's 128 KB is refused in one sentence, in words and never bytes; nothing is written", async () => {
+        // Things with every field at its bound, as many as fit: more than 100, and one more is past 128 KB.
+        const full: Thing[] = [];
+        while (toolDocBytes(shed(...full, atCaps(full.length))) <= THINGS_DOC_BYTES) full.push(atCaps(full.length));
+        expect(full.length).toBeGreaterThan(100);
+        await keep(shed(...full));
+        await open('edit');
+        await fillAtCaps();
+        await click('edit-save');
+        expect(text('edit-problem')).toBe(FULL_LINE);
+        expect(text('edit-problem')).not.toMatch(/KB|byte/);
+        expect((await kept()).things).toHaveLength(full.length);
         expect(nav.backs).toBe(0);
+    });
+
+    it("on a server from before 128 KB (its `max` 65536): the room is against 64 KB, a save past it is refused, and nothing past it is sent", async () => {
+        market.max = 65_536;
+        const some = shed(...Array.from({ length: 30 }, (_, i) => atCaps(i)));
+        await keep(some);
+        await open('main');
+        // The open's GET said 65536: kept beside the setting, and the room is counted against it.
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeMax).toBe(65_536);
+        expect(text('things-room')).toBe(roomLine(some, 65_536));
+        expect(shedRoom(some, 65_536)).toBeLessThan(shedRoom(some, THINGS_DOC_BYTES));
 
         act(() => root.unmount());
         root = createRoot(host);
-        // Things with every field at its bound, as many as fit: one more is past 64 KB.
-        const big = (i: number) => thing(`b-${i}`, 'n'.repeat(80), { lendTerms: 't'.repeat(300), ownerNote: 'o'.repeat(500), replacementValue: 'r'.repeat(40) });
+        // The server keeps what the open sent, as a real one does (this stand-in keeps nothing of a PUT), so the next open
+        // finds the copy still on: with it off, the server's bound holds nothing.
+        market.copy = { doc: market.puts.at(-1), updatedAt: '2026-10-21T08:00:00.000Z' };
         const full: Thing[] = [];
-        while (toolDocBytes(shed(...full, big(full.length))) <= TOOL_LIMITS.docBytes) full.push(big(full.length));
-        expect(full.length).toBeLessThan(THINGS_MAX_ITEMS);
+        while (toolDocBytes(shed(...full, atCaps(full.length))) <= TOOL_LIMITS.docBytes) full.push(atCaps(full.length));
         await keep(shed(...full));
+        // One more fits the shed's own 128 KB, not this server's 64 KB.
+        expect(toolDocBytes(shed(...full, atCaps(full.length)))).toBeLessThan(THINGS_DOC_BYTES);
         await open('edit');
-        await type('edit-name', 'n'.repeat(80));
-        await type('edit-terms', 't'.repeat(300));
-        await type('edit-note', 'o'.repeat(500));
-        await type('edit-replacement', 'r'.repeat(40));
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeCopy).not.toBe(false);
+        await fillAtCaps();
         await click('edit-save');
-        expect(text('edit-problem')).toBe('Your Tool shed is full: it keeps up to 64 KB. Delete something you no longer have, or shorten some notes.');
+        expect(text('edit-problem')).toBe(FULL_LINE);
         expect((await kept()).things).toHaveLength(full.length);
+        // And the store itself holds to it: a write past it is refused there too.
+        await expect(writeToolDoc(ME.publicKey, THINGS, shed(...full, atCaps(full.length)))).rejects.toBeInstanceOf(ToolDocTooBigError);
+        await settle();
+        expect(market.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
+    });
+
+    it("a shed already past a server's 64 KB (kept before it said so): a Delete and a shorter note are kept, an Add is refused, nothing past it is sent", async () => {
+        // Kept while the phone counted against the shed's own 128 KB; then the open's GET says 65536.
+        const over: Thing[] = [];
+        while (toolDocBytes(shed(...over)) <= TOOL_LIMITS.docBytes + 4_000) over.push(atCaps(over.length));
+        await keep(shed(...over));
+        market.max = 65_536;
+        await open('main');
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeMax).toBe(65_536);
+        expect(text('things-room')).toBe(FULL_LINE);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 'b-0' });
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(await keptThing('b-0')).toBeUndefined();
+        expect(shedThings(await kept())).toHaveLength(over.length - 1);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('edit', { key: 'b-1' });
+        await type('edit-note', 'Top shelf.');
+        await click('edit-save');
+        expect(byTestId('edit-problem')).toBeNull();
+        expect((await keptThing('b-1'))?.ownerNote).toBe('Top shelf.');
+
+        // Still past 64 KB: one more thing is not taken, on the screen or by the store.
+        act(() => root.unmount());
+        root = createRoot(host);
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await open('edit');
+        await type('edit-name', 'One more');
+        await click('edit-save');
+        expect(text('edit-problem')).toBe(FULL_LINE);
+        expect(shedThings(await kept())).toHaveLength(over.length - 1);
+        const now = await kept();
+        await expect(writeToolDoc(ME.publicKey, THINGS, { ...now, things: [...now.things, thing('t-x', 'Saw')] })).rejects.toBeInstanceOf(ToolDocTooBigError);
+        await writeToolDoc(ME.publicKey, THINGS, removeThing(now, 'b-2', NOW));
+        expect(shedThings(await kept())).toHaveLength(over.length - 2);
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await settle();
+        expect(market.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
+    });
+
+    it("with the copy off, an older server's 64 KB holds nothing: a save past it is kept, and the room is the shed's own 128 KB", async () => {
+        // Heard while the copy was on; then the member switched it off.
+        await writeToolSettings(ME.publicKey, 'things', { nodeCopy: false, nodeMax: 65_536 }, 'https://mullum.example');
+        const full: Thing[] = [];
+        while (toolDocBytes(shed(...full, atCaps(full.length))) <= TOOL_LIMITS.docBytes) full.push(atCaps(full.length));
+        await keep(shed(...full));
+        await open('main');
+        expect(text('things-room')).toBe(roomLine(shed(...full), THINGS_DOC_BYTES));
+        expect(text('things-room')).not.toBe(FULL_LINE);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('edit');
+        await fillAtCaps();
+        await click('edit-save');
+        expect(byTestId('edit-problem')).toBeNull();
+        expect(shedThings(await kept())).toHaveLength(full.length + 1);
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await settle();
+        // Off: nothing asked of the server, and nothing sent.
+        expect(market.requests.filter((r) => r.includes('/api/tools/'))).toEqual([]);
+        expect(market.puts).toEqual([]);
+    });
+
+    it("switching the copy on with more than an older server keeps says so, and how many things to delete; never \"couldn't reach\"", async () => {
+        await writeToolSettings(ME.publicKey, 'things', { nodeCopy: false }, 'https://mullum.example');
+        const over: Thing[] = [];
+        while (toolDocBytes(shed(...over)) <= TOOL_LIMITS.docBytes + 6_000) over.push(atCaps(over.length));
+        await keep(shed(...over));
+        market.max = 65_536;
+        await open('main');
+        await click('tool-menu');
+        await click('tool-menu-settings');
+        await click('tool-settings-node-copy');
+        const n = shedToDelete(shed(...over), 65_536);
+        expect(n).toBeGreaterThan(1);
+        expect(text('tool-settings-node-copy-too-big')).toBe(`Your Tool shed holds more than your community's server keeps for now, so nothing changed. Delete about ${n} things, then switch the copy on again. Or leave it off, and your things stay on this device only.`);
+        expect(byTestId('tool-settings-node-copy-failed')).toBeNull();
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeCopy).toBe(false);
+        expect(market.puts).toEqual([]);
+
+        // That many deleted, the switch is taken, and what is sent fits the server.
+        let d = await kept();
+        for (const t of over.slice(0, n)) d = removeThing(d, t.id, NOW);
+        await writeToolDoc(ME.publicKey, THINGS, d);
+        await click('tool-settings-node-copy');
+        expect(byTestId('tool-settings-node-copy-too-big')).toBeNull();
+        expect(byTestId('tool-settings-node-copy-failed')).toBeNull();
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeCopy).toBe(true);
+        expect(market.puts).toHaveLength(1);
+        expect(toolDocBytes(market.puts[0])).toBeLessThanOrEqual(65_536);
+    });
+});
+
+describe('Your things: the room left, in things', () => {
+    it("says about how many more things fit, never bytes: from the member's own things, or a typical thing while there are none", async () => {
+        await open('main');
+        await click('tool-door-doing');
+        expect(text('things-room')).toBe(roomLine(shed(), THINGS_DOC_BYTES));
+        expect(shedRoom(shed(), THINGS_DOC_BYTES)).toBeGreaterThan(300);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        const mine = shed(thing('t-1', 'Ladder', { lendTerms: 'Back by Sunday.' }), atCaps(1), atCaps(2));
+        await keep(mine);
+        await open('main');
+        expect(text('things-room')).toBe(roomLine(mine, THINGS_DOC_BYTES));
+        expect(text('things-room')).toMatch(/^Room for about \d+ more things$/);
+    });
+
+    it('a shed with no room says it is full, in the same words as a save that is refused', async () => {
+        const full: Thing[] = [];
+        while (toolDocBytes(shed(...full, atCaps(full.length))) <= THINGS_DOC_BYTES) full.push(atCaps(full.length));
+        // Less left than one of them: and if about one still would, a small thing takes it.
+        let doc = shed(...full);
+        if (shedRoom(doc, THINGS_DOC_BYTES) > 0) doc = shed(...full, thing('last', 'Odds and ends'));
+        expect(toolDocBytes(doc)).toBeLessThanOrEqual(THINGS_DOC_BYTES);
+        expect(shedRoom(doc, THINGS_DOC_BYTES)).toBe(0);
+        await keep(doc);
+        await open('main');
+        expect(text('things-room')).toBe(FULL_LINE);
     });
 });
 
@@ -982,7 +1159,8 @@ describe('A thing', () => {
         expect(market.paused).toEqual(['post-1']);
         expect(fs.existsSync(file)).toBe(false);
         expect(shedThings(await kept())).toEqual([]);
-        expect(readThingsDoc(await kept()).things[0]).toMatchObject({ id: 't-1', gone: true });
+        // Taken out of the list, nothing of it kept (no tombstone: the sync reads the document whole, never one).
+        expect((await kept()).things).toEqual([]);
         expect(nav.backs).toBe(1);
     });
 
@@ -1002,7 +1180,7 @@ describe('A thing', () => {
         root = createRoot(host);
         answer();
         await settle();
-        expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-1')).toMatchObject({ gone: true });
+        expect((await kept()).things.map((t) => (t as Thing).id)).toEqual(['t-2']);
         expect(nav.backs).toBe(1);
     });
 
@@ -1025,7 +1203,7 @@ describe('A thing', () => {
         await click('thing-delete');
         await click('thing-delete-yes');
         expect(byTestId('thing-refused')).toBeNull();
-        expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+        expect((await kept()).things.map((t) => (t as Thing).id)).toEqual(['t-1']);
         expect(nav.backs).toBe(1);
         expect(market.paused).toEqual([]);
         // The paused one's pause is still asked, as its owner's: one a shop closed for now paused would otherwise come back
@@ -1113,7 +1291,8 @@ describe('A thing', () => {
         await click('thing-delete');
         await click('thing-delete-yes');
         expect(byTestId('thing-refused')).toBeNull();
-        expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+        expect(await keptThing('t-2')).toBeUndefined();
+        expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1', lentTo: { name: 'Sam' } });
         expect(nav.backs).toBe(1);
 
         expect(market.marketAsks).toEqual(['pause post-1', 'pause post-2']);
@@ -1334,9 +1513,9 @@ describe('A thing', () => {
         expect(text('thing-state')).toContain('In your shop');
     });
 
-    /** A shed with `first` in it and things to fill it, `room` bytes under the store's bound. */
+    /** A shed with `first` in it and things to fill it, `room` bytes under the shed's own bound (128 KB). */
     function shedWithRoom(first: Thing, room: number): ThingsDoc {
-        const target = TOOL_LIMITS.docBytes - room;
+        const target = THINGS_DOC_BYTES - room;
         const big = (i: number) => thing(`f-${i}`, 'n'.repeat(80), { lendTerms: 't'.repeat(300), ownerNote: 'o'.repeat(500), replacementValue: 'r'.repeat(40) });
         const small = (i: number) => thing(`f-${i}`, 'n'.repeat(80));
         // The last thing's note: a letter more is a byte more, so it takes up all that is left but `room`.
@@ -1348,17 +1527,17 @@ describe('A thing', () => {
         expect(toolDocBytes(doc)).toBe(target);
         return doc;
     }
-    const FULL = 'Your Tool shed is full: it keeps up to 64 KB. Delete something you no longer have, or shorten some notes.';
+    const FULL = FULL_LINE;
 
     it("at the store's bound, lend, take out and link say the shed is full before the server is asked anything; nothing changes", async () => {
         offer('post-1', 'Ladder');
         const listed = thing('t-1', 'Ladder', { postId: 'post-1' });
         // Lent to Sam, back in a week: more than the 40 bytes left.
         const full = shedWithRoom(listed, 40);
-        expect(toolDocBytes(lendOutside(full, 't-1', 'Sam', backAroundIn(NOW, 7), NOW))).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        expect(toolDocBytes(lendOutside(full, 't-1', 'Sam', backAroundIn(NOW, 7), NOW))).toBeGreaterThan(THINGS_DOC_BYTES);
         await keep(full);
         const before = await kept();
-        expect(toolDocBytes(before)).toBe(TOOL_LIMITS.docBytes - 40);
+        expect(toolDocBytes(before)).toBe(THINGS_DOC_BYTES - 40);
         await open('thing', { key: 't-1' });
         const asked = market.requests.length;
         await click('thing-lend');
@@ -1468,10 +1647,21 @@ describe('A thing', () => {
     it("keep: past the bound it never asks the host; the host's own size refusal is the shed full; anything else is not kept", async () => {
         const set = vi.fn(async (_next: ThingsDoc) => {});
         const over = shedWithRoom(thing('t-1', 'Ladder'), 0);
-        const setting = (s: typeof set) => ({ doc: { get: () => over, set: s } }) as unknown as Parameters<typeof keepThings>[0];
+        const setting = (s: typeof set) => ({ doc: { get: () => over, set: s, maxBytes: () => THINGS_DOC_BYTES } }) as unknown as Parameters<typeof keepThings>[0];
         expect(await keepThings(setting(set), lendOutside(over, 't-1', 'Sam', null, NOW))).toBe('too-big');
         expect(set).not.toHaveBeenCalled();
         expect(await keepThings(setting(set), shed(thing('t-1', 'Ladder')))).toBeNull();
+        // The bound is the host's: an older server's 64 KB refuses before the host is asked, as the shed's own 128 KB does.
+        const older = (held: ThingsDoc) => ({ doc: { get: () => held, set, maxBytes: () => 65_536 } }) as unknown as Parameters<typeof keepThings>[0];
+        const sixty = shed(...Array.from({ length: 60 }, (_, i) => atCaps(i)));
+        set.mockClear();
+        expect(await keepThings(older(shed()), sixty)).toBe('too-big');
+        expect(set).not.toHaveBeenCalled();
+        // Unless the host holds more than that already (kept before the server said 64 KB): smaller is handed to the host.
+        expect(toolDocBytes(sixty)).toBeGreaterThan(65_536);
+        expect(await keepThings(older(over), sixty)).toBeNull();
+        expect(set).toHaveBeenCalledWith(sixty);
+        set.mockClear();
         expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocTooBigError(70_000, 65_536); })), shed())).toBe('too-big');
         expect(await keepThings(setting(vi.fn(async () => { throw new Error('database or disk is full'); })), shed())).toBe('not-kept');
     });

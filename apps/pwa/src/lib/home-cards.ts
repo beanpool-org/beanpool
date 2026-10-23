@@ -20,8 +20,10 @@
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, t, type FindCommunityState } from '@beanpool/core';
+import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
+import { tierWords } from './trust-tier';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
 export const HOME_CARD_IDS = [
@@ -275,16 +277,17 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[]): Ste
         const nearest = answer.cards.find?.communities[0];
         const km = nearest?.distanceKm;
         const near = isNearKm(km) ? nearest : undefined;
+        const ask = near?.name ? t('Ask {name} to let you in', { name: near.name }) : t('Ask a community to let you in');
         return [
-            { key: 'firstPost', done: s.firstPost, text: 'Post something free or for swap' },
-            ...(near?.url ? [{ key: 'ask' as const, done: false, text: `Ask ${near.name ?? 'a community'} to let you in`, untracked: true as const, href: near.url }] : []),
+            { key: 'firstPost', done: s.firstPost, text: t('Post something free or for swap') },
+            ...(near?.url ? [{ key: 'ask' as const, done: false, text: ask, untracked: true as const, href: near.url }] : []),
         ];
     }
     return [
-        { key: 'firstOffer', done: s.firstOffer, text: 'Post your first Offer' },
-        { key: 'photo', done: s.photo, text: 'Add a photo to your profile' },
-        { key: 'interests', done: s.interests || interests.length > 0, text: 'Pick a few things you like' },
-        ...(s.invited !== null && (s.firstOffer || answer.me?.firstOffer) ? [{ key: 'invite' as const, done: s.invited, text: 'Invite someone' }] : []),
+        { key: 'firstOffer', done: s.firstOffer, text: t('Post your first Offer') },
+        { key: 'photo', done: s.photo, text: t('Add a photo to your profile') },
+        { key: 'interests', done: s.interests || interests.length > 0, text: t('Pick a few things you like') },
+        ...(s.invited !== null && (s.firstOffer || answer.me?.firstOffer) ? [{ key: 'invite' as const, done: s.invited, text: t('Invite someone') }] : []),
     ];
 }
 
@@ -319,43 +322,48 @@ export function toggleInterest(interests: readonly string[], id: string): string
 
 // ── words ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export const CARD_TITLES: Record<HomeCardId, string> = {
-    needs: 'Needs you',
-    safety: 'Your way back in',
-    find: 'Find your community',
-    steps: 'First steps',
-    tips: 'Tips',
-    interests: 'What are you into?',
-    deals: 'Your deals',
-    enterprise: 'Your enterprise',
-    events: 'Coming up',
-    market: 'New in the Market',
-    decide: 'Decide',
-    groups: 'Your groups',
-    joined: 'Who joined',
-    pulse: 'The Pulse',
-    beans: 'Your Beans',
-    notices: 'From your community',
-    invite: 'Grow your community',
-    community: 'Your community',
+/** The cards' titles: word() keys, the same English as core's card names (home-frame.ts), shown through t() (cardTitle). */
+export const CARD_TITLES: Record<HomeCardId, WordKey> = {
+    needs: word('Needs you'),
+    safety: word('Your way back in'),
+    find: word('Find your community'),
+    steps: word('First steps'),
+    tips: word('Tips'),
+    interests: word('What are you into?'),
+    deals: word('Your deals'),
+    enterprise: word('Your enterprise'),
+    events: word('Coming up'),
+    market: word('New in the Market'),
+    decide: word('Decide'),
+    groups: word('Your groups'),
+    joined: word('Who joined'),
+    pulse: word('The Pulse'),
+    beans: word('Your Beans'),
+    notices: word('From your community'),
+    invite: word('Grow your community'),
+    community: word('Your community'),
 };
 
 /**
- * A card's title on this node: the Market card is "Near you" where listings come nearest first (global, §3.1); a
- * visitor's are the lobby's words (§9 (c)): "Near you" for the communities, "What people post" for the listings.
+ * A card's title on this node, in the member's language: the Market card is "Near you" where listings come nearest first
+ * (global, §3.1); a visitor's are the lobby's words (§9 (c)): "Near you" for the communities, "What people post" for the
+ * listings.
  */
 export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & Partial<Pick<HomeAnswer, 'welcome' | 'me' | 'cards'>>): string {
     const visitor = !!answer.welcome || answer.me === null;
     // The one you keep is a project: "Your project" (group decisions §3.1). A node too old to say: "Your enterprise".
-    if (id === 'enterprise' && answer.cards?.enterprise?.lifecycle === 'bounded') return 'Your project';
-    if (visitor && id === 'find') return 'Near you';
-    if (visitor && id === 'market') return 'What people post';
+    if (id === 'enterprise' && answer.cards?.enterprise?.lifecycle === 'bounded') return t('Your project');
+    if (visitor && id === 'find') return t('Near you');
+    if (visitor && id === 'market') return t('What people post');
     // "Coming up" says how near only when the node measured from a point (the card adds "· within 50 km").
-    if (id === 'market' && answer.profile === 'global') return 'Near you';
-    return CARD_TITLES[id];
+    if (id === 'market' && answer.profile === 'global') return t('Near you');
+    return t(CARD_TITLES[id]);
 }
 
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+/** A count as English has always grouped it ("2,310"), and with the language's digits elsewhere (core formatCount). */
+const count = (n: number) => formatCount(n);
+/** A distance in km: one decimal under 10 ("4.6"), whole above ("12,489"). */
+const kmText = (km: number) => (km < 10 ? formatNumber(km, 1) : formatCount(Math.round(km)));
 
 /**
  * A "Coming up" line's time (DESIGN-event-times §4): the place's clock, "FRI 16 OCT · 20:50", with its zone named only when
@@ -380,16 +388,18 @@ export function homeEventRepeats(item: Pick<HomeEventItem, 'repeat' | 'repeatUnt
     return repeatCaption(item.repeat ?? null, item.repeatUntil ?? null);
 }
 
-/** "Sat 3 Oct", in the member's own time. */
+/** "Sat 3 Oct", in the member's own time and language (core's date tables). */
 export function dayLabel(iso: string): string {
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return '';
-    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    return formatDate(d, 'weekday-day-month');
 }
 
 /**
  * When a vote closes, in the member's own time (the node words it in hours only, §5.2): "closes tonight" when it closes
  * later today after 6 pm, "closes today", "closes tomorrow", or "closes Fri" within a week; "closes 12 Oct" after.
+ * English, as the node writes the Needs-you line this goes into (HomePage needsLine: the node's own words, put right
+ * where it said "in 30 hours"); the Decide card's own line says it in the member's language (closesIn).
  */
 export function closesWords(closesAt: string, now: number = Date.now()): string {
     const at = new Date(closesAt);
@@ -403,32 +413,68 @@ export function closesWords(closesAt: string, now: number = Date.now()): string 
     return `closes ${at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
 }
 
+/** The Decide card's "closes …", in the member's language: the same days as closesWords, the day and date from core's tables. */
+function closesIn(closesAt: string, now: number): string {
+    const at = new Date(closesAt);
+    if (!Number.isFinite(at.getTime())) return '';
+    const today = new Date(now);
+    const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const days = Math.round((dayStart(at) - dayStart(today)) / DAY_MS);
+    if (days <= 0) return at.getHours() >= 18 ? t('closes tonight') : t('closes today');
+    if (days === 1) return t('closes tomorrow');
+    if (days < 7) return t('closes {day}', { day: formatDate(at, 'weekday') });
+    return t('closes {date}', { date: formatDate(at, 'day-month') });
+}
+
+/**
+ * A balance's figure: thousands grouped in English as toLocaleString('en') always grouped them, cents and all ("1,234.5",
+ * "-0.5"); every other language's digits alone, with its decimal separator (core formatCount and formatNumber).
+ */
+function beansFigure(n: number): string {
+    if (Number.isInteger(n)) return formatCount(n);
+    const abs = Math.abs(n);
+    const whole = Math.trunc(abs);
+    // formatNumber writes the whole part as it writes `whole` alone: what follows it is the separator and the cents.
+    const cents = formatNumber(abs).slice(formatNumber(whole).length);
+    return `${n < 0 ? '-' : ''}${formatCount(whole)}${cents}`;
+}
+
+/** "12 Beans", "1 Bean", "12.5 Beans", "1,234.5 Beans": the member's balance in words. */
+const beansAmount = (n: number) => tn(n, '{n} Bean', '{n} Beans', { n: beansFigure(n) });
+
 /** "12 Beans · room to spend 200 · Resident"; a new member's "0 Beans · nothing to repay". Their own balance only (§3.1). */
 export function beansLines(b: NonNullable<HomeCards['beans']>): { line: string; note: string | null } {
     const n = Math.round(b.balance * 100) / 100;
     if (!b.activated && n === 0) {
-        return { line: '0 Beans · nothing to repay', note: 'Your credit opens with a first trade.' };
+        return { line: t('0 Beans · nothing to repay'), note: t('Your credit opens with a first trade.') };
     }
-    const balance = `${n.toLocaleString('en')} ${Math.abs(n) === 1 ? 'Bean' : 'Beans'}`;
-    const room = b.frozen ? 'spending paused' : `room to spend ${Math.round(b.room).toLocaleString('en')}`;
-    return { line: `${balance} · ${room}`, note: b.tier || null };
+    const amount = beansAmount(n);
+    const line = b.frozen ? t('{amount} · spending paused', { amount }) : t('{amount} · room to spend {room}', { amount, room: count(Math.round(b.room)) });
+    return { line, note: b.tier ? tierWords(b.tier) : null };
 }
 
 /** "2 open · waiting on you: Mend clothes". */
 export function dealsLine(d: NonNullable<HomeCards['deals']>): string {
-    const open = `${d.open} open`;
-    if (d.waitingOnMe) return `${open} · waiting on you: ${d.waitingOnMe.title}`;
-    return d.waiting > 0 ? `${open} · ${d.waiting} waiting on you` : open;
+    const open = tn(d.open, '{n} open', '{n} open');
+    if (d.waitingOnMe) return t('{open} · waiting on you: {title}', { open, title: d.waitingOnMe.title });
+    if (d.waiting === 0) return open;
+    // Two counts side by side, as the phone's dealsLine writes them.
+    const waiting = tn(d.waiting, '{n} waiting on you', '{n} waiting on you');
+    return `${open} · ${waiting}`;
 }
 
 /** "1 Decision closes Fri · 2 polls open". */
 export function decideLine(d: NonNullable<HomeCards['decide']>, now: number = Date.now()): string {
     const parts: string[] = [];
     if (d.open > 0) {
-        const when = d.soonestClosesAt ? ` ${closesWords(d.soonestClosesAt, now)}` : '';
-        parts.push(d.open === 1 ? `1 Decision${when}` : `${d.open} Decisions open, the first${when}`);
+        const closes = d.soonestClosesAt ? closesIn(d.soonestClosesAt, now) : '';
+        parts.push(d.open === 1
+            ? (closes ? t('1 Decision {closes}', { closes }) : t('1 Decision'))
+            : closes
+                ? tn(d.open, '{n} Decision open, the first {closes}', '{n} Decisions open, the first {closes}', { closes })
+                : tn(d.open, '{n} Decision open', '{n} Decisions open'));
     }
-    if (d.polls > 0) parts.push(`${d.polls}${d.pollsMore ? '+' : ''} ${d.polls === 1 && !d.pollsMore ? 'poll' : 'polls'} open`);
+    if (d.polls > 0) parts.push(d.pollsMore ? t('{n}+ polls open', { n: d.polls }) : tn(d.polls, '{n} poll open', '{n} polls open'));
     return parts.join(' · ');
 }
 
@@ -437,35 +483,37 @@ export function joinedLine(j: NonNullable<HomeCards['joined']>): string {
     if (j.names && j.names.length) {
         const names = j.names.slice(0, 2).map(n => n.callsign);
         const rest = j.count7d - names.length;
-        const who = rest > 0 ? `${names.join(', ')} and ${rest} more` : names.length === 2 ? `${names[0]} and ${names[1]}` : names[0];
-        return `${who} joined this week.`;
+        if (rest > 0) return tn(rest, '{names} and {n} more joined this week.', '{names} and {n} more joined this week.', { names: names.join(', ') });
+        if (names.length === 2) return t('{names} and {last} joined this week.', { names: names[0], last: names[1] });
+        return t('{name} joined this week.', { name: names[0] });
     }
-    const people = plural(j.count7d, 'person', 'people');
-    const where = j.radiusKm ? ` within ${j.radiusKm} km` : '';
-    return `${people}${where} joined this week.`;
+    const n = count(j.count7d);
+    return j.radiusKm
+        ? tn(j.count7d, '{n} person within {km} km joined this week.', '{n} people within {km} km joined this week.', { n, km: j.radiusKm })
+        : tn(j.count7d, '{n} person joined this week.', '{n} people joined this week.', { n });
 }
 
 /** "81 members · 23 trades this month"; global: "2,310 members · 38 communities listed". */
 export function communityLine(c: NonNullable<HomeCards['community']>, profile: string): string {
-    const parts = [plural(c.members, 'member', 'members')];
-    if (profile === 'global' && typeof c.communities === 'number') parts.push(`${plural(c.communities, 'community', 'communities')} listed`);
-    if (typeof c.tradesThisMonth === 'number') parts.push(`${plural(c.tradesThisMonth, 'trade', 'trades')} this month`);
+    const parts = [tn(c.members, '{n} member', '{n} members', { n: count(c.members) })];
+    if (profile === 'global' && typeof c.communities === 'number') parts.push(tn(c.communities, '{n} community listed', '{n} communities listed', { n: count(c.communities) }));
+    if (typeof c.tradesThisMonth === 'number') parts.push(tn(c.tradesThisMonth, '{n} trade this month', '{n} trades this month', { n: count(c.tradesThisMonth) }));
     return parts.join(' · ');
 }
 
 /** The community card's name: the community's own, or the global node's "The worldwide community". */
 export function communityName(c: NonNullable<HomeCards['community']>, profile: string): string {
-    if (profile === 'global') return 'The worldwide community';
-    return c.name || 'Your community';
+    if (profile === 'global') return t('The worldwide community');
+    return c.name || t(CARD_TITLES.community);
 }
 
 /** "12 km away · 40 members", whatever of that is known (as the phone's find card says it). */
 export function communityFacts(c: Pick<HomeCommunity, 'distanceKm' | 'memberCount'>): string {
     const parts: string[] = [];
     if (c.distanceKm !== null && c.distanceKm !== undefined) {
-        parts.push(c.distanceKm < 1 ? 'Less than 1 km away' : `${c.distanceKm < 10 ? c.distanceKm.toFixed(1) : Math.round(c.distanceKm).toLocaleString('en')} km away`);
+        parts.push(c.distanceKm < 1 ? t('Less than 1 km away') : t('{distance} km away', { distance: kmText(c.distanceKm) }));
     }
-    if (c.memberCount !== null && c.memberCount !== undefined) parts.push(plural(c.memberCount, 'member', 'members'));
+    if (c.memberCount !== null && c.memberCount !== undefined) parts.push(tn(c.memberCount, '{n} member', '{n} members', { n: count(c.memberCount) }));
     return parts.join(' · ');
 }
 
@@ -481,8 +529,8 @@ export function findBody(f: HomeFind): string {
     switch (state) {
         case 'near':
             return communitiesNear(f.communities).length === 1
-                ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
-                : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
+                ? t('The community nearest you. Ask to join, and trade with your neighbours there.')
+                : t('The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.');
         case 'far':
             return FIND_COMMUNITY_WORDS.farLine(f.communities.length);
         case 'none':
@@ -491,8 +539,9 @@ export function findBody(f: HomeFind): string {
             return t(FIND_COMMUNITY_WORDS.notLoaded);
         case 'no_point': {
             const n = knownCommunityCount(f.communityCount);
-            const see = 'Share your area, or type your town, to see the nearest.';
-            return n === null ? see : `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. ${see}`;
+            if (n === null) return t('Share your area, or type your town, to see the nearest.');
+            return tn(n, '{n} community is listed. Share your area, or type your town, to see the nearest.',
+                '{n} communities are listed. Share your area, or type your town, to see the nearest.', { n: count(n) });
         }
     }
 }
@@ -515,8 +564,9 @@ export function findOffersStart(f: HomeFind): boolean {
 /** "9 listings within 25 km" (the find card's count, §3.1). */
 export function nearbyLine(f: HomeFind): string | null {
     if (!f.nearbyPosts) return null;
-    const { count, more, radiusKm } = f.nearbyPosts;
-    return `${count.toLocaleString('en')}${more ? '+' : ''} ${count === 1 && !more ? 'listing' : 'listings'} within ${radiusKm} km`;
+    const { count: listings, more, radiusKm } = f.nearbyPosts;
+    const values = { n: count(listings), km: radiusKm };
+    return more ? t('{n}+ listings within {km} km', values) : tn(listings, '{n} listing within {km} km', '{n} listings within {km} km', values);
 }
 
 /**
@@ -529,14 +579,18 @@ export function probationSentence(p: HomeProbation | null | undefined): string |
     const posts = p.limits?.posts?.limit;
     const chats = p.limits?.new_dm_recipients?.limit;
     if (!hours || posts === undefined || chats === undefined) return null;
-    const span = hours % 24 === 0 ? plural(hours / 24, 'day', 'days') : plural(hours, 'hour', 'hours');
-    return `For your first ${span}: ${plural(posts, 'post', 'posts')} and ${plural(chats, 'new chat', 'new chats')} a day.`;
+    // The phone's sentence (utils/home-cards.ts probationSentence), each count in its own form.
+    return t('For your first {span}: {posts} and {chats} a day.', {
+        span: hours % 24 === 0 ? tn(hours / 24, '{n} day', '{n} days') : tn(hours, '{n} hour', '{n} hours'),
+        posts: tn(posts, '{n} post', '{n} posts'),
+        chats: tn(chats, '{n} new chat', '{n} new chats'),
+    });
 }
 
 /** A listing's distance on a card: whole km, "under 1 km" below one (the place is the area's centre for visitors). */
 export function distanceText(km: number | null | undefined): string | null {
     if (km === null || km === undefined || !Number.isFinite(km)) return null;
-    return km < 1 ? 'under 1 km' : `${Math.round(km).toLocaleString('en')} km`;
+    return km < 1 ? t('under 1 km') : t('{km} km', { km: count(Math.round(km)) });
 }
 
 /**
@@ -557,8 +611,8 @@ export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<
 
 // ── Sun and moon ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Edit home's line for a sun and moon card with no place to work from. */
-export const SKY_NO_PLACE_LINE = 'Nothing to show now: no place is known.';
+/** Edit home's line for a sun and moon card with no place to work from. A word() key: shown through t(). */
+export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.');
 
 /**
  * The sun and moon card's words (@beanpool/core sky.ts), worked out in this browser with no request: from the

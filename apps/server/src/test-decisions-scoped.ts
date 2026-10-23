@@ -241,6 +241,10 @@ async function main(): Promise<void> {
     assert((await signedFetch('GET', `/api/enterprise/${e1}/decisions`, null, null)).status === 401, 'an unsigned read is refused by the middleware');
     // The community's one-open-Decision rule is unchanged by a keepers' vote (§2.1): Kim's bakery vote is still open.
     const freeze = { title: 'Freeze a credit line', description: 'A community proposal from a keeper with a bakery vote open', touches: 'member', effect: 'freeze_credit', subject: outsider.pubKeyHex };
+    // A completed trade is Kim's standing to propose one (the earned_credit badge makeMember gives is none).
+    const tradedAt = new Date().toISOString();
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k2.pubKeyHex, outsider.pubKeyHex, tradedAt, tradedAt);
     const byKeeper = await signedFetch('POST', '/api/commons/decisions', freeze, k2);
     assert(row(d4).status === 'open' && byKeeper.status === 200,
         `a keeper with an open enterprise vote can still propose a community Decision (got ${byKeeper.status} ${byKeeper.error ?? ''})`);

@@ -46,6 +46,8 @@ import { ShopToggle, shopIdForEdit, shopToggleState, type ShopToggleState } from
 import { readListingShopId, readMyShop } from '../../utils/shop';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
+import { changedElsewhere } from '../../utils/changed-elsewhere';
+import { signedRequestWords } from '../../components/signed-request-lines';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading. The headings and the
@@ -66,7 +68,7 @@ function explainTradeError(e: any): { title: string; message: string } {
     if (raw.startsWith('HOLIDAY_MODE')) {
         return { title: t('🌴 Holiday mode is on'), message: t('Turn off holiday mode in Settings before trading.') };
     }
-    return { title: t('Error'), message: raw.replace(/^[A-Z_]+:\s*/, '') };
+    return { title: t('Error'), message: signedRequestWords(raw.replace(/^[A-Z_]+:\s*/, '')) };
 }
 
 /** A request's estimated length, in the listing price's own unit ("for {n} days" or "for {n} weeks" for a loan). */
@@ -899,7 +901,7 @@ export default function PostDetailModal() {
             setEditMode(false);
         } catch (e: any) {
             // The node's own words when it gave any: a price held by an open deal says so, and how to change it.
-            Alert.alert(t('Error'), String(e?.message || t('Failed to save changes')));
+            Alert.alert(t('Error'), e?.message ? signedRequestWords(String(e.message)) : t('Failed to save changes'));
         }
         setSaving(false);
     };
@@ -913,7 +915,7 @@ export default function PostDetailModal() {
             else await resumePost(post.id);
             setPost({ ...post, status: willPause ? 'paused' : 'active' });
         } catch (e: any) {
-            Alert.alert(t('Error'), String(e?.message || t('Failed to update offer')));
+            Alert.alert(t('Error'), e?.message ? signedRequestWords(String(e.message)) : t('Failed to update offer'));
         } finally {
             setToggling(false);
         }
@@ -963,7 +965,7 @@ export default function PostDetailModal() {
                     console.error('Failed to create chat on approve', e);
                 }
             }
-        } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), e.message); }
+        } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); }
         setAccepting(false);
     };
 
@@ -1005,7 +1007,7 @@ export default function PostDetailModal() {
                         router.push({ pathname: '/chat/[id]', params: { id: convId, prefill: words } });
                     } else {
                         Alert.alert(t('Offer declined'), e?.message
-                            ? t("Your message wasn't sent: {reason}", { reason: e.message })
+                            ? t("Your message wasn't sent: {reason}", { reason: signedRequestWords(e.message) })
                             : t("Your message wasn't sent: the chat could not be opened"));
                     }
                 }
@@ -1014,7 +1016,7 @@ export default function PostDetailModal() {
             setRequests(prev => prev.filter(r => r.id !== rejectModalTxId));
             setRejectModalTxId(null);
             hapticSuccess();
-        } catch (e: any) { Alert.alert(t('Error'), e.message); }
+        } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
         setAccepting(false);
     };
 
@@ -1024,7 +1026,7 @@ export default function PostDetailModal() {
         try {
             await cancelMarketplaceRequest(myRequest.id, identity.publicKey);
             setRequests(prev => prev.filter(r => r.id !== myRequest.id));
-        } catch (e: any) { Alert.alert(t('Error'), e.message); }
+        } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
         setAccepting(false);
     };
 
@@ -1281,7 +1283,7 @@ export default function PostDetailModal() {
                                                         targetCallsign: targetPeerCallsign 
                                                     });
                                                     hapticSuccess();
-                                                } catch(e: any) { hapticWarning(); Alert.alert(t('Error'), e.message); } finally { setAccepting(false); }
+                                                } catch(e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
                                             }}>
                                                 <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Credits')}</Text>
                                             </Pressable>
@@ -1323,7 +1325,7 @@ export default function PostDetailModal() {
                                         const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                         if (conv) router.push(`/chat/${conv.id}`);
                                     } catch (e: any) {
-                                        Alert.alert(t('Error'), e.message || t('Failed to start chat.'));
+                                        Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
                                     }
                                 }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
@@ -1352,13 +1354,13 @@ export default function PostDetailModal() {
                                             await cancelMarketplaceTransaction(txToCancel, identity.publicKey);
                                             if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                         } catch(e:any) { 
-                                            if (e.message?.includes('not found') || e.message?.includes('not authorized')) {
+                                            if (changedElsewhere(e, 'transaction_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
                                                 if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                             } else {
-                                                Alert.alert(t('Error'), e.message);
+                                                Alert.alert(t('Error'), signedRequestWords(e.message));
                                             }
                                         } finally { setAccepting(false); }
                                     }}
@@ -1642,7 +1644,7 @@ export default function PostDetailModal() {
                                             // Fallback if chat fails
                                             router.replace({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
                                         } catch (e: any) {
-                                            if (e.message?.includes('not found') || e.message?.includes('not active')) {
+                                            if (changedElsewhere(e, 'post_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This post was already accepted or modified elsewhere. Refreshing your screen...'));
                                                 const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
@@ -1731,7 +1733,7 @@ export default function PostDetailModal() {
                                                 try {
                                                     const conv = await createConversationApi('dm', [reqPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                                     if (conv) router.push(`/chat/${conv.id}`);
-                                                } catch (e: any) { Alert.alert(t('Error'), e.message); }
+                                                } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
                                             }}
                                         >
                                             <Text style={styles.reqMessageBtnText}>{t('💬 Message')}</Text>
@@ -1766,7 +1768,7 @@ export default function PostDetailModal() {
                                     const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
                                     if (conv) router.push(`/chat/${conv.id}`);
                                 } catch (e: any) {
-                                    Alert.alert(t('Error'), e.message || t('Failed to start chat.'));
+                                    Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
                                 }
                             }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
@@ -1806,7 +1808,7 @@ export default function PostDetailModal() {
                                                 setHasExistingRating(true);
                                                 hapticSuccess();
                                                 Alert.alert(t('Success'), hasExistingRating ? t('Rating updated!') : t('Rating submitted!'));
-                                            } catch(e:any) { hapticWarning(); Alert.alert(t('Error'), e.message); } finally { setSubmittingRating(false); }
+                                            } catch(e:any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setSubmittingRating(false); }
                                         }}>
                                             <Text style={[styles.confirmActionBtnText, myRating >= 1 && !hasExistingRating && { color: colors.text.onGold }]}>
                                                 {submittingRating ? t('Submitting...') : hasExistingRating ? t('Update Rating') : t('Submit Rating')}
@@ -1849,7 +1851,7 @@ export default function PostDetailModal() {
                                                                 { text: t('OK'), onPress: () => router.back() }
                                                             ]);
                                                         } catch (e: any) {
-                                                            Alert.alert(t('Error'), e?.message || t('Failed to delete post'));
+                                                            Alert.alert(t('Error'), e?.message ? signedRequestWords(e.message) : t('Failed to delete post'));
                                                         } finally {
                                                             setDeletingAsConvenor(false);
                                                         }
@@ -1993,7 +1995,7 @@ export default function PostDetailModal() {
                                             // The thanks, and why the member's words were left out when they were (case 14).
                                             Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, finalReason));
                                         } catch (e: any) {
-                                            Alert.alert(t('Error'), e.message);
+                                            Alert.alert(t('Error'), signedRequestWords(e.message));
                                         } finally {
                                             setSubmittingReport(false);
                                         }

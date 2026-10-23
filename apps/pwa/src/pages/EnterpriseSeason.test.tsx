@@ -153,7 +153,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
             // Listing badge shows Paused
             expect(screen.getByText(/⏸️ Paused/i)).toBeInTheDocument();
 
-            // P&L Accountability Panel plain words check
+            // P&L Accountability Panel plain words check, behind Money and backing (DESIGN-shops-round3-enterprise-shopfront §0 row 9, S8)
+            fireEvent.click(screen.getByTestId('shopfront-money-toggle'));
             expect(screen.getByText(/Income & Spend \(P&L\)/i)).toBeInTheDocument();
             expect(screen.getAllByText(/Came in/i).length).toBeGreaterThanOrEqual(1);
             expect(screen.getAllByText(/Went out/i).length).toBeGreaterThanOrEqual(1);
@@ -243,6 +244,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 />
             );
 
+            // A keeper's control: in the page's Manage tab (S8).
+            fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
             await waitFor(() => {
                 expect(screen.getByText(/Start Wind-Up/i)).toBeInTheDocument();
             });

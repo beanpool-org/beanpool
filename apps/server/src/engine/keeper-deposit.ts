@@ -145,9 +145,10 @@ export function checkSsoKeeperShares(
         // The supported list comes from the provider table, not from this line (CR). Un-pausing a
         // provider is one row in sso.ts, and a hardcoded list here would go stale silently — in a
         // message whose entire job is to tell the caller which values are valid. `String()` rather
-        // than bare interpolation because a symbol would throw inside the template.
+        // than bare interpolation because a symbol would throw inside the template; at most 40
+        // characters of it, as recovery-collect.ts writes the same refusal.
         throw new KeeperDepositError(
-            `'${String(provider)}' is not a sign-in provider this node can verify. `
+            `'${String(provider).slice(0, 40)}' is not a sign-in provider this node can verify. `
             + `Supported: ${SSO_PROVIDERS.join(', ')}.`,
         );
     }

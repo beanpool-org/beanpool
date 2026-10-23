@@ -126,7 +126,7 @@ describe('the screens that show them pass the message through the table (read fr
     const rawLines = (src: string) => src.split('\n').filter((l) => raw.test(l) && !/console\.(?:warn|error|log)/.test(l)).map((l) => l.trim());
 
     it.each<[string, number, string[]]>([
-        ['app/treasury-detail.tsx', 20, []], ['app/treasury-post.tsx', 1, []], ['app/propose-project.tsx', 1, []], ['app/group-post.tsx', 1, []],
+        ['app/treasury-detail.tsx', 21, []], ['app/treasury-post.tsx', 1, []], ['app/propose-project.tsx', 1, []], ['app/group-post.tsx', 1, []],
         ['app/names-list.tsx', 1, []], ['components/GroupDetailModal.tsx', 9, []], ['components/GroupSuccessionPanel.tsx', 2, []],
         ['components/EnterpriseDecisions.tsx', 3, []], ['components/DecideSection.tsx', 1, []], ['components/ProposeDecisionModal.tsx', 1, []],
         ['components/PollCard.tsx', 2, []], ['components/NewPollModal.tsx', 1, []], ['components/ReviewModal.tsx', 1, []],

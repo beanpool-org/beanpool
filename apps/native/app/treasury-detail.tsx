@@ -621,8 +621,9 @@ export default function TreasuryDetailScreen() {
             const conv = await createConversationApi('dm', [myPubkey, leadKeeper.publicKey], myPubkey);
             router.push(`/chat/${conv.id}`);
         } catch (e: any) {
-            const offline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : e.message);
+            const said: string = e?.message ?? '';
+            const offline = !said || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(said);
+            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : signedRequestWords(said));
         } finally {
             setMessagingLead(false);
         }

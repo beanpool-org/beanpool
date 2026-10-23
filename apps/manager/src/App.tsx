@@ -64,6 +64,7 @@ import { downloadNotice, downloadedAlert } from './lib/backup-shortfall';
 import { AdminLoginCard } from './components/auth/AdminLoginCard';
 import { TotpSetupGate } from './components/auth/TotpSetupGate';
 import { HomeScreen } from './components/modules/HomeScreen';
+import { CommunityShapeSection } from './components/modules/CommunityShapeSection';
 import { PeopleSafetySection } from './components/modules/PeopleSafetySection';
 import { EconomySection } from './components/modules/EconomySection';
 import { BulletinSection } from './components/modules/BulletinSection';
@@ -1629,6 +1630,19 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                     </SectionErrorBoundary>
                                 );
                             })()}
+
+                            {activeTab === 'shape' && activeNode && (
+                                <SectionErrorBoundary sectionName="How this community works" resetKey={activeNode.id}>
+                                    <CommunityShapeSection
+                                        activeNode={activeNode}
+                                        viewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
+                                        onNavigate={(tab, sub) => {
+                                            setNavSubTab(sub);
+                                            setActiveTab(tab as any);
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
 
                             {activeTab === 'people' && (
                                 <SectionErrorBoundary sectionName="People & Safety" resetKey={activeNode?.id}>

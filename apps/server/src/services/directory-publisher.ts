@@ -145,8 +145,8 @@ export function initDirectoryPublisher(): boolean {
         console.log(`[Directory] 📴 ${HELD_BACK_UNLISTED_MESSAGE}`);
         return false;
     }
-    // The schedule, whole hours from 1 (the route and a kept record take only those); one stored before that bound
-    // reads as the default. Its old 0, Never, was carried over to Listed off at boot (config/community-shape-upgrade.ts).
+    // The schedule, whole hours from 1 (the route takes only those); anything else stored reads as the default. Its old
+    // 0, Never, is carried over to Listed off at boot and at a kept record's install (config/community-shape-upgrade.ts).
     const stored = getNodeConfig().directoryPushIntervalHours;
     const intervalHours = isDirectoryPushInterval(stored) ? stored : DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS;
 

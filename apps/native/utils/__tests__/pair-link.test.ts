@@ -223,8 +223,13 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
 
     it("a link never replaces an open sheet (as a camera scan can't): not while it asks, sends, shows the digits, or at all (review N2)", () => {
         const effect = slice(pair(), 'useEffect(() => {\n        if (linkCode === undefined', '}, [linkCode]);');
-        expect(effect).toContain("if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current && !isScanningLocked.current) void readCode(linkCode, 'link');");
-        // Not while a camera scan is being read either (confirm-1 N2 race note).
+        expect(effect).toContain("if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current) void readCode(linkCode, 'link');");
+        // Never dropped unsaid (Damo, 23 Oct): with a sheet open, the member is told to close it first.
+        expect(effect).toContain("else Alert.alert('', t('A new code was opened while this one is still on the screen, so the new one was not read. Close this one first, then open the new code again.'));");
+        // The camera's pause after a Cancel or a refusal (isScanningLocked) is the camera's: it stopped a link opened in it,
+        // unsaid, and now doesn't; a read still finishing is overtaken by the newer code instead (readSeqRef;
+        // pair-device-new-link-render.test.ts renders both).
+        expect(effect).not.toContain('isScanningLocked');
         // The camera's own guard, for comparison: an open sheet stops it too.
         expect(pair()).toContain('if (isScanningLocked.current || isTransferring || scannedData) return;');
     });
@@ -236,9 +241,10 @@ describe("the pairing screen's link path (the screen cannot be rendered here: it
         expect(effect).not.toContain('router.setParams');
         const cleared = effect.indexOf('navigation.setParams({ qr: undefined } as never);');
         expect(read).toBeGreaterThan(-1);
-        // After the read starts, and on its own line: whether the link was read or dropped, it is cleared.
+        // After the read starts (or the member is told to close the open sheet), on its own line: whether the link was read
+        // or not, it is cleared.
         expect(cleared).toBeGreaterThan(read);
-        expect(effect.slice(read, cleared)).toMatch(/^void readCode\(linkCode, 'link'\);\s*$/);
+        expect(effect.slice(read, cleared)).toMatch(/^void readCode\(linkCode, 'link'\);\s*else Alert\.alert\('', t\('A new code was opened[^)]*\)\);\s*$/);
         expect(effect).toMatch(/if \(linkCode === undefined\) return;/);
     });
 

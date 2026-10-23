@@ -17,8 +17,9 @@
  * matching; those move to a `code` first (test-member-words.ts holds the list).
  *
  * The catalogs: apps/server/words/<lang>.json (the server's sentences and @beanpool/engine's) and core's
- * packages/beanpool-core/words/<lang>.json (the push sentences live in core). Read once per language; a missing or
- * unreadable file is no catalog, and the English shows (onboarding-no-hard-gates), never a throw.
+ * packages/beanpool-core/words/<lang>.json (the push sentences live in core). Read once per language, and the language's
+ * words built from them once; a missing or unreadable file is no catalog, and the English shows (onboarding-no-hard-gates),
+ * never a throw.
  */
 
 import fs from 'node:fs';
@@ -37,6 +38,11 @@ interface Catalogs { server: Catalog | null; core: Catalog | null }
 
 const held = new Map<Lang, Catalogs>();
 const forTests = new Map<Lang, Partial<Catalogs>>();
+/**
+ * Each language's words, built once from its catalogs: the table holds every sentence of both catalogs, so building it
+ * for each refused request was a cost per refusal that grew with the catalogs.
+ */
+const built = new Map<Lang, { all: Words; refusals: Words }>();
 
 function readCatalog(file: () => string): Catalog | null {
     try {
@@ -61,20 +67,32 @@ function catalogsOf(lang: Lang): Catalogs {
 }
 
 const present = (list: (Catalog | null)[]): Catalog[] => list.filter((c): c is Catalog => c !== null);
+const ENGLISH = wordsFor('en');
+
+function builtFor(lang: Lang): { all: Words; refusals: Words } {
+    let words = built.get(lang);
+    if (!words) {
+        const { server, core } = catalogsOf(lang);
+        words = {
+            all: wordsFor(lang, present([core, server])),
+            // A refusal is translated with the server's catalog alone, so only a sentence the server or the engine marked
+            // is ever translated, never one that happens to match a sentence of core's the apps write.
+            refusals: wordsFor(lang, present([server])),
+        };
+        built.set(lang, words);
+    }
+    return words;
+}
 
 /** The server's words and core's in `lang`; English for no language. */
 export function wordsIn(lang: Lang | null | undefined): Words {
-    if (!lang || lang === 'en') return wordsFor('en');
-    const { server, core } = catalogsOf(lang);
-    return wordsFor(lang, present([core, server]));
+    if (!lang || lang === 'en') return ENGLISH;
+    return builtFor(lang).all;
 }
 
-/**
- * The words a refusal is translated with: the server's catalog alone, so only a sentence the server or the engine marked
- * is ever translated, never one that happens to match a sentence of core's the apps write.
- */
+/** The words a refusal is translated with (builtFor). */
 function refusalWordsIn(lang: Lang): Words {
-    return wordsFor(lang, present([catalogsOf(lang).server]));
+    return builtFor(lang).refusals;
 }
 
 /** The language a request names in `X-Language`, when it is one BeanPool writes; null when it names none. */
@@ -126,4 +144,5 @@ export function useCatalogsForTests(lang: Lang, catalogs: Partial<Catalogs> | nu
     if (catalogs) forTests.set(lang, catalogs);
     else forTests.delete(lang);
     held.delete(lang);
+    built.delete(lang);
 }

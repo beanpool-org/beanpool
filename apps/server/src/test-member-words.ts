@@ -121,6 +121,20 @@ async function testWayOut(): Promise<void> {
         const regional = await get('/api/refused', 'fr-CA');
         assert(regional.body?.error === FR[POLL_CLOSED], "a device's regional tag (fr-CA) is its language");
 
+        // A language's words are built once, not for each refusal: a catalog changed in place after the first refusal is
+        // not seen by the next one; given again (as a new file read would be), it is.
+        const live: Record<string, string> = { ...FR };
+        useCatalogsForTests('fr', { server: live, core: FR_CORE });
+        const before = await get('/api/refused', 'fr');
+        live[POLL_CLOSED] = 'Ce sondage est fermé';
+        const cached = await get('/api/refused', 'fr');
+        assert(before.body?.error === FR[POLL_CLOSED] && cached.body?.error === FR[POLL_CLOSED] && wordsIn('fr') === wordsIn('fr'),
+            `the words of a language are built once and kept (${cached.body?.error})`);
+        useCatalogsForTests('fr', { server: live, core: FR_CORE });
+        const rebuilt = await get('/api/refused', 'fr');
+        assert(rebuilt.body?.error === 'Ce sondage est fermé', `and built again when its catalogs are read again (${rebuilt.body?.error})`);
+        useCatalogsForTests('fr', { server: FR, core: FR_CORE });
+
         const coded = await get('/api/coded', 'fr');
         assert(coded.status === 404 && coded.body?.error === 'not_found' && coded.body?.message === FR[POLL_CLOSED],
             `a code in error stays as it is, the message beside it comes in French (${coded.text})`);

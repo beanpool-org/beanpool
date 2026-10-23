@@ -471,6 +471,15 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
         { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
     await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
 
+    // A spent invite: its code beside it (invite_used), its sentence English while the apps still match it.
+    const { generateInvite } = await import('./engine/invites.js');
+    const invite = generateInvite(owner.pk);
+    const first = newId('FirstJoiner'), second = newId('SecondJoiner');
+    const redeemed = await call('POST', first, '/api/invite/redeem', { code: invite?.code, publicKey: first.pk, callsign: 'FirstJoiner' });
+    const spent = await call('POST', second, '/api/invite/redeem', { code: invite?.code, publicKey: second.pk, callsign: 'SecondJoiner' }, 'fr');
+    assert(redeemed.status === 200 && spent.status === 400 && spent.text === JSON.stringify({ error: 'This invite has already been used', code: 'invite_used' }),
+        `a spent invite says so by code, in English whatever the language (${redeemed.status} / ${spent.status} ${spent.text})`);
+
     // Shops and a push's notice (routes/shops.ts, routes/notices.ts).
     await family('shops, one that is not here', 'There is no such shop here.', 'GET', ann, '/api/shops/no-such-shop');
     await family('a push notice that is gone', 'This server has no such notice for you. Notices are kept for 7 days.', 'GET', ann, '/api/notices/push/no-such-notice');

@@ -178,13 +178,20 @@ function unsignedVisitorRefusal(joinerSigned: boolean): { success: false; error:
  * Validates and redeems standard INV- code, registering the member and seeding earned credit. `joinerSigned`: the
  * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal).
  */
+/**
+ * The code beside a spent invite's or ticket's sentence, for the apps to read instead of its English (they still match
+ * "already been used" / "already been redeemed" until they read this: invite-next.ts, welcome.tsx, _layout.tsx, the
+ * web's WelcomePage.tsx), so the sentence can be translated once they do.
+ */
+export const INVITE_USED_CODE = 'invite_used';
+
 export function redeemInvite(
     broadcast: (event: any) => void,
     code: string,
     publicKey: string,
     callsign: string,
     joinerSigned = false
-): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
     assertInvitesOn();
     // One key, one spelling (engine/member-key.ts), before any lookup or write: a member's key in capitals is no other
@@ -256,7 +263,7 @@ export function redeemInvite(
     // deliberately not enforced here, so an invitee picks whatever callsign they want.
     if (invite.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
-        return { success: false, error: 'This invite has already been used' };
+        return { success: false, error: 'This invite has already been used', code: INVITE_USED_CODE };
     }
 
     if (!canInvite(invite.created_by)) {
@@ -302,7 +309,7 @@ export function redeemOfflineTicket(
     joinerPublicKey: string,
     callsign: string,
     joinerSigned = false
-): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
     assertInvitesOn();
     // One key, one spelling, as in redeemInvite.
@@ -359,7 +366,7 @@ export function redeemOfflineTicket(
     const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
     if (existingInvite?.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
-        return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+        return { success: false, error: 'This exact mathematical offline ticket has already been redeemed', code: INVITE_USED_CODE };
     }
     // Where only admins invite (the door, config/door.ts), a ticket made by a member is refused. A code is made here, so
     // one made before the door closed still joins; a ticket is made on the phone and this server first sees it now, and

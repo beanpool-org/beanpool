@@ -1985,11 +1985,11 @@ export function searchMemberDirectoryRows(prefix: string, limit: number): Direct
 export { generateInvite, adminGenerateInvite };
 
 /** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
-export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
 }
 
-export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign, joinerSigned);
 }
 

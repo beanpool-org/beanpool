@@ -1275,7 +1275,7 @@ router.post('/api/invite/redeem', async (ctx) => {
     try { result = redeemInvite(code, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
-        ctx.body = { error: result.error };
+        ctx.body = result.code ? { error: result.error, code: result.code } : { error: result.error };
         return;
     }
     // For a publicKey that is already a member this answers before the code is checked as used. The public card only:
@@ -1299,7 +1299,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
     try { result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
-        ctx.body = { error: result.error };
+        ctx.body = result.code ? { error: result.error, code: result.code } : { error: result.error };
         return;
     }
     // The public card only, as /api/invite/redeem above.

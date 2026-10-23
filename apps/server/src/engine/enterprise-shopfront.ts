@@ -102,9 +102,12 @@ export function changeEnterpriseFace(treasury: string, actor: string, changes: F
     const name = rawName === undefined ? undefined : textOf(rawName);
     const purpose = rawPurpose === undefined ? undefined : textOf(rawPurpose);
     const about = rawAbout === undefined ? undefined : rawAbout === null ? '' : textOf(rawAbout);
-    const newName = name !== undefined && name !== row.callsign ? name : undefined;
-    const newPurpose = purpose !== undefined && purpose !== (row.purpose ?? '') ? purpose : undefined;
-    const newAbout = about !== undefined && about !== (row.bio ?? '') ? about : undefined;
+    // What is stored, in the form textOf gives what is sent: a crowdfund's purpose keeps its textarea's newline (db.ts
+    // createCrowdfundProject) and an older seed's About may run past 600, and the form sends either back trimmed (#2391).
+    const asSent = (stored: string | null) => replaceLoneSurrogates(stored ?? '').trim();
+    const newName = name !== undefined && name !== asSent(row.callsign) ? name : undefined;
+    const newPurpose = purpose !== undefined && purpose !== asSent(row.purpose) ? purpose : undefined;
+    const newAbout = about !== undefined && about !== asSent(row.bio) ? about : undefined;
 
     if ((newName !== undefined || newPurpose !== undefined) && !opts.lead) throw new EnterpriseFaceRefusal(403, 'lead_only', FACE_LEAD_ONLY);
     if (newName !== undefined) {

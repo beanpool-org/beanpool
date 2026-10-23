@@ -3551,6 +3551,33 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(row.getAttribute('aria-label')).toBe('Sourdough. waiting on you · 10m ago. Opens the deal.');
     });
 
+    it('deals card: deleted listing with empty title renders label fallback without dangling with or blank row', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                deals: {
+                    open: 2,
+                    waiting: 1,
+                    waitingOnMe: null,
+                    items: [
+                        { postId: 'p1', txId: 't1', title: '', with: 'Ana', waitsOnMe: true, at: iso(now - 10 * 60_000) },
+                        { postId: 'p2', txId: 't2', title: '', with: null, waitsOnMe: false, at: iso(now - 30 * 60_000) },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const row1 = document.querySelector('[data-testid="home-deal-t1"]')!;
+        expect(row1.textContent).toContain('Deal · with Ana');
+
+        const row2 = document.querySelector('[data-testid="home-deal-t2"]')!;
+        expect(row2.textContent).toContain('Deal');
+    });
+
     it('enterprise card: omits balance when Beans are disabled', async () => {
         const base = localMember();
         node.answer = {

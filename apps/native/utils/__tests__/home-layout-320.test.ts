@@ -401,6 +401,8 @@ describe('new fixed strings at 320dp x 1.3 (Home slice W5)', () => {
     it('none of the new fixed strings has a clipped word (measured at 320dp and 1.3x text)', () => {
         const strings = [
             'All deals ›',
+            'Deal · with Ana',
+            'Deal',
             'waiting on you',
             'waiting on them',
             'waiting on you · 2h ago',

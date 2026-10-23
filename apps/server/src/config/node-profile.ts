@@ -177,6 +177,13 @@ export interface ProfileSwitches {
      *  grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local community): a
      *  listing stays until its author takes it down, as before. */
     retention: boolean;
+    /** A member's first message to someone who hasn't added them, written to them or traded with them waits as a request
+     *  until that person accepts it (engine/dm-requests.ts; DESIGN-message-a-friend-fable.md §4, Marty 2026-10-23). On (the
+     *  global community): anyone joins with 12 words, and probation bounds how many people one new account reaches, not
+     *  what lands in one person's inbox from many. Off (a local community): everyone was let in by someone and its Market
+     *  runs on members writing to each other, so a direct message arrives as before. The operator's switch in Settings
+     *  (`dmRequests`) is this switch's override. Off again, a request still waiting is an ordinary chat. */
+    dmRequests: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -212,6 +219,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         showcase: false,
         openMembership: false,
         retention: false,
+        dmRequests: false,
     },
     global: {
         openJoin: true,
@@ -255,6 +263,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         openMembership: true,
         // Free, with limits published (Marty, 2026-10-18): a listing nobody has touched in 90 days goes, with its photos.
         retention: true,
+        // A stranger's first message waits until it is accepted (Marty, 2026-10-23): the lobby is where strangers are.
+        dmRequests: true,
     },
 };
 
@@ -325,6 +335,10 @@ export interface NodeFeatures {
      *  open group's roster to anyone outside it are refused, and the activity feed names nobody who joined. Absent (a
      *  local community, or a server from before it): every read answers as before. */
     openMembership?: true;
+    /** Present, and true, only where `dmRequests` is on: a first message to someone new waits as a request, each direct
+     *  conversation in the lists says whether it is one (`request`), and a member's list holds the requests waiting for
+     *  them apart (`requests`). Absent (a local community, or a server from before it): every message arrives as before. */
+    dmRequests?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -545,6 +559,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.membersOnDemand ? { membersOnDemand: true as const } : {}),
         ...(s.showcase ? { showcase: true as const } : {}),
         ...(s.openMembership ? { openMembership: true as const } : {}),
+        ...(s.dmRequests ? { dmRequests: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
     if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };

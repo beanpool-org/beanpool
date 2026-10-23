@@ -173,11 +173,14 @@ async function main(): Promise<void> {
     assert(on.status === 200 && on.body?.confirmation === true, `setup: the owner turns the known floor's dial on (${show(on)})`);
 
     const sam = makeMember('Sam', 50);
-    /** A member with earned standing, as one who has traded has, so they may propose a Decision (one open at a time each). */
+    /** A member who has traded (with a partner of their own), so they may propose a Decision (one open at a time each). */
     let proposers = 0;
     const proposer = (): Id => {
         const m = makeMember(`Proposer${++proposers}`, 0);
-        db.prepare('UPDATE members SET earned_credit = 50 WHERE public_key = ?').run(m.pk);
+        const partner = makeMember(`Partner${proposers}`, 0);
+        const at = new Date().toISOString();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                    VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
     const shop = (who: Id, beans: number) => createPost('offer', 'produce', `Sam's ${beans}-Bean basket for ${who.name}`, 'Veg', beans, 'fixed', sam.pk)!.id;

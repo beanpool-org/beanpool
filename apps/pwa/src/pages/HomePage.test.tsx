@@ -37,7 +37,8 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { backToEnglish, bracketed, bypassing, showIn } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
@@ -2649,5 +2650,74 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(join.parentElement).toBe(grid().parentElement);
         expect(span('community')).toBe('1 / -1');
         expect(span('market')).toBe('');
+    });
+});
+
+describe('Home in the member\'s language: every line a card draws from lib/home-cards.ts and the lines lib keeps', () => {
+    const rich = () => answer({ me: { ...answer().me!, joinedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), probation: {
+        onProbation: true, ageEndsAt: null, keptPosts: 0, keptPostsNeeded: 1, limits: { posts: { limit: 3 }, new_dm_recipients: { limit: 10 } }, endsWhen: { hours: 72, keptPosts: 1 },
+    } } }, {
+        steps: { joinedAt: null, firstOffer: false, firstPost: false, photo: false, interests: false, invited: null, area: false, knocked: null },
+        deals: { open: 2, waiting: 1, waitingOnMe: null },
+        decide: { open: 1, soonestClosesAt: new Date(Date.now() + 3 * 86_400_000).toISOString(), polls: 2, pollsMore: false },
+        joined: { count7d: 5, radiusKm: null, names: [{ callsign: 'Kofi', avatarUrl: null }, { callsign: 'Wren', avatarUrl: null }] },
+    });
+    /** What members and the node wrote, shown as written (the faces' initials are the callsigns'). The tier is a word of ours. */
+    const WRITTEN = ['Seed swap', 'Town Hall', 'Pottery lessons', 'Sourdough', 'Borrow a drill', 'How our LETS started', 'River Folk', 'Mullumbimby', 'Kofi', 'Wren', 'KO', 'WR', 'Ana'];
+
+    afterEach(() => backToEnglish());
+
+    it('in the pseudo-locale no letters a card draws are outside a bracket, but what members and the node wrote', async () => {
+        await showIn('xx');
+        vi.mocked(api.getHome).mockResolvedValue(fresh(rich()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-decide');
+        for (const id of ['steps', 'deals', 'decide', 'joined', 'beans', 'community']) expect(screen.getByTestId(`home-card-${id}`), id).toBeInTheDocument();
+        expect(bracketed()).toBeGreaterThan(20);
+        expect(bypassing(document.body, { others: WRITTEN })).toEqual([]);
+    });
+
+    it('a visitor\'s Home in the global lobby, in the pseudo-locale: the find card, the examples, the lobby\'s notes and the town search', async () => {
+        await showIn('xx');
+        vi.mocked(api.getHome).mockResolvedValue(fresh({
+            generatedAt: NOW, profile: 'global', welcome: true, me: null, layout: null,
+            features: { beans: false, guestListingsOnly: true, exampleListings: true, invites: false },
+            cards: {
+                find: { point: 'request', communities: [{ key: 'l', name: 'Lismore', url: 'https://lismore.example.org', memberCount: 12, distanceKm: 12_489 }],
+                    communityCount: 10, nearbyPosts: { radiusKm: 25, count: 9, more: false }, watches: null, knock: null, directoryFetchedAt: '2026-10-14T08:00:00.000Z' },
+                market: { items: [{ id: 'p1', type: 'offer', title: 'Seedlings to give away', category: 'garden', photoUrl: null, distanceKm: 3 }], total14d: 1, more: false, examples: true },
+                events: { items: [{ id: 'e1', title: 'Beach clean', startsAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), endsAt: null, place: null, rsvp: null }], radiusKm: null },
+                community: { name: null, members: 2310, communities: 38 },
+            },
+        }));
+        render(<HomePage identity={null} visitor={{ joinCard: <section data-testid="lobby-join-card" /> , beans: false }} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-examples');
+        expect(bracketed()).toBeGreaterThan(10);
+        expect(bypassing(document.body, { others: ['Lismore', 'Seedlings to give away', 'Beach clean'] })).toEqual([]);
+    });
+
+    it('in Portuguese from a catalog that has the lines, and in English as before', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(rich()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const beans = await screen.findByTestId('home-card-beans');
+        expect(beans).toHaveTextContent('12 Beans · room to spend 200');
+        expect(screen.getByTestId('home-card-joined')).toHaveTextContent('Kofi, Wren and 3 more joined this week.');
+        expect(screen.getByTestId('home-card-community')).toHaveTextContent('81 members · 23 trades this month.');
+        cleanup();
+        setLanguage('pt', [{
+            'Your Beans': 'Os seus Beans',
+            '{n} Bean|{n} Beans': { one: '{n} Bean', other: '{n} Beans' },
+            '{amount} · room to spend {room}': '{amount} · pode gastar {room}',
+            '{names} and {n} more joined this week.|{names} and {n} more joined this week.': { one: '{names} e mais {n} entraram esta semana.', other: '{names} e mais {n} entraram esta semana.' },
+            '{n} member|{n} members': { one: '{n} membro', other: '{n} membros' },
+            '{n} trade this month|{n} trades this month': { one: '{n} troca este mês', other: '{n} trocas este mês' },
+        }]);
+        vi.mocked(api.getHome).mockResolvedValue(fresh(rich()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const pt = await screen.findByTestId('home-card-beans');
+        expect(pt).toHaveTextContent('Os seus Beans');
+        expect(pt).toHaveTextContent('12 Beans · pode gastar 200');
+        expect(screen.getByTestId('home-card-joined')).toHaveTextContent('Kofi, Wren e mais 3 entraram esta semana.');
+        expect(screen.getByTestId('home-card-community')).toHaveTextContent('81 membros · 23 trocas este mês.');
     });
 });

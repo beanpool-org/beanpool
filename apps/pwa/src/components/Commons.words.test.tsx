@@ -422,7 +422,7 @@ describe('proposing a Decision in English', () => {
         expect(within(screen.getByRole('dialog')).getAllByRole('button').slice(1, 3).map((b) => b.textContent)).toEqual(['👤Member', '🏛️Commons Pool']);
         fireEvent.click(screen.getAllByRole('radio').find((r) => r.textContent?.includes('Remove Member'))!);
         expect(screen.getByTestId('removal-debt-write-off-line').textContent).toBe("Balances are private: you can't see Member's. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds 322 beans now.");
-        expect(screen.getByText(/No bond required\./).parentElement!.textContent).toBe('No bond required. Open to members with a completed trade or earned standing, and to node admins. Open for 7 days, executing automatically on pass.');
+        expect(screen.getByText(/No bond required\./).parentElement!.textContent).toBe('No bond required. Open to members who have completed a trade, and to node admins. Open for 7 days, executing automatically on pass.');
         fireEvent.change(screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library'), { target: { value: 'Mia away' } });
         fireEvent.change(screen.getByPlaceholderText(/Explain why this decision is needed/), { target: { value: 'Moved' } });
         fireEvent.change(screen.getByPlaceholderText('Enter member callsign or pubkey...'), { target: { value: 'Mia' } });

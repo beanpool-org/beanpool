@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { t } from '@beanpool/core';
-import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, parseBeans, debtCodeOk, payFailureWords, PAY_UNANSWERED_RETRY, REPAYMENT_WORDS, type Repayment, type CommonsPayment } from '../lib/debts';
+import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, parseBeans, debtCodeOk, payFailureWords, PAY_WORDS, REPAYMENT_WORDS, type Repayment, type CommonsPayment } from '../lib/debts';
 import type { ConfirmedPayment } from '../lib/payment-request';
 
 /** The pay-back link's code, and what was left on that debt when the admin shared it (null when the link doesn't say). */
@@ -57,9 +57,9 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         let payment = held;
         if (!payment) {
             const beans = parseBeans(amount);
-            if (beans === null) { setError(REPAYMENT_WORDS.badAmount); return; }
+            if (beans === null) { setError(t(REPAYMENT_WORDS.badAmount)); return; }
             const debt = code.trim();
-            if (debt && !debtCodeOk(debt)) { setError(REPAYMENT_WORDS.badCode); return; }
+            if (debt && !debtCodeOk(debt)) { setError(t(REPAYMENT_WORDS.badCode)); return; }
             if (!window.confirm(REPAYMENT_WORDS.payConfirm(beans, !!debt, linkFor(debt), !debt && !!repayment))) return;
             payment = confirmCommonsPayment(beans, debt || undefined);
         }
@@ -74,7 +74,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         } catch (e) {
             const lost = unansweredPayment(e);
             setHeld(lost ? payment : null);
-            setError(lost ? PAY_UNANSWERED_RETRY : payFailureWords(e));
+            setError(lost ? t(PAY_WORDS.unansweredRetry) : payFailureWords(e));
         } finally {
             inFlight.current = false;
             setBusy(false);
@@ -91,16 +91,16 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
             )}
             {!open ? (
                 <button type="button" onClick={() => setOpen(true)} className="self-start min-h-[48px] px-1 text-sm font-semibold text-terra-600 dark:text-terra-500">
-                    {REPAYMENT_WORDS.payTitle}
+                    {t(REPAYMENT_WORDS.payTitle)}
                 </button>
             ) : (
                 <div className="rounded-2xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 px-4 py-3 flex flex-col gap-2">
-                    <h3 className="font-bold text-nature-950 dark:text-white">{REPAYMENT_WORDS.payTitle}</h3>
+                    <h3 className="font-bold text-nature-950 dark:text-white">{t(REPAYMENT_WORDS.payTitle)}</h3>
                     {paid ? (
                         <p role="status" className="text-sm leading-relaxed text-nature-800 dark:text-nature-200 break-words select-all">{paid}</p>
                     ) : (
                         <>
-                            <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-300">{REPAYMENT_WORDS.payIntro}</p>
+                            <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-300">{t(REPAYMENT_WORDS.payIntro)}</p>
                             {linkFor(code.trim()) !== null && <p className="text-sm leading-relaxed text-nature-700 dark:text-nature-300">{REPAYMENT_WORDS.linkLeft(link.left!)}</p>}
                             <label className="text-xs font-bold tracking-wide text-nature-600 dark:text-nature-400">{t('BEANS')}
                                 <input className={input} inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setHeld(null); }} placeholder={t('For example 12.50')} maxLength={12} disabled={busy} />
@@ -114,7 +114,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
                     <div className="flex flex-wrap gap-2">
                         {!paid && (
                             <button type="button" onClick={pay} disabled={busy} className="flex-1 min-h-[48px] px-4 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold disabled:opacity-50">
-                                {held ? t('Try again') : REPAYMENT_WORDS.payTitle}
+                                {held ? t('Try again') : t(REPAYMENT_WORDS.payTitle)}
                             </button>
                         )}
                         <button type="button" onClick={() => { setOpen(false); setPaid(null); setError(null); setHeld(null); }} className="flex-1 min-h-[48px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-semibold">

@@ -42,6 +42,7 @@ import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/show
 import { LocalCommunityMark, ExampleHeader } from '../components/showcase/LocalCommunityMark';
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
+import { signedRequestWords } from '../components/signed-request-lines';
 import {
     ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText,
     ShopfrontTogether, ShopfrontVisitorNote, kindSinceLine, openListing,
@@ -423,7 +424,7 @@ export default function TreasuryDetailScreen() {
                 Alert.alert(t('Could not post'), (res as any)?.error || t('Failed to post message'));
             }
         } catch (e: any) {
-            Alert.alert(t('Error'), e.message || t('Could not post message'));
+            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Could not post message'));
         } finally {
             setThreadPosting(false);
         }
@@ -447,7 +448,7 @@ export default function TreasuryDetailScreen() {
                             await removeEnterpriseThreadMessage(treasuryKey, messageId);
                             await loadThread();
                         } catch (e: any) {
-                            Alert.alert(t('Error'), e.message || t('Could not remove message'));
+                            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Could not remove message'));
                         } finally {
                             setThreadRemovingId(null);
                         }
@@ -481,7 +482,7 @@ export default function TreasuryDetailScreen() {
             setLedgerShown(LEDGER_PAGE);
         } catch (e: any) {
             if (request !== ledgerRequest.current) return;
-            setLedgerError(e?.message || t('Could not load the ledger'));
+            setLedgerError(e?.message ? signedRequestWords(e.message) : t('Could not load the ledger'));
         } finally {
             if (request === ledgerRequest.current) setLedgerLoading(false);
         }
@@ -531,7 +532,7 @@ export default function TreasuryDetailScreen() {
                 finaliseWindUp: t('Failed to finalise wind-up'),
             }[action];
             title = t('Could not complete that');
-            message = e?.message || fallback;
+            message = e?.message ? signedRequestWords(e.message) : fallback;
         } finally {
             setLifecycleBusy(false);
         }
@@ -620,8 +621,9 @@ export default function TreasuryDetailScreen() {
             const conv = await createConversationApi('dm', [myPubkey, leadKeeper.publicKey], myPubkey);
             router.push(`/chat/${conv.id}`);
         } catch (e: any) {
-            const offline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : e.message);
+            const said: string = e?.message ?? '';
+            const offline = !said || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(said);
+            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : signedRequestWords(said));
         } finally {
             setMessagingLead(false);
         }
@@ -650,7 +652,7 @@ export default function TreasuryDetailScreen() {
             setSweepAmount('');
             load();
         } catch (e: any) {
-            Alert.alert(t('Sweep failed'), e.message || t('Could not sweep to the Commons.'));
+            Alert.alert(t('Sweep failed'), e.message ? signedRequestWords(e.message) : t('Could not sweep to the Commons.'));
         } finally {
             setSweeping(false);
         }
@@ -678,7 +680,7 @@ export default function TreasuryDetailScreen() {
                 : t('Your request to join as a keeper with {amount} 🫘 backing has been submitted for review.', { amount: amt }));
             load();
         } catch (e: any) {
-            Alert.alert(t('Request Failed'), e.message || (project ? t('Could not submit collaborator request.') : t('Could not submit keeper request.')));
+            Alert.alert(t('Request Failed'), e.message ? signedRequestWords(e.message) : (project ? t('Could not submit collaborator request.') : t('Could not submit keeper request.')));
         } finally {
             setSubmittingJoin(false);
         }
@@ -698,7 +700,7 @@ export default function TreasuryDetailScreen() {
             }
             load();
         } catch (e: any) {
-            Alert.alert(t('Approval Failed'), e.message || (project ? t('Could not approve collaborator request.') : t('Could not approve keeper request.')));
+            Alert.alert(t('Approval Failed'), e.message ? signedRequestWords(e.message) : (project ? t('Could not approve collaborator request.') : t('Could not approve keeper request.')));
         } finally {
             setProcessingRequestId(null);
         }
@@ -712,7 +714,7 @@ export default function TreasuryDetailScreen() {
             Alert.alert(t('Request Declined'), project ? t('Collaborator request has been declined.') : t('Keeper request has been declined.'));
             load();
         } catch (e: any) {
-            Alert.alert(t('Decline Failed'), e.message || (project ? t('Could not decline collaborator request.') : t('Could not decline keeper request.')));
+            Alert.alert(t('Decline Failed'), e.message ? signedRequestWords(e.message) : (project ? t('Could not decline collaborator request.') : t('Could not decline keeper request.')));
         } finally {
             setProcessingRequestId(null);
         }
@@ -734,7 +736,7 @@ export default function TreasuryDetailScreen() {
             setShowCandidatePicker(false);
             load();
         } catch (e: any) {
-            Alert.alert(t('Proposal Failed'), e.message || t('Could not propose lead succession.'));
+            Alert.alert(t('Proposal Failed'), e.message ? signedRequestWords(e.message) : t('Could not propose lead succession.'));
         } finally {
             setSubmittingSuccession(false);
         }
@@ -748,7 +750,7 @@ export default function TreasuryDetailScreen() {
             Alert.alert(t('Objection recorded'), t('The change is cancelled.'));
             load();
         } catch (e: any) {
-            Alert.alert(t('Could not object'), e.message || t('Please try again.'));
+            Alert.alert(t('Could not object'), e.message ? signedRequestWords(e.message) : t('Please try again.'));
         } finally {
             setProcessingChangeId(null);
         }
@@ -765,7 +767,7 @@ export default function TreasuryDetailScreen() {
                         await removeEnterpriseKeeper(treasuryKey, k.publicKey);
                         load();
                     } catch (e: any) {
-                        Alert.alert(t('Could not remove'), e.message || t('Please try again.'));
+                        Alert.alert(t('Could not remove'), e.message ? signedRequestWords(e.message) : t('Please try again.'));
                     } finally {
                         setProcessingChangeId(null);
                     }
@@ -786,7 +788,7 @@ export default function TreasuryDetailScreen() {
                         load();
                     } catch (e: any) {
                         // The server says plainly what must happen first (e.g. the debt your pledge covers).
-                        Alert.alert(t('Not yet'), e.message || t('Could not step down.'));
+                        Alert.alert(t('Not yet'), e.message ? signedRequestWords(e.message) : t('Could not step down.'));
                     } finally {
                         setSteppingDown(false);
                     }
@@ -816,7 +818,7 @@ export default function TreasuryDetailScreen() {
             }
             load();
         } catch (e: any) {
-            Alert.alert(t('Vote Failed'), e.message || t('Could not vote on succession.'));
+            Alert.alert(t('Vote Failed'), e.message ? signedRequestWords(e.message) : t('Could not vote on succession.'));
         } finally {
             setSubmittingSuccession(false);
         }
@@ -849,7 +851,7 @@ export default function TreasuryDetailScreen() {
             setPledgeMemo('');
             load();
         } catch (e: any) {
-            Alert.alert(t('Pledge Failed'), e.message || t('Could not complete pledge.'));
+            Alert.alert(t('Pledge Failed'), e.message ? signedRequestWords(e.message) : t('Could not complete pledge.'));
         } finally {
             setPledging(false);
         }
@@ -872,7 +874,7 @@ export default function TreasuryDetailScreen() {
                             Alert.alert(t('Initiative Cancelled 🌱'), t('Pledges have been refunded to backers.'));
                             router.back();
                         } catch (e: any) {
-                            Alert.alert(t('Cancellation Failed'), e.message || t('Could not cancel initiative.'));
+                            Alert.alert(t('Cancellation Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel initiative.'));
                         } finally {
                             setCancelling(false);
                         }
@@ -901,7 +903,7 @@ export default function TreasuryDetailScreen() {
             Alert.alert(t('Bid Approved ✅'), t('Funds locked in trust successfully.'));
             load();
         } catch (e: any) {
-            Alert.alert(t('Approve Failed'), e.message || t('Could not approve bid.'));
+            Alert.alert(t('Approve Failed'), e.message ? signedRequestWords(e.message) : t('Could not approve bid.'));
         } finally {
             setActionState(null);
         }
@@ -924,7 +926,7 @@ export default function TreasuryDetailScreen() {
                             Alert.alert(t('Bid Declined'), t('The request has been declined.'));
                             load();
                         } catch (e: any) {
-                            Alert.alert(t('Decline Failed'), e.message || t('Could not decline bid.'));
+                            Alert.alert(t('Decline Failed'), e.message ? signedRequestWords(e.message) : t('Could not decline bid.'));
                         } finally {
                             setActionState(null);
                         }
@@ -958,7 +960,7 @@ export default function TreasuryDetailScreen() {
                             Alert.alert(t('Payment Released ✅'), t('The beans have been paid to the member.'));
                             load();
                         } catch (e: any) {
-                            Alert.alert(t('Release Failed'), e.message || t('Could not release payment.'));
+                            Alert.alert(t('Release Failed'), e.message ? signedRequestWords(e.message) : t('Could not release payment.'));
                         } finally {
                             setActionState(null);
                         }
@@ -2143,7 +2145,7 @@ export default function TreasuryDetailScreen() {
                                                 // The thanks, and why the member's words were left out when they were (case 14).
                                                 Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason));
                                             } catch (e: any) {
-                                                Alert.alert(t('Error'), e.message || t('Could not submit report.'));
+                                                Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Could not submit report.'));
                                                 throw e; // the box keeps the choice and the words
                                             }
                                         }}
@@ -2209,7 +2211,7 @@ export default function TreasuryDetailScreen() {
                                             Alert.alert(t('Payment Released ✅'), t('The beans have been paid to the member.'));
                                             load();
                                         } catch (e: any) {
-                                            Alert.alert(t('Release Failed'), e.message || t('Could not release payment.'));
+                                            Alert.alert(t('Release Failed'), e.message ? signedRequestWords(e.message) : t('Could not release payment.'));
                                         } finally {
                                             setActionState(null);
                                         }

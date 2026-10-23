@@ -119,6 +119,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     db.prepare('UPDATE OR IGNORE withheld_conversations SET owner_pubkey = ? WHERE owner_pubkey = ?').run(newKey, oldKey);
     db.prepare('UPDATE OR IGNORE withheld_conversations SET other_pubkey = ? WHERE other_pubkey = ?').run(newKey, oldKey);
     db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ? OR other_pubkey = ?').run(oldKey, oldKey);
+    // Their message requests, made and waiting for them (engine/dm-requests.ts): keyed by the conversation, which keeps its id.
+    move('dm_requests', 'from_pubkey');
+    move('dm_requests', 'to_pubkey');
+    move('dm_requests', 'accepted_by');
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');
@@ -293,6 +297,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('money_requests', 'payer_pubkey');
     move('known_floor_log', 'actor_pubkey');
     move('known_floor_log', 'member_pubkey');
+    move('community_settings_log', 'actor_pubkey');
     // The old key's locked copy of its names-list record (engine/names-list.ts): sealed to the old key, so the new one
     // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
     if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);

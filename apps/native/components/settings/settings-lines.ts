@@ -53,6 +53,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "The community's answer didn't confirm the delete. Try again.": word("The community's answer didn't confirm the delete. Try again."),
     'This phone changed community. Open Delete account again.': word('This phone changed community. Open Delete account again.'),
     'This phone is not set to a community.': word('This phone is not set to a community.'),
+    // utils/node-post.ts purgeAccountOnNode: no community to ask (its refusal with only a status is in FILLED).
+    'No community node connection found.': word('No community node connection found.'),
     // utils/names-list.ts NAMES_COPY: Sign Out with the names list's copy not confirmed.
     'Names list': word('Names list'),
     'Try again': word('Try again'),
@@ -127,6 +129,16 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     {
         pattern: /^The community said no \((\d+)\)\.$/,
         words: (m) => t('The community said no ({status}).', { status: m[1] }),
+    },
+    // utils/node-post.ts purgeAccountOnNode: the community refused the delete with no words of its own, by its status.
+    {
+        pattern: /^Server returned (\d+)$/,
+        words: (m) => t('Server returned {status}', { status: m[1] }),
+    },
+    // utils/keeper-enrolment.ts disconnectAtCommunity: the community refused; what it answered stays as it came.
+    {
+        pattern: /^Could not disconnect ([^:]+): ([\s\S]*)$/,
+        words: (m) => t('Could not disconnect {provider}: {reason}', { provider: m[1], reason: m[2] }),
     },
 ];
 

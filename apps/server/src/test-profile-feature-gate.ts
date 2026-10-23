@@ -49,6 +49,7 @@ async function main() {
         showcase: true,
         openMembership: true,
         retention: true,
+        dmRequests: true,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',

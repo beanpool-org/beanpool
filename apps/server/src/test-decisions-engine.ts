@@ -6,7 +6,7 @@
  * 1. Franchises & Eligibility:
  *    - 1m1v for member decisions; quadratic on trade standing for pool decisions
  *    - Enterprises and frozen members cannot propose or vote
- *    - Author standing gate (earnedCredit > 0) and max 1 open decision per author
+ *    - Author standing gate (a completed trade, or a node admin) and max 1 open decision per author
  *    - Quadratic voice credits cost = voteCount²
  * 2. Quorum Rules:
  *    - 30% of active members in 30 days, floor K_min = 3 (25% for removal)
@@ -152,6 +152,8 @@ async function runDecisionsSuite() {
     seedTestMember(enterprise1, 'Community Eggs', { isTreasury: true });
     seedTestMember(frozenMember, 'FrozenUser', { creditFrozen: true, earnedCredit: 100 });
     seedTestMember(zeroStandingMember, 'ZeroStanding', { earnedCredit: 0 });
+    // Alice and Bob have traded: that is their standing to propose (their earned_credit badge is none).
+    recordTestActivity(m1, m2, 20);
 
     // Eligibility to propose
     const entCheck = checkCanProposeDecision(enterprise1);
@@ -160,8 +162,32 @@ async function runDecisionsSuite() {
     const frozenCheck = checkCanProposeDecision(frozenMember);
     testAssert(!frozenCheck.ok && frozenCheck.error?.includes('frozen'), 'Frozen member cannot propose decisions');
 
+    // The refusal is in a member's words: what to do (complete a trade), never a field name (earnedCredit).
+    const NO_TRADE_REFUSAL = 'You can propose a Decision once you have completed a trade';
     const zeroCheck = checkCanProposeDecision(zeroStandingMember);
-    testAssert(!zeroCheck.ok && zeroCheck.error?.includes('earnedCredit > 0'), 'Member with zero earned credit cannot propose decisions');
+    testAssert(!zeroCheck.ok && zeroCheck.error === NO_TRADE_REFUSAL, `A member with no completed trade cannot propose decisions (got ${JSON.stringify(zeroCheck)})`);
+    testAssert(!/earnedCredit|earned_credit|standing/.test(zeroCheck.error ?? ''), `The refusal names no field and no "standing" (got "${zeroCheck.error}")`);
+
+    // Badges unlock nothing (Marty, 23 Oct): a trust badge an admin gave (members.earned_credit, adminSetTier's Steward
+    // here) is no standing to propose; only a trading record is. Its words are the no-standing refusal's.
+    const badgeOnly = 'member_badge_only_' + Date.now();
+    seedTestMember(badgeOnly, 'BadgeOnly', { earnedCredit: 600 });
+    const badgeCheck = checkCanProposeDecision(badgeOnly);
+    testAssert(!badgeCheck.ok && badgeCheck.error === NO_TRADE_REFUSAL,
+        `A member with a trust badge and no trading record cannot propose (got ${JSON.stringify(badgeCheck)})`);
+    let badgeRefusal = '';
+    try {
+        createDecision({ authorPubkey: badgeOnly, title: 'Badge-only proposal', description: 'A badge is no standing', touches: 'member', effect: 'freeze_credit', subject: m2 });
+    } catch (e: any) { badgeRefusal = e.message; }
+    testAssert(badgeRefusal.includes(NO_TRADE_REFUSAL), `createDecision refuses the badge-only member in the same words (got "${badgeRefusal}")`);
+
+    // A trading record, with no badge, still proposes. Its pool vote weight is its trade value, and a badge adds none.
+    const traderOnly = 'member_trader_only_' + Date.now();
+    seedTestMember(traderOnly, 'TraderOnly', { earnedCredit: 0 });
+    recordTestActivity(traderOnly, m1, 20);
+    testAssert(checkCanProposeDecision(traderOnly).ok, 'A member with a trading record and no badge can propose');
+    testAssert(getDecisionVoiceCredits('no-such-decision', badgeOnly).totalCredits === 0, 'A trust badge gives no voice credits on a pool Decision');
+    testAssert(getDecisionVoiceCredits('no-such-decision', traderOnly).totalCredits === 20, 'Voice credits on a pool Decision are the trade value (20)');
 
     // Create decision with 1m1v franchise (member touch)
     const decMember = createDecision({
@@ -204,8 +230,7 @@ async function runDecisionsSuite() {
     // ── 2. Quorum & Denominator (active in 30d, floor K_min = 3) ──────────────
     console.log('\n--- 2. Quorum & Denominator ---');
 
-    // Generate active trades for m1, m2, admin
-    recordTestActivity(m1, m2, 20);
+    // Active trades for m1, m2 (their trade above), and admin
     recordTestActivity(admin, m1, 15);
 
     const activeCount = getActiveMembersCount30d();
@@ -702,6 +727,7 @@ async function runDecisionsSuite() {
     const keeperAuthor = 'keeper_author_' + Date.now();
     seedTestMember(keeperMember, 'TestKeeper');
     seedTestMember(keeperAuthor, 'KeeperAuthor', { earnedCredit: 50 });
+    recordTestActivity(admin, keeperAuthor, 50); // a trade: their standing to propose
     db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by) VALUES (?, ?, 'lead', ?, 'admin')")
         .run(entPubkey, keeperMember, Date.now());
     db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(keeperMember);

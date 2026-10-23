@@ -11,6 +11,7 @@ import { View, Text, Pressable, Alert } from 'react-native';
 import { useStyles } from '../app/ThemeContext';
 import { isFriendLocal, removeFriendOnNode } from '../utils/db';
 import { t, word } from '@beanpool/core';
+import { signedRequestWords } from './signed-request-lines';
 
 /** The line under the name while they are a friend, and after the removal: word() keys, shown with t(). */
 const BLOCKED_FRIEND_WORDS = {
@@ -47,7 +48,7 @@ export function BlockedFriendRemove({ myKey, pubkey, callsign }: { myKey: string
             await removeFriendOnNode(myKey, pubkey);
             setState('removed');
         } catch (e: any) {
-            setError(String(e?.message || t('That did not go through, so they are still your friend. Please try again.')));
+            setError(String(e?.message ? signedRequestWords(String(e.message)) : t('That did not go through, so they are still your friend. Please try again.')));
             setState('friend');
         }
     };

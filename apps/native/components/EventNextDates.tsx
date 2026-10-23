@@ -14,6 +14,7 @@ import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { setEventDateCancelled } from '../utils/db';
+import { eventLineWords } from './event-lines';
 
 /** One of a series' next dates. `endAt` from a node with confirmation 2 of #1993: a cancelled date the event has passed is listed until then. */
 export interface EventNextDate { date: string; startLocal: string; startAt: string; endAt?: string; cancelled: boolean }
@@ -68,7 +69,7 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
             if (res?.post) onChanged?.(res.post);
             if (thenMove) onChangeThisDateOnly?.(res?.post ?? post, date);
         } catch (e: any) {
-            setProblem(repeatRefusalText(e?.message) || t('Could not change that date.'));
+            setProblem(eventLineWords(repeatRefusalText(e?.message)) || t('Could not change that date.'));
         } finally {
             setBusy(null);
         }

@@ -595,6 +595,20 @@ describe('the sender\'s side', () => {
         expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     });
 
+    it('a photo waiting for Send goes when the node says his line is in (sent from another device): no Send under the waiting sentence', async () => {
+        node.list = boList(mine(true));
+        node.reads[CONV] = readOf(mine(true), []);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-first-line');
+        fireEvent.paste(screen.getByPlaceholderText('Message...'), { clipboardData: clipboardWith(picture()) });
+        expect(await screen.findByTestId('chat-image-preview')).toBeInTheDocument();
+        node.list = boList(mine(false));
+        node.reads[CONV] = readOf(mine(false), [line(bo, 'Hi Ann')]);
+        await ringDoorbell();
+        await screen.findByTestId('request-waiting');
+        expect(screen.queryByTestId('chat-image-preview')).toBeNull();
+    });
+
     it('after a block is lifted, the line kept during it is no request\'s: the node says the next line is, and the composer is back', async () => {
         // Bo's line kept for him alone while Ann blocked him is in his read; it never reached her, and once she lifts the
         // block the node takes his next line as the request (#2392 review 4354388176). The page can't tell which line was

@@ -2849,9 +2849,13 @@ CREATE TABLE IF NOT EXISTS dm_requests (
     requested_at    TEXT NOT NULL,
     decided_at      TEXT,
     -- Whose act accepted it: the person it is for (their Accept, line, open of the chat or friend add), or the opener (their
-    -- line once the rule lets them through: a role, a trade); null for a trade's opening. An opener who blocked the person
-    -- it is for reads one that person accepted after the block as not made, while the block holds (engine/dm-requests.ts).
+    -- line or reaction once the rule lets them through: a role, a trade); null for a trade's opening, or once each of the
+    -- two has accepted it. Either of them who blocked the other reads one the other accepted after the block as not made,
+    -- while the block holds (engine/dm-requests.ts acceptanceHiddenFrom).
     accepted_by     TEXT,
+    -- The state it had when it was accepted ('pending', 'ignored' or 'expired'): what the person it is for reads while an
+    -- acceptance of the opener's own act stays hidden from them, and 'ignored' once they ignore it then.
+    state_before    TEXT CHECK (state_before IN ('pending', 'ignored', 'expired')),
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
     updated_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (from_pubkey != to_pubkey)

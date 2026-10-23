@@ -1575,22 +1575,23 @@ export function socketStanding(pubkey: string): SocketStanding {
 }
 
 /** Event types carrying a direct conversation's id (`conversationId`, or `conversation.id`), and a transfer's. */
-const VISITOR_CHAT_EVENTS: ReadonlySet<string> = new Set(['new_message', 'message_edited', 'message_reaction', 'conversation_created']);
+const VISITOR_CHAT_EVENTS: ReadonlySet<string> = new Set(['new_message', 'message_edited', 'message_reaction', 'conversation_created', 'dm_request_updated']);
 
 /**
  * Whether an event sent to a visitor's socket as a party is one it may have: a line, an edit, a reaction or the
- * opening of a direct conversation (a DM) it is in, or a transfer of its Beans. Anything else addressed to it is not
- * delivered: a group's chat, an event's chat, a post's update, a trade. Its HTTP reads are held to the same
- * (https-server.ts visitorsOwnRead).
+ * opening of a direct conversation (a DM) it is in, a message request in one decided (engine/dm-requests.ts; the visitor
+ * decides one sent to it, PR #2392 review 4355750376), or its Ignore all, every one of whose chats is a DM, or a transfer
+ * of its Beans. Anything else addressed to it is not delivered: a group's chat, an event's chat, a post's update, a trade.
+ * Its HTTP reads are held to the same (https-server.ts visitorsOwnRead).
  */
 function visitorMayReceive(event: any): boolean {
     const type = event?.type;
     if (type === 'transaction') return true;
+    const isDm = (id: unknown) => typeof id === 'string'
+        && (db.prepare('SELECT type FROM conversations WHERE id = ?').get(id) as { type: string } | undefined)?.type === 'dm';
+    if (type === 'dm_requests_ignored') return Array.isArray(event.conversationIds) && event.conversationIds.every(isDm);
     if (!VISITOR_CHAT_EVENTS.has(type)) return false;
-    const conversationId = typeof event.conversationId === 'string' ? event.conversationId : event.conversation?.id;
-    if (typeof conversationId !== 'string') return false;
-    const conv = db.prepare('SELECT type FROM conversations WHERE id = ?').get(conversationId) as { type: string } | undefined;
-    return conv?.type === 'dm';
+    return isDm(typeof event.conversationId === 'string' ? event.conversationId : event.conversation?.id);
 }
 
 /**

@@ -9,7 +9,7 @@ import {
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
     markConversationRead, getListedUnreadCounts, getUnreadCounts,
-    getMember, isNodeMember, getNodeRole,
+    getMember, isNodeMember, isLiveVisitor, getNodeRole,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -432,9 +432,11 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
 });
 
 /**
- * A message request (engine/dm-requests.ts) is decided by the person it was sent to, signed by them, a member here, on the
- * main server: a standby answers 503 `standby` and writes nothing, as a block's change does (routes/blocks.ts). The actor,
- * or undefined once the refusal is written.
+ * A message request (engine/dm-requests.ts) is decided by the person it was sent to, signed by them, a member here or a
+ * visitor's row (isLiveVisitor: a key a member messaged, or a member of another community reached over the relay, which
+ * may decide one sent to it and nothing else new; the director's option b on PR #2392 review 4355750376, and the visitor
+ * gate names these two routes, visitor-allowlist.ts), on the main server: a standby answers 503 `standby` and writes
+ * nothing, as a block's change does (routes/blocks.ts). The actor, or undefined once the refusal is written.
  */
 function requestDecider(ctx: any): string | undefined {
     const actor = ctx.state.actor as string | undefined;
@@ -443,7 +445,7 @@ function requestDecider(ctx: any): string | undefined {
         ctx.body = { error: word('A signed request is required') };
         return undefined;
     }
-    if (!isNodeMember(actor)) {
+    if (!isNodeMember(actor) && !isLiveVisitor(actor)) {
         ctx.status = 403;
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
         return undefined;

@@ -405,8 +405,8 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
  *   build, in one request (a key the community has no row for, which a list skips, goes again on its own, as the web
  *   app's move sends it). An unblock reaches each community this phone put that block on, when the phone is next there.
  * - A community the phone visits as a guest (nodes.ts markGuestNode: "Guest view first", Add & Connect) is sent nothing:
- *   the account is no member there, and the list is the member's own business. Joining there clears the mark, and the
- *   next sync sends the list.
+ *   the account is no member there, and the list is the member's own business. Joining there clears the mark (every
+ *   invite join: db.ts redeemInvite), and the next sync sends the list.
  * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429): asked again at the next sync. A block whose
  *   answer never came may be on the list, so it is taken off all the same when the member unblocks.
  * - A community that has the account as no member, yet or now (403 not_a_member, or account_closed: removed, or deleted by

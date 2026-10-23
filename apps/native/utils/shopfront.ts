@@ -69,6 +69,17 @@ export function readShopfrontListing(raw: unknown, anchor: string): ShopfrontLis
     };
 }
 
+/**
+ * The text listings an enterprise's detail carries (GET /api/treasury/:t `posts`, for every app since before shops), as
+ * the shopfront draws them: no photo and no stamp, so they fill the sections when its listings with photos can't be read.
+ */
+export function listingsFromDetailPosts(posts: unknown): ShopfrontListing[] {
+    if (!Array.isArray(posts)) return [];
+    return posts
+        .map((p) => (p && typeof p === 'object' ? readShopfrontListing({ ...p, priceType: (p as Record<string, unknown>).price_type ?? (p as Record<string, unknown>).priceType, photos: [] }, '') : null))
+        .filter((l): l is ShopfrontListing => !!l);
+}
+
 /** The shelf: its live featured Offers, the latest featured first, at most six. */
 export function featuredOf(listings: readonly ShopfrontListing[]): ShopfrontListing[] {
     return listings
@@ -210,9 +221,14 @@ export function moneyLine(balance: number, creditLine: number): string {
  */
 export function readsAsMember(detail: unknown): boolean {
     if (!detail || typeof detail !== 'object') return false;
-    const d = detail as Record<string, unknown>;
-    if (!('about' in d) && !('since' in d)) return true;
-    return Array.isArray(d.offerCategories);
+    if (!hasShopfront(detail)) return true;
+    return Array.isArray((detail as Record<string, unknown>).offerCategories);
+}
+
+/** Whether an enterprise's detail is from a node with the shopfront (E2: it says `about` and `since`). */
+export function hasShopfront(detail: unknown): boolean {
+    if (!detail || typeof detail !== 'object') return false;
+    return 'about' in detail || 'since' in detail;
 }
 
 // ── shops ───────────────────────────────────────────────────────────────────────────────────────

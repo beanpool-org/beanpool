@@ -543,6 +543,8 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('components', 'PulseFeedCard.tsx')]: 1,
             [path.join('components', 'AddedYouLines.tsx')]: 1,
             [path.join('components', 'GlobalHeader.tsx')]: 1,
+            // The shopfront's keeper rows (S5): a keeper is a member, opened by their key.
+            [path.join('components', 'shopfront', 'Shopfront.tsx')]: 1,
         });
     });
 });

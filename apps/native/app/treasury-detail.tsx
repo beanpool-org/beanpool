@@ -8,7 +8,7 @@ export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import {
-    getTreasuryDetail, getBalance, treasurySweep, treasuryApprove,
+    getTreasuryDetail, getBalance, treasurySweep, createConversationApi, treasuryApprove,
     treasuryComplete, treasuryReject, treasuryPledge, reportAbuse,
     deleteCrowdfundProjectApi, requestToJoinEnterprise, approveKeeperRequest,
     declineKeeperRequest, proposeEnterpriseSuccession, voteEnterpriseSuccession,
@@ -42,22 +42,18 @@ import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/show
 import { LocalCommunityMark, ExampleHeader } from '../components/showcase/LocalCommunityMark';
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
+import {
+    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText,
+    ShopfrontTogether, ShopfrontVisitorNote, kindSinceLine, openListing,
+} from '../components/shopfront/Shopfront';
+import {
+    featuredOf, hasShopfront, leadKeeperOf, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings,
+    readsAsMember, shopKindOf, shopSectionsOf, sinceLine, type ShopfrontListing,
+} from '../utils/shopfront';
 
 /** What stands in for a message a keeper (a project's collaborator) removed: the same words the remove alert quotes. */
 function removedLine(project: boolean): string {
     return project ? t('removed by a collaborator') : t('removed by a keeper');
-}
-
-/** A keeper's part on their chip, in their kind's words (the same words as Talk's rows: utils/your-groups.ts). */
-function keeperRoleWord(project: boolean, isLead: boolean): string {
-    if (project) return isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role');
-    return isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role');
-}
-
-/** What a screen reader says for a suspended keeper's chip. */
-function suspendedKeeperLabel(name: string, project: boolean, isLead: boolean): string {
-    if (project) return isLead ? t('{name}, leader, suspended', { name }) : t('{name}, collaborator, suspended', { name });
-    return isLead ? t('{name}, lead keeper, suspended', { name }) : t('{name}, keeper, suspended', { name });
 }
 
 function decodeThreadMessage(ciphertext: string, type: string, project = false): string {
@@ -122,6 +118,10 @@ export default function TreasuryDetailScreen() {
     const [blockedHere, setBlockedHere] = useState(false);
     const [blocking, setBlocking] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
+    // The shopfront's listings with their photos and stamps (S5): undefined until read, null when they couldn't be, and
+    // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
+    const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
+    const [messagingLead, setMessagingLead] = useState(false);
 
     // Keeper Join Request State
     const [joinBackingPledge, setJoinBackingPledge] = useState('0');
@@ -163,16 +163,6 @@ export default function TreasuryDetailScreen() {
         headerTitle: { flex: 1, fontSize: 18, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
         scroll: { padding: 16, paddingBottom: 60 },
 
-        identityRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-        avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surface.subtle },
-        avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-        name: { fontSize: 20, fontWeight: '800', color: colors.text.heading },
-        subtitle: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
-
-        purposeCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
-        purposeLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, marginBottom: 6 },
-        purposeText: { fontSize: 14, color: colors.text.body, lineHeight: 21 },
-
         progressCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
         progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 },
         currentAmt: { fontSize: 20, fontWeight: '800', color: colors.text.body },
@@ -190,16 +180,6 @@ export default function TreasuryDetailScreen() {
         pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         pledgeButton: { backgroundColor: colors.brand.fill, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
         pledgeButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
-
-        keepersCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
-        keepersLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, marginBottom: 8 },
-        keepersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-        keeperChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surface.app, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default },
-        keeperChipSuspended: { opacity: 0.6 },
-        keeperCallsign: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
-        leadKeeperBadge: { backgroundColor: colors.feedback.warning.bg, color: colors.feedback.warning.fg, fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', letterSpacing: 0.5 },
-        keeperBadge: { backgroundColor: colors.surface.subtle, color: colors.text.secondary, fontSize: 10, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
-        backingText: { fontSize: 11, fontWeight: '700', color: colors.brand.primary },
 
         // Join Request Section
         joinCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
@@ -252,7 +232,6 @@ export default function TreasuryDetailScreen() {
         candidateOption: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.border.default, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
         candidateOptionText: { fontSize: 15, fontWeight: '600', color: colors.text.heading },
 
-
         balanceCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
         balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.5 },
         balanceValue: { fontSize: 34, fontWeight: '900', letterSpacing: -1, marginTop: 4 },
@@ -281,18 +260,6 @@ export default function TreasuryDetailScreen() {
         sweepBtnDisabled: { opacity: 0.4 },
         sweepBtnText: { color: colors.brand.primary, fontWeight: '800', fontSize: 13 },
         opHint: { fontSize: 12, color: colors.brand.primary, marginTop: 10, lineHeight: 17 },
-
-        listingCard: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 8 },
-        listingTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-        typeBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-        typeBadgeOffer: { backgroundColor: colors.brand.tint },
-        typeBadgeNeed: { backgroundColor: colors.surface.subtle },
-        typeBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-        recurBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-        recurText: { fontSize: 10, color: colors.text.secondary, fontWeight: '700' },
-        listingTitle: { fontSize: 15, fontWeight: '700', color: colors.text.heading, flex: 1 },
-        listingPrice: { fontSize: 15, fontWeight: '800', color: colors.brand.primary },
-        listingDesc: { fontSize: 13, color: colors.text.secondary, lineHeight: 18 },
 
         flowRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         flowIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
@@ -402,6 +369,9 @@ export default function TreasuryDetailScreen() {
                 if (!active) return;
                 if (d) setDetail(d);
                 setIdentity(id);
+                if (d && treasuryKey && hasShopfront(d) && readsAsMember(d)) {
+                    void readOwnerListings(treasuryKey).then((rows) => { if (active) setOwnListings(rows); });
+                }
                 if (id?.publicKey && treasuryKey) {
                     const b: any = await getBalance(id.publicKey).catch(() => ({}));
                     if (!active) return;
@@ -631,6 +601,31 @@ export default function TreasuryDetailScreen() {
     const kw = keeperWords(detail?.lifecycle);
     const project = kw.kind === 'project';
     const removableKeepers = keeperList.filter(k => canRemoveKeeper(k, myPubkey, iAmLead, keeperChanges));
+
+    // The shopfront (S5): who keeps it with their badges, whom Message writes to, whether this reader gets a member's page
+    // (a preview shows everything), and its listings: with photos and stamps when read, else the detail's own text ones.
+    const shopfrontKeepers = readKeepers(detail?.keepers);
+    const leadKeeper = leadKeeperOf(shopfrontKeepers);
+    const memberView = isEffectivePreview || readsAsMember(detail);
+    const shopListings: ShopfrontListing[] = ownListings ?? listingsFromDetailPosts(detail?.posts);
+    const openListingHere = (id: string) => { if (!isEffectivePreview) openListing(id); };
+    const handleMessageLead = async () => {
+        if (!leadKeeper || !myPubkey || messagingLead) return;
+        setMessagingLead(true);
+        try {
+            if (await isUserBlocked(leadKeeper.publicKey)) {
+                Alert.alert(t('You have blocked {name}', { name: leadKeeper.callsign }), t('Unblock them from their profile to write to them.'));
+                return;
+            }
+            const conv = await createConversationApi('dm', [myPubkey, leadKeeper.publicKey], myPubkey);
+            router.push(`/chat/${conv.id}`);
+        } catch (e: any) {
+            const offline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
+            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : e.message);
+        } finally {
+            setMessagingLead(false);
+        }
+    };
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
 
@@ -1021,19 +1016,16 @@ export default function TreasuryDetailScreen() {
                                 <ExampleHeader />
                             </View>
                         )}
-                        {/* Identity */}
-                        <View style={styles.identityRow}>
-                            {avatar ? (
-                                // The node's URL for the photo, relative to it, or a shipped picture (MemberAvatar resolves both).
-                                <MemberAvatar avatarUrl={avatar} pubkey={treasuryKey ?? ''} callsign={name} size={56} />
-                            ) : (
-                                <View style={[styles.avatar, styles.avatarPlaceholder]}><Text style={{ fontSize: 28 }}>{detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}</Text></View>
-                            )}
-                            <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
-                                <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                                <Text style={styles.subtitle}>{groupKindLine(detail?.lifecycle)}</Text>
-                            </View>
-                        </View>
+                        {/* The shopfront (DESIGN-shops-round3-enterprise-shopfront-fable.md §3, S5): its banner (its shop's one photo, or a
+                            quiet block in its kind's emoji), its logo (its avatar), its name, its kind and since when, and what kind of group it is. */}
+                        <ShopfrontHeader
+                            name={name}
+                            ownerKey={treasuryKey ?? ''}
+                            logoUrl={avatar}
+                            kind={shopKindOf(detail?.shop)}
+                            fallbackEmoji={detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
+                            lines={[kindSinceLine(shopKindOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
+                        />
 
                         {/* State banner every member sees (docs/the-commons.md §2.2) */}
                         {banner && (() => {
@@ -1062,110 +1054,6 @@ export default function TreasuryDetailScreen() {
                                     {banner.kind === 'winding_up' && !!banner.graceEndedNote && (
                                         <Text style={[styles.bannerWarning, { color: tone.fg, borderTopColor: tone.line }]}>{banner.graceEndedNote}</Text>
                                     )}
-                                </View>
-                            );
-                        })()}
-
-                        {/* Purpose Statement (docs/the-commons.md §2.1) */}
-                        {!!detail?.purpose && (
-                            <View style={styles.purposeCard}>
-                                <Text style={styles.purposeLabel}>{inCapitalsOf(t('PURPOSE'))}</Text>
-                                <Text style={styles.purposeText}>{detail.purpose}</Text>
-                            </View>
-                        )}
-
-                        {/* Funding Progress (for Bounded Enterprises with a goal) */}
-                        {detail?.goalAmount != null && detail.goalAmount > 0 && (() => {
-                            const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
-                            const goal = detail.goalAmount;
-                            const progress = Math.min(100, (current / goal) * 100);
-                            const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
-                            const daysRemaining = getDaysRemaining(detail.deadlineAt);
-                            // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
-                            const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle);
-                            return (
-                                <View style={styles.progressCard}>
-                                    <View style={styles.progressHeader}>
-                                        <View>
-                                            <Text style={[styles.currentAmt, isFunded && { color: colors.brand.primary }]}>
-                                                <Sentence
-                                                    text={t('{amount} 🫘 {raised}', { amount: current })}
-                                                    parts={{ raised: <Text style={styles.progressLabel}>{t('raised', undefined, 'pledges towards a goal')}</Text> }}
-                                                />
-                                            </Text>
-                                            <Text style={styles.goalAmt}>{t('Goal: {amount} 🫘', { amount: goal })}</Text>
-                                        </View>
-                                        {daysRemaining && (
-                                            <Text style={[styles.deadlineBadge, daysRemaining.expired && styles.deadlineExpired]}>
-                                                ⏳ {daysRemaining.text}
-                                            </Text>
-                                        )}
-                                    </View>
-                                    <View style={styles.progressBarBg}>
-                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }]} />
-                                    </View>
-                                    <Text style={styles.escrowNotice}>
-                                        {isFunded
-                                            ? (project
-                                                ? t("🎉 This project reached its funding goal! Pledged funds are held securely in the project's account.")
-                                                : t("🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise's account."))
-                                            : (project
-                                                ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
-                                                : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
-                                    </Text>
-
-                                    {/* Inline Pledge Beans Input */}
-                                    {/* In preview (Example Valley's): the marker, never the box. */}
-                                    {isEffectivePreview ? (
-                                        <View style={styles.pledgeBox} testID="pledge-preview">
-                                            <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>
-                                                {inCapitalsOf(t('Back this initiative'))}
-                                            </Text>
-                                            <LocalCommunityMark variant="action" feature="enterprises" label={t('Pledge')} />
-                                        </View>
-                                    ) : (<>
-                                    {pledgesClosed ? (
-                                        <View style={styles.pledgeBox} testID="pledges-closed">
-                                            <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
-                                        </View>
-                                    ) : (
-                                        <View style={styles.pledgeBox}>
-                                        <View style={styles.pledgeInputRow}>
-                                            <TextInput
-                                                accessibilityLabel={t('Pledge amount')}
-                                                style={styles.pledgeAmountInput}
-                                                placeholder={t('Amount (🫘)')}
-                                                placeholderTextColor={colors.text.muted}
-                                                keyboardType="numeric"
-                                                value={pledgeAmount}
-                                                onChangeText={setPledgeAmount}
-                                            />
-                                            <TextInput
-                                                accessibilityLabel={t('Pledge memo')}
-                                                style={styles.pledgeMemoInput}
-                                                placeholder={t('Memo (optional)')}
-                                                placeholderTextColor={colors.text.muted}
-                                                value={pledgeMemo}
-                                                onChangeText={setPledgeMemo}
-                                            />
-                                        </View>
-                                        <Pressable
-                                            style={[styles.pledgeButton, (pledging || !pledgeAmount.trim()) && { opacity: 0.6 }]}
-                                            disabled={pledging || !pledgeAmount.trim()}
-                                            onPress={handlePledge}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={t('Pledge Beans')}
-                                            accessibilityState={{ disabled: pledging || !pledgeAmount.trim(), busy: pledging }}
-                                        >
-                                            {pledging ? (
-                                                <ActivityIndicator color={colors.text.inverse} />
-                                            ) : (
-                                                <Text style={styles.pledgeButtonText}>{t('PLEDGE BEANS 🌱')}</Text>
-                                            )}
-                                        </Pressable>
-                                    </View>
-                                    )}
-                                    </>)}
                                 </View>
                             );
                         })()}
@@ -1334,6 +1222,164 @@ export default function TreasuryDetailScreen() {
                             </View>
                         )}
 
+                        {/* What it is for, the Commons' statement of it (docs/the-commons.md §2.1) */}
+                        {!!detail?.purpose && <ShopfrontText title={t('What it is for')} text={detail.purpose} lines={3} testID="shopfront-purpose" />}
+
+                        {/* Who keeps it, each with their badges: recognition, which gates nothing (round 3 §0 row 6). Not a button in a preview. */}
+                        <ShopfrontKeepers keepers={shopfrontKeepers} project={project} navigable={!isEffectivePreview}>
+                            {!isEffectivePreview && removableKeepers.map((k: any) => (
+                                <Pressable
+                                    key={`rm-${k.publicKey}`}
+                                    style={[styles.keeperActionBtn, processingChangeId === k.publicKey && { opacity: 0.6 }]}
+                                    disabled={processingChangeId === k.publicKey}
+                                    onPress={() => handleRemoveKeeper(k)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={project
+                                        ? t('Remove {name} as a collaborator', { name: k.callsign })
+                                        : t('Remove {name} as a keeper', { name: k.callsign })}
+                                >
+                                    <Text style={styles.keeperActionText}>{t('Remove {name}', { name: k.callsign })}</Text>
+                                </Pressable>
+                            ))}
+                            {!isEffectivePreview && canStepDown(myPubkey, keeperList) && (
+                                <Pressable
+                                    style={[styles.keeperActionBtn, steppingDown && { opacity: 0.6 }]}
+                                    disabled={steppingDown}
+                                    onPress={handleStepDown}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={project ? t('Step down as a collaborator') : t('Step down as a keeper')}
+                                >
+                                    {steppingDown ? (
+                                        <ActivityIndicator size="small" color={colors.text.secondary} />
+                                    ) : (
+                                        <Text style={styles.keeperActionText}>{project ? t('Step down as a collaborator') : t('Step down as a keeper')}</Text>
+                                    )}
+                                </Pressable>
+                            )}
+                        </ShopfrontKeepers>
+
+                        {/* Funding Progress (for Bounded Enterprises with a goal) */}
+                        {detail?.goalAmount != null && detail.goalAmount > 0 && (() => {
+                            const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
+                            const goal = detail.goalAmount;
+                            const progress = Math.min(100, (current / goal) * 100);
+                            const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
+                            const daysRemaining = getDaysRemaining(detail.deadlineAt);
+                            // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
+                            const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle);
+                            return (
+                                <View style={styles.progressCard}>
+                                    <View style={styles.progressHeader}>
+                                        <View>
+                                            <Text style={[styles.currentAmt, isFunded && { color: colors.brand.primary }]}>
+                                                <Sentence
+                                                    text={t('{amount} 🫘 {raised}', { amount: current })}
+                                                    parts={{ raised: <Text style={styles.progressLabel}>{t('raised', undefined, 'pledges towards a goal')}</Text> }}
+                                                />
+                                            </Text>
+                                            <Text style={styles.goalAmt}>{t('Goal: {amount} 🫘', { amount: goal })}</Text>
+                                        </View>
+                                        {daysRemaining && (
+                                            <Text style={[styles.deadlineBadge, daysRemaining.expired && styles.deadlineExpired]}>
+                                                ⏳ {daysRemaining.text}
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <View style={styles.progressBarBg}>
+                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }]} />
+                                    </View>
+                                    <Text style={styles.escrowNotice}>
+                                        {isFunded
+                                            ? (project
+                                                ? t("🎉 This project reached its funding goal! Pledged funds are held securely in the project's account.")
+                                                : t("🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise's account."))
+                                            : (project
+                                                ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
+                                                : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
+                                    </Text>
+
+                                    {/* Inline Pledge Beans Input */}
+                                    {/* In preview (Example Valley's): the marker, never the box. */}
+                                    {isEffectivePreview ? (
+                                        <View style={styles.pledgeBox} testID="pledge-preview">
+                                            <Text style={[styles.sectionLabel, { marginBottom: 8 }]}>
+                                                {inCapitalsOf(t('Back this initiative'))}
+                                            </Text>
+                                            <LocalCommunityMark variant="action" feature="enterprises" label={t('Pledge')} />
+                                        </View>
+                                    ) : (<>
+                                    {pledgesClosed ? (
+                                        <View style={styles.pledgeBox} testID="pledges-closed">
+                                            <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.pledgeBox}>
+                                        <View style={styles.pledgeInputRow}>
+                                            <TextInput
+                                                accessibilityLabel={t('Pledge amount')}
+                                                style={styles.pledgeAmountInput}
+                                                placeholder={t('Amount (🫘)')}
+                                                placeholderTextColor={colors.text.muted}
+                                                keyboardType="numeric"
+                                                value={pledgeAmount}
+                                                onChangeText={setPledgeAmount}
+                                            />
+                                            <TextInput
+                                                accessibilityLabel={t('Pledge memo')}
+                                                style={styles.pledgeMemoInput}
+                                                placeholder={t('Memo (optional)')}
+                                                placeholderTextColor={colors.text.muted}
+                                                value={pledgeMemo}
+                                                onChangeText={setPledgeMemo}
+                                            />
+                                        </View>
+                                        <Pressable
+                                            style={[styles.pledgeButton, (pledging || !pledgeAmount.trim()) && { opacity: 0.6 }]}
+                                            disabled={pledging || !pledgeAmount.trim()}
+                                            onPress={handlePledge}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={t('Pledge Beans')}
+                                            accessibilityState={{ disabled: pledging || !pledgeAmount.trim(), busy: pledging }}
+                                        >
+                                            {pledging ? (
+                                                <ActivityIndicator color={colors.text.inverse} />
+                                            ) : (
+                                                <Text style={styles.pledgeButtonText}>{t('PLEDGE BEANS 🌱')}</Text>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                    )}
+                                    </>)}
+                                </View>
+                            );
+                        })()}
+
+                        {/* About, in its keepers' words (members.bio, round 3 §0 row 5) */}
+                        {!!detail?.about && <ShopfrontText title={t('About')} text={detail.about} testID="shopfront-about" />}
+
+                        {/* What it offers: Featured, what its keepers do together, its sections. A member's (round 3 §5): a visitor's page ends at How we deal. */}
+                        {memberView && (
+                            <>
+                                <ShopfrontFeatured listings={featuredOf(shopListings)} showsBeans onOpen={openListingHere} />
+                                <ShopfrontTogether categories={Array.isArray(detail?.offerCategories) ? detail.offerCategories : []} />
+                                <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} onOpen={openListingHere} />
+                            </>
+                        )}
+
+                        {/* How we deal, its shop's words */}
+                        {!!detail?.shop?.howToDeal && <ShopfrontText title={t('How we deal')} text={detail.shop.howToDeal} boxed testID="shopfront-how" />}
+
+                        {!memberView && (
+                            <ShopfrontVisitorNote text={t("Members of this community see what it offers, its keepers' badges and its accounts.")} />
+                        )}
+
+                        {/* Past here, a member's page only. */}
+                        {memberView && (<>
+                        {/* Message: a DM to the lead keeper, named (round 3 §0 row 10). Not to themselves, and none in a preview. */}
+                        {!isEffectivePreview && leadKeeper && leadKeeper.publicKey !== myPubkey && !!myPubkey && (
+                            <ShopfrontMessage label={messageLabel(leadKeeper.callsign, project ? 'project' : 'enterprise')} busy={messagingLead} onPress={handleMessageLead} />
+                        )}
+
                         {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
                         {isEffectivePreview ? (
                             <View style={styles.joinCard}>
@@ -1415,131 +1461,210 @@ export default function TreasuryDetailScreen() {
                             )
                         )}
 
-                        {/* Accountable Keepers */}
-                        {detail?.keepers && detail.keepers.length > 0 && (
-                            <View style={styles.keepersCard}>
-                                <Text style={styles.keepersLabel}>
-                                    {inCapitalsOf(project
-                                        ? t('COLLABORATORS ({n})', { n: detail.keepers.length })
-                                        : t('KEEPERS ({n})', { n: detail.keepers.length }))}
-                                </Text>
-                                <View style={styles.keepersList}>
-                                    {detail.keepers.map((k: any) => {
-                                        const isLead = k.role === 'lead';
-                                        const pk = k.publicKey || k.pubkey || k.memberPubkey;
-                                        // Suspended keepers are shown, not hidden: they still count as keepers of this
-                                        // enterprise, but cannot act until the suspension is lifted.
-                                        const isSuspended = !!k.suspended;
+                        {/* The money in one line, and today's figures and its ledger behind "Money and backing" (round 3 §0 row 9): public
+                            to every member as the Commons design says. Open from the start in a preview, which shows everything. */}
+                        <ShopfrontMoney line={moneyLine(balance, Number(detail.creditLine ?? 0))} initiallyOpen={isEffectivePreview}>
+                            {/* Balance */}
+                            <View style={styles.balanceCard}>
+                                <Text style={styles.balanceLabel}>{inCapitalsOf(t('Balance'))}</Text>
+                                <Text style={[styles.balanceValue, balance < 0 ? styles.balanceNeg : styles.balancePos]}>{formatNumber(balance)} 🫘</Text>
+                                <View style={styles.balanceMetaRow}>
+                                    <View style={styles.metaBox}>
+                                        <Text style={styles.metaLabel}>{inCapitalsOf(t('Credit line'))}</Text>
+                                        <Text style={styles.metaValue}>{formatNumber(Number(detail.creditLine ?? 0))} 🫘</Text>
+                                    </View>
+                                    <View style={styles.metaBox}>
+                                        <Text style={styles.metaLabel}>{inCapitalsOf(t('Live offers'))}</Text>
+                                        <Text style={styles.metaValue}>{formatNumber(Number(detail.liveOffers ?? 0))}</Text>
+                                    </View>
+                                </View>
+                                <View style={styles.balanceMetaRow}>
+                                    <View style={styles.metaBox}>
+                                        <Text style={styles.metaLabel}>{inCapitalsOf(t('Earned surplus'))}</Text>
+                                        <Text style={styles.metaValue}>{formatNumber(Number(detail.earnedSurplus ?? 0))} 🫘</Text>
+                                    </View>
+                                    <View style={styles.metaBox}>
+                                        <Text style={styles.metaLabel}>{inCapitalsOf(t('Capital ceiling'))}</Text>
+                                        <Text style={styles.metaValue}>{detail.workingCapitalCeiling != null ? `${formatNumber(Number(detail.workingCapitalCeiling))} 🫘` : t('Uncapped')}</Text>
+                                    </View>
+                                </View>
+                                {balance < 0 && (
+                                    <View
+                                        accessible={true}
+                                        accessibilityRole="alert"
+                                        accessibilityLabel={project
+                                            ? t('Warning: Operator eats last. This project is currently in deficit with {amount} beans. Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: balance })
+                                            : t('Warning: Operator eats last. This enterprise is currently in deficit with {amount} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: balance })}
+                                        style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
+                                    >
+                                        <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '700', lineHeight: 16 }}>
+                                            {project
+                                                ? t('⚠️ OPERATOR EATS LAST: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: balance })
+                                                : t('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: balance })}
+                                        </Text>
+                                    </View>
+                                )}
+                                {pendingClaims.length > 0 && (
+                                    <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                            <Text style={{ flex: 1, minWidth: 0, fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.4 }}>
+                                                {inCapitalsOf(t('Pending Wage Claims ({n})', { n: pendingClaims.length }))}
+                                            </Text>
+                                            <Text style={{ flexShrink: 0, fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
+                                                {formatNumber(pendingClaimsTotal)} 🫘
+                                            </Text>
+                                        </View>
+                                        <Text style={{ fontSize: 11, color: colors.text.secondary, marginTop: 4, lineHeight: 15 }}>
+                                            {project
+                                                ? t('Deferred until the project earns sufficient trading profit. Paid automatically from future sales.')
+                                                : t('Deferred until the enterprise earns sufficient trading profit. Paid automatically from future sales.')}
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* What each keeper backs it with, as their chips said before the shopfront (#106). */}
+                            {keeperList.some((k: any) => Number(k.backing) > 0) && (
+                                <View style={styles.plCard} testID="enterprise-backing">
+                                    <Text style={styles.plTitle}>{inCapitalsOf(project ? t('Backed by its collaborators') : t('Backed by its keepers'))}</Text>
+                                    {keeperList.filter((k: any) => Number(k.backing) > 0).map((k: any) => (
+                                        <Text key={k.publicKey} style={[styles.ledgerWith, { marginTop: 6 }]}>
+                                            {t('{name} · {amount} 🫘', { name: k.callsign, amount: formatNumber(Number(k.backing)) }, "a keeper's backing")}
+                                        </Text>
+                                    ))}
+                                </View>
+                            )}
+
+                            {/* Income & Spend (P&L) — transparent accounting, visible to every member */}
+                            <View style={styles.plCard}>
+                                <Text style={styles.plTitle}>{inCapitalsOf(t('📊 Income & Spend (P&L)'))}</Text>
+                                <Text style={styles.plSubtitle}>{t('Transparent accounting · visible to every member')}</Text>
+
+                                <View style={styles.periodStrip} accessibilityRole="tablist">
+                                    {LEDGER_PERIODS.map((p) => {
+                                        const selected = ledgerPeriod === p.key;
                                         return (
-                                            <View
-                                                key={pk}
-                                                style={[styles.keeperChip, isSuspended && styles.keeperChipSuspended]}
-                                                accessibilityLabel={isSuspended ? suspendedKeeperLabel(k.callsign, project, isLead) : undefined}
+                                            <Pressable
+                                                key={p.key}
+                                                style={[styles.periodTab, p.key === 'all' && { flex: 1.6 }, selected && styles.periodTabActive]}
+                                                onPress={() => setLedgerPeriod(p.key)}
+                                                accessibilityRole="tab"
+                                                accessibilityLabel={t(p.a11y)}
+                                                accessibilityState={{ selected }}
                                             >
-                                                <MaterialCommunityIcons name="shield-account" size={14} color={isSuspended ? colors.text.secondary : colors.brand.primary} />
-                                                <Text style={styles.keeperCallsign}>{k.callsign}</Text>
-                                                {isSuspended && <Text style={styles.keeperBadge}>{t('Suspended')}</Text>}
-                                                {/* The lead's badge in capitals, the language's way. */}
-                                                <Text style={isLead ? styles.leadKeeperBadge : styles.keeperBadge}>
-                                                    {isLead ? inCapitalsOf(keeperRoleWord(project, true)) : keeperRoleWord(project, false)}
+                                                <Text style={[styles.periodTabText, selected && styles.periodTabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.1}>
+                                                    {t(p.label)}
                                                 </Text>
-                                                {Number(k.backing) > 0 && (
-                                                    <Text style={styles.backingText}>+{formatNumber(Number(k.backing))} 🫘</Text>
-                                                )}
-                                            </View>
+                                            </Pressable>
                                         );
                                     })}
                                 </View>
-                                {!isEffectivePreview && removableKeepers.map((k: any) => (
-                                    <Pressable
-                                        key={`rm-${k.publicKey}`}
-                                        style={[styles.keeperActionBtn, processingChangeId === k.publicKey && { opacity: 0.6 }]}
-                                        disabled={processingChangeId === k.publicKey}
-                                        onPress={() => handleRemoveKeeper(k)}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={project
-                                            ? t('Remove {name} as a collaborator', { name: k.callsign })
-                                            : t('Remove {name} as a keeper', { name: k.callsign })}
-                                    >
-                                        <Text style={styles.keeperActionText}>{t('Remove {name}', { name: k.callsign })}</Text>
-                                    </Pressable>
-                                ))}
-                                {!isEffectivePreview && canStepDown(myPubkey, keeperList) && (
-                                    <Pressable
-                                        style={[styles.keeperActionBtn, steppingDown && { opacity: 0.6 }]}
-                                        disabled={steppingDown}
-                                        onPress={handleStepDown}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={project ? t('Step down as a collaborator') : t('Step down as a keeper')}
-                                    >
-                                        {steppingDown ? (
-                                            <ActivityIndicator size="small" color={colors.text.secondary} />
-                                        ) : (
-                                            <Text style={styles.keeperActionText}>{project ? t('Step down as a collaborator') : t('Step down as a keeper')}</Text>
-                                        )}
-                                    </Pressable>
-                                )}
-                            </View>
-                        )}
 
-                        {/* Balance */}
-                        <View style={styles.balanceCard}>
-                            <Text style={styles.balanceLabel}>{inCapitalsOf(t('Balance'))}</Text>
-                            <Text style={[styles.balanceValue, balance < 0 ? styles.balanceNeg : styles.balancePos]}>{formatNumber(balance)} 🫘</Text>
-                            <View style={styles.balanceMetaRow}>
-                                <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Credit line'))}</Text>
-                                    <Text style={styles.metaValue}>{formatNumber(Number(detail.creditLine ?? 0))} 🫘</Text>
-                                </View>
-                                <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Live offers'))}</Text>
-                                    <Text style={styles.metaValue}>{formatNumber(Number(detail.liveOffers ?? 0))}</Text>
-                                </View>
-                            </View>
-                            <View style={styles.balanceMetaRow}>
-                                <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Earned surplus'))}</Text>
-                                    <Text style={styles.metaValue}>{formatNumber(Number(detail.earnedSurplus ?? 0))} 🫘</Text>
-                                </View>
-                                <View style={styles.metaBox}>
-                                    <Text style={styles.metaLabel}>{inCapitalsOf(t('Capital ceiling'))}</Text>
-                                    <Text style={styles.metaValue}>{detail.workingCapitalCeiling != null ? `${formatNumber(Number(detail.workingCapitalCeiling))} 🫘` : t('Uncapped')}</Text>
-                                </View>
-                            </View>
-                            {balance < 0 && (
-                                <View
-                                    accessible={true}
-                                    accessibilityRole="alert"
-                                    accessibilityLabel={project
-                                        ? t('Warning: Operator eats last. This project is currently in deficit with {amount} beans. Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: balance })
-                                        : t('Warning: Operator eats last. This enterprise is currently in deficit with {amount} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: balance })}
-                                    style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
-                                >
-                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '700', lineHeight: 16 }}>
-                                        {project
-                                            ? t('⚠️ OPERATOR EATS LAST: This project is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but collaborators can only be paid from profit. Collaborators cannot be paid while the project is in deficit.', { amount: balance })
-                                            : t('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({amount} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.', { amount: balance })}
-                                    </Text>
-                                </View>
-                            )}
-                            {pendingClaims.length > 0 && (
-                                <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                                        <Text style={{ flex: 1, minWidth: 0, fontSize: 11, color: colors.text.secondary, fontWeight: '700', letterSpacing: 0.4 }}>
-                                            {inCapitalsOf(t('Pending Wage Claims ({n})', { n: pendingClaims.length }))}
-                                        </Text>
-                                        <Text style={{ flexShrink: 0, fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
-                                            {formatNumber(pendingClaimsTotal)} 🫘
-                                        </Text>
+                                {(() => {
+                                    const pl = plSummaryText(ledger?.summary);
+                                    return (
+                                        <>
+                                            <View style={styles.plSummaryRow}>
+                                                <View style={[styles.plBox, { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }]}>
+                                                    <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Came in'))}</Text>
+                                                    <Text style={[styles.plBoxValue, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                        {pl.cameIn}
+                                                    </Text>
+                                                </View>
+                                                <View style={[styles.plBox, { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
+                                                    <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Went out'))}</Text>
+                                                    <Text style={[styles.plBoxValue, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                        {pl.wentOut}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <View style={[styles.plBox, { flex: 0, marginBottom: pl.feeNote ? 6 : 10, backgroundColor: colors.surface.app, borderColor: colors.border.default }]}>
+                                                <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Net change'))}</Text>
+                                                <Text style={[styles.plBoxValue, { color: pl.netIsPositive ? colors.feedback.success.fg : colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                    {pl.net}
+                                                </Text>
+                                            </View>
+                                            {pl.feeNote && (
+                                                <Text style={styles.plFeeNote}>{pl.feeNote}</Text>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+
+                                {ledgerLoading ? (
+                                    <Text style={styles.emptyNote}>{t('Loading ledger records…')}</Text>
+                                ) : ledgerError ? (
+                                    <View style={{ paddingVertical: 8 }}>
+                                        <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, textAlign: 'center' }}>{ledgerError}</Text>
+                                        <Pressable style={styles.ledgerMoreBtn} onPress={() => loadLedger(ledgerPeriod)} accessibilityRole="button">
+                                            <Text style={styles.ledgerMoreText}>{t('Try again')}</Text>
+                                        </Pressable>
                                     </View>
-                                    <Text style={{ fontSize: 11, color: colors.text.secondary, marginTop: 4, lineHeight: 15 }}>
-                                        {project
-                                            ? t('Deferred until the project earns sufficient trading profit. Paid automatically from future sales.')
-                                            : t('Deferred until the enterprise earns sufficient trading profit. Paid automatically from future sales.')}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
+                                ) : !ledger?.entries?.length ? (
+                                    <Text style={styles.emptyNote}>{t('No transactions recorded for this period.')}</Text>
+                                ) : (() => {
+                                    // Newest first on a phone; the node sends them oldest first.
+                                    const newestFirst = [...ledger.entries].reverse();
+                                    const visible = newestFirst.slice(0, ledgerShown);
+                                    const remaining = newestFirst.length - visible.length;
+                                    return (
+                                        <View>
+                                            {visible.map((entry) => {
+                                                const labels = ledgerLineLabels(entry);
+                                                const income = entry.direction === 'income';
+                                                const amountColor = income ? colors.feedback.success.fg : colors.feedback.warning.fg;
+                                                const when = formatTime(entry.timestamp);
+                                                return (
+                                                    <View
+                                                        key={entry.id}
+                                                        style={styles.ledgerRow}
+                                                        accessible
+                                                        accessibilityLabel={tn(entry.runningBalance, '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', {
+                                                            flow: labels.flow, amount: signedBeans(entry.amount, entry.direction), what: labels.what, with: labels.with, when,
+                                                            n: formatNumber(entry.runningBalance, 2),
+                                                        })}
+                                                    >
+                                                        <View style={styles.ledgerLine}>
+                                                            <Text style={styles.ledgerWhat} numberOfLines={2}>{labels.what}</Text>
+                                                            <Text style={[styles.ledgerAmount, { color: amountColor }]} numberOfLines={1}>{signedBeans(entry.amount, entry.direction)}</Text>
+                                                        </View>
+                                                        <Text style={styles.ledgerWith} numberOfLines={1}>
+                                                            <Sentence
+                                                                text={t('{flow} · with {name}', { name: labels.with })}
+                                                                parts={{ flow: <Text style={[styles.ledgerFlow, { color: amountColor }]}>{labels.flow}</Text> }}
+                                                            />
+                                                        </Text>
+                                                        <View style={styles.ledgerLine}>
+                                                            <Text style={styles.ledgerWhen} numberOfLines={1}>{when}</Text>
+                                                            <Text style={styles.ledgerRunning} numberOfLines={1}>{t('Balance {amount} 🫘', { amount: formatNumber(entry.runningBalance, 2) })}</Text>
+                                                        </View>
+                                                    </View>
+                                                );
+                                            })}
+                                            {remaining > 0 && (
+                                                <Pressable style={styles.ledgerMoreBtn} onPress={() => setLedgerShown((n) => n + LEDGER_PAGE)} accessibilityRole="button">
+                                                    <Text style={styles.ledgerMoreText}>{tn(remaining, 'Show {shown} more ({n} older)', 'Show {shown} more ({n} older)', { shown: Math.min(LEDGER_PAGE, remaining) })}</Text>
+                                                </Pressable>
+                                            )}
+                                            <View style={styles.ledgerFooter}>
+                                                <Text style={styles.ledgerFooterText}>
+                                                    <Sentence
+                                                        text={t('Starting balance: {amount}')}
+                                                        parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatNumber(ledger.summary.startingBalance, 2)} 🫘</Text> }}
+                                                    />
+                                                </Text>
+                                                <Text style={styles.ledgerFooterText}>
+                                                    <Sentence
+                                                        text={t('Ending balance: {amount}')}
+                                                        parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatNumber(ledger.summary.endingBalance, 2)} 🫘</Text> }}
+                                                    />
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    );
+                                })()}
+                            </View>
+                        </ShopfrontMoney>
 
                         {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
                         {treasuryKey && !isEffectivePreview && (
@@ -1838,167 +1963,6 @@ export default function TreasuryDetailScreen() {
                             );
                         })()}
 
-                        {/* Income & Spend (P&L) — transparent accounting, visible to every member */}
-                        <View style={styles.plCard}>
-                            <Text style={styles.plTitle}>{inCapitalsOf(t('📊 Income & Spend (P&L)'))}</Text>
-                            <Text style={styles.plSubtitle}>{t('Transparent accounting · visible to every member')}</Text>
-
-                            <View style={styles.periodStrip} accessibilityRole="tablist">
-                                {LEDGER_PERIODS.map((p) => {
-                                    const selected = ledgerPeriod === p.key;
-                                    return (
-                                        <Pressable
-                                            key={p.key}
-                                            style={[styles.periodTab, p.key === 'all' && { flex: 1.6 }, selected && styles.periodTabActive]}
-                                            onPress={() => setLedgerPeriod(p.key)}
-                                            accessibilityRole="tab"
-                                            accessibilityLabel={t(p.a11y)}
-                                            accessibilityState={{ selected }}
-                                        >
-                                            <Text style={[styles.periodTabText, selected && styles.periodTabTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.1}>
-                                                {t(p.label)}
-                                            </Text>
-                                        </Pressable>
-                                    );
-                                })}
-                            </View>
-
-                            {(() => {
-                                const pl = plSummaryText(ledger?.summary);
-                                return (
-                                    <>
-                                        <View style={styles.plSummaryRow}>
-                                            <View style={[styles.plBox, { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }]}>
-                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Came in'))}</Text>
-                                                <Text style={[styles.plBoxValue, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                                    {pl.cameIn}
-                                                </Text>
-                                            </View>
-                                            <View style={[styles.plBox, { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
-                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Went out'))}</Text>
-                                                <Text style={[styles.plBoxValue, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                                    {pl.wentOut}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <View style={[styles.plBox, { flex: 0, marginBottom: pl.feeNote ? 6 : 10, backgroundColor: colors.surface.app, borderColor: colors.border.default }]}>
-                                            <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{inCapitalsOf(t('Net change'))}</Text>
-                                            <Text style={[styles.plBoxValue, { color: pl.netIsPositive ? colors.feedback.success.fg : colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                                {pl.net}
-                                            </Text>
-                                        </View>
-                                        {pl.feeNote && (
-                                            <Text style={styles.plFeeNote}>{pl.feeNote}</Text>
-                                        )}
-                                    </>
-                                );
-                            })()}
-
-                            {ledgerLoading ? (
-                                <Text style={styles.emptyNote}>{t('Loading ledger records…')}</Text>
-                            ) : ledgerError ? (
-                                <View style={{ paddingVertical: 8 }}>
-                                    <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, textAlign: 'center' }}>{ledgerError}</Text>
-                                    <Pressable style={styles.ledgerMoreBtn} onPress={() => loadLedger(ledgerPeriod)} accessibilityRole="button">
-                                        <Text style={styles.ledgerMoreText}>{t('Try again')}</Text>
-                                    </Pressable>
-                                </View>
-                            ) : !ledger?.entries?.length ? (
-                                <Text style={styles.emptyNote}>{t('No transactions recorded for this period.')}</Text>
-                            ) : (() => {
-                                // Newest first on a phone; the node sends them oldest first.
-                                const newestFirst = [...ledger.entries].reverse();
-                                const visible = newestFirst.slice(0, ledgerShown);
-                                const remaining = newestFirst.length - visible.length;
-                                return (
-                                    <View>
-                                        {visible.map((entry) => {
-                                            const labels = ledgerLineLabels(entry);
-                                            const income = entry.direction === 'income';
-                                            const amountColor = income ? colors.feedback.success.fg : colors.feedback.warning.fg;
-                                            const when = formatTime(entry.timestamp);
-                                            return (
-                                                <View
-                                                    key={entry.id}
-                                                    style={styles.ledgerRow}
-                                                    accessible
-                                                    accessibilityLabel={tn(entry.runningBalance, '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', '{flow}, {amount}, {what}, with {with}, {when}. Running balance {n} beans.', {
-                                                        flow: labels.flow, amount: signedBeans(entry.amount, entry.direction), what: labels.what, with: labels.with, when,
-                                                        n: formatNumber(entry.runningBalance, 2),
-                                                    })}
-                                                >
-                                                    <View style={styles.ledgerLine}>
-                                                        <Text style={styles.ledgerWhat} numberOfLines={2}>{labels.what}</Text>
-                                                        <Text style={[styles.ledgerAmount, { color: amountColor }]} numberOfLines={1}>{signedBeans(entry.amount, entry.direction)}</Text>
-                                                    </View>
-                                                    <Text style={styles.ledgerWith} numberOfLines={1}>
-                                                        <Sentence
-                                                            text={t('{flow} · with {name}', { name: labels.with })}
-                                                            parts={{ flow: <Text style={[styles.ledgerFlow, { color: amountColor }]}>{labels.flow}</Text> }}
-                                                        />
-                                                    </Text>
-                                                    <View style={styles.ledgerLine}>
-                                                        <Text style={styles.ledgerWhen} numberOfLines={1}>{when}</Text>
-                                                        <Text style={styles.ledgerRunning} numberOfLines={1}>{t('Balance {amount} 🫘', { amount: formatNumber(entry.runningBalance, 2) })}</Text>
-                                                    </View>
-                                                </View>
-                                            );
-                                        })}
-                                        {remaining > 0 && (
-                                            <Pressable style={styles.ledgerMoreBtn} onPress={() => setLedgerShown((n) => n + LEDGER_PAGE)} accessibilityRole="button">
-                                                <Text style={styles.ledgerMoreText}>{tn(remaining, 'Show {shown} more ({n} older)', 'Show {shown} more ({n} older)', { shown: Math.min(LEDGER_PAGE, remaining) })}</Text>
-                                            </Pressable>
-                                        )}
-                                        <View style={styles.ledgerFooter}>
-                                            <Text style={styles.ledgerFooterText}>
-                                                <Sentence
-                                                    text={t('Starting balance: {amount}')}
-                                                    parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatNumber(ledger.summary.startingBalance, 2)} 🫘</Text> }}
-                                                />
-                                            </Text>
-                                            <Text style={styles.ledgerFooterText}>
-                                                <Sentence
-                                                    text={t('Ending balance: {amount}')}
-                                                    parts={{ amount: <Text style={{ fontWeight: '800', color: colors.text.body }}>{formatNumber(ledger.summary.endingBalance, 2)} 🫘</Text> }}
-                                                />
-                                            </Text>
-                                        </View>
-                                    </View>
-                                );
-                            })()}
-                        </View>
-
-                        {/* Live listings */}
-                        <Text style={styles.sectionLabel}>{inCapitalsOf(t('Listings'))}</Text>
-                        {posts.length === 0 ? (
-                            <Text style={styles.emptyNote}>{t('No live listings yet.')}</Text>
-                        ) : posts.map((p) => (
-                            <Pressable
-                                key={p.id}
-                                style={styles.listingCard}
-                                onPress={() => !isEffectivePreview && router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-                                accessibilityRole="button"
-                            >
-                                <View style={styles.listingTopRow}>
-                                    <View style={[styles.typeBadge, p.type === 'offer' ? styles.typeBadgeOffer : styles.typeBadgeNeed]}>
-                                        {/* The listing's kind (stored lower-case, drawn in capitals): the Market's own badge words. */}
-                                        <Text style={[styles.typeBadgeText, { color: p.type === 'offer' ? colors.brand.primary : colors.text.secondary }]}>
-                                            {p.type === 'offer' ? inCapitalsOf(t('OFFER')) : p.type === 'need' ? inCapitalsOf(t('NEED')) : p.type.toUpperCase()}
-                                        </Text>
-                                    </View>
-                                    {!!p.repeatable && (
-                                        <View style={styles.recurBadge}>
-                                            <MaterialCommunityIcons name="autorenew" size={12} color={colors.text.secondary} />
-                                            <Text style={styles.recurText}>{t('Recurring')}</Text>
-                                        </View>
-                                    )}
-                                    <Text style={styles.listingTitle} numberOfLines={1}>{p.title}</Text>
-                                    <Text style={styles.listingPrice}>{formatNumber(Number(p.credits) || 0)} 🫘</Text>
-                                </View>
-                                {!!p.description && <Text style={styles.listingDesc} numberOfLines={2}>{p.description}</Text>}
-                            </Pressable>
-                        ))}
-
                         {/* Recent activity */}
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('Recent activity'))}</Text>
                         {flow.length === 0 ? (
@@ -2187,6 +2151,7 @@ export default function TreasuryDetailScreen() {
                                 )}
                             </View>
                         )}
+                        </>)}
                     </ScrollView>
                 </KeyboardAvoidingView>
             )}

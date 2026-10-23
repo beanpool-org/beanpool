@@ -140,12 +140,18 @@ export function keeperRoleWord(project: boolean, isLead: boolean): string {
     return isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role');
 }
 
+/** What a screen reader says for a suspended keeper's row. */
+function suspendedKeeperLabel(name: string, project: boolean, isLead: boolean): string {
+    if (project) return isLead ? t('{name}, leader, suspended', { name }) : t('{name}, collaborator, suspended', { name });
+    return isLead ? t('{name}, lead keeper, suspended', { name }) : t('{name}, keeper, suspended', { name });
+}
+
 /**
  * Who keeps it, each a row: their picture, name and part, and under it their badges (tier, stars, trades) when the node
  * gave them; said once that the badges are recognition and gate nothing (memory: tiers are merit badges). A tap opens
  * the keeper's own profile.
  */
-export function ShopfrontKeepers({ keepers, project, children }: { keepers: ShopfrontKeeper[]; project: boolean; children?: React.ReactNode }) {
+export function ShopfrontKeepers({ keepers, project, navigable = true, children }: { keepers: ShopfrontKeeper[]; project: boolean; navigable?: boolean; children?: React.ReactNode }) {
     const s = useStyles(makeStyles);
     const anyBadges = keepers.some((k) => keeperBadgeLine(k) !== null);
     if (keepers.length === 0) return null;
@@ -155,13 +161,17 @@ export function ShopfrontKeepers({ keepers, project, children }: { keepers: Shop
             {keepers.map((k) => {
                 const role = keeperRoleWord(project, k.isLead);
                 const badges = keeperBadgeLine(k);
+                const label = [k.suspended ? suspendedKeeperLabel(k.callsign, project, k.isLead) : t('{name}, {role}', { name: k.callsign, role }), badges].filter(Boolean).join('. ');
+                const Row = navigable ? Pressable : View;
                 return (
-                    <Pressable
+                    <Row
                         key={k.publicKey}
                         style={s.keeperRow}
-                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: k.publicKey, callsign: k.callsign } })}
-                        accessibilityRole="button"
-                        accessibilityLabel={[t('{name}, {role}', { name: k.callsign, role }), k.suspended ? t('Suspended') : null, badges].filter(Boolean).join('. ')}
+                        {...(navigable ? {
+                            onPress: () => router.push({ pathname: '/public-profile', params: { publicKey: k.publicKey, callsign: k.callsign } }),
+                            accessibilityRole: 'button' as const,
+                        } : { accessible: true })}
+                        accessibilityLabel={label}
                         testID={`shopfront-keeper-${k.publicKey}`}
                     >
                         <MemberAvatar avatarUrl={k.avatarUrl} pubkey={k.publicKey} callsign={k.callsign} size={32} />
@@ -172,7 +182,7 @@ export function ShopfrontKeepers({ keepers, project, children }: { keepers: Shop
                             {k.suspended ? <Text style={s.suspended}>{t('Suspended')}</Text> : null}
                             {badges ? <Text style={s.keeperBadges} testID={`shopfront-badges-${k.publicKey}`}>{badges}</Text> : null}
                         </View>
-                    </Pressable>
+                    </Row>
                 );
             })}
             {anyBadges ? <Text style={s.muted} testID="shopfront-badges-note">{t('Badges show what each person has done here. They gate nothing.')}</Text> : null}
@@ -196,7 +206,8 @@ export function ShopfrontText({ title, text, boxed, lines = 4, testID }: { title
     );
 }
 
-function openListing(id: string): void {
+/** Opens a listing's own screen: what a tile or a row does unless the page says otherwise (a preview opens nothing). */
+export function openListing(id: string): void {
     router.push({ pathname: '/post/[id]', params: { id } });
 }
 
@@ -214,7 +225,7 @@ function ListingPicture({ l, style, emojiStyle }: { l: ShopfrontListing; style: 
 }
 
 /** Featured: up to six tiles, two a row, each its photo, title and price; a tap opens the listing. */
-export function ShopfrontFeatured({ listings, showsBeans }: { listings: ShopfrontListing[]; showsBeans: boolean }) {
+export function ShopfrontFeatured({ listings, showsBeans, onOpen = openListing }: { listings: ShopfrontListing[]; showsBeans: boolean; onOpen?: (id: string) => void }) {
     const s = useStyles(makeStyles);
     const [width, setWidth] = useState(0);
     if (listings.length === 0) return null;
@@ -230,7 +241,7 @@ export function ShopfrontFeatured({ listings, showsBeans }: { listings: Shopfron
                         <Pressable
                             key={l.id}
                             style={[s.tile, { width: tile }]}
-                            onPress={() => openListing(l.id)}
+                            onPress={() => onOpen(l.id)}
                             accessibilityRole="button"
                             accessibilityLabel={price ? t('{title}, {price}', { title: l.title, price }) : l.title}
                             testID={`shopfront-featured-${l.id}`}
@@ -267,7 +278,7 @@ export function ShopfrontTogether({ categories }: { categories: string[] }) {
 }
 
 /** Its sections, each a heading and its rows (picture, title, price or state); past five, "Show all". */
-export function ShopfrontSections({ sections, showsBeans, empty }: { sections: ShopSection[]; showsBeans: boolean; empty: string }) {
+export function ShopfrontSections({ sections, showsBeans, empty, onOpen = openListing }: { sections: ShopSection[]; showsBeans: boolean; empty: string; onOpen?: (id: string) => void }) {
     const s = useStyles(makeStyles);
     const [open, setOpen] = useState<Record<string, boolean>>({});
     return (
@@ -286,7 +297,7 @@ export function ShopfrontSections({ sections, showsBeans, empty }: { sections: S
                                 <Pressable
                                     key={l.id}
                                     style={s.row}
-                                    onPress={() => openListing(l.id)}
+                                    onPress={() => onOpen(l.id)}
                                     accessibilityRole="button"
                                     accessibilityLabel={[l.title, ...lines].join(', ')}
                                     testID={`shopfront-row-${l.id}`}
@@ -333,9 +344,9 @@ export function ShopfrontMessage({ label, busy, onPress }: { label: string; busy
 }
 
 /** The money in one line, and "Money and backing" opening today's figures, pledges and ledger under it (round 3 §0 row 9). */
-export function ShopfrontMoney({ line, children }: { line: string; children: React.ReactNode }) {
+export function ShopfrontMoney({ line, initiallyOpen = false, children }: { line: string; initiallyOpen?: boolean; children: React.ReactNode }) {
     const s = useStyles(makeStyles);
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(initiallyOpen);
     return (
         <View style={s.block} testID="shopfront-money">
             <View style={s.money}>

@@ -303,14 +303,16 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
             if (!(e instanceof KnownFloorError)) throw e;
             throw new ShapeChangeError(400, e.code, e.message, 'knownFloor');
         }
+        // The dial the owner set, not the off Beans-off reads it as: Beans on and the dial off in one request writes the off.
         const lines: PlannedChange[] = [];
-        if (plan.confirmation !== undefined && plan.confirmation !== plan.before.confirmation) {
-            lines.push({ setting: 'knownFloor.on', from: onOff(plan.before.confirmation), to: onOff(plan.confirmation) });
+        if (plan.confirmation !== undefined && plan.confirmation !== plan.before.confirmationSet) {
+            lines.push({ setting: 'knownFloor.on', from: onOff(plan.before.confirmationSet), to: onOff(plan.confirmation) });
         }
         if (plan.floor !== plan.before.knownFloor) lines.push({ setting: 'knownFloor.floor', from: String(plan.before.knownFloor), to: String(plan.floor) });
         if (plan.cap !== plan.before.creditCap) lines.push({ setting: 'knownFloor.cap', from: String(plan.before.creditCap), to: String(plan.cap) });
+        // The dial asked on reads off all the same without Beans: refused, as any change is, never a 200 that leaves it off.
+        if ((lines.length > 0 || plan.confirmation === true) && !beansAfter) refuse('knownFloor', LOCKS_AFTER_A_CHANGE.beansOff());
         if (lines.length > 0) {
-            if (!beansAfter) refuse('knownFloor', LOCKS_AFTER_A_CHANGE.beansOff());
             planned.push(...lines);
             floorPlan = plan;
         }

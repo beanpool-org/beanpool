@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { db } = await import('./db/db.js');
-    const { setMemberPhoto } = await import('@beanpool/engine');
+    const { setMemberPhoto, CONFIRMATION_DIAL_KEY } = await import('@beanpool/engine');
     const np = await import('./config/node-profile.js');
     const { getDoor, mayInviteHere } = await import('./config/door.js');
     const { knownFloorSettings } = await import('./config/known-floor.js');
@@ -326,6 +326,27 @@ async function main(): Promise<void> {
         `members are told both: with Beans back, the dial that read off without them is on again (${JSON.stringify(toldEach(nMark))})`);
     await refusedClean('Beans off and the known floor moved in one request (beans_off)', () => change({ beans: false, knownFloor: { floor: 1400 } }), 409, 'beans_off');
     assert(np.getNodeFeatures().beans, 'and Beans stayed on: nothing of it was written');
+    // The dial is compared with the one the owner set, never the off that Beans-off reads it as (#2415 review r4360287274):
+    // a request that asks for the dial off is written off, or refused, never a 200 that leaves it on.
+    await change({ beans: false });
+    assert(rowOf(CONFIRMATION_DIAL_KEY) === null && !knownFloorSettings().confirmation, 'Beans off again, the dial left on by the owner and read off');
+    await refusedClean('the known floor\'s dial off with no Beans (beans_off): not a 200 that writes nothing', () => change({ knownFloor: { on: false } }), 409, 'beans_off');
+    mark = logMark(); nMark = noticeMark();
+    const floorLogBefore = (db.prepare('SELECT COALESCE(MAX(rowid), 0) AS m FROM known_floor_log').get() as { m: number }).m;
+    const beansOnFloorOff = await change({ beans: true, knownFloor: { on: false } });
+    lines = linesSince(mark);
+    assert(beansOnFloorOff.status === 200 && np.getNodeFeatures().beans && rowOf(CONFIRMATION_DIAL_KEY) === 'off' && !knownFloorSettings().confirmation
+        && beansOnFloorOff.body?.shape?.settings.knownFloor.configured.on === false && beansOnFloorOff.body.shape.settings.knownFloor.value.on === false,
+        `Beans on and the dial off in one request: Beans come on and the dial is written off, as asked (${show(beansOnFloorOff)})`);
+    assert(isDeepStrictEqual(lines.map((l) => `${l.setting}:${l.old_value}>${l.new_value}`), ['beans:off>on', 'knownFloor.on:on>off']),
+        `a line for each, the dial's from the one the owner had set (${JSON.stringify(lines.map((l) => `${l.setting}:${l.old_value}>${l.new_value}`))})`);
+    const dialLines = db.prepare('SELECT action, old_value, new_value FROM known_floor_log WHERE member_pubkey IS NULL AND rowid > ? ORDER BY rowid').all(floorLogBefore) as any[];
+    assert(isDeepStrictEqual(dialLines.map((l) => `${l.action}:${l.old_value}>${l.new_value}`), ['confirmation:on>off']),
+        `the known floor's own log keeps the dial's line too (${JSON.stringify(dialLines)})`);
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('Beans are on.')]),
+        `members are told Beans are on, and nothing of a known floor: they had none without Beans and have none now (${JSON.stringify(toldEach(nMark))})`);
+    const dialBack = await change({ knownFloor: { on: true } });
+    assert(dialBack.status === 200 && rowOf(CONFIRMATION_DIAL_KEY) === null && knownFloorSettings().confirmation, `the dial back on (${show(dialBack)})`);
 
     // ── 3. The private preview and the server's env ─────────────────────────────────────────────
     console.log('\n── 3. the locks of the server\'s env ──');

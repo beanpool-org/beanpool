@@ -15,7 +15,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX } from '@beanpool/core';
-import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, savedCreditCap, knownFloor, isConfirmed, memberKnownGrant } from '@beanpool/engine';
+import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, confirmationDialSetFrom, savedCreditCap, knownFloor, isConfirmed, memberKnownGrant } from '@beanpool/engine';
 import { getProfileSwitches } from './node-profile.js';
 import { getMember } from '../state-engine.js';
 import { clearEnterpriseFloorCache } from '@beanpool/engine';
@@ -30,6 +30,12 @@ export class KnownFloorError extends Error {
 
 export interface KnownFloorException { memberPubkey: string; amount: number | null; frozen: boolean; setBy: string; setAt: string }
 export interface KnownFloorLogLine { id: string; actor: string; action: string; memberPubkey: string | null; oldValue: string | null; newValue: string | null; at: string }
+
+/** The dial as the owner set it (no 'off' row: on), Beans or not: what a change to it is compared with and logged from. */
+function dialSet(): boolean {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string | null } | undefined;
+    return confirmationDialSetFrom(row?.value ?? null);
+}
 
 // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
 function setDial(on: boolean): void {
@@ -70,9 +76,13 @@ export function knownFloorSettings() {
     };
 }
 
-/** A change to the dial, the known floor or the cap, checked whole: what each will be, against what they are. */
+/**
+ * A change to the dial, the known floor or the cap, checked whole: what each will be, against what they are. `before`'s
+ * `confirmation` is the dial as the node runs it (off without Beans); `confirmationSet` the one the owner set, which a
+ * change is compared with (#2415 review r4360287274: compared with the run one, an off sent with Beans off wrote nothing).
+ */
 export interface KnownFloorPlan {
-    before: ReturnType<typeof knownFloorSettings>;
+    before: ReturnType<typeof knownFloorSettings> & { confirmationSet: boolean };
     /** The dial as sent, or undefined where it was left out. */
     confirmation: boolean | undefined;
     floor: number;
@@ -85,7 +95,7 @@ export interface KnownFloorPlan {
  * request (config/community-shape-write.ts), which checks Beans itself; the node's own switches otherwise.
  */
 export function checkKnownFloorSettings(body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }, beans = getProfileSwitches().beans): KnownFloorPlan {
-    const before = knownFloorSettings();
+    const before = { ...knownFloorSettings(), confirmationSet: dialSet() };
     if (body.confirmation !== undefined && typeof body.confirmation !== 'boolean') {
         throw new KnownFloorError(400, 'bad_confirmation', 'confirmation must be true or false.');
     }
@@ -110,9 +120,9 @@ export function checkKnownFloorSettings(body: { confirmation?: unknown; knownFlo
 export function writeKnownFloorSettings(actor: string, plan: KnownFloorPlan, at?: string): void {
     const { before, confirmation, cap, floor } = plan;
     db.transaction(() => {
-        if (confirmation !== undefined && confirmation !== before.confirmation) {
+        if (confirmation !== undefined && confirmation !== before.confirmationSet) {
             setDial(confirmation);
-            log(actor, 'confirmation', null, before.confirmation ? 'on' : 'off', confirmation ? 'on' : 'off', at);
+            log(actor, 'confirmation', null, before.confirmationSet ? 'on' : 'off', confirmation ? 'on' : 'off', at);
         }
         if (cap !== before.creditCap) {
             setCap(cap);

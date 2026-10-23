@@ -43,14 +43,33 @@ type Item = Record<string, unknown>;
 const obj = (v: unknown): Item | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Item) : null);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
+// What Unicode draws as nothing: format characters (Cf: direction overrides, zero-width spaces, the "tag" letters) and
+// the default-ignorable code points (variation selectors, Hangul fillers, the combining grapheme joiner).
+const HIDDEN = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
+const EMOJI = /\p{Emoji}/u;
+const JOINERS = new Set(['\u200C', '\u200D']);
+const shown = (c: string | undefined): c is string => c !== undefined && !HIDDEN.test(c);
+
 /**
- * Without the characters a reader cannot see: format characters (Unicode's Cf: direction overrides, zero-width
- * spaces, the "tag" letters that can hide words from a person but not from a program), except the two joiners that
- * emoji and some scripts need (U+200C, U+200D). The text is read by the team's tools, and what it says should be
- * what a person reading it sees.
+ * Without the characters a reader cannot see, which can hide words from a person but not from a program: the text is
+ * read by the team's tools, and what it says should be what a person reading it sees. Two are kept, one at a time, where
+ * they change what is drawn: U+FE0F (draw as emoji) straight after a character that can be one, and a joiner (U+200C,
+ * U+200D, which emoji and some scripts need) alone between two characters that are drawn. A run of them never is.
  */
 export function visible(raw: unknown): string {
-    return str(raw).replace(/[^\P{Cf}‌‍]+/gu, '');
+    const chars = Array.from(str(raw));
+    let out = '';
+    let keptLast = false;
+    chars.forEach((c, i) => {
+        const prev = chars[i - 1];
+        // A joiner after a kept U+FE0F stays: \u2764\uFE0F\u200D\uD83D\uDD25 is \u2764, U+FE0F, U+200D, \uD83D\uDD25.
+        keptLast =
+            shown(c) ||
+            (c === '\uFE0F' && shown(prev) && EMOJI.test(prev)) ||
+            (JOINERS.has(c) && keptLast && shown(chars[i + 1]));
+        if (keptLast) out += c;
+    });
+    return out;
 }
 
 /** Text as written, on its lines: no control characters but new lines and tabs, no line ending in spaces, at most `max`. */

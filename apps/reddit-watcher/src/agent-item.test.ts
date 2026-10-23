@@ -183,6 +183,29 @@ describe('plainText', () => {
         expect(visible('a‌b')).toBe('a‌b');
     });
 
+    it('drops variation selectors and runs of joiners, which can carry a message no one sees', () => {
+        // One variation selector after a character carries a byte ("emoji smuggling"); a run of joiners is a binary code.
+        const selectors = Array.from({ length: 16 }, (_, i) => String.fromCodePoint(0xe0100 + i)).join('');
+        expect(visible(`ok${selectors}`)).toBe('ok');
+        const joiners = Array.from({ length: 16 }, (_, i) => (i % 2 ? '‍' : '‌')).join('');
+        expect(visible(`x${joiners}y`)).toBe('xy');
+        expect(visible('ok︀︁︎')).toBe('ok');
+        // U+FE0F after a letter draws nothing different, and only one after an emoji does.
+        expect(visible('ok️')).toBe('ok');
+        expect(visible('❤️️️')).toBe('❤️');
+        // A joiner at either end joins nothing.
+        expect(visible('‍x‌')).toBe('x');
+        // The combining grapheme joiner, a Hangul filler and a Mongolian variation selector: drawn as nothing.
+        expect(visible('a͏bㅤc᠋d')).toBe('abcd');
+    });
+
+    it('keeps the selector and joiners that emoji and scripts are drawn with', () => {
+        // ❤️, ❤️‍🔥, 🏳️‍🌈, a farmer with a skin tone, the 1 keycap, Persian "I want", Devanagari "kṣa".
+        for (const text of ['❤️', '❤️‍🔥', '🏳️‍🌈', '👩🏽‍🌾', '1️⃣', 'می‌خواهم', 'क्‍ष']) {
+            expect(visible(text)).toBe(text);
+        }
+    });
+
     it(`cuts at ${BODY_MAX} characters, between characters, with "…"`, () => {
         const body = plainText('🌱'.repeat(BODY_MAX + 50));
         expect(Array.from(body)).toHaveLength(BODY_MAX);

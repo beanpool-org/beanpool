@@ -1213,12 +1213,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             case 'safety':
                 // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
-                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕.
+                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕. The cell comes with the card: put away
+                // or checked, it has nothing to say and takes no cell (PR #2411 review).
                 return identity && (
-                    <div key={id} style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
-                        {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
-                        <OneWayBackCard identity={identity} placement="landing" onSeeWords={onSeeWords} />
-                    </div>
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} frame={(oneWayBack) => (
+                        <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
+                            {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
+                            {oneWayBack}
+                        </div>
+                    )} />
                 );
             case 'find': {
                 const f = c.find!;

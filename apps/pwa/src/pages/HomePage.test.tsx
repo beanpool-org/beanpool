@@ -38,9 +38,9 @@ vi.mock('../lib/sync', () => ({
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
 import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
-import { backToEnglish, bracketed, bypassing, showIn } from '../words-xx.test-support';
+import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
-import { removedLine } from '../lib/home-layout';
+import { FEWER_CARDS_LINE, removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 import { RADIUS_STORAGE_KEY, loadRadiusSettings } from '../lib/geo';
@@ -2473,7 +2473,11 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         });
         vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { resized.push(cb); } observe() {} disconnect() {} });
     });
-    afterEach(() => { measured?.mockRestore(); });
+    afterEach(() => {
+        measured?.mockRestore();
+        backToEnglish();
+        vi.mocked(api.getCommunityMe).mockImplementation(async () => ({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } }) as never);
+    });
 
     const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
     const grid = () => screen.getByTestId('home-grid');
@@ -2531,6 +2535,43 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(orders[2]).toEqual(orders[0]);
     });
 
+    // "Your way back in" (components/OneWayBack.tsx) decides in this browser whether it has anything to say: the node's
+    // word that the member has only their 12 words, and the card's own schedule. With nothing to say it takes no cell,
+    // where it left one holding only its "…" (445 × 28 px, PR #2411 review).
+    const SAFETY = { needs: NEEDS, safety: { words: true as const, signInLinked: false as const } };
+    const wordsOnly = () => vi.mocked(api.getCommunityMe).mockImplementation(async () => ({ probation: { rules: 'words', keptPosts: 0, ageEndsAt: null } }) as never);
+
+    it('"Your way back in" with nothing to show (the 12 words already checked from it) takes no cell, in one, two and three columns', async () => {
+        wordsOnly();
+        for (const w of [360, 800, 1400]) {
+            localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+            await landAt(w, SAFETY);
+            await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+            await pause();
+            expect(screen.queryByTestId('home-card-safety'), String(w)).toBeNull();
+            expect(cardIds(), String(w)).toEqual(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+            // Nothing in the grid but the cards and the notes under the first.
+            for (const el of Array.from(grid().children)) expect(el.getAttribute('data-testid') ?? '', String(w)).toMatch(/^home-(card-|hint$|fewer$)/);
+            cleanup();
+            vi.mocked(api.getCommunityMe).mockClear();
+        }
+    });
+
+    it('"Your way back in" with something to say is one cell of its own with its "…", as before; put away, its cell goes too', async () => {
+        wordsOnly();
+        await landAt(1400, SAFETY);
+        const card = await screen.findByTestId('one-way-back-landing');
+        const cell = screen.getByTestId('home-card-safety');
+        expect(cell.parentElement).toBe(grid());
+        expect(cell.contains(card)).toBe(true);
+        expect(span('safety')).toBe('');
+        expect(within(cell).getByTestId('home-card-menu')).toBeInTheDocument();
+        expect(cardIds().slice(0, 3)).toEqual(['needs', 'safety', 'tips']);
+        fireEvent.click(within(card).getByRole('button', { name: 'Hide this for now' }));
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
+    });
+
     it('the one-time hint under the first card spans the row, straight after it in the reading order', async () => {
         await landAt(1400);
         const hint = await screen.findByTestId('home-hint');
@@ -2582,6 +2623,24 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         width = 360;
         act(() => { for (const r of resized) r(); });
         expect(screen.getByTestId('home-hint').previousElementSibling).toBe(screen.getByTestId('home-card-tips'));
+    });
+
+    it("the fewer-cards note and the hint in the member's language, above the grid and under the first card (pseudo-locale)", async () => {
+        await showIn('xx');
+        width = 800;
+        nodeV2(answer(), null);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const fewer = await screen.findByTestId('home-fewer');
+        aboveTheGrid(fewer);
+        expect(fewer).toHaveTextContent(xx(FEWER_CARDS_LINE));
+        expect(screen.getByTestId('home-hint')).toHaveTextContent(xx(HOME_HINT));
+        for (const note of [fewer, screen.getByTestId('home-hint')]) expect(bypassing(note), note.dataset.testid).toEqual([]);
+        cleanup();
+        await landAt(1400);
+        const hint = await screen.findByTestId('home-hint');
+        expect(hint.previousElementSibling).toBe(screen.getByTestId('home-card-needs'));
+        expect(hint).toHaveTextContent(xx(HOME_HINT));
+        expect(bypassing(hint)).toEqual([]);
     });
 
     it('side by side, the "…" says Move earlier · Move later (up can be left), and moves the card in the saved list', async () => {

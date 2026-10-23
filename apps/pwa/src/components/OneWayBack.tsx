@@ -15,7 +15,7 @@
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { t, word } from '@beanpool/core';
 import { getCommunityMe } from '../lib/api';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
@@ -269,9 +269,11 @@ interface CardProps {
     origin?: string;
     /** Read the node again when this changes. */
     refreshKey?: unknown;
+    /** What the card stands in (Home's cell, with its "…"): drawn only with the card, so a card with nothing to say takes no place. */
+    frame?: (card: ReactNode) => ReactNode;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card }: CardProps) {
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
@@ -296,7 +298,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                     {keyLineWords(linkResultMessage(result))}
                 </p>
             )}
-            {shown && (
+            {shown && frame(
                 <section data-testid={`one-way-back-${placement}`} aria-labelledby={`one-way-back-title-${placement}`}
                     className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-amber-300 dark:border-amber-700 p-4 mb-3 min-w-0">
                     <div className="flex items-start justify-between gap-2">

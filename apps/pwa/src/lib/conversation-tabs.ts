@@ -1,9 +1,11 @@
 // The Messages list's filter chips: All, Transactions, Direct and Groups. Groups is the phone's Talk → Groups (groups
-// decision 6): the group, enterprise and event chats. Each chat other than under All sits under one chip only.
+// decision 6): the group, enterprise and event chats. Each chat other than under All sits under one chip only. Requests,
+// where the community holds a stranger's first message as a request (PR #2392), lists the requests waiting for the member
+// (components/MessageRequests.tsx): no chat of theirs sits under it.
 
 import type { Conversation } from './api';
 
-export type ConversationTab = 'all' | 'transactions' | 'direct' | 'groups';
+export type ConversationTab = 'all' | 'transactions' | 'direct' | 'groups' | 'requests';
 
 /** A chat for some people rather than two: a Commons group's, an enterprise's or an event's. */
 export function isGroupLikeChat(conv: Pick<Conversation, 'type'>): boolean {
@@ -12,6 +14,7 @@ export function isGroupLikeChat(conv: Pick<Conversation, 'type'>): boolean {
 
 /** Whether a conversation belongs under a chip. A group chat has no postId, so Direct asks for a DM by type. */
 export function inConversationTab(conv: Pick<Conversation, 'type' | 'postId'>, tab: ConversationTab): boolean {
+    if (tab === 'requests') return false;
     if (tab === 'groups') return isGroupLikeChat(conv);
     if (tab === 'transactions') return !!conv.postId && !isGroupLikeChat(conv);
     if (tab === 'direct') return !conv.postId && !isGroupLikeChat(conv);

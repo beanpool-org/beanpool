@@ -8,6 +8,17 @@ import { TreasuryDetailPage } from './TreasuryDetailPage';
 import * as api from '../lib/api';
 import * as identityLib from '../lib/identity';
 
+/**
+ * The page is the enterprise's shopfront and its keepers' controls are its Manage tab (DESIGN-shops-round3-enterprise-
+ * shopfront-fable.md §3, slice S8): its keepers read "Kept by", each a row with their part, their backing behind "Money
+ * and backing"; a request, a succession and the map pin are in Manage.
+ */
+async function openManage() {
+    fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
+    return screen.findByTestId('manage-panel');
+}
+const keeperRow = (name: string) => screen.getByText(name).closest('[data-testid^="shopfront-keeper-"]') as HTMLElement;
+
 describe('Enterprise Keepers & Succession (Slice 6)', () => {
     const mockLeadIdentity = {
         publicKey: 'lead-alice-pubkey',
@@ -78,12 +89,15 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
-        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Kept by' })).toBeInTheDocument();
         expect(screen.getByText('Alice')).toBeInTheDocument();
         expect(screen.getByText('Bob')).toBeInTheDocument();
-        expect(screen.getByText('Lead keeper')).toBeInTheDocument();
-        expect(screen.getByText('Keeper')).toBeInTheDocument();
-        expect(screen.getByText('+50 🫘')).toBeInTheDocument();
+        expect(keeperRow('Alice')).toHaveTextContent('Alice · Lead keeper');
+        expect(keeperRow('Bob')).toHaveTextContent('Bob · Keeper');
+        // What each backs it with is under Money and backing (round 3 §0 row 9).
+        fireEvent.click(screen.getByTestId('shopfront-money-toggle'));
+        expect(screen.getByTestId('enterprise-backing')).toHaveTextContent('Alice · 50 🫘');
+        expect(screen.getByTestId('enterprise-backing')).not.toHaveTextContent('Bob');
         // Vocabulary check: never owner, never steward
         expect(screen.queryByText(/owner/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/steward/i)).not.toBeInTheDocument();
@@ -99,9 +113,9 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             posts: [], flow: [],
         } as any);
         render(<TreasuryDetailPage identity={mockApplicantIdentity} pubkey="project-roof-pubkey" onBack={vi.fn()} />);
-        expect(await screen.findByText(/^Collaborators \(2\)/)).toBeInTheDocument();
-        expect(screen.getByText('Leader')).toBeInTheDocument();
-        expect(screen.getByText('Collaborator')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Run by' })).toBeInTheDocument();
+        expect(keeperRow('Alice')).toHaveTextContent('Alice · Leader');
+        expect(keeperRow('Bob')).toHaveTextContent('Bob · Collaborator');
         expect(screen.getByText('Project · A leader, a goal, an end date')).toBeInTheDocument();
         expect(screen.queryByText(/Bounded|Treasur/)).toBeNull();
         expect(screen.queryByText('Lead keeper')).toBeNull();
@@ -185,9 +199,10 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
-        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Kept by' })).toBeInTheDocument();
         expect(screen.getByText('Alice')).toBeInTheDocument();
         expect(screen.getAllByText('Suspended')).toHaveLength(1);
+        expect(keeperRow('Alice')).toHaveTextContent('Suspended');
     });
 
     it('renders single control "Back this enterprise with your standing: 0 … <available>" and submits join request', async () => {
@@ -289,6 +304,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
+        await openManage();
         expect(await screen.findByText(/Asking to join as keepers \(1\)/i)).toBeInTheDocument();
         expect(screen.getByText('Charlie')).toBeInTheDocument();
         expect(screen.getByText('25 🫘')).toBeInTheDocument();
@@ -309,7 +325,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
                 onBack={vi.fn()}
             />
         );
-        const declineBtn = screen.getByRole('button', { name: /decline/i });
+        const declineBtn = await screen.findByRole('button', { name: /decline/i });
         fireEvent.click(declineBtn);
 
         await waitFor(() => {
@@ -342,6 +358,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             <TreasuryDetailPage identity={mockLeadIdentity} pubkey="enterprise-eggs-pubkey" onBack={vi.fn()} />
         );
 
+        await openManage();
         expect(await screen.findByText(/Asking to join as keepers \(3\)/i)).toBeInTheDocument();
         expect(screen.getByText('Their standing covers this pledge.')).toBeInTheDocument();
         expect(screen.getByText("Their standing doesn't cover this pledge right now, so it can't be approved yet.")).toBeInTheDocument();
@@ -416,10 +433,11 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
+        await openManage();
         expect(await screen.findByText(/Lead Keeper Inactive \(32 days\)/i)).toBeInTheDocument();
         expect(screen.getByText('Propose an Active Keeper as Lead')).toBeInTheDocument();
 
-        const select = screen.getByRole('combobox');
+        const select = screen.getByRole('combobox', { name: 'Propose an Active Keeper as Lead' });
         fireEvent.change(select, { target: { value: 'keeper-bob-pubkey' } });
 
         const proposeBtn = screen.getByRole('button', { name: /propose lead/i });
@@ -496,6 +514,7 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
+        await openManage();
         const control = await screen.findByTestId('enterprise-map-pin-control');
         expect(within(control).getByText('Not on the map')).toBeInTheDocument();
         fireEvent.click(within(control).getByRole('button', { name: 'Set map pin' }));
@@ -514,7 +533,9 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
-        expect(await screen.findByText(/^Keepers \(1\)/i)).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Kept by' })).toBeInTheDocument();
+        // Nothing of a keeper's: no Manage tab, and no pin control on the page.
+        expect(screen.queryByRole('tab', { name: 'Manage' })).not.toBeInTheDocument();
         expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
         expect(screen.queryByTestId('enterprise-location-visibility')).not.toBeInTheDocument();
     });
@@ -530,7 +551,10 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
-        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Kept by' })).toBeInTheDocument();
+        // keeperOf still lists it, so Manage is there: the pin control is not, there or on the page.
+        expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
+        await openManage();
         expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
     });
 
@@ -539,7 +563,9 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
-        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Kept by' })).toBeInTheDocument();
+        expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
+        await openManage();
         expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
     });
 
@@ -548,6 +574,7 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
+        await openManage();
         const control = await screen.findByTestId('enterprise-map-pin-control');
         fireEvent.click(within(control).getByRole('button', { name: 'Set map pin' }));
 
@@ -582,6 +609,7 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
+        await openManage();
         const control = await screen.findByTestId('enterprise-map-pin-control');
         expect(within(control).getByText('On the map at -28.549, 153.501')).toBeInTheDocument();
         fireEvent.click(within(control).getByRole('button', { name: 'Move or clear map pin' }));

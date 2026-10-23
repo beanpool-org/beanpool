@@ -32,6 +32,12 @@ const REMOVE_CARA = {
     resolvedAt: null, resolvedBy: null, resolvedByCallsign: null, reason: null,
 };
 
+// Each is a keeper's control, so each is in the page's Manage tab (DESIGN-shops-round3-enterprise-shopfront-fable.md §3, S8).
+async function openManage() {
+    fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
+    return screen.findByTestId('manage-panel');
+}
+
 describe('Enterprise keeper answers (A, G, M)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
@@ -49,6 +55,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         const objectSpy = vi.spyOn(api, 'objectToKeeperChange').mockResolvedValue({ success: true, change: { ...REMOVE_CARA, status: 'objected' } } as any);
         render(<TreasuryDetailPage identity={BOB} pubkey={ENT} onBack={vi.fn()} />);
 
+        await openManage();
         expect(await screen.findByText('Removing Cara as a keeper')).toBeInTheDocument();
         expect(screen.getByText(/Objection window: 2 days left/)).toBeInTheDocument();
         const btn = screen.getByRole('button', { name: 'Object: Removing Cara as a keeper' });
@@ -60,6 +67,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
     it('the lead who made the change is not offered Object, and cannot re-remove the same keeper', async () => {
         vi.spyOn(api, 'getTreasury').mockResolvedValue(treasury({ keeperChanges: [REMOVE_CARA], isLeadOrSoleKeeperOrAdmin: true }));
         render(<TreasuryDetailPage identity={ALICE} pubkey={ENT} onBack={vi.fn()} />);
+        await openManage();
         expect(await screen.findByText('Removing Cara as a keeper')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /^Object/ })).toBeNull();
         expect(screen.getByRole('button', { name: 'Remove Bob' })).toBeInTheDocument();
@@ -71,6 +79,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         const removeSpy = vi.spyOn(api, 'removeEnterpriseKeeper').mockResolvedValue({ success: true, applied: false, change: null });
         render(<TreasuryDetailPage identity={ALICE} pubkey={ENT} onBack={vi.fn()} />);
+        await openManage();
         fireEvent.click(await screen.findByRole('button', { name: 'Remove Bob' }));
         await waitFor(() => expect(removeSpy).toHaveBeenCalledWith(ENT, 'keeper-bob'));
         expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('unless another keeper objects first'));
@@ -82,6 +91,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         const refusal = 'This enterprise is 30 beans in debt and your pledge is part of what covers it. You can step down once the debt is down to 10 beans, or once the other keepers pledge 20 beans more.';
         const stepSpy = vi.spyOn(api, 'stepDownAsKeeper').mockRejectedValue(new Error(refusal));
         render(<TreasuryDetailPage identity={BOB} pubkey={ENT} onBack={vi.fn()} />);
+        await openManage();
         const btn = await screen.findByRole('button', { name: 'Step down as a keeper' });
         expect(btn.className).toContain('min-h-[48px]');
         fireEvent.click(btn);
@@ -106,6 +116,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         const voteSpy = vi.spyOn(api, 'voteEnterpriseSuccession').mockResolvedValue({ success: true, executed: false } as any);
         render(<TreasuryDetailPage identity={BOB} pubkey={ENT} onBack={vi.fn()} />);
 
+        await openManage();
         expect(await screen.findByText('1 yes, 0 no. Needs 2 yes of 2 keepers.')).toBeInTheDocument();
         expect(screen.getByText(/Open for 14 days: 13 days left/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'No, do not make Cara lead keeper' }));
@@ -116,6 +127,7 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         const inactivity = { leadPubkey: 'lead-alice', leadCallsign: 'Alice', daysInactive: 0, isEligible: true, autoPromoted: true };
         vi.spyOn(api, 'getTreasury').mockResolvedValue(treasury({ leadInactivity: inactivity, succession: { inactivity, proposals: [] } }));
         render(<TreasuryDetailPage identity={BOB} pubkey={ENT} onBack={vi.fn()} />);
+        await openManage();
         expect(await screen.findByText('NEW LEAD CHOSEN AUTOMATICALLY')).toBeInTheDocument();
         expect(screen.getByText(/can choose someone else now/)).toBeInTheDocument();
     });
@@ -157,23 +169,30 @@ describe('Enterprise keeper answers (A, G, M)', () => {
         const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
         render(<TreasuryDetailPage identity={{ publicKey: 'p-bob', callsign: 'Bob', tier: 'Resident' } as any} pubkey={PRJ} onBack={vi.fn()} />);
 
-        expect(await screen.findByText('Collaborator changes waiting (1)')).toBeInTheDocument();
+        // Everything the page and its Manage tab say, each read as it is drawn.
+        const saidHere = () => [
+            document.body.textContent ?? '',
+            ...Array.from(document.querySelectorAll('[aria-label],[placeholder],[title]')).map((el) =>
+                [el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('title')].join(' ')),
+        ].join('\n');
+
+        // The page: the wind-up, the thread.
         expect(await screen.findByText('removed by a collaborator')).toBeInTheDocument();
         expect(screen.getByText(/Any collaborator can stop this during the 7-day grace period/)).toBeInTheDocument();
         expect(screen.getByText(/started by a collaborator/)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Message the project...')).toBeInTheDocument();
+        const onPage = saidHere();
+
+        // Manage: the changes, the succession, stepping down.
+        await openManage();
+        expect(await screen.findByText('Collaborator changes waiting (1)')).toBeInTheDocument();
         expect(screen.getByText(/Move the leader role to/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Yes, make Cara leader' })).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Message the project...')).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Step down as a collaborator' }));
         expect(confirmSpy.mock.calls[0][0]).toMatch(/^Step down as a collaborator\?/);
 
-        const said = [
-            document.body.textContent ?? '',
-            ...Array.from(document.querySelectorAll('[aria-label],[placeholder],[title]')).map((el) =>
-                [el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('title')].join(' ')),
-            ...confirmSpy.mock.calls.map((c) => String(c[0])),
-        ].join('\n');
+        const said = [onPage, saidHere(), ...confirmSpy.mock.calls.map((c) => String(c[0]))].join('\n');
         expect(said).not.toMatch(/keeper|enterprise|treasur|bounded/i);
     });
 });

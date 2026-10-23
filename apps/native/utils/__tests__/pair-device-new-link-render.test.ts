@@ -22,6 +22,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import * as ReactAll from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,11 +69,11 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../../app/IdentityContext', () => ({
     useIdentity: () => ({ identity: { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Sally' }, setIdentity() {}, isLoading: false }),
 }));
-/** AsyncStorage; `slow` holds a read of the community the phone is on until the test lets it go. */
-const store = vi.hoisted(() => ({ map: new Map<string, string>(), slow: null as Promise<void> | null }));
+/** AsyncStorage; `slowNext` holds the next read only (of the community the phone is on) until the test lets it go. */
+const store = vi.hoisted(() => ({ map: new Map<string, string>(), slowNext: null as Promise<void> | null }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => { const v = store.map.get(k) ?? null; if (store.slow) await store.slow; return v; }),
+        getItem: vi.fn(async (k: string) => { const v = store.map.get(k) ?? null; const hold = store.slowNext; store.slowNext = null; if (hold) await hold; return v; }),
         setItem: vi.fn(async (k: string, v: string) => { store.map.set(k, v); }),
         removeItem: vi.fn(async (k: string) => { store.map.delete(k); }),
     },
@@ -110,7 +112,7 @@ beforeEach(() => {
     nav.canGoBack = true;
     store.map.clear();
     store.map.set('beanpool_anchor_url', 'https://mullum.example');
-    store.slow = null;
+    store.slowNext = null;
     unlock.calls = 0;
     sent.requests.length = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => { sent.requests.push(String(url)); throw new Error('no network in this test'); }));
@@ -120,7 +122,8 @@ afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(
 const settle = async () => { for (let i = 0; i < 12; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function open(params: Record<string, string> = {}) {
     route.set(params);
-    await act(async () => { root.render(createElement(PairDeviceScreen as any)); });
+    // react-dom's types carry their own copy of @types/react; the element is the same.
+    await act(async () => { root.render(createElement(PairDeviceScreen as any) as Parameters<Root['render']>[0]); });
     await settle();
 }
 /** A link opened from the camera app while this screen is up. */
@@ -165,11 +168,12 @@ describe('a link from the camera app reaches the sheet', () => {
     it('the newest link wins over a read still finishing', async () => {
         await open();
         let release!: () => void;
-        store.slow = new Promise<void>((r) => { release = r; });
+        store.slowNext = new Promise<void>((r) => { release = r; });
         await linkArrives(MULLUM);
         expect(sheet()).toBeNull(); // still reading which servers this phone uses
         await linkArrives(RIVERBEND);
-        store.slow = null;
+        expect(sheetHost()).toBe('riverbend.example');
+        // The older read finishes after: it never puts its code's sheet over the newer one's.
         await act(async () => { release(); });
         await settle();
         expect(sheetHost()).toBe('riverbend.example');
@@ -209,5 +213,13 @@ describe('leaving the screen after a cold start from the camera app, where it is
         await press(host.querySelector('[aria-label="Close camera scanner"]'), '✕');
         expect(nav.back).toBe(1);
         expect(nav.replaced).toEqual([]);
+    });
+
+    it('Done under the digits and the ✕ before camera access leave the same way (read from the source: the digits need a send)', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/pair-device.tsx'), 'utf8');
+        expect(src.match(/onPress=\{leave\}/g)).toHaveLength(3);
+        expect(src).toMatch(/<Pressable style=\{styles\.cancelBtn\} onPress=\{leave\} accessibilityRole="button">\s*<Text style=\{styles\.cancelBtnText\}>\{t\('Done'\)\}<\/Text>/);
+        expect(src).toMatch(/onPress=\{leave\}\s*accessibilityRole="button"\s*accessibilityLabel=\{t\('Go back'\)\}/);
+        expect(src).not.toContain('onPress={() => router.back()}');
     });
 });

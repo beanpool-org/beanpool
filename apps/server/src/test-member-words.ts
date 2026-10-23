@@ -460,6 +460,9 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     await family('asking to join, a name too short', 'Please give a name of at least 2 characters.', 'POST', asker, '/api/join/knock', { callsign: 'A', message: 'Hello there' });
     await family('invites, a code that is none', 'Invalid invite code', 'POST', asker, '/api/invite/redeem', { code: 'NOPE-NOPE', publicKey: asker.pk, callsign: 'Asker' });
     await family('recovery, no account named', 'Which account are you recovering?', 'POST', asker, '/api/recovery/collect', {});
+    // Shops and a push's notice (routes/shops.ts, routes/notices.ts).
+    await family('shops, one that is not here', 'There is no such shop here.', 'GET', ann, '/api/shops/no-such-shop');
+    await family('a push notice that is gone', 'This server has no such notice for you. Notices are kept for 7 days.', 'GET', ann, '/api/notices/push/no-such-notice');
     await family('groups, a vote with nobody to vote with', 'Nobody else in this group can vote, so there is nobody to vote with.',
         'POST', ann, `/api/groups/${tools.id}/decisions`, { effect: 'close_group', title: 'Close it', description: 'We have finished with the library' });
 

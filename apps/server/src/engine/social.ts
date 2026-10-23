@@ -2,7 +2,7 @@
 //
 // Bridges the database storage layer with server singletons and tombstone logs.
 
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, word } from '@beanpool/core';
 import { db, writeTombstone } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -73,7 +73,7 @@ export class FriendRefusal extends Error {
         this.name = 'FriendRefusal';
     }
 }
-export const FRIEND_BLOCKED_ERROR = 'You have blocked them. Unblock them first to add them.';
+export const FRIEND_BLOCKED_ERROR = word('You have blocked them. Unblock them first to add them.');
 
 /**
  * Add a connection between two members. A visitor's row adds nobody, as a key with no row adds nobody.

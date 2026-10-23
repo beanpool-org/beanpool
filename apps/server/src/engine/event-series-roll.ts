@@ -42,7 +42,7 @@ import {
     type EventRepeatRule,
     type MarketplacePost,
 } from '@beanpool/engine';
-import { formatDate, type PushNoticeKind } from '@beanpool/core';
+import { formatDate, type PushNoticeKind, word } from '@beanpool/core';
 import { db, deletePlainRows, writeTombstone } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { bumpPostsVersion } from './versions.js';
@@ -336,7 +336,7 @@ export function setSeriesDateSkipped(
     const row = db.prepare(`SELECT ${SERIES_COLUMNS}, type, hidden_by_reports_at FROM posts WHERE id = ?`).get(postId) as (SeriesRow & { type: string; hidden_by_reports_at: string | null }) | undefined;
     if (!row || row.type !== 'event' || (row.hidden_by_reports_at && !isEventHost(db, row, actorPubkey))) throw new Error('Event not found');
     if (!isEventHost(db, row, actorPubkey)) throw new Error(SKIP_HOST_ONLY);
-    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error('This event has been cancelled');
+    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error(word('This event has been cancelled'));
     const rule = readRepeatRule(row.event_repeat);
     if (!rule || !row.event_start_local || !row.event_tz) throw new Error(SERIES_NOT_REPEATING);
     const nowIso = new Date(nowMs).toISOString();

@@ -33,7 +33,7 @@ import Router from '@koa/router';
 import { passesReadGate, getNodeRole } from '../state-engine.js';
 import { listKeptNotices, markKeptNoticesSeen, MARK_SEEN_MAX_IDS } from '../engine/kept-notices.js';
 import { readPushNotice } from '../engine/push-notices.js';
-import { isPushNoticeId } from '@beanpool/core';
+import { isPushNoticeId, word } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
 /** The verified member signing this request, or undefined once the refusal is written. */
@@ -41,12 +41,12 @@ function member(ctx: any): string | undefined {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return undefined;
     }
     if (!passesReadGate(actor)) {
         ctx.status = 403;
-        ctx.body = { error: 'Read access requires a member identity' };
+        ctx.body = { error: word('Read access requires a member identity') };
         return undefined;
     }
     return actor;
@@ -70,7 +70,7 @@ export function createNoticeRoutes(_deps: RouteDeps): Router {
         const notice = isPushNoticeId(ctx.params.id) ? readPushNotice(ctx.params.id, actor) : null;
         if (!notice) {
             ctx.status = 404;
-            ctx.body = { error: 'This server has no such notice for you. Notices are kept for 7 days.', code: 'no_notice' };
+            ctx.body = { error: word('This server has no such notice for you. Notices are kept for 7 days.'), code: 'no_notice' };
             return;
         }
         ctx.body = notice;
@@ -81,7 +81,7 @@ export function createNoticeRoutes(_deps: RouteDeps): Router {
         if (!actor) return;
         if (getNodeRole() !== 'primary') {
             ctx.status = 503;
-            ctx.body = { error: 'This server is a standby copy of the community, not its main server. Notices are marked seen on the main server.', code: 'standby' };
+            ctx.body = { error: word('This server is a standby copy of the community, not its main server. Notices are marked seen on the main server.'), code: 'standby' };
             return;
         }
         const ids = ((ctx as any).requestBody || {}).ids;

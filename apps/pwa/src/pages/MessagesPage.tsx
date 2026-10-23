@@ -241,6 +241,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => registerLivePostTie(conversationTie(() => conversationsRef.current)), []);
     const [userTransactions, setUserTransactions] = useState<MarketplaceTransaction[]>([]);
     const [activeTab, setActiveTab] = useState<ConversationTab>('all');
+    // Requests turned off while the member is on them: the pill goes, so the list goes back to All, never to no chip.
+    useEffect(() => { if (!requests && activeTab === 'requests') setActiveTab('all'); }, [requests, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
@@ -1534,8 +1536,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
         // Dropping onto a blocked conversation would only produce a message the
         // person cannot send, so the chat takes no drops at all while blocked; nor
-        // while a request waits for this member to decide, or for the other to accept.
-        const acceptsDrop = !isPeerBlocked && requestMode !== 'to-me' && requestMode !== 'mine-waiting';
+        // while a request waits for this member to decide, or for the other to accept,
+        // or while the opener's chat is still being read (its 📎 is hidden then too).
+        const acceptsDrop = !isPeerBlocked && requestMode !== 'to-me' && requestMode !== 'mine-waiting' && requestMode !== 'mine-loading';
 
         return (
             <div

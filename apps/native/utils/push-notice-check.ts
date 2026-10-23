@@ -105,12 +105,10 @@ export const VAULT_NOTICE_WORDS = {
 } as const;
 
 /**
- * The fixed words of a notice the app writes in a push's place, in the member's language: its kind's sentence (core
- * PUSH_NOTICE_KINDS), or the general one for a kind this build doesn't know, or none. What a push came with is checked
- * against the English (pushNoticeWords), which is what a server sends.
+ * The general words of a notice the app writes in a push's place, in the member's language, for a push that names no
+ * kind or one this build doesn't know. A kind's own are core's pushNoticeWords(kind), in the app's language too.
  */
-function noticeWordsShown(kind: PushNoticeKind | null): { title: string; body: string } {
-    if (kind) return { title: PUSH_NOTICE_TITLE, body: t(PUSH_NOTICE_KINDS[kind].body) };
+function generalNoticeWords(): { title: string; body: string } {
     return { title: PUSH_NOTICE_TITLE, body: t(UNSIGNED_NOTICE_WORDS.body) };
 }
 
@@ -377,11 +375,13 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             const checked = await checkSigned(notice, ctx);
             if (checked.ok) {
                 if (!(await noteOnce(ctx.storage, 'shown', checked.id, checked.sentAt, nowSeconds(ctx)))) return drop('repeated');
-                // A kind this build doesn't know has no words here: the general ones.
-                const words = checked.kind ? pushNoticeWords(checked.kind) : UNSIGNED_NOTICE_WORDS;
+                // A kind this build doesn't know has no words here: the general ones. Both in the app's language, which a
+                // server sends in when the phone registered with it; other words (an older server's English, or a
+                // language changed since) are replaced by the same sentence in it.
+                const words = checked.kind ? pushNoticeWords(checked.kind) : generalNoticeWords();
                 if (checked.kind && n.title === words.title && n.body === words.body) return { kind: 'show' };
                 // The words aren't signed: shown with the kind's, and the notice kept, so a tap on it opens as this would.
-                return { kind: 'replace', ...noticeWordsShown(checked.kind), data: { ...notice, ...LOCAL_NOTICE_DATA } };
+                return { kind: 'replace', ...words, data: { ...notice, ...LOCAL_NOTICE_DATA } };
             }
             // Signed by no community this phone pinned: from one it sent its token to but hasn't learnt the key of yet,
             // perhaps, so it goes as an unsigned push would below. Any other refusal is final.
@@ -397,7 +397,7 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
         const pins = await readPushPins(ctx.storage);
         if (pins.unpinnedRegistered.length === 0) return drop(notice ? 'other-community' : 'unsigned');
         const named = asObject(n.data)?.k;
-        return { kind: 'replace', ...noticeWordsShown(isPushNoticeKind(named) ? named : null), data: { ...LOCAL_NOTICE_DATA } };
+        return { kind: 'replace', ...(isPushNoticeKind(named) ? pushNoticeWords(named) : generalNoticeWords()), data: { ...LOCAL_NOTICE_DATA } };
     } catch (e) {
         console.warn('[Push] Could not check a notification', e);
         return drop('unreadable');

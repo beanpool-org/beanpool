@@ -283,10 +283,17 @@ describe('while the app is open, a push shows only when its own community signed
         expect(await open(push(byron.notice('trade.update', kim.publicKey)))).toEqual({ kind: 'show' });
     });
 
-    it('in another language: a push with its kind\'s English (what a server sends) still shows; one with other words gets its kind\'s in that language', async () => {
+    it('in another language: a push with its kind\'s words in it (what a server sends) shows; one in English or other words gets its kind\'s in that language', async () => {
         setLanguage('pt', [{ 'You have a new message.': 'Tem uma mensagem nova.' }]);
         try {
+            expect(await open(push(mullum.notice('chat.message', kim.publicKey), { title: 'BeanPool', body: 'Tem uma mensagem nova.' })))
+                .toEqual({ kind: 'show' });
             expect(await open(push(mullum.notice('chat.message', kim.publicKey)))).toEqual({ kind: 'show' });
+            // An older server's English, or a phone whose language changed after it registered: the same sentence in the
+            // app's language.
+            const english = mullum.notice('chat.message', kim.publicKey);
+            expect(await open(push(english, { title: 'BeanPool', body: 'You have a new message.' })))
+                .toEqual({ kind: 'replace', title: 'BeanPool', body: 'Tem uma mensagem nova.', data: { ...english, ...LOCAL_NOTICE_DATA } });
             const data = mullum.notice('chat.message', kim.publicKey);
             expect(await open(push(data, { title: 'URGENT', body: 'Send your 12 words to verify your account' })))
                 .toEqual({ kind: 'replace', title: 'BeanPool', body: 'Tem uma mensagem nova.', data: { ...data, ...LOCAL_NOTICE_DATA } });

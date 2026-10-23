@@ -49,7 +49,13 @@ export function NodeIdentityPanel({
         return () => { mounted = false; };
     }, [activeNode.url]);
 
-    // Coordinates & Service radius
+    // Coordinates & Service radius. The area comes from the node config read, and only from an answer that says it (a node
+    // always does, null for none): the diagnostics carry no place, so until then the pin is unset, and a Save sent
+    // serviceRadius: null, which clears the node's. Until it loads, or if it can't, the pin, the search and the radius are
+    // closed and Save leaves the area out. The Leaflet handlers, set once, read it through the ref.
+    const [area, setArea] = useState<'loading' | 'loaded' | 'failed'>('loading');
+    const areaRef = useRef(area);
+    areaRef.current = area;
     const [lat, setLat] = useState<number | null>(() => (diag as any)?.location?.lat ?? null);
     const [lng, setLng] = useState<number | null>(() => (diag as any)?.location?.lng ?? null);
     const [radiusKm, setRadiusKm] = useState<number>(0);
@@ -63,7 +69,11 @@ export function NodeIdentityPanel({
     const lookupRef = useRef<AddressLookup | null>(null);
     const searchWrapperRef = useRef<HTMLDivElement>(null);
 
-    // Directory publishing flags
+    // Directory publishing flags. They come from the node config read, and only from an answer that carries them: a private
+    // preview answers anyone it doesn't give the whole config the service area alone, and the defaults below saved back
+    // switched "Share Location & Radius" on again. Until they load, or if they can't, the switches and the schedule are
+    // closed and Save leaves them all out, as it does the contacts.
+    const [directory, setDirectory] = useState<'loading' | 'loaded' | 'failed'>('loading');
     const [publishLocation, setPublishLocation] = useState(true);
     const [publishMembers, setPublishMembers] = useState(true);
     // Off unless the node says the owner turned each on: a contact is published only by an owner's choice.
@@ -129,26 +139,33 @@ export function NodeIdentityPanel({
                 }).catch(() => null);
                 if (configRes && configRes.ok && mounted) {
                     const cfg = await configRes.json().catch(() => ({}));
-                    if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {
+                    if (cfg.serviceRadius === null) {
+                        setArea('loaded');
+                    } else if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {
                         const km = Number(cfg.serviceRadius.radiusKm);
                         setRadiusKm(!isNaN(km) && km >= 0 ? km : 0);
-                        if (cfg.serviceRadius.lat != null) {
-                            const parsedLat = Number(cfg.serviceRadius.lat);
-                            if (!isNaN(parsedLat)) setLat(parsedLat);
-                        }
-                        if (cfg.serviceRadius.lng != null) {
-                            const parsedLng = Number(cfg.serviceRadius.lng);
-                            if (!isNaN(parsedLng)) setLng(parsedLng);
-                        }
+                        const parsedLat = cfg.serviceRadius.lat != null ? Number(cfg.serviceRadius.lat) : NaN;
+                        const parsedLng = cfg.serviceRadius.lng != null ? Number(cfg.serviceRadius.lng) : NaN;
+                        if (!isNaN(parsedLat)) setLat(parsedLat);
+                        if (!isNaN(parsedLng)) setLng(parsedLng);
+                        // An area with no centre it can read is not the node's to write back.
+                        setArea(!isNaN(parsedLat) && !isNaN(parsedLng) ? 'loaded' : 'failed');
+                    } else {
+                        setArea('failed');
                     }
-                    if (cfg.publishLocation !== undefined) setPublishLocation(Boolean(cfg.publishLocation));
-                    if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
-                    setPublishContactEmail(cfg.publishContactEmail === true);
-                    setPublishContactPhone(cfg.publishContactPhone === true);
-                    if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
-                    if (cfg.directoryPushIntervalHours !== undefined) {
-                        const parsedHours = Number(cfg.directoryPushIntervalHours);
-                        setDirectoryPushIntervalHours(!isNaN(parsedHours) ? parsedHours : 12);
+                    if (cfg.publishLocation !== undefined) {
+                        setPublishLocation(Boolean(cfg.publishLocation));
+                        if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
+                        setPublishContactEmail(cfg.publishContactEmail === true);
+                        setPublishContactPhone(cfg.publishContactPhone === true);
+                        if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
+                        if (cfg.directoryPushIntervalHours !== undefined) {
+                            const parsedHours = Number(cfg.directoryPushIntervalHours);
+                            setDirectoryPushIntervalHours(!isNaN(parsedHours) ? parsedHours : 12);
+                        }
+                        setDirectory('loaded');
+                    } else {
+                        setDirectory('failed');
                     }
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);
@@ -166,6 +183,9 @@ export function NodeIdentityPanel({
                             if (typeof knocks.open === 'number') setOpenKnocks(knocks.open);
                         }
                     }
+                } else if (mounted) {
+                    setDirectory('failed');
+                    setArea('failed');
                 }
             } catch (err) {
                 console.warn('Failed to load initial node identity config:', err);
@@ -228,6 +248,7 @@ export function NodeIdentityPanel({
             }).addTo(map);
 
             map.on('click', (e: L.LeafletMouseEvent) => {
+                if (areaRef.current !== 'loaded') return;
                 const newLat = parseFloat(e.latlng.lat.toFixed(6));
                 const newLng = parseFloat(e.latlng.lng.toFixed(6));
                 setLat(newLat);
@@ -268,6 +289,8 @@ export function NodeIdentityPanel({
                     map.setView(pos, 10);
                 } catch {}
             }
+            if (area === 'loaded') markerRef.current?.dragging?.enable();
+            else markerRef.current?.dragging?.disable();
 
             if (radiusKm > 0) {
                 if (circleRef.current) {
@@ -300,7 +323,7 @@ export function NodeIdentityPanel({
                 circleRef.current = null;
             }
         }
-    }, [lat, lng, radiusKm, nodeIcon]);
+    }, [lat, lng, radiusKm, nodeIcon, area]);
 
     // The shared Nominatim lookup (debounce, abort, 1 req/s floor, cache); disposed on unmount so no timer or
     // request outlives the panel. A failed search just stops the spinner and keeps the last list, as before.
@@ -354,6 +377,7 @@ export function NodeIdentityPanel({
     };
 
     const handleSelectLocation = (item: AddressResult) => {
+        if (area !== 'loaded') return;
         const itemLat = item.lat;
         const itemLng = item.lng;
         setLat(itemLat);
@@ -434,15 +458,18 @@ export function NodeIdentityPanel({
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
-                    publishLocation,
-                    publishMembers,
-                    publishContactEmail,
-                    publishContactPhone,
-                    publishHealth,
-                    directoryPushIntervalHours,
-                    serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
-                        ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
-                        : null,
+                    // Only settings the node gave: switches that never loaded would write the form's defaults over its own.
+                    ...(directory === 'loaded'
+                        ? { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, directoryPushIntervalHours }
+                        : {}),
+                    // Only an area the node gave: null clears the node's, and an unset pin that never loaded would send it.
+                    ...(area === 'loaded'
+                        ? {
+                            serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
+                                ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
+                                : null,
+                        }
+                        : {}),
                     // Only to a node that has the setting; it keeps what it had when this is left out.
                     ...(acceptKnocks === null ? {} : { acceptKnocks }),
                 }),
@@ -536,6 +563,11 @@ export function NodeIdentityPanel({
                     <label htmlFor="location-search" className="block text-xs font-bold text-nature-300 mb-1">
                         Operating Region
                     </label>
+                    {area === 'failed' && (
+                        <p id="area-not-loaded" role="status" className="text-[11px] text-amber-300 m-0 leading-normal">
+                            Couldn&apos;t load the service area from the node, so Save leaves it as it is. Reload to change it.
+                        </p>
+                    )}
                     <div ref={searchWrapperRef} className="relative search-wrapper">
                         <div className="relative">
                             <input
@@ -571,7 +603,8 @@ export function NodeIdentityPanel({
                                 }}
                                 placeholder="Search for a location..."
                                 autoComplete="off"
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 pr-10"
+                                disabled={area !== 'loaded'}
+                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 pr-10 disabled:opacity-50"
                             />
                             {searching && (
                                 <span className="absolute right-3 top-2.5 text-nature-400 text-xs animate-spin">
@@ -646,7 +679,8 @@ export function NodeIdentityPanel({
                             value={radiusKm}
                             aria-label="Service radius slider in kilometers"
                             onChange={(e) => setRadiusKm(Number(e.target.value))}
-                            className="flex-1 accent-terra-500 cursor-pointer h-2 bg-nature-950 rounded-lg appearance-none"
+                            disabled={area !== 'loaded'}
+                            className="flex-1 accent-terra-500 cursor-pointer h-2 bg-nature-950 rounded-lg appearance-none disabled:opacity-50"
                         />
                         <div className="flex items-center gap-2 shrink-0">
                             <input
@@ -662,7 +696,8 @@ export function NodeIdentityPanel({
                                     setRadiusKm(v);
                                 }}
                                 placeholder="km"
-                                className="w-20 bg-nature-950 border border-nature-700 rounded-xl px-2.5 py-1.5 text-center text-xs text-white font-mono focus:outline-none focus:border-terra-500"
+                                disabled={area !== 'loaded'}
+                                className="w-20 bg-nature-950 border border-nature-700 rounded-xl px-2.5 py-1.5 text-center text-xs text-white font-mono focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             />
                             <span className="text-xs text-nature-400">km</span>
                         </div>
@@ -697,6 +732,11 @@ export function NodeIdentityPanel({
                         people on the global community can find you and ask to join. The rest is up to you below; your contact email and phone
                         are not published unless you turn them on.
                     </p>
+                    {directory === 'failed' && (
+                        <p id="directory-not-loaded" role="status" className="text-[11px] text-amber-300 m-0 leading-normal">
+                            Couldn&apos;t load the directory settings from the node, so Save leaves them as they are. Reload to change them.
+                        </p>
+                    )}
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-nature-950 p-4 rounded-2xl border border-nature-800">
                         <div>
@@ -707,7 +747,8 @@ export function NodeIdentityPanel({
                                 id="directory-push-interval"
                                 value={directoryPushIntervalHours}
                                 onChange={(e) => setDirectoryPushIntervalHours(Number(e.target.value))}
-                                className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500"
+                                disabled={directory !== 'loaded'}
+                                className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             >
                                 <option value={0}>Never (Disabled)</option>
                                 <option value={1}>Every 1 hour</option>
@@ -754,7 +795,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishLocation}
                                     onChange={(e) => setPublishLocation(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>📍 Share Location &amp; Radius</span>
                             </label>
@@ -770,7 +812,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishMembers}
                                     onChange={(e) => setPublishMembers(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>👥 Share Member Count</span>
                             </label>
@@ -786,7 +829,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishContactEmail}
                                     onChange={(e) => setPublishContactEmail(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>📧 Share Email in Directory</span>
                             </label>
@@ -802,7 +846,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishContactPhone}
                                     onChange={(e) => setPublishContactPhone(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>📞 Share Phone in Directory</span>
                             </label>
@@ -818,7 +863,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishHealth}
                                     onChange={(e) => setPublishHealth(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>🖥️ Share Node Health &amp; Version</span>
                             </label>

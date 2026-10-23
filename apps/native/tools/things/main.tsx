@@ -37,7 +37,8 @@ export function Main({ host }: ThingsScreenProps) {
                 <ToolButtons>
                     <ToolButton text={t('Add a thing')} primary onPress={() => host.navigate('edit')} testID="things-add" />
                 </ToolButtons>
-                <ToolNote tone={room > 0 ? undefined : 'warning'} text={room > 0 ? shedRoomLine(room) : shedFullLine()} testID="things-room" />
+                {/* A standing line, not news: no tone, so no live region (a refusal is said where it happens). */}
+                <ToolNote text={room > 0 ? shedRoomLine(room) : shedFullLine()} testID="things-room" />
                 {things.length === 0 ? (
                     <ToolEmpty icon="🧰" text={t("Nothing here yet. Add the first thing you'd lend: a drill, a ladder, a tent.")} testID="things-empty" />
                 ) : (

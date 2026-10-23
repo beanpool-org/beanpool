@@ -178,15 +178,21 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const copy: PhoneToolCopy = useMemo(() => ({ manifest, owner: { kind: 'member', publicKey: owner }, url }), [manifest, owner, url]);
 
     /**
-     * What a sync with the server did, told to every open screen of the tool (none open: the store already has it): the
-     * server's copy taken (the document drawn again, its reminders from it), the copy switched off elsewhere (the
-     * setting off and the line once), or a server that keeps no copies yet. And, whatever it did, the most the server
-     * said it keeps of the document, when that is new: the screens' room is counted against it.
+     * The most the server said it keeps of the document, as the node copy kept it beside the setting, told to every open
+     * screen when it is new: the store's bound, and the screens' room, are counted against it.
      */
-    const heardCopy = useCallback((outcome: ToolCopyOutcome) => {
+    const heardMax = useCallback(() => {
         void readToolSettings(owner, manifest.id, url).then((s) => {
             if (s.nodeMax !== settingsRef.current.nodeMax) tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeMax: s.nodeMax } });
         }).catch(() => {});
+    }, [owner, manifest.id, url, shareKey]);
+    /**
+     * What a sync with the server did, told to every open screen of the tool (none open: the store already has it): the
+     * server's copy taken (the document drawn again, its reminders from it), the copy switched off elsewhere (the
+     * setting off and the line once), or a server that keeps no copies yet. And, whatever it did, its bound (heardMax).
+     */
+    const heardCopy = useCallback((outcome: ToolCopyOutcome) => {
+        heardMax();
         if (outcome === 'taken') {
             void readToolDoc(owner, manifest).then((read) => {
                 tellOpenScreens(shareKey, null, { doc: read.doc, stored: read.stored });
@@ -197,7 +203,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         } else if (outcome === 'older-node') {
             tellOpenScreens(shareKey, null, { copyNote: 'older-node' });
         }
-    }, [owner, manifest, shareKey, reschedule, url]);
+    }, [owner, manifest, shareKey, reschedule, heardMax]);
 
     // The tool's open: once, from its first screen, after the phone's copy and settings are read.
     useEffect(() => {
@@ -211,6 +217,8 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const switchCopy = useCallback(async (on: boolean) => {
         setCopyRound({ busy: true, failed: null });
         const done = await switchToolCopy(copy, on).catch(() => 'failed' as const);
+        // Its answers say the server's bound too, whether or not it switched.
+        heardMax();
         if (done === 'on' || done === 'off') {
             setCopyRound({ busy: false, failed: null });
             tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeCopy: done === 'on' }, copyNote: null });
@@ -219,7 +227,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         } else {
             setCopyRound({ busy: false, failed: done });
         }
-    }, [copy, shareKey, heardCopy]);
+    }, [copy, shareKey, heardCopy, heardMax]);
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {

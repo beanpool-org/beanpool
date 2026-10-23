@@ -2895,3 +2895,347 @@ describe('Home in the member\'s language: every line a card draws from lib/home-
         expect(screen.getByTestId('home-card-community')).toHaveTextContent('81 membros · 23 trocas este mês.');
     });
 });
+
+describe('the web app draws the cards real content (DESIGN-home-wide-and-content-fable.md §2, slice W4)', () => {
+    let pageWidth = 0;
+    let cardWidth = 0;
+    let measured: { mockRestore(): void } | null = null;
+    let resized: Array<() => void> = [];
+
+    beforeEach(() => {
+        pageWidth = 0;
+        cardWidth = 0;
+        resized = [];
+        measured = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+            const tid = this.getAttribute('data-testid') ?? '';
+            if (tid === 'home-page') return pageWidth;
+            if (tid.startsWith('home-card-')) return cardWidth;
+            return 0;
+        });
+        vi.stubGlobal('ResizeObserver', class {
+            constructor(cb: () => void) { resized.push(cb); }
+            observe() {}
+            disconnect() {}
+        });
+    });
+
+    afterEach(() => {
+        measured?.mockRestore();
+        backToEnglish();
+    });
+
+    const W4_CARDS: HomeAnswer['cards'] = {
+        deals: {
+            open: 2,
+            waiting: 1,
+            waitingOnMe: { txId: 't1', postId: 'p1', title: 'Sourdough' },
+            items: [
+                { txId: 't1', postId: 'p1', title: 'Sourdough', with: 'Ana', waitsOnMe: true, at: new Date(Date.now() - 2 * 3600_000).toISOString() },
+                { txId: 't2', postId: 'p2', title: 'Mend clothes', with: 'Kofi', waitsOnMe: false, at: new Date(Date.now() - 24 * 3600_000).toISOString() },
+            ],
+        },
+        enterprise: {
+            id: 'ent-1',
+            name: 'Mullum Ceramics',
+            requests: 3,
+            others: 1,
+            lifecycle: 'ongoing',
+            keepers: 3,
+            balance: 340,
+            month: { trades: 5, in: 120, out: 60 },
+            latest: { amount: 12, at: new Date(Date.now() - 2 * 3600_000).toISOString(), kind: 'member', who: 'Ana' },
+        },
+        decide: {
+            open: 1,
+            soonestClosesAt: new Date(Date.now() + 24 * 3600_000).toISOString(),
+            polls: 1,
+            pollsMore: false,
+            items: [
+                { id: 'dec-1', title: 'Compost bay', closesAt: new Date(Date.now() + 9 * 3600_000).toISOString(), voted: false },
+            ],
+            poll: { id: 'pol-1', title: 'Market on Sundays?', closesAt: new Date(Date.now() + 48 * 3600_000).toISOString() },
+        },
+        groups: {
+            items: [
+                { id: 'g1', kind: 'group', name: 'Garden Group', unread: 4, muted: false, last: { who: 'Ana', at: new Date(Date.now() - 2 * 3600_000).toISOString(), text: 'Who has a ladder?' } },
+                { id: 'g2', kind: 'group', name: 'Tool Library', unread: 0, muted: false, last: null },
+            ],
+            total: 2,
+        },
+        pulse: {
+            items: [
+                { id: 'u1', title: 'How our LETS began', thumbnailUrl: 'http://example.com/p1.jpg', platform: 'peertube', callsign: 'River Folk', category: 'commons', url: null, publishedAt: new Date(Date.now() - 3 * 3600_000).toISOString() },
+                { id: 'u2', title: 'Why a town needs money', thumbnailUrl: 'http://example.com/p2.jpg', platform: 'youtube', callsign: 'Kofi', category: 'economy', url: null, publishedAt: new Date(Date.now() - 24 * 3600_000).toISOString() },
+                { id: 'u3', title: 'Seed saving notes', thumbnailUrl: null, platform: 'peertube', callsign: 'Ana', category: 'garden', url: null, publishedAt: new Date(Date.now() - 48 * 3600_000).toISOString() },
+                { id: 'u4', title: 'Local solar harvest', thumbnailUrl: null, platform: 'youtube', callsign: 'Sun Works', category: 'energy', url: null, publishedAt: new Date(Date.now() - 72 * 3600_000).toISOString() },
+            ],
+        },
+        beans: {
+            balance: -35,
+            room: 165,
+            tier: 'Resident',
+            activated: true,
+            frozen: false,
+            month: { trades: 3, in: 40, out: 25, fees: 0, more: false },
+        },
+        community: {
+            name: 'Mullumbimby',
+            members: 81,
+            joined7d: 4,
+            tradesThisMonth: 23,
+            commonsPot: 310,
+            listings: 37,
+            eventsSoon: 3,
+        },
+        market: {
+            items: [
+                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: 'http://example.com/m1.jpg', distanceKm: 2 },
+                { id: 'm2', type: 'need', title: 'Ride to Lismore', category: 'rides', credits: 0, photoUrl: null, distanceKm: 5 },
+                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', credits: 6, photoUrl: 'http://example.com/m3.jpg', distanceKm: 1 },
+                { id: 'm4', type: 'offer', title: 'Mend clothes', category: 'skills', credits: 20, photoUrl: null, distanceKm: 3 },
+            ],
+            total14d: 4,
+            more: false,
+        },
+    };
+
+    it('every new field renders across all cards', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, W4_CARDS)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+
+        // Deals
+        const deals = await screen.findByTestId('home-card-deals');
+        expect(deals).toHaveTextContent('Sourdough · with Ana');
+        expect(deals).toHaveTextContent('waiting on you');
+        expect(deals).toHaveTextContent('2h ago');
+        expect(deals).toHaveTextContent('Mend clothes · with Kofi');
+        expect(deals).toHaveTextContent('waiting on them');
+        expect(deals).toHaveTextContent('1d ago');
+        expect(within(deals).getByRole('button', { name: /All deals/ })).toBeInTheDocument();
+
+        // Enterprise
+        const ent = screen.getByTestId('home-card-enterprise');
+        expect(ent).toHaveTextContent('Mullum Ceramics · enterprise');
+        expect(ent).toHaveTextContent('Balance 340 Beans · 3 keepers');
+        expect(ent).toHaveTextContent('This month: 5 trades · +120 in · −60 out');
+        expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');
+        expect(ent).toHaveTextContent('3 requests to approve');
+        expect(ent).toHaveTextContent('and 1 more you keep');
+
+        // Decide
+        const decide = screen.getByTestId('home-card-decide');
+        expect(decide).toHaveTextContent('Compost bay');
+        expect(decide).toHaveTextContent('Not yet');
+        expect(decide).toHaveTextContent('Poll: Market on Sundays?');
+        expect(within(decide).getByRole('button', { name: /Decide/ })).toBeInTheDocument();
+
+        // Groups
+        const groups = screen.getByTestId('home-card-groups');
+        expect(groups).toHaveTextContent('Garden Group · 4 new');
+        expect(groups).toHaveTextContent('Ana, 2h ago: Who has a ladder?');
+        expect(groups).toHaveTextContent('Tool Library · quiet');
+
+        // Pulse
+        const pulse = screen.getByTestId('home-card-pulse');
+        expect(pulse).toHaveTextContent('How our LETS began');
+        expect(pulse).toHaveTextContent('by River Folk · 3h ago');
+        expect(pulse).toHaveTextContent('Why a town needs money');
+        expect(pulse).toHaveTextContent('by Kofi · 1d ago');
+        expect(pulse).toHaveTextContent('Seed saving notes');
+        expect(pulse).toHaveTextContent('by Ana · 2d ago');
+        expect(pulse).toHaveTextContent('Local solar harvest');
+        expect(pulse).toHaveTextContent('by Sun Works · 3d ago');
+
+        // Beans
+        const beans = screen.getByTestId('home-card-beans');
+        expect(beans).toHaveTextContent('−35 Beans · room to spend 165');
+        expect(beans).toHaveTextContent('This month: 3 trades · +40 in · −25 out');
+        expect(beans).toHaveTextContent('Resident');
+
+        // Community
+        const comm = screen.getByTestId('home-card-community');
+        expect(comm).toHaveTextContent('81');
+        expect(comm).toHaveTextContent('4');
+        expect(comm).toHaveTextContent('23');
+        expect(comm).toHaveTextContent('310');
+        expect(comm).toHaveTextContent('37');
+        expect(comm).toHaveTextContent('3');
+    });
+
+    it('rows under 480 px container width and tiles over', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, W4_CARDS)));
+
+        // Under 480 px: narrow rows
+        pageWidth = 360;
+        cardWidth = 328;
+        const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+
+        const marketCardNarrow = screen.getByTestId('home-card-market');
+        expect(marketCardNarrow).toHaveAttribute('data-card-wide', 'false');
+        expect(within(marketCardNarrow).getByTestId('home-market-items')).toHaveAttribute('data-layout', 'rows');
+
+        const pulseCardNarrow = screen.getByTestId('home-card-pulse');
+        expect(pulseCardNarrow).toHaveAttribute('data-card-wide', 'false');
+        expect(within(pulseCardNarrow).getByTestId('home-pulse-items')).toHaveAttribute('data-layout', 'rows');
+
+        const commCardNarrow = screen.getByTestId('home-card-community');
+        expect(within(commCardNarrow).getByTestId('home-community-body')).toHaveAttribute('data-layout', 'rows');
+        expect(commCardNarrow).toHaveTextContent('81 members · 4 joined this week');
+        expect(commCardNarrow).toHaveTextContent('23 trades this month · Commons pot 310 Beans');
+        expect(commCardNarrow).toHaveTextContent('37 listings · 3 events coming up');
+
+        unmount();
+
+        // 480 px and over: wide tiles
+        pageWidth = 600;
+        cardWidth = 544;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+
+        const marketCardWide = screen.getByTestId('home-card-market');
+        expect(marketCardWide).toHaveAttribute('data-card-wide', 'true');
+        expect(within(marketCardWide).getByTestId('home-market-items')).toHaveAttribute('data-layout', 'tiles');
+
+        const pulseCardWide = screen.getByTestId('home-card-pulse');
+        expect(pulseCardWide).toHaveAttribute('data-card-wide', 'true');
+        expect(within(pulseCardWide).getByTestId('home-pulse-items')).toHaveAttribute('data-layout', 'tiles');
+
+        const commCardWide = screen.getByTestId('home-card-community');
+        expect(within(commCardWide).getByTestId('home-community-body')).toHaveAttribute('data-layout', 'tiles');
+        expect(within(commCardWide).getAllByTestId('home-community-tile')).toHaveLength(6);
+    });
+
+    it('at 320 px each card text equals before plus the new lines (nothing lost)', async () => {
+        pageWidth = 320;
+        cardWidth = 288;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, W4_CARDS)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+
+        // Deals card contains both deal items and All deals link
+        const deals = screen.getByTestId('home-card-deals');
+        expect(deals).toHaveTextContent('Sourdough · with Ana');
+        expect(deals).toHaveTextContent('Mend clothes · with Kofi');
+        expect(deals).toHaveTextContent('All deals ›');
+
+        // Enterprise card contains name, lifecycle, balance, month, latest, requests
+        const ent = screen.getByTestId('home-card-enterprise');
+        expect(ent).toHaveTextContent('Mullum Ceramics · enterprise');
+        expect(ent).toHaveTextContent('Balance 340 Beans · 3 keepers');
+        expect(ent).toHaveTextContent('This month: 5 trades · +120 in · −60 out');
+        expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');
+        expect(ent).toHaveTextContent('3 requests to approve');
+
+        // Decide card contains decisions, poll, and link
+        const decide = screen.getByTestId('home-card-decide');
+        expect(decide).toHaveTextContent('Compost bay');
+        expect(decide).toHaveTextContent('Poll: Market on Sundays?');
+        expect(decide).toHaveTextContent('Decide ›');
+
+        // Groups card contains group names, status, and last message lines
+        const groups = screen.getByTestId('home-card-groups');
+        expect(groups).toHaveTextContent('Garden Group · 4 new');
+        expect(groups).toHaveTextContent('Ana, 2h ago: Who has a ladder?');
+        expect(groups).toHaveTextContent('Tool Library · quiet');
+
+        // Pulse card contains 4 items with byline and time
+        const pulse = screen.getByTestId('home-card-pulse');
+        expect(pulse).toHaveTextContent('How our LETS began');
+        expect(pulse).toHaveTextContent('by River Folk · 3h ago');
+        expect(pulse).toHaveTextContent('Why a town needs money');
+        expect(pulse).toHaveTextContent('See all ›');
+
+        // Beans card contains balance, room to spend, month and tier badge
+        const beans = screen.getByTestId('home-card-beans');
+        expect(beans).toHaveTextContent('−35 Beans · room to spend 165');
+        expect(beans).toHaveTextContent('This month: 3 trades · +40 in · −25 out');
+        expect(beans).toHaveTextContent('Resident');
+
+        // Community card contains members, joined this week, trades this month, Commons pot, listings, events coming up
+        const comm = screen.getByTestId('home-card-community');
+        expect(comm).toHaveTextContent('81 members · 4 joined this week');
+        expect(comm).toHaveTextContent('23 trades this month · Commons pot 310 Beans');
+        expect(comm).toHaveTextContent('37 listings · 3 events coming up');
+    });
+
+    it('navigation: listing tile opens listing, group line opens chat, Pulse tile opens Pulse, deal opens deal', async () => {
+        pageWidth = 600;
+        cardWidth = 544;
+        const nav = vi.fn();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, W4_CARDS)));
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        await screen.findByTestId('home-card-market');
+
+        // Market listing tile
+        const listing = screen.getByRole('button', { name: /Offer, Garlic/ });
+        fireEvent.click(listing);
+        expect(nav).toHaveBeenCalledWith('marketplace', 'm1');
+
+        // Group line
+        const group = screen.getByRole('button', { name: /Garden Group/ });
+        fireEvent.click(group);
+        expect(nav).toHaveBeenCalledWith('messages', 'g1');
+
+        // Pulse tile
+        const pulseTile = screen.getByRole('button', { name: /How our LETS began/ });
+        fireEvent.click(pulseTile);
+        expect(nav).toHaveBeenCalledWith('pulse');
+
+        // Deal
+        const deal = screen.getByRole('button', { name: /Sourdough · with Ana/ });
+        fireEvent.click(deal);
+        expect(nav).toHaveBeenCalledWith('marketplace', 'p1');
+
+        // Decide
+        const decide = screen.getByRole('button', { name: /Compost bay/ });
+        fireEvent.click(decide);
+        expect(nav).toHaveBeenCalledWith('projects');
+    });
+
+    it('images lazy with at most 8 eager across the page', async () => {
+        pageWidth = 1400;
+        cardWidth = 427;
+        // Search card with 4 items with images, plus Market with 2 images, Pulse with 2 images = 8 images
+        const cardsWithManyImages: HomeAnswer['cards'] = {
+            ...W4_CARDS,
+            'search-custom': {
+                q: 'bike',
+                kind: 'any',
+                category: null,
+                km: null,
+                items: [
+                    { id: 's1', type: 'offer', title: 'Bike 1', category: 'transport', photoUrl: 'http://example.com/s1.jpg' },
+                    { id: 's2', type: 'offer', title: 'Bike 2', category: 'transport', photoUrl: 'http://example.com/s2.jpg' },
+                    { id: 's3', type: 'offer', title: 'Bike 3', category: 'transport', photoUrl: 'http://example.com/s3.jpg' },
+                    { id: 's4', type: 'offer', title: 'Bike 4', category: 'transport', photoUrl: 'http://example.com/s4.jpg' },
+                    { id: 's5', type: 'offer', title: 'Bike 5', category: 'transport', photoUrl: 'http://example.com/s5.jpg' },
+                    { id: 's6', type: 'offer', title: 'Bike 6', category: 'transport', photoUrl: 'http://example.com/s6.jpg' },
+                ],
+                more: false,
+            },
+        };
+        const layoutWithSearch: HomeLayoutV2 = {
+            v: 2,
+            cards: [
+                { id: 'market', type: 'market' },
+                { id: 'pulse', type: 'pulse' },
+                { id: 'search-custom', type: 'search', settings: { q: 'bike', kind: 'any' } },
+                { id: 'community', type: 'community' },
+            ],
+            dismissed: {},
+            updatedAt: null,
+        };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: layoutWithSearch }, cardsWithManyImages)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+
+        const allImgs = Array.from(document.querySelectorAll('img')).filter(img => !img.closest('[data-testid="lobby-join-card"]'));
+        expect(allImgs.length).toBeGreaterThan(8);
+        const eagerImgs = allImgs.filter(img => img.getAttribute('loading') === 'eager');
+        const lazyImgs = allImgs.filter(img => img.getAttribute('loading') === 'lazy');
+        expect(eagerImgs.length).toBe(8);
+        expect(lazyImgs.length).toBe(allImgs.length - 8);
+    });
+});
+

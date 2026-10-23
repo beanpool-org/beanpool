@@ -3373,6 +3373,41 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/post/[id]', params: { id: 'poll1' } });
     });
 
+    it('decide card: draws "N polls open" line and links to Market Polls when more than one poll is open alongside first poll', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                decide: {
+                    open: 1,
+                    soonestClosesAt: iso(now + 9 * H),
+                    polls: 3,
+                    pollsMore: false,
+                    items: [
+                        { id: 'd1', title: 'Compost bay', closesAt: iso(now + 9 * H), voted: false },
+                    ],
+                    poll: { id: 'poll1', title: 'Market on Sundays?', closesAt: iso(now + 24 * H) },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-decide"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Poll: Market on Sundays?');
+        expect(card.textContent).toContain('3 polls open');
+
+        const pollsRow = document.querySelector('[data-testid="home-decide-polls"]') as HTMLElement;
+        expect(pollsRow).not.toBeNull();
+        expect(pollsRow.getAttribute('aria-label')).toBe('3 polls open. Opens the polls, in the Market.');
+
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { pollsRow.click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { filter: 'polls' } });
+    });
+
     it('groups card: draws each group\'s last line, and a locked group line opens the chat', async () => {
         const now = Date.now();
         const base = localMember();

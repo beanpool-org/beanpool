@@ -389,6 +389,9 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
 /** One line per place (utils/home-cards.ts `decideLines`): Decisions open Commons → Decide, polls the Market's Polls. */
 export function DecideBody({ card, features, colors, now }: { card: NonNullable<HomeCards['decide']>; features: HomeAnswer['features']; colors: AppColors; now: number }) {
     if ((card.items && card.items.length > 0) || card.poll) {
+        const pollsLine = (card.polls > 1 || card.pollsMore || (!card.poll && card.polls > 0))
+            ? decideLines(card, features, now).find(l => l.id === 'polls')
+            : null;
         return (
             <>
                 {(card.items || []).slice(0, 3).map(item => {
@@ -423,6 +426,16 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
                         })}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: card.poll!.id } })}
                         testID="home-decide-poll"
+                    />
+                )}
+                {pollsLine && (
+                    <HomeRow
+                        key="polls"
+                        colors={colors}
+                        text={pollsLine.text}
+                        a11y={pollsLine.a11y}
+                        onPress={() => router.push(pollsLine.href)}
+                        testID="home-decide-polls"
                     />
                 )}
                 {decideOnNode(features) && (card.items?.length ?? 0) > 0 && (

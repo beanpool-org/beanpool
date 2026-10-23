@@ -96,6 +96,43 @@ export function savesAnything(save: FaceSave): boolean {
     return Object.keys(save.face).length > 0 || Object.keys(save.shop).length > 0;
 }
 
+/** The form as read and as typed, held together so a read and a Save each change both at once. */
+export interface FaceState {
+    before: FaceForm;
+    draft: FaceForm;
+}
+
+const FACE_WORDS = ['name', 'purpose', 'about', 'kind', 'howToDeal'] as const;
+
+/**
+ * The form when its enterprise is read again: the console reads it on every focus and after every action on it
+ * (Featured, a keeper request, a season control), not only after this form's Save. Each field the keeper hasn't
+ * changed since the last read takes the node's; what they typed or picked stays, still to be saved.
+ */
+export function faceOnRead(form: FaceState, read: FaceForm): FaceState {
+    const draft = { ...form.draft };
+    for (const k of FACE_WORDS) if (form.draft[k] === form.before[k]) (draft as Record<string, unknown>)[k] = read[k];
+    return { before: read, draft };
+}
+
+/**
+ * The form once `sent` was saved (`typed` the form as Save was pressed): what was sent is what the node holds now, and
+ * each field of it the keeper hasn't changed since is that, so the next read takes the node's (faceOnRead). A logo sent
+ * is the node's: the form holds no picture to send again. A field not sent stays as typed.
+ */
+export function faceAfterSave(form: FaceState, typed: FaceForm, sent: FaceSave): FaceState {
+    const stored: Partial<FaceForm> = {};
+    if (sent.face.name !== undefined) stored.name = sent.face.name;
+    if (sent.face.purpose !== undefined) stored.purpose = sent.face.purpose;
+    if (sent.face.about !== undefined) stored.about = sent.face.about;
+    if (sent.shop.kind !== undefined) stored.kind = sent.shop.kind;
+    if (sent.shop.howToDeal !== undefined) stored.howToDeal = sent.shop.howToDeal ?? '';
+    const draft = { ...form.draft };
+    for (const k of FACE_WORDS) if (k in stored && form.draft[k] === typed[k]) (draft as Record<string, unknown>)[k] = stored[k];
+    if (sent.face.avatar !== undefined && form.draft.logo === typed.logo) draft.logo = null;
+    return { before: { ...form.before, ...stored }, draft };
+}
+
 /** The shelf as the console draws it. */
 export interface FeaturedShelf {
     /** Its Offers in its shop that may hold a place: live, out on loan or in a deal, or paused. */

@@ -5,7 +5,8 @@
  *
  * - The face: any keeper its About, logo, kind and how we deal; its lead its name and what it is for, which every other
  *   keeper reads with the sentence why (never hidden without saying). One Save sends what changed; the node's refusal
- *   shows in its own words, and no answer says so, keeping what was typed.
+ *   shows in its own words, and no answer says so, keeping what was typed. The console reads the enterprise again after
+ *   any action on it, and what was typed and not saved stays through that (faceOnRead).
  * - Featured: each of its live Offers in its shop, on the shelf or off it with one tap (six at most, said once when
  *   full); its live Offers not in its shop yet go in with one tap; no shop yet, one tap opens it.
  *
@@ -23,7 +24,7 @@ import { AvatarPickerSheet } from '../AvatarPickerSheet';
 import { ToolButton, ToolButtons, ToolField, ToolInput, ToolNote, ToolRow, ToolSection } from '../../tools/ui';
 import { ShopKindSheet } from '../shop/ShopSheets';
 import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, featureOffer, shopKindLabel, type ShopListing } from '../../utils/shop';
-import { faceFormOf, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm } from '../../utils/enterprise-manage';
+import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm, type FaceSave, type FaceState } from '../../utils/enterprise-manage';
 
 /** Its face: one form, one Save. `onSaved` reads the enterprise again once anything was written. */
 export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }: {
@@ -37,9 +38,12 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
 }) {
     const { colors } = useTheme();
     const read = useMemo(() => faceFormOf(detail), [detail]);
-    const [before, setBefore] = useState<FaceForm>(read);
-    const [draft, setDraft] = useState<FaceForm>(read);
-    useEffect(() => { setBefore(read); setDraft(read); }, [read]);
+    const [form, setForm] = useState<FaceState>(() => ({ before: read, draft: read }));
+    // Every read of the enterprise, not only this form's Save's: what the keeper typed and hasn't saved stays.
+    useEffect(() => { setForm((f) => faceOnRead(f, read)); }, [read]);
+    const { before, draft } = form;
+    // The logo just saved, shown until the enterprise is read with its new one (`over`: its logo when it was sent).
+    const [sentLogo, setSentLogo] = useState<{ uri: string; over: string | null | undefined } | null>(null);
     const [busy, setBusy] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -48,9 +52,10 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
     const [choosingKind, setChoosingKind] = useState(false);
     const plan = faceSaveOf(before, draft, lead);
     const name = typeof (detail as Record<string, unknown> | null)?.name === 'string' ? (detail as Record<string, string>).name : '';
+    const logoShown = draft.logo ?? (sentLogo && sentLogo.over === logoUrl ? sentLogo.uri : null) ?? logoUrl ?? null;
 
     const edit = (next: Partial<FaceForm>) => {
-        setDraft((d) => ({ ...d, ...next }));
+        setForm((f) => ({ ...f, draft: { ...f.draft, ...next } }));
         setSaved(false);
         setError(null);
         setPartly(false);
@@ -58,17 +63,23 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
 
     const save = async () => {
         if (busy || !savesAnything(plan)) return;
+        const typed = draft;
         setBusy(true);
         setSaved(false);
         setError(null);
         setPartly(false);
         let faceDone = false;
+        const went = (sent: FaceSave) => {
+            setForm((f) => faceAfterSave(f, typed, sent));
+            if (sent.face.avatar) setSentLogo({ uri: sent.face.avatar, over: logoUrl });
+        };
         try {
             if (Object.keys(plan.face).length > 0) {
                 await changeEnterpriseFace(treasury, plan.face);
                 faceDone = true;
             }
             if (Object.keys(plan.shop).length > 0) await changeEnterpriseShop(treasury, plan.shop);
+            went(plan);
             setSaved(true);
             onSaved();
         } catch (e) {
@@ -76,8 +87,8 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
             // Its face went and its shop's part didn't: the face is as typed now, and only the rest is still to save.
             if (faceDone) {
                 setPartly(true);
-                setBefore((b) => ({ ...b, name: draft.name, purpose: draft.purpose, about: draft.about }));
-                setDraft((d) => ({ ...d, logo: null }));
+                went({ face: plan.face, shop: {} });
+                onSaved();
             }
         } finally {
             setBusy(false);
@@ -101,7 +112,7 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
             )}
             <View style={styles.logoRow}>
                 <View testID="manage-face-logo-image">
-                    <MemberAvatar avatarUrl={draft.logo ?? logoUrl ?? null} pubkey={treasury} callsign={draft.name || name} size={56} />
+                    <MemberAvatar avatarUrl={logoShown} pubkey={treasury} callsign={draft.name || name} size={56} />
                 </View>
                 <View style={styles.logoText}>
                     <Text style={[styles.logoLabel, { color: colors.text.body }]}>{t('Logo')}</Text>

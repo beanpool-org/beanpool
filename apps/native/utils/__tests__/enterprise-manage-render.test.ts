@@ -485,6 +485,79 @@ for (const dark of [false, true]) {
                 expect(byId('manage-face-saved')).toBeNull();
             });
 
+            it('the enterprise read again (Put them in its shop) keeps what the keeper typed and picked; a field they left is the node\'s', async () => {
+                // Each read a new copy, as the node's JSON is; since the first, another keeper changed what it is for.
+                let reads = 0;
+                const base = community();
+                net.answer = (name, args) => {
+                    if (name !== 'getTreasuryDetail') return base(name, args);
+                    reads++;
+                    return Promise.resolve(leadsView(reads > 1 ? { purpose: 'Bread and flour for the valley' } : {}));
+                };
+                await render('console');
+                await type(byId('manage-face-about'), 'We bake on Saturdays and Wednesdays.', 'About');
+                await type(byId('manage-face-how'), 'Saturdays only.', 'how we deal');
+                await click(byId('manage-face-kind'), 'Kind');
+                await click(byId('shop-kind-pick-food'), 'the kind');
+                await click(byId('manage-face-logo'), 'Change the logo');
+                await click(byId('picker-pick'), 'a picture');
+                await click(byId('manage-shop-add'), 'Put them in its shop');
+                expect(reads, 'the console read the enterprise again').toBeGreaterThan(1);
+                expect((byId('manage-face-about') as HTMLInputElement).value).toBe('We bake on Saturdays and Wednesdays.');
+                expect((byId('manage-face-how') as HTMLInputElement).value).toBe('Saturdays only.');
+                expect(byId('manage-face-kind')?.textContent).toContain('🥕 Food from the garden or farm');
+                expect(byId('manage-face-logo-image')?.querySelector('[data-avatar="56"]')?.getAttribute('data-src')).toBe(PICKED);
+                expect((byId('manage-face-purpose') as HTMLInputElement).value).toBe('Bread and flour for the valley');
+                await click(byId('manage-face-save'), 'Save');
+                expect(writes().filter((w) => w.path !== `/api/treasury/${ENT}/shop/offers`)).toEqual([
+                    { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { about: 'We bake on Saturdays and Wednesdays.', avatar: PICKED } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food', howToDeal: 'Saturdays only.' } },
+                ]);
+            });
+
+            it('its face saved and its shop\'s part refused: the new logo shows until it is read again, and only the refused part is sent again', async () => {
+                const OLD = `${NODE}/api/members/${ENT}/avatar?v=old`;
+                const NEW = `${NODE}/api/members/${ENT}/avatar?v=new`;
+                let shopOpen = false;
+                let faceWent = false;
+                let land: ((d: unknown) => void) | null = null;
+                const base = community({}, {
+                    write: async (method, path, body) => {
+                        if (path === `/api/treasury/${ENT}/shop` && !shopOpen) throw Object.assign(new Error('Its shop is closed for now.'), { status: 409, code: 'shop_paused' });
+                        if (path === `/api/treasury/${ENT}/profile`) faceWent = true;
+                        return okWrites(method, path, body);
+                    },
+                });
+                // The read after the save is held, to land when the test says.
+                net.answer = (name, args) => {
+                    if (name !== 'getTreasuryDetail') return base(name, args);
+                    if (!faceWent) return Promise.resolve(leadsView({ avatar: OLD }));
+                    return new Promise((r) => { land = r; });
+                };
+                await render('console');
+                await click(byId('manage-face-logo'), 'Change the logo');
+                await click(byId('picker-pick'), 'a picture');
+                await click(byId('manage-face-kind'), 'Kind');
+                await click(byId('shop-kind-pick-food'), 'the kind');
+                await click(byId('manage-face-save'), 'Save');
+                expect(byId('manage-face-error')?.textContent).toBe('Its shop is closed for now.');
+                expect(byId('manage-face-partly')?.textContent).toBe('Its other changes were saved.');
+                const logo = () => byId('manage-face-logo-image')?.querySelector('[data-avatar="56"]')?.getAttribute('data-src');
+                expect(logo(), 'the logo on the node now, not its old one').toBe(PICKED);
+                expect(land, 'the enterprise is read again').not.toBeNull();
+                await act(async () => { land!(leadsView({ avatar: NEW })); });
+                await settle();
+                expect(logo()).toBe(NEW);
+                expect(byId('manage-face-kind')?.textContent).toContain('🥕 Food from the garden or farm');
+                shopOpen = true;
+                await click(byId('manage-face-save'), 'Save again');
+                expect(writes()).toEqual([
+                    { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food' } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food' } },
+                ]);
+            });
+
             it('no answer from the community says so, and keeps what was typed', async () => {
                 net.answer = community({}, { write: async () => { throw new TypeError('Network request failed'); } });
                 await render('console');

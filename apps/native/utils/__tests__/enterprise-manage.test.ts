@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../db', () => ({ signedGet: async () => ({ ok: false }), signedRequestWithMethod: async () => ({}) }));
 
-import { faceFormOf, faceSaveOf, featuredShelf, leadsIt, mayManage, refusalWords, savesAnything } from '../enterprise-manage';
+import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadsIt, mayManage, refusalWords, savesAnything } from '../enterprise-manage';
 import type { ShopListing } from '../shop';
 
 /**
@@ -57,6 +57,46 @@ describe('what one Save sends', () => {
 
     it('About emptied goes as empty words, which the node clears; a kind taken off goes as none', () => {
         expect(faceSaveOf(before, { ...before, about: '   ', kind: null }, false)).toEqual({ face: { about: '' }, shop: { kind: null } });
+    });
+});
+
+describe('the form when the enterprise is read again, and once saved', () => {
+    const before = faceFormOf(DETAIL);
+
+    it('a read keeps each field the keeper changed and takes the node\'s for the rest', () => {
+        const draft = { ...before, about: 'Saturdays and Wednesdays.', kind: 'food' as const, howToDeal: '', logo: 'data:image/jpeg;base64,AA' };
+        const read = faceFormOf({ ...DETAIL, purpose: 'Bread and flour for the valley', about: 'Someone else wrote this.' });
+        expect(faceOnRead({ before, draft }, read)).toEqual({
+            before: read,
+            draft: { ...read, about: 'Saturdays and Wednesdays.', kind: 'food', howToDeal: '', logo: 'data:image/jpeg;base64,AA' },
+        });
+        // Nothing typed: the form is the node's.
+        expect(faceOnRead({ before, draft: before }, read)).toEqual({ before: read, draft: read });
+        // What it sends is still what the keeper changed, against what the node holds now.
+        const { draft: kept } = faceOnRead({ before, draft }, read);
+        expect(faceSaveOf(read, kept, true)).toEqual({
+            face: { about: 'Saturdays and Wednesdays.', avatar: 'data:image/jpeg;base64,AA' },
+            shop: { kind: 'food', howToDeal: null },
+        });
+    });
+
+    it('once saved, what went is what the node holds: nothing is left to send, and the logo is not sent again', () => {
+        const draft = { ...before, name: ' Hill Bakery and Mill ', howToDeal: '', logo: 'data:image/jpeg;base64,AA' };
+        const sent = faceSaveOf(before, draft, true);
+        const after = faceAfterSave({ before, draft }, draft, sent);
+        expect(after.before).toEqual({ ...before, name: 'Hill Bakery and Mill', howToDeal: '' });
+        expect(after.draft).toEqual({ ...before, name: 'Hill Bakery and Mill', howToDeal: '', logo: null });
+        expect(savesAnything(faceSaveOf(after.before, after.draft, true))).toBe(false);
+    });
+
+    it('only its face went: the shop\'s part stays as typed, still to send; a field typed again while it went stays too', () => {
+        const typed = { ...before, about: 'New words.', kind: 'food' as const, logo: 'data:image/jpeg;base64,AA' };
+        const sent = faceSaveOf(before, typed, true);
+        const later = { ...typed, about: 'Newer words.' };
+        const after = faceAfterSave({ before, draft: later }, typed, { face: sent.face, shop: {} });
+        expect(after.before).toEqual({ ...before, about: 'New words.' });
+        expect(after.draft).toEqual({ ...before, about: 'Newer words.', kind: 'food', logo: null });
+        expect(faceSaveOf(after.before, after.draft, true)).toEqual({ face: { about: 'Newer words.' }, shop: { kind: 'food' } });
     });
 });
 

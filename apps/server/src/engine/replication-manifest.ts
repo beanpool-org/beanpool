@@ -462,7 +462,12 @@ export const TABLES: Record<string, TableEntry> = {
     // standby's replication token, or the community's own admin password, and nothing else (routes/backup.ts), with the
     // messages and recovery copies a standby already holds. Only members' (MEMBERS_OWN). Locked (services/push-token-seal.ts):
     // a token's id and its box, never the token, which a standby opens only once a take-over brings the key.
-    push_tokens: plain('public_key token_id token_box platform created_at registered_at updated_at', { rows: MEMBERS_OWN }),
+    push_tokens: plain('public_key token_id token_box platform created_at registered_at updated_at', { rows: MEMBERS_OWN, except: {
+        lang: {
+            reason: "the language a phone's pushes are written in, a device property the main server alone needs (Marty's M6): "
+                + 'a server that takes over writes English until each phone registers again, which it does at every start',
+        },
+    } }),
     // A day's leave statements applied, so a registration the phone sent before one, delivered late to a server that took
     // over, is refused there too (state-engine.ts registerPushToken). Its day-old rows go without tombstones, on each
     // server (state-engine.ts PUSH_LEAVE_PRUNE_SQL; the age rule). Only members' (MEMBERS_OWN).

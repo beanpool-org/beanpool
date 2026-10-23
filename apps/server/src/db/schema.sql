@@ -709,6 +709,10 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     -- The token, XChaCha20-Poly1305, bound to public_key and token_id; base64 of nonce, ciphertext and tag.
     token_box TEXT NOT NULL,
     platform TEXT DEFAULT 'ios',
+    -- The language the phone writes in, as its registration named it (one of core's LANGS, no region), so its pushes'
+    -- words are in it (state-engine.ts dispatchPushNotification; Marty's M6). NULL: English. A device property like
+    -- `platform`, erased with the row, never joined to the profile, and never copied to a standby (the manifest's except).
+    lang TEXT,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The phone's own ordering stamp for this registration (ms, never compared with this node's clock), or NULL from
     -- an app before leave statements. A leave statement removes the row only when this is not later than its own.

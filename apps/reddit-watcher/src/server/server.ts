@@ -1,10 +1,10 @@
 // The app's one endpoint: Devvit POSTs each new post and comment here (devvit.json "triggers"). Everything it decides
-// is in ../notice.ts and ../ntfy.ts; this file only wires them to Devvit's settings, Redis and fetch.
+// is in ../notice.ts, ../agent-item.ts and ../ntfy.ts; this file only wires them to Devvit's settings, Redis and fetch.
 
 import { once } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { redis, settings } from '@devvit/web/server';
-import { deliver, SEEN_S, type Deps } from '../ntfy';
+import { deliver, deliverAgent, SEEN_S, type Deps } from '../ntfy';
 
 export const NEW_ITEM = '/internal/triggers/new-item';
 
@@ -31,7 +31,8 @@ export async function onReq(req: IncomingMessage, res: ServerResponse): Promise<
     } catch {
         console.log('[reddit-watcher] a trigger request that is not JSON');
     }
-    await deliver(event, deps);
+    // The phone's notice and the inbox's item go out side by side, each bounded: neither waits on the other.
+    await Promise.all([deliver(event, deps), deliverAgent(event, deps)]);
     // A trigger's answer is an empty object (TriggerResponse); what happened is in the log line.
     writeJson(res, 200, {});
 }

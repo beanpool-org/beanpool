@@ -11,7 +11,7 @@
  * .ics) are each covered by the same tests on both sides.
  */
 
-import type { RepeatPattern } from '@beanpool/core';
+import { t, type RepeatPattern } from '@beanpool/core';
 
 /** Minutes before the start. The only values the node accepts (the shared contract). */
 export const REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
@@ -158,14 +158,14 @@ export interface ShareableEvent {
 function calendarDetails(event: ShareableEvent, link: string): string {
     return [
         event.description || '',
-        event.whenText ? `Starts ${event.whenText}` : '',
+        event.whenText ? t('Starts {when}', { when: event.whenText }) : '',
         link,
     ].filter(Boolean).join('\n\n');
 }
 
 /** A calendar entry's place: the place's name, or "Online" for an online event. */
 function calendarLocation(event: ShareableEvent): string | null {
-    if (event.online) return 'Online';
+    if (event.online) return t('Online');
     return event.placeName || null;
 }
 

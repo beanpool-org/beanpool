@@ -35,6 +35,7 @@ import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../../utils/credit-line-card';
+import { signedRequestWords } from '../../components/signed-request-lines';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -488,7 +489,7 @@ export default function LedgerScreen() {
             loadData();
         } catch (e: any) {
             hapticWarning();
-            setSendError(e.message || t('Transfer failed'));
+            setSendError(e.message ? signedRequestWords(e.message) : t('Transfer failed'));
         } finally { setSending(false); }
     };
 

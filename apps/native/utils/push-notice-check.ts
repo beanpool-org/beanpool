@@ -59,20 +59,20 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     isPushNoticeId, isPushNoticeKind, PUSH_COMMUNITY_TAG_PATTERN, PUSH_NOTICE_CLOCK_SKEW_SECONDS, PUSH_NOTICE_KINDS,
-    PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_VERSION, pushNoticeBytes, pushNoticeWords, verifyPushNotice, type PushNoticeKind,
-    type PushNoticeRefusal, type PushNoticeTab,
+    PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_TITLE, PUSH_NOTICE_VERSION, pushNoticeBytes, pushNoticeWords, t, verifyPushNotice, word,
+    type PushNoticeKind, type PushNoticeRefusal, type PushNoticeTab,
 } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { readPushPins, type PushPin, type PushPins } from './push-pins';
 import { vaultPushTokenStoreKey } from './storage-keys';
 
-/** What a tap on a notice the phone can't trust shows, once. */
+/** What a tap on a notice the phone can't trust shows, once (a word() key: components/PushNoticeWarning.tsx t()s it). */
 export const FORGED_NOTICE_LINE =
-    "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.";
+    word("That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.");
 
 /** The words shown, while the app is open, in place of an unsigned push's own, when it names no kind. */
-export const UNSIGNED_NOTICE_WORDS = { title: 'BeanPool', body: 'There is news from your community.' } as const;
+export const UNSIGNED_NOTICE_WORDS = { title: PUSH_NOTICE_TITLE, body: word('There is news from your community.') } as const;
 
 /** `data` of a notice the app posts itself: one shown in a push's place, and the sync's (sync-notices.ts). */
 export const LOCAL_NOTICE_DATA = { bpLocal: 1 } as const;
@@ -91,18 +91,26 @@ const LEDGER_MAX = 500;
  */
 export const VAULT_NOTICE_WORDS = {
     'vault-hold': {
-        title: 'Someone is getting back into your BeanPool account',
-        body: 'Someone is getting back into your BeanPool account on another device. Open BeanPool: tap "Yes, it\'s me" if it was you, or Stop if it wasn\'t.',
+        title: word('Someone is getting back into your BeanPool account'),
+        body: word('Someone is getting back into your BeanPool account on another device. Open BeanPool: tap "Yes, it\'s me" if it was you, or Stop if it wasn\'t.'),
     },
     'vault-released': {
-        title: 'Your BeanPool account was restored',
-        body: "Your BeanPool account was just restored on another device. If that wasn't you, open BeanPool now.",
+        title: word('Your BeanPool account was restored'),
+        body: word("Your BeanPool account was just restored on another device. If that wasn't you, open BeanPool now."),
     },
     'vault-replaced': {
-        title: 'Sign-in recovery moved to another account',
-        body: 'Your sign-in now protects a different BeanPool account. This one has only its 12 words.',
+        title: word('Sign-in recovery moved to another account'),
+        body: word('Your sign-in now protects a different BeanPool account. This one has only its 12 words.'),
     },
 } as const;
+
+/**
+ * The general words of a notice the app writes in a push's place, in the member's language, for a push that names no
+ * kind or one this build doesn't know. A kind's own are core's pushNoticeWords(kind), in the app's language too.
+ */
+function generalNoticeWords(): { title: string; body: string } {
+    return { title: PUSH_NOTICE_TITLE, body: t(UNSIGNED_NOTICE_WORDS.body) };
+}
 
 type VaultNoticeType = keyof typeof VAULT_NOTICE_WORDS;
 
@@ -367,11 +375,13 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             const checked = await checkSigned(notice, ctx);
             if (checked.ok) {
                 if (!(await noteOnce(ctx.storage, 'shown', checked.id, checked.sentAt, nowSeconds(ctx)))) return drop('repeated');
-                // A kind this build doesn't know has no words here: the general ones.
-                const words = checked.kind ? pushNoticeWords(checked.kind) : UNSIGNED_NOTICE_WORDS;
+                // A kind this build doesn't know has no words here: the general ones. Both in the app's language, which a
+                // server sends in when the phone registered with it; other words (an older server's English, or a
+                // language changed since) are replaced by the same sentence in it.
+                const words = checked.kind ? pushNoticeWords(checked.kind) : generalNoticeWords();
                 if (checked.kind && n.title === words.title && n.body === words.body) return { kind: 'show' };
                 // The words aren't signed: shown with the kind's, and the notice kept, so a tap on it opens as this would.
-                return { kind: 'replace', title: words.title, body: words.body, data: { ...notice, ...LOCAL_NOTICE_DATA } };
+                return { kind: 'replace', ...words, data: { ...notice, ...LOCAL_NOTICE_DATA } };
             }
             // Signed by no community this phone pinned: from one it sent its token to but hasn't learnt the key of yet,
             // perhaps, so it goes as an unsigned push would below. Any other refusal is final.
@@ -381,14 +391,13 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             // isn't signed yet), and a copy that names only its type, so a tap on it opens Settings (checkTap).
             const type = vaultNoticeType(n.data);
             if (type && await vaultHasToken(ctx)) {
-                return { kind: 'replace', ...VAULT_NOTICE_WORDS[type], data: { ...LOCAL_NOTICE_DATA, type } };
+                return { kind: 'replace', title: t(VAULT_NOTICE_WORDS[type].title), body: t(VAULT_NOTICE_WORDS[type].body), data: { ...LOCAL_NOTICE_DATA, type } };
             }
         }
         const pins = await readPushPins(ctx.storage);
         if (pins.unpinnedRegistered.length === 0) return drop(notice ? 'other-community' : 'unsigned');
         const named = asObject(n.data)?.k;
-        const words = isPushNoticeKind(named) ? pushNoticeWords(named) : UNSIGNED_NOTICE_WORDS;
-        return { kind: 'replace', title: words.title, body: words.body, data: { ...LOCAL_NOTICE_DATA } };
+        return { kind: 'replace', ...(isPushNoticeKind(named) ? pushNoticeWords(named) : generalNoticeWords()), data: { ...LOCAL_NOTICE_DATA } };
     } catch (e) {
         console.warn('[Push] Could not check a notification', e);
         return drop('unreadable');

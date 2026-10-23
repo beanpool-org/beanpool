@@ -30,6 +30,7 @@ import {
     getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
+import { keyLineWords } from '../components/key-lines';
 import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
 import { ConsentText } from '../components/ConsentText';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
@@ -2713,7 +2714,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     padding: '0.75rem', borderRadius: '10px', background: 'rgba(37, 99, 235, 0.08)',
                                     border: '1px solid rgba(37, 99, 235, 0.25)', overflowWrap: 'anywhere',
                                 }}>
-                                    {PRIVATE_PREVIEW_MESSAGE}
+                                    {keyLineWords(PRIVATE_PREVIEW_MESSAGE)}
                                 </p>
                             )}
 

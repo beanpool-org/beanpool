@@ -50,6 +50,7 @@ import {
 } from '../utils/names-debts';
 import { keyLineWords } from '../components/key-lines';
 import { formatNumber, t, tn } from '@beanpool/core';
+import { signedRequestWords } from '../components/signed-request-lines';
 
 /**
  * The words this screen shows from utils/names-list.ts, names-debts.ts and community-health.ts (which hold the list's
@@ -462,7 +463,7 @@ export default function NamesListScreen() {
                 });
                 setNotice(t('The Decision is open: the community votes on forgiving the debt.'));
             } catch (e: any) {
-                setError(typeof e?.message === 'string' && e.message ? e.message : t('The Decision couldn’t be started. Nothing was changed.'));
+                setError(typeof e?.message === 'string' && e.message ? signedRequestWords(e.message) : t('The Decision couldn’t be started. Nothing was changed.'));
             } finally {
                 finish();
             }

@@ -51,7 +51,7 @@ function baseId(full: unknown, kind: 't1' | 't3'): string {
 }
 
 /** Reddit's permalink as an absolute https://www.reddit.com address, or '' when it isn't one. */
-function fromPermalink(permalink: unknown): string {
+export function fromPermalink(permalink: unknown): string {
     const p = str(permalink).trim();
     if (PERMALINK.test(p)) return new URL(p, REDDIT).href;
     try {

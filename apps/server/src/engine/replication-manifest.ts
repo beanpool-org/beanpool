@@ -503,7 +503,7 @@ export const TABLES: Record<string, TableEntry> = {
     // A direct conversation waiting as a message request, and what became of it (engine/dm-requests.ts), so a standby
     // that takes over holds back the same lines and lists the same requests. Only a real conversation's: one kept for a
     // blocked opener alone is never in a copy (withheld_conversations), and its row starts travelling when it becomes real.
-    dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at updated_at', { rows: REAL_CONVERSATIONS }),
+    dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by updated_at', { rows: REAL_CONVERSATIONS }),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },

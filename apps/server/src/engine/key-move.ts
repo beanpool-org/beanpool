@@ -122,6 +122,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // Their message requests, made and waiting for them (engine/dm-requests.ts): keyed by the conversation, which keeps its id.
     move('dm_requests', 'from_pubkey');
     move('dm_requests', 'to_pubkey');
+    move('dm_requests', 'accepted_by');
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');

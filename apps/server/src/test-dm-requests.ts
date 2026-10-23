@@ -573,6 +573,22 @@ async function globalRun(): Promise<void> {
     assert(oraLapsed === 'expired' && oraAfter === 'pending' && o2.status === 200 && o3.status === 403 && o3.body?.code === 'dm_request_pending'
         && p2.status === 200 && p3.status === 403,
         `after 30 days Ora reads it as lapsed and writes once more, as Pip does (${oraLapsed} → ${oraAfter}; ${o2.status}/${o3.status}; Pip ${p2.status}/${p3.status})`);
+    // What lets Ora through on her own still does, and then it is hers to read: made a moderator, her line goes through.
+    grantNodeRole(ora.pk, 'moderator', owner.pk);
+    const o4 = await send(oraConv, ora);
+    const oraOwn = entryOf(await listOf(ora), oraConv)?.request?.state;
+    assert(o4.status === 200 && oraOwn === 'accepted', `made a moderator, Ora's line goes through and she reads it accepted (${o4.status}, ${oraOwn})`);
+    // An acceptance made before the block was seen, and stays seen: Ann accepts Quin's, then Quin blocks her.
+    const quin = member('Quin');
+    const quinConv: string = (await open(quin, ann)).body?.conversation?.id;
+    await send(quinConv, quin);
+    const qAccept = await decide(ann, quinConv, 'accept');
+    await sleep(5);
+    const blockQuin = await call('POST', quin, '/api/blocks', { targetPubkey: ann.pk });
+    const quinSees = entryOf(await listOf(quin), quinConv)?.request?.state;
+    const q2 = await send(quinConv, quin);
+    assert(qAccept.status === 200 && blockQuin.status === 200 && quinSees === 'accepted' && q2.status === 200,
+        `Ann's acceptance before Quin blocks her still reads accepted to him, and he writes on (${quinSees}; ${show(q2)})`);
     const unZak = await call('POST', zak, '/api/blocks/remove', { targetPubkey: ann.pk });
     const zakReadAfter = await call('GET', zak, `/api/messages/${zakConv}`);
     const zakListAfter = await listOf(zak);

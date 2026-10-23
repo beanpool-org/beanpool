@@ -37,8 +37,15 @@
  * the request's age and its acceptance only ({@link viewOf}): 'pending', 'expired' once 30 days have passed (an ignored
  * request too, or ignoring would show), or 'accepted', which is visible because the opener can write again.
  *
- * A block lifted is the one exception, as lifting it is meant to be: the line kept for the opener during it never reaches
- * the other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince).
+ * A block lifted is one exception, as lifting it is meant to be: the line kept for the opener during it never reaches the
+ * other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince).
+ *
+ * A block the opener made is the other. What a blocked member does never reaches the person who blocked them
+ * (engine/member-blocks.ts), and an acceptance would, by the composer coming back. So while the opener blocks the person
+ * it was for, an acceptance that person made after the block reads to the opener as not made ({@link acceptanceHiddenFrom}):
+ * 'pending', or 'expired' once 30 days have passed, and their next line and reaction are refused as a waiting request's
+ * are. It shows once they lift the block. The person who accepted reads it as they left it (the director's option b on
+ * PR #2392 review 4354581168).
  *
  * ## The switch turned off
  *
@@ -94,6 +101,7 @@ interface RequestRow {
     state: RequestState;
     requested_at: string;
     decided_at: string | null;
+    accepted_by: string | null;
 }
 
 /** A request as one of its two people reads it: its state for them, who opened it, and when it was made. */
@@ -129,14 +137,40 @@ function over(row: RequestRow, now: number): boolean {
 
 /**
  * The request as `viewer` reads it. The opener reads only its age and its acceptance (the header's "same, whatever became of
- * it"); the person it is for reads what they did with it, and 'expired' for one that waited 30 days.
+ * it"), and not an acceptance made while they block the one who made it (acceptanceHiddenFrom); the person it is for reads
+ * what they did with it, and 'expired' for one that waited 30 days.
  */
 function viewOf(row: RequestRow, viewer: string, now: number): RequestView {
     let state: RequestState;
-    if (row.state === 'accepted') state = 'accepted';
+    if (row.state === 'accepted' && !acceptanceHiddenFrom(row, viewer)) state = 'accepted';
     else if (viewer === row.from_pubkey) state = over(row, now) ? 'expired' : 'pending';
     else state = row.state === 'pending' && over(row, now) ? 'expired' : row.state;
     return { state, from: row.from_pubkey, at: row.requested_at };
+}
+
+/**
+ * Whether `viewer`, the opener, reads the request's acceptance as not made: the person it was for accepted it after the
+ * opener had blocked them, and the block still holds (the header's "A block the opener made"). An acceptance of the
+ * opener's own act, or a trade's, always shows. Read only where requests are on.
+ */
+function acceptanceHiddenFrom(row: RequestRow, viewer: string): boolean {
+    if (row.state !== 'accepted' || viewer !== row.from_pubkey || row.accepted_by !== row.to_pubkey) return false;
+    const block = db.prepare('SELECT created_at FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?')
+        .get(viewer, row.to_pubkey) as { created_at: string } | undefined;
+    return !!block && Date.parse(block.created_at) <= Date.parse(row.decided_at ?? '');
+}
+
+/**
+ * What lets `from` through whatever `to` has done: a node role of theirs, or a trade between the two under way or done,
+ * which each of them has in the open. Nothing `to` did that a block of theirs would keep from `from`.
+ */
+function throughOnTheirOwn(from: string, to: string): boolean {
+    if (nodeRoleOf(from)) return true;
+    return !!db.prepare(`
+        SELECT 1 FROM marketplace_transactions
+         WHERE status IN ('pending', 'completed')
+           AND ((buyer_pubkey = @from AND seller_pubkey = @to) OR (buyer_pubkey = @to AND seller_pubkey = @from))
+    `).get({ from, to });
 }
 
 /**
@@ -145,13 +179,10 @@ function viewOf(row: RequestRow, viewer: string, now: number): RequestView {
  * lets them through.
  */
 export function requestNeeded(from: string, to: string): boolean {
-    if (nodeRoleOf(from)) return false;
+    if (throughOnTheirOwn(from, to)) return false;
     return !db.prepare(`
         SELECT 1 WHERE
             EXISTS (SELECT 1 FROM friends WHERE owner_pubkey = @to AND friend_pubkey = @from)
-         OR EXISTS (SELECT 1 FROM marketplace_transactions
-                     WHERE status IN ('pending', 'completed')
-                       AND ((buyer_pubkey = @from AND seller_pubkey = @to) OR (buyer_pubkey = @to AND seller_pubkey = @from)))
          OR EXISTS (SELECT 1 FROM conversation_participants theirs
                       JOIN conversations c ON c.id = theirs.conversation_id AND c.type = 'dm'
                       JOIN conversation_participants mine ON mine.conversation_id = c.id AND mine.public_key = @from
@@ -172,18 +203,22 @@ function acceptable(row: RequestRow | undefined): row is RequestRow {
 }
 
 /**
- * Accept it: its state, and the two people's sockets (the opener's app can write again), after the write commits. Never
- * the socket of one who has blocked the other: what a blocked member does never reaches the person who blocked them
- * (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392 review 4354581168). `actor`, whose act it
- * is, always hears their own.
+ * Accept it: its state, whose act it was, and the two people's sockets (the opener's app can write again), after the write
+ * commits. Never the socket of one who has blocked the other: what a blocked member does never reaches the person who
+ * blocked them (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392 review 4354581168). `actor`,
+ * whose act it is, always hears their own. One accepted already is accepted again only by an act of its opener's own,
+ * where they read it as not made (acceptanceHiddenFrom): it is theirs then, and they read it, as they would have.
  */
 function accept(row: RequestRow, now: number, actor?: string): void {
+    const again = row.state === 'accepted';
+    if (again && !(actor && acceptanceHiddenFrom(row, actor))) return;
     assertPlainTablesWritable();
-    const changed = db.prepare("UPDATE dm_requests SET state = 'accepted', decided_at = ? WHERE conversation_id = ? AND state != 'accepted'")
-        .run(iso(now), row.conversation_id).changes;
+    const changed = db.prepare(`UPDATE dm_requests SET state = 'accepted', decided_at = ?, accepted_by = ?
+                                 WHERE conversation_id = ? AND (state != 'accepted' OR ?)`)
+        .run(iso(now), actor ?? null, row.conversation_id, again ? 1 : 0).changes;
     if (changed === 0) return;
     const request: RequestView = { state: 'accepted', from: row.from_pubkey, at: row.requested_at };
-    const hears = [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
+    const hears = again ? [actor!] : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
         .filter(([who, other]) => who === actor || !hasBlocked(who, other)).map(([who]) => who);
     if (hears.length === 0) return;
     afterTransactionCommit(() => ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request }, hears));
@@ -274,28 +309,36 @@ function waitingFor(to: string, what: 'write' | 'react'): string {
  * - the opener, when the rule no longer holds them (a friend add, a role, a trade since), is let through and it is accepted;
  * - the opener's first line is the request's line, and so is their first after the 30 days, which makes it a new request;
  * - any other line of the opener's is refused.
+ * An opener who reads its acceptance as not made (acceptanceHiddenFrom) is answered as if it still waited: only what lets
+ * them through on their own (throughOnTheirOwn) does, and a line of theirs that would be the request's goes through and
+ * starts the 30 days again for them, but it is an ordinary line to the person who accepted it.
  */
 export function lineThroughRequest(conversationId: string, author: string, now: number = Date.now()): LineThroughRequest {
     const row = rowOf(conversationId);
-    if (!row || row.state === 'accepted') return DIRECT;
+    if (!row) return DIRECT;
     if (!requestsOn()) {
-        lineWhileOff(row, author, now);
+        if (row.state !== 'accepted') lineWhileOff(row, author, now);
         return DIRECT;
     }
+    const hidden = acceptanceHiddenFrom(row, author);
+    if (row.state === 'accepted' && !hidden) return DIRECT;
     if (author === row.to_pubkey) {
         accept(row, now, author);
         return DIRECT;
     }
     if (author !== row.from_pubkey) return DIRECT;
-    if (!requestNeeded(row.from_pubkey, row.to_pubkey)) {
+    if (hidden ? throughOnTheirOwn(row.from_pubkey, row.to_pubkey) : !requestNeeded(row.from_pubkey, row.to_pubkey)) {
         accept(row, now, author);
         return DIRECT;
     }
+    const requestLine: LineThroughRequest = hidden ? DIRECT : { kind: 'request', to: row.to_pubkey };
     if (over(row, now)) {
         assertPlainTablesWritable();
-        db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
+        db.prepare(hidden
+            ? 'UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?'
+            : "UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
             .run(iso(now), row.conversation_id);
-        return { kind: 'request', to: row.to_pubkey };
+        return requestLine;
     }
     if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
     // The request's line: the request is made by it, so its 30 days run from it, not from the open (PR #2392 review
@@ -303,7 +346,7 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     if (!standbyWritesNothing()) {
         db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
     }
-    return { kind: 'request', to: row.to_pubkey };
+    return requestLine;
 }
 
 /**
@@ -322,12 +365,17 @@ function lineWhileOff(row: RequestRow, author: string, now: number): void {
     }
 }
 
-/** The refusal of a reaction by the opener of a request still waiting, or null (engine/messaging.ts toggleMessageReaction). */
+/**
+ * The refusal of a reaction by the opener of a request still waiting, or of one they read as not accepted
+ * (acceptanceHiddenFrom), or null (engine/messaging.ts toggleMessageReaction).
+ */
 export function reactionRefusal(conversationId: string, author: string, now: number = Date.now()): string | null {
     if (!requestsOn()) return null;
     const row = rowOf(conversationId);
-    if (!row || row.state === 'accepted' || author !== row.from_pubkey) return null;
-    if (!requestNeeded(row.from_pubkey, row.to_pubkey)) {
+    if (!row || author !== row.from_pubkey) return null;
+    const hidden = acceptanceHiddenFrom(row, author);
+    if (row.state === 'accepted' && !hidden) return null;
+    if (hidden ? throughOnTheirOwn(row.from_pubkey, row.to_pubkey) : !requestNeeded(row.from_pubkey, row.to_pubkey)) {
         accept(row, now, author);
         return null;
     }

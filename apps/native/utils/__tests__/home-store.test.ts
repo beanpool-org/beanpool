@@ -8,7 +8,8 @@
  * - a copy for another list of cards, account or community is no copy;
  * - a refusal, a failure, a bad body: the copy stays as it was;
  * - overlapping reads are one request; the header reads the answer while it is fresher than two minutes;
- * - the layout and the interests saves (POST /api/members/preferences) and the interests' one truth;
+ * - the layout and the interests saves (POST /api/members/preferences) and the interests' one truth; the columns chosen on
+ *   the web (`view`, W0) carried through a phone edit unchanged;
  * - Sign Out takes Home's copies with the account.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,9 +34,9 @@ vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () =>
 
 import {
     FAV_CATEGORIES_STORE_KEY, HOME_HEADER_WAIT_MS, coarseHomePoint, freshHomeForHeader, homeForHeader, homePath, loadHome, readHomeFromNode, readStoredHome,
-    interestsTurnNow, reconcileInterests, resetHomeStoreForTests, saveHomePreferences, saveInterests,
+    interestsTurnNow, readPhoneLayout, reconcileInterests, resetHomeStoreForTests, saveHomePreferences, saveInterests, writePhoneLayout,
 } from '../home-store';
-import { HOME_FRESH_FOR_HEADER_MS, cardsToAsk, type HomeAnswer, type HomeLayout } from '../home-cards';
+import { HOME_FRESH_FOR_HEADER_MS, cardsToAsk, moveCard, removeCard, resetLayout, type HomeAnswer, type HomeLayout } from '../home-cards';
 import { homeAnswerStoreKey, homeHintStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey } from '../storage-keys';
 import { draftIdentity, wipeIdentityScopedStorage, type BeanPoolIdentity } from '../identity';
 import { boundSignatureValid, type SentRequest } from './server-signature-check';
@@ -309,6 +310,31 @@ describe('the layout and the interests are the account\'s, with a copy on the ph
         expect(JSON.parse(node.requests.at(-1)!.body).preferences['home.layout']).not.toHaveProperty('updatedAt');
         node.down = true;
         expect(await saveHomePreferences(NODE, me, { layout })).toBeNull();
+    });
+
+    it('a phone edit of a layout holding the columns chosen on the web sends them back unchanged (W0: carried, never read)', async () => {
+        // A newer app's own key in the view rides along too, as `zzz-future` does in the list.
+        const view = { columns: 2 as const, later: { kept: true } };
+        node.answer = answer({ layout: JSON.parse(JSON.stringify({ ...layout, view })) });
+        const read = await readHomeFromNode(NODE, me, asked, null);
+        const account = read.kind === 'answer' ? read.stored.answer.layout : null;
+        expect(JSON.stringify(account?.view)).toBe(JSON.stringify(view));
+        expect(JSON.stringify((await readStoredHome(me.publicKey, NODE))?.answer.layout?.view)).toBe(JSON.stringify(view));
+        // The phone's own copy keeps it as well.
+        await writePhoneLayout(me.publicKey, NODE, account!);
+        const phone = (await readPhoneLayout(me.publicKey, NODE))!;
+        expect(JSON.stringify(phone.view)).toBe(JSON.stringify(view));
+        const sentView = () => JSON.stringify(JSON.parse(node.requests.at(-1)!.body).preferences['home.layout'].view);
+        const now = Date.parse('2026-10-03T09:00:00.000Z');
+        const moved = moveCard(phone, 'search-k7mq', 'up', phone.cards, now)!;
+        expect(moved.cards.map(c => c.id)).toEqual(['search-k7mq', 'beans', 'zzz-1']);
+        const saved = await saveHomePreferences(NODE, me, { layout: moved });
+        expect(sentView()).toBe(JSON.stringify(view));
+        expect(saved !== 'refused' && saved !== 'shape-refused' && JSON.stringify(saved?.layout?.view)).toBe(JSON.stringify(view));
+        await saveHomePreferences(NODE, me, { layout: removeCard(moved, 'beans', now + 1)! });
+        expect(sentView()).toBe(JSON.stringify(view));
+        await saveHomePreferences(NODE, me, { layout: resetLayout(moved, now + 2) });
+        expect(sentView()).toBe(JSON.stringify(view));
     });
 
     it('a star is the phone\'s at once and the account\'s behind it; one that can\'t land is owed and sent at the next landing', async () => {

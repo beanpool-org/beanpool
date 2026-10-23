@@ -114,6 +114,28 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(ids(resetLayout(null, NOW))).toEqual(starterCards().map(c => c.id));
     });
 
+    it('the columns a member chose stay through every edit and through Reset: columns are no card (W0)', () => {
+        const view = { columns: 2 as const, later: { kept: true } };
+        const raw = JSON.parse(JSON.stringify({ v: 2, cards: [{ id: 'market', type: 'market' }, NEWER, { id: 'tips', type: 'tips' }], dismissed: {}, updatedAt: iso(NOW - H), view }));
+        let l = readLayout(raw)!;
+        expect(l.view).toEqual(view);
+        const add = addCard(l, 'beans', NOW);
+        l = add.ok ? add.layout : l;
+        expect(l.view).toEqual(view);
+        l = moveCard(l, 'tips', 'up', cardOrder(l), NOW)!;
+        expect(l.view).toEqual(view);
+        l = removeCard(l, 'market', NOW)!;
+        expect(l.view).toEqual(view);
+        const search = addCard(l, 'search', NOW, { settings: { q: 'eggs' }, random: () => 0 });
+        if (!search.ok) throw new Error('the saved search was refused');
+        l = changeCardSettings(search.layout, 'search-aaaa', { q: 'jam' }, NOW)!;
+        expect(l.view).toEqual(view);
+        const reset = resetLayout(l, NOW + 1);
+        expect(JSON.stringify(reset.view)).toBe(JSON.stringify(view));
+        expect(reset.cards).toEqual([...starterCards(), NEWER]);
+        expect(resetLayout({ ...starterLayout(), cards: [] }, NOW)).not.toHaveProperty('view');
+    });
+
     it('a card of a type this build doesn\'t know is kept through every edit, byte for byte, never drawn, never asked', () => {
         const raw = JSON.parse(JSON.stringify({ v: 2, cards: [{ id: 'market', type: 'market' }, NEWER, { id: 'tips', type: 'tips' }], dismissed: {}, updatedAt: iso(NOW - H) }));
         let l = readLayout(raw)!;
@@ -246,6 +268,17 @@ describe('this browser\'s own marked save, read back (review of #1701 confirmati
         expect(sameList(sent, { ...sent, cards: [...sent.cards].reverse() })).toBe(false);
         expect(sameList(sent, { ...sent, dismissed: {} })).toBe(false);
         expect(sameList(sent, { ...sent, cards: [sent.cards[0], { ...sent.cards[1], settings: { q: 'jam', kind: 'any' } }] })).toBe(false);
+    });
+
+    it('the columns a member chose are in the print, so a columns change counts as an edit; a Home that never chose prints as before (W0)', () => {
+        // Pinned before W0: every mark a browser already keeps still matches its list.
+        expect(layoutPrint(sent)).toBe('3be262bd5e15eebf');
+        const two = { ...sent, view: { columns: 2 as const } };
+        expect(sameList(sent, two)).toBe(false);
+        expect(sameList(two, { ...two, view: { columns: 1 } })).toBe(false);
+        expect(sameList(two, { ...answered(NOW - 5_000), view: { columns: 2 } })).toBe(true);
+        // Read as core reads it: a columns no build knows prints as Auto.
+        expect(layoutPrint({ ...sent, view: { columns: 5 } } as never)).toBe(layoutPrint({ ...sent, view: { columns: 'auto' } }));
     });
 
     it('the same list dated as sent or earlier is this browser\'s; dated later, another list, or a version-1 answer is not', () => {

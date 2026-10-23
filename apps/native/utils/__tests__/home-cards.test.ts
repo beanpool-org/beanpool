@@ -337,6 +337,16 @@ describe('the layout (§4)', () => {
         expect(defaultCards()).toEqual([{ id: 'start', type: 'start' }]);
     });
 
+    it('reset keeps the columns chosen on the web, byte for byte: the phone carries them, never reads them (W0)', () => {
+        const view = { columns: 2 as const, later: { kept: true } };
+        const l: HomeLayout = { v: 2, cards: [{ id: 'beans', type: 'beans' }], dismissed: {}, updatedAt: iso(NOW - H), view };
+        const r = resetLayout(l, NOW);
+        expect(r.cards).toEqual(starterCards());
+        expect(JSON.stringify(r.view)).toBe(JSON.stringify(view));
+        expect(resetLayout({ ...l, view: undefined }, NOW)).not.toHaveProperty('view');
+        expect(dismissSafety(l, NOW).view).toBe(view);
+    });
+
     it('the newer copy wins by updatedAt; a phone copy newer than the account\'s is sent', () => {
         const account = layout({ hidden: ['pulse'], updatedAt: iso(NOW - H) });
         const phone = layout({ hidden: ['beans'], updatedAt: iso(NOW) });
@@ -1068,6 +1078,19 @@ describe('the phone\'s own marked save, read back (review of #1701 confirmation,
         expect(sameList(sent, { ...sent, cards: [...sent.cards].reverse() })).toBe(false);
         expect(sameList(sent, { ...sent, dismissed: {} })).toBe(false);
         expect(sameList(sent, { ...sent, cards: [sent.cards[0], { ...sent.cards[1], settings: { q: 'jam', kind: 'any' } }] })).toBe(false);
+    });
+
+    it('the columns the member chose on the web are in the print, as the web app prints them; a Home that never chose prints as before (W0)', () => {
+        // The web app's home-layout.test.ts list, pinned before W0 there: the phone prints it alike, and every kept mark still matches.
+        const before: HomeLayout = {
+            v: 2, updatedAt: null, dismissed: { safety: '2026-10-02T02:00:00.000Z' },
+            cards: [{ id: 'beans', type: 'beans' }, { id: 'search-aaaa', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
+        };
+        expect(layoutPrint(before)).toBe('3be262bd5e15eebf');
+        const two: HomeLayout = { ...sent, view: { columns: 2 } };
+        expect(sameList(sent, two)).toBe(false);
+        expect(sameList(two, { ...two, view: { columns: 1 } })).toBe(false);
+        expect(sameList(two, { ...answered(NOW - 5_000), view: { columns: 2 } })).toBe(true);
     });
 
     it('the same list dated as sent or earlier is the phone\'s; dated later, another list, or a version-1 answer is not', () => {

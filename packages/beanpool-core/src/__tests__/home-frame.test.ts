@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_TYPES, HOME_FRAME_LIMITS, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk, checkHomeLayout, defaultCards, moveCard,
-    readHomeLayout, readSearchSettings, removeCard, translateV1, type HomeLayoutV2, type HomeNodeFacts,
+    HOME_CARD_TYPES, HOME_COLUMN_CHOICES, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk,
+    checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard, readHomeLayout, readSearchSettings, removeCard, setHomeColumns,
+    translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
+import { t } from '../words.js';
 import { toolHomeCardTypes } from '../tools/index.js';
 
 const AT = '2026-10-08T10:00:00.000Z';
@@ -141,6 +143,100 @@ describe('home frame §5.2 (2): addCard, removeCard, moveCard', () => {
         expect(moveCard(l, 'steps', -1, NOW).cards.map(c => c.id)).toEqual(['safety', 'steps', 'search-k7mq']);
         expect(moveCard(l, 'safety', -1, NOW)).toBe(l);
         expect(moveCard(l, 'steps', 1, NOW)).toBe(l);
+    });
+});
+
+describe('home frame W0: the columns a member chose, kept in the layout (DESIGN-home-wide-and-content-fable.md D1)', () => {
+    const withView = (view: unknown, cards: HomeLayoutV2['cards'] = [one('steps'), FUTURE]) => ({ ...layout(cards), view });
+
+    it('a layout with a view round-trips byte for byte through the read and the write, for each choice', () => {
+        expect(HOME_COLUMN_CHOICES).toEqual(['auto', 1, 2]);
+        for (const columns of HOME_COLUMN_CHOICES) {
+            const value = withView({ columns });
+            const read = readHomeLayout(JSON.parse(JSON.stringify(value)));
+            expect(JSON.stringify(read)).toBe(JSON.stringify(value));
+            expect(homeColumns(read)).toBe(columns);
+            const checked = checkHomeLayout(value);
+            expect(checked.ok && JSON.stringify(checked.layout)).toBe(JSON.stringify(value));
+        }
+    });
+
+    it('a layout without one gains none (Auto), so a layout kept before W0 reads and checks as it did', () => {
+        const value = layout([one('steps')]);
+        expect(readHomeLayout(value)).not.toHaveProperty('view');
+        const checked = checkHomeLayout(value);
+        expect(checked.ok && checked.layout).not.toHaveProperty('view');
+        expect(homeColumns(readHomeLayout(value))).toBe('auto');
+        expect(homeColumns(null)).toBe('auto');
+    });
+
+    it('{ columns: 5 } reads as Auto and is refused on a write with the sentence, as is any other columns or a view that is no object', () => {
+        expect(homeColumns(readHomeLayout(withView({ columns: 5 })))).toBe('auto');
+        expect(readHomeLayout(withView({ columns: 5 }))?.view).toEqual({ columns: 'auto' });
+        expect(checkHomeLayout(withView({ columns: 5 }))).toEqual({ ok: false, problem: 'view' });
+        for (const columns of [3, 0, -1, 1.5, '2', 'Auto', 'three', null, true, [2], {}]) {
+            expect(homeColumns(readHomeLayout(withView({ columns }))), JSON.stringify(columns)).toBe('auto');
+            expect(checkHomeLayout(withView({ columns })), JSON.stringify(columns)).toEqual({ ok: false, problem: 'view' });
+        }
+        expect(checkHomeLayout(withView({}))).toEqual({ ok: false, problem: 'view' });
+        for (const view of ['wide', 2, [2], null, true]) {
+            const read = readHomeLayout(withView(view));
+            expect(read?.cards, JSON.stringify(view)).toHaveLength(2);
+            expect(read, JSON.stringify(view)).not.toHaveProperty('view');
+            expect(checkHomeLayout(withView(view)), JSON.stringify(view)).toEqual({ ok: false, problem: 'view' });
+        }
+        expect(HOME_FRAME_MESSAGES.view).toBe("A Home layout's view names its columns: auto, 1 or 2.");
+        // Marked for translation (member-words.ts translates it on the way out): t() takes it, English unchanged.
+        expect(t(HOME_FRAME_MESSAGES.view)).toBe(HOME_FRAME_MESSAGES.view);
+    });
+
+    it("a newer app's own keys in the view ride along, read and written, as an unknown card's settings do", () => {
+        const value = withView({ columns: 2, later: { dense: true, list: [1, 'two'] } });
+        expect(JSON.stringify(readHomeLayout(value))).toBe(JSON.stringify(value));
+        const checked = checkHomeLayout(value);
+        expect(checked.ok && JSON.stringify(checked.layout)).toBe(JSON.stringify(value));
+        expect(readHomeLayout(withView({ later: 1, columns: 'one' }))?.view).toEqual({ later: 1, columns: 'auto' });
+    });
+
+    it('the view counts toward the 8 KB bound', () => {
+        const pad = (n: number) => withView({ columns: 2, later: 'x'.repeat(n) }, []);
+        let n = 0;
+        while (new TextEncoder().encode(JSON.stringify(pad(n + 1))).length <= HOME_FRAME_LIMITS.layoutBytes) n++;
+        const kept = checkHomeLayout(pad(n));
+        expect(kept.ok && JSON.stringify(kept.layout)).toBe(JSON.stringify(pad(n)));
+        expect(checkHomeLayout(pad(n + 1))).toEqual({ ok: false, problem: 'layoutSize' });
+    });
+
+    it('version 1 has none: its translation never carries a view', () => {
+        const v1 = { v: 1, order: ['market'], hidden: [], dismissed: {}, updatedAt: AT, view: { columns: 2 } };
+        expect(readHomeLayout(v1)).not.toHaveProperty('view');
+        expect(translateV1(v1)).not.toHaveProperty('view');
+    });
+
+    it('kept by addCard, removeCard, moveCard and endTourLayout: columns are no card', () => {
+        const view = { columns: 2 as const };
+        const l: HomeLayoutV2 = { ...layout([one('start'), one('steps'), one('tips')]), view };
+        const added = addCard(l, 'beans', { now: NOW });
+        expect(added.ok && added.layout.view).toEqual(view);
+        expect(removeCard(l, 'tips', NOW).view).toEqual(view);
+        expect(moveCard(l, 'tips', -1, NOW).view).toEqual(view);
+        expect(endTourLayout(l, { now: NOW }).view).toEqual(view);
+        // A Home with only Getting started on it ends the tour on the starter set: the choice stays.
+        expect(endTourLayout({ ...layout([one('start')]), view }, { now: NOW }).view).toEqual(view);
+    });
+
+    it('setHomeColumns: the choice made, dated now so the last write wins as for any edit; the same choice changes nothing', () => {
+        const l = layout([one('steps')]);
+        const two = setHomeColumns(l, 2, NOW + 5);
+        expect(two.view).toEqual({ columns: 2 });
+        expect(two.cards).toBe(l.cards);
+        expect(two.updatedAt).toBe(new Date(NOW + 5).toISOString());
+        expect(setHomeColumns(two, 2, NOW + 9)).toBe(two);
+        expect(setHomeColumns(l, 'auto', NOW)).toBe(l);
+        expect(setHomeColumns(two, 'auto', NOW + 9).view).toEqual({ columns: 'auto' });
+        expect(setHomeColumns({ ...l, view: { columns: 1, later: 'x' } }, 2, NOW).view).toEqual({ columns: 2, later: 'x' });
+        // A newcomer who never edited chooses on the default Home.
+        expect(setHomeColumns(null, 1, NOW)).toMatchObject({ v: 2, cards: defaultCards(), view: { columns: 1 } });
     });
 });
 

@@ -45,7 +45,9 @@
  * ({@link accept}, PR #2392 review 4355143120). The opener's own view says so (`nextLineIsRequest`, by that same count), as
  * their apps can't tell from the lines: the kept one is among those they read, and must not be told apart (PR #2404 review
  * 4356625513). It shows a lifted block no more than their next line going through does, which Marty accepted on 23 Oct
- * 2026; while the block holds it reads as any waiting request's, and nothing in it says which line was kept.
+ * 2026; while the block holds it reads as any waiting request's, after the 30 days too, and nothing in it says which line
+ * was kept. Nor does it tell an opener of an acceptance they read as not made (the next part): their line is answered
+ * as a waiting request's, and their view says what that answer is.
  *
  * A block the opener made is the other. What a blocked member does never reaches the person who blocked them
  * (engine/member-blocks.ts), and an acceptance would, by the composer coming back. So while the opener blocks the person

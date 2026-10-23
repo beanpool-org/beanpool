@@ -52,7 +52,8 @@
  *      stays in her chats
  *
  * In every part, only the opener's own view of a request says whether their next line is its line (`nextLineIsRequest`),
- * by the node's count (PR #2404 review 4356625513); the person it is for never reads it.
+ * by the node's count (PR #2404 review 4356625513); the person it is for never reads it, a visitor nor one whose acceptance
+ * is hidden from them. While a block holds, either one's, it says what an unblocked opener's would (6, 8, 12b).
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -686,6 +687,9 @@ async function globalRun(): Promise<void> {
         `none of the three is in Ann's chats, her requests, her unread count or her badge (${[yulConv, rexConv, sidConv].map(c => `${inChats(annMirror, c)}/${countsMirror[c] ?? 0}`).join(', ')})`);
     assert(annYul === 'pending' && annRex === 'pending' && annSid === 'ignored',
         `she reads each as she left it: Yul's and Rex's waiting, Sid's ignored (${annYul}, ${annRex}, ${annSid})`);
+    const annMirrorViews: any[] = [];
+    for (const c of [yulConv, rexConv, sidConv]) annMirrorViews.push((await call('GET', ann, `/api/messages/${c}`)).body?.conversation?.request);
+    assert(annMirrorViews.every(r => !!r && !('nextLineIsRequest' in r)), `and none of them says to her whose next line is what (${JSON.stringify(annMirrorViews)})`);
     // She may Ignore one (the director: Ann may Ignore it, and the opener reads nothing new). Yul reads it accepted, his own
     // act, before and after, hears nothing, and writes on.
     const yulSock = await socket(yul);
@@ -699,7 +703,8 @@ async function globalRun(): Promise<void> {
     const y3 = await send(yulConv, yul);
     assert(ignoreYul.status === 200 && ignoreYul.body?.request?.state === 'ignored' && await annReads(yulConv) === 'ignored'
         && !inChats(await listOf(ann), yulConv), `Ann may Ignore Yul's: she reads it ignored (${show(ignoreYul)})`);
-    assert(yulAfter === yulBefore && JSON.parse(yulBefore)[0]?.state === 'accepted' && yulHeard === 0 && y3.status === 200,
+    assert(yulAfter === yulBefore && JSON.parse(yulBefore).every((r: any) => r?.state === 'accepted' && !('nextLineIsRequest' in r))
+        && yulHeard === 0 && y3.status === 200,
         `and Yul reads nothing new: accepted, as his own act made it, and he writes on (${yulBefore} → ${yulAfter}; heard ${yulHeard}; ${show(y3)})`);
     // It shows once she lifts the block, as option b's opener reads one once they lift theirs: her Ignore was of a request
     // he had accepted already.
@@ -799,9 +804,14 @@ async function globalRun(): Promise<void> {
     ageRequest(oraConv, 31);
     ageRequest(pipConv, 31);
     const oraLapsed = entryOf(await listOf(ora), oraConv)?.request?.state;
-    const [o2, o3] = [await send(oraConv, ora), await send(oraConv, ora)];
-    const [p2, p3] = [await send(pipConv, pip), await send(pipConv, pip)];
+    const lapsedSay = [await nextLineSays(ora, oraConv), await nextLineSays(pip, pipConv)];
+    const o2 = await send(oraConv, ora);
+    const p2 = await send(pipConv, pip);
+    const linedSay = [await nextLineSays(ora, oraConv), await nextLineSays(pip, pipConv)];
+    const [o3, p3] = [await send(oraConv, ora), await send(pipConv, pip)];
     const oraAfter = entryOf(await listOf(ora), oraConv)?.request?.state;
+    assert(lapsedSay.every(s => allSay(s, true)) && linedSay.every(s => allSay(s, false)),
+        `and her own view says what Pip's does: her next line is the request after the 30 days, and the one after it is not (${JSON.stringify([lapsedSay, linedSay])})`);
     assert(oraLapsed === 'expired' && oraAfter === 'pending' && o2.status === 200 && o3.status === 403 && o3.body?.code === 'dm_request_pending'
         && p2.status === 200 && p3.status === 403,
         `after 30 days Ora reads it as lapsed and writes once more, as Pip does (${oraLapsed} → ${oraAfter}; ${o2.status}/${o3.status}; Pip ${p2.status}/${p3.status})`);
@@ -914,8 +924,14 @@ async function globalRun(): Promise<void> {
     ageRequest(nevConv, 31);
     attempt(() => requestsEngine.expireOldRequests(Date.now()));
     const leftLate = [rowOf(zedConv)?.state, rowOf(nevConv)?.state];
+    const lateSay = [await nextLineSays(zed, zedConv), await nextLineSays(nev, nevConv)];
     const lateLines = [await send(zedConv, zed), await send(nevConv, nev)];
+    const lateLinedSay = [await nextLineSays(zed, zedConv), await nextLineSays(nev, nevConv)];
     const lateAgain = [await send(zedConv, zed), await send(nevConv, nev)];
+    // Their own views say what Hal's and Fy's did, though the block holds: the next line after the 30 days is the request,
+    // and the one after it is not. Nothing in them says the block, nor that Ann ignored Zed's.
+    assert(lateSay.every(s => allSay(s, true)) && lateLinedSay.every(s => allSay(s, false)),
+        `blocked, each one's own view says as an unblocked opener's would (${JSON.stringify([lateSay, lateLinedSay])})`);
     await sleep(100);
     const annLate = await listOf(ann);
     const annReadsLate = [
@@ -930,6 +946,10 @@ async function globalRun(): Promise<void> {
         && ![zedConv, nevConv].some(c => inChats(annLate, c) || inRequests(annLate, c) || c in countsLate),
         `each stays as Ann left it, in none of her lists, her unread count or her badge (${rowOf(zedConv)?.state}, ${rowOf(nevConv)?.state}; she reads ${annReadsLate})`);
     const unblocksLate = [await call('POST', ann, '/api/blocks/remove', { targetPubkey: zed.pk }), await call('POST', ann, '/api/blocks/remove', { targetPubkey: nev.pk })];
+    // The block lifted, the line kept for each during it is no request's line, and each one's own view says so, by the
+    // count his next line is answered by (Marty accepted on 23 Oct that this shows a lifted block, as the line going does).
+    const liftedLateSay = [await nextLineSays(zed, zedConv), await nextLineSays(nev, nevConv)];
+    assert(liftedLateSay.every(s => allSay(s, true)), `once Ann lifts it, each one's own view says his next line is the request (${JSON.stringify(liftedLateSay)})`);
     const lateNext = [await send(zedConv, zed), await send(nevConv, nev)];
     await sleep(100);
     const annLate2 = await listOf(ann);
@@ -1028,6 +1048,9 @@ async function globalRun(): Promise<void> {
     assert(vOpen.status === 200 && veeRow?.is_visitor === 1 && rowOf(veeConv)?.state === 'pending' && rowOf(veeConv)?.from_pubkey === abe.pk
         && ab1.status === 200 && ab2.status === 403 && ab2.body?.code === 'dm_request_pending',
         `Abe messages a key with no row: a visitor's row, and his open a request; his first line goes, his second waits (${show(ab2)})`);
+    const abeSays = await nextLineSays(abe, veeConv);
+    assert(vOpen.body?.conversation?.request?.nextLineIsRequest === true && allSay(abeSays, false),
+        `his own view says his next line was the request, and after it that the next is not, as any opener's does (${JSON.stringify(abeSays)})`);
     const calConv: string = (await open(cal, vee)).body?.conversation?.id;
     const dotConv: string = (await open(dot, vee)).body?.conversation?.id;
     await send(calConv, cal);
@@ -1056,6 +1079,11 @@ async function globalRun(): Promise<void> {
         && veeHeard.some(e => e.type === 'dm_request_updated' && e.conversationId === calConv && e.request?.state === 'ignored')
         && veeHeard.some(e => e.type === 'dm_requests_ignored' && e.conversationIds?.includes(dotConv)),
         `her socket hears each of her decisions, as her other devices would (${veeHeard.map(e => e.type).join(', ') || 'nothing'})`);
+    const veeRead = await call('GET', vee, `/api/messages/${calConv}`);
+    const veeViews = [...(veeList?.requests?.conversations ?? []).map((c: any) => c.request), vAccept.body?.request, vIgnore.body?.request,
+        veeRead.body?.conversation?.request, ...veeHeard.filter(e => e.type === 'dm_request_updated').map(e => e.request)];
+    assert(veeRead.status === 200 && veeViews.length >= 8 && veeViews.every(r => !!r && !('nextLineIsRequest' in r)),
+        `and none of her views of them says whose next line is what (${JSON.stringify(veeViews)})`);
     veeSock.ws.close();
     // Nothing else: a request in a chat she isn't in is the gate's refusal, as for any write of hers it doesn't name, and she
     // still can't block.

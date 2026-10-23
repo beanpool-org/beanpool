@@ -1013,8 +1013,10 @@ function communityCard(c: Ctx): HomeCards['community'] {
 }
 
 /**
- * A local community's figures for a member (W3, §2): who joined this week, as Who joined counts them, the reader
- * included; the events coming up in the next fortnight by the Events card's rule (PostFilter.upcomingUntil: running now
+ * A local community's figures for a member (W3, §2): who joined this week by Who joined's rules (no enterprise, no
+ * visitor's row, nobody pruned or suspended, no system row), the reader included: a community total, as `members` beside
+ * it counts the reader, where the Joined card leaves the reader out (its faces are the people new to them; second
+ * review of #2416); the events coming up in the next fortnight by the Events card's rule (PostFilter.upcomingUntil: running now
  * or starting by then, so a market week counts for its whole run; review of #2416), on idx_posts_event_start, counted
  * over the public board as the listings are, and with the board's author rules as the card reads it (getPosts with no
  * author): no host on holiday, no paused or winding-up enterprise (second review of #2416); and where Beans are on the

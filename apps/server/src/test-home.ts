@@ -976,6 +976,21 @@ async function main(): Promise<void> {
         assert(JSON.stringify(paused.titles) === '["HomeSentinel seed swap"]' && paused.soon === 1,
             `community: the bakery paused too, its event in neither: one, the seed swap (${paused.soon}; ${JSON.stringify(paused.titles)})`);
 
+        // Who joined this week, in the figure and on the card (second review of #2416): the figure is the community's, the
+        // reader counted as `members` counts them; the Joined card is the people new to the reader, never the reader. Carol
+        // joined this week; with Mia moved into the week too (and back after), Carol's card names Mia alone and her figure
+        // counts both, while Alice, here for months, reads 2 on both.
+        const miaJoinedAt = (db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(w3.mia.pk) as { joined_at: string }).joined_at;
+        db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - DAY).toISOString(), w3.mia.pk);
+        const carolsWeek = (await get('/api/home?cards=joined,community', carol)).body?.cards;
+        const alicesWeek = (await get('/api/home?cards=joined,community', alice)).body?.cards;
+        db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(miaJoinedAt, w3.mia.pk);
+        assert(carolsWeek?.joined?.count7d === 1 && JSON.stringify(carolsWeek.joined.names?.map((n: any) => n.callsign)) === '["HomeWenMia"]'
+            && carolsWeek?.community?.joined7d === 2,
+            `joined: Carol, new this week herself, has Mia alone on the Joined card and both of them in the figure (${JSON.stringify(carolsWeek?.joined)}, figure ${carolsWeek?.community?.joined7d})`);
+        assert(alicesWeek?.joined?.count7d === 2 && alicesWeek?.community?.joined7d === 2,
+            `and Alice, here for months, 2 on both (card ${alicesWeek?.joined?.count7d}, figure ${alicesWeek?.community?.joined7d})`);
+
         // A locked line: its bytes while ciphertext, nonce and metadata come to 512 characters at most, "🔒 Message" always.
         const short = sealedLine(512);
         chatLine(group.id, bob, '', short);

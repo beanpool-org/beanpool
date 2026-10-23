@@ -419,6 +419,7 @@ async function runSuite() {
         ['grant_tier', 'member'], ['revoke_tier', 'member'], ['grant_elder', 'member'], ['revoke_elder', 'member'],
     ] as const) {
         const proposer = makeMember(`Proposer_${effect}`, { balance: 100, earnedCredit: 50 });
+        recordActivity(proposer, bob, 5); // a trade is the standing to propose; the earnedCredit badge is none
         refusedProposers.push(proposer);
         const res = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
             actor: proposer,

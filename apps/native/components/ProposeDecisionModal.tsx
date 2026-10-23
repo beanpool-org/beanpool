@@ -22,6 +22,7 @@ import {
 } from '../utils/db';
 import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { signedRequestWords } from './signed-request-lines';
 
 interface Props {
     isOpen: boolean;
@@ -405,7 +406,7 @@ export function ProposeDecisionModal({
                 Alert.alert(t('Error'), (res as any).error || t('Failed to propose decision'));
             }
         } catch (err: any) {
-            Alert.alert(t('Error'), err.message || t('Failed to propose decision'));
+            Alert.alert(t('Error'), err.message ? signedRequestWords(err.message) : t('Failed to propose decision'));
         } finally {
             setSubmitting(false);
         }
@@ -597,7 +598,7 @@ export function ProposeDecisionModal({
                             <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                             <Text style={styles.noBondText}>
                                 <Sentence
-                                    text={t('{bond} Open to members with a completed trade or earned standing, and to node admins. Open for 7 days. Closes and executes automatically.')}
+                                    text={t('{bond} Open to members who have completed a trade, and to node admins. Open for 7 days. Closes and executes automatically.')}
                                     parts={{ bond: <Text style={{ fontWeight: '700' }}>{t('No bond required.')}</Text> }}
                                 />
                             </Text>

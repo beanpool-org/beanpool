@@ -35,6 +35,7 @@ import { pageSheetTopInset } from '../utils/modal-safe-area';
 import { placelessListingNote, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
+import { signedRequestWords } from './signed-request-lines';
 
 const HEADER_PAD_TOP = 14;
 
@@ -145,7 +146,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             onClose();
         } catch (err: any) {
             // The node's own words as it sent them (slice S4).
-            Alert.alert(t('Failed to Create Poll'), err.message || t('Server rejected the poll.'));
+            Alert.alert(t('Failed to Create Poll'), err.message ? signedRequestWords(err.message) : t('Server rejected the poll.'));
         } finally {
             setSubmitting(false);
         }

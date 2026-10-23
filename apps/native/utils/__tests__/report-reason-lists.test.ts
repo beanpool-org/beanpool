@@ -99,8 +99,9 @@ describe('the phone\'s report lists', () => {
         expect(b).toContain('await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);');
         expect(b).not.toContain('TextInput');
         // A failed send rethrows after its alert, so the box keeps the choice and the words (review of #1912, finding 3;
-        // the event screen's side is drawn in event-report-render.test.ts).
-        expect(src).toMatch(/Alert\.alert\(t\('Error'\), e\.message \|\| t\('Could not submit report\.'\)\);\s*throw e;/);
+        // the event screen's side is drawn in event-report-render.test.ts). db.ts's own refusals in the member's language
+        // (components/signed-request-lines.ts).
+        expect(src).toMatch(/Alert\.alert\(t\('Error'\), e\.message \? signedRequestWords\(e\.message\) : t\('Could not submit report\.'\)\);\s*throw e;/);
     });
 
     // #1938 case 14 (adopted): every accepted report says the same thanks in the "Reported" dialog, and when the member's

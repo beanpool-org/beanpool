@@ -98,7 +98,7 @@ async function main() {
     const roleOf = (id: Id) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(id.pk) as { role: string } | undefined)?.role ?? null;
     const decision = (decisionId: string) => db.prepare('SELECT * FROM decisions WHERE id = ?').get(decisionId) as any;
 
-    // Members who joined yesterday and were active today: every one of them can propose (earned standing) and vote.
+    // Members who joined yesterday and were active today: every one of them can vote. Bob and Carol (below) can also propose.
     const joined = new Date(Date.now() - DAY).toISOString();
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -118,6 +118,13 @@ async function main() {
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     ADMIN = ownerSessionHeaders(olga.pk);
     const voters = [alice, bob, carol, dave];
+    // Bob and Carol propose below, so they have traded: that is the standing to propose (earned_credit, a badge, is none).
+    // They joined two months ago: a trade between two members who both joined yesterday is an insular cluster of newcomers,
+    // which the wash rule counts for nothing (engine trust.ts qualifiedTradeValue).
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(new Date(Date.now() - 60 * DAY).toISOString(), bob.pk, carol.pk);
+    const tradedAt = new Date().toISOString();
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), bob.pk, carol.pk, tradedAt, tradedAt);
 
     // A Decision already on this node, as if opened before the switch went off.
     const existing = (effect: string, subject: Id, opts: { status?: string; opensAt?: string; closesAt?: string } = {}): string => {

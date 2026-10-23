@@ -463,7 +463,7 @@ async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> 
 
     // Enterprises, the community's Decisions and a group's votes (routes/treasury.ts, decisions-engine.ts).
     await family('enterprises, a read of what is none', 'Not a treasury', 'GET', ann, `/api/enterprise/${bob.pk}`);
-    await family("the community's Decisions, standing to propose", 'Proposing a Decision requires earned trade standing (earnedCredit > 0)',
+    await family("the community's Decisions, standing to propose", 'You can propose a Decision once you have completed a trade',
         'POST', ann, '/api/commons/decisions', { title: 'Seeds', touches: 'pool', effect: 'grant', description: 'Seeds for the garden beds', subject: ann.pk, params: { amount: 5 } });
     const tools = se.createGroup({ name: 'Tool Library', joinPolicy: 'open', createdBy: ann.pk });
     // The names list, creator channels and the open join door (routes/names-list.ts, engine/creator-channels.ts, routes/open-join.ts).

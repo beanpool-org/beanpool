@@ -1,7 +1,10 @@
 // Sending a notice to the team's ntfy topic: the control room's channel (apps/registrar/src/alerts.js), the same
 // NTFY_URL / NTFY_TOKEN pair kept here as two Devvit secrets, ntfyUrl and ntfyToken. The topic URL and token are secrets:
 // they go in the request and nowhere else — a log line says what happened and the HTTP status, never the address.
+// The team's inbox (agent-item.ts) is a second topic on the same host, a third secret (agentNtfyUrl), sent to by the same
+// rules: once per item, a bounded send, no redirect, and a failed send tried again only if Reddit delivers the event again.
 
+import { agentMessage, toAgentItem } from './agent-item';
 import { quietNames, toNotice, type Notice } from './notice';
 
 /** The hosts a topic may be on. Devvit lets the app fetch only these: devvit.json's permissions.http.domains, the same list. */
@@ -45,11 +48,28 @@ export function ntfyRequest(notice: Notice, topic: URL, token?: unknown): { url:
     };
 }
 
+/**
+ * One POST of an inbox item: the JSON is the message. No title, tag or tap, since no phone shows it, and `X-Firebase: no`
+ * keeps ntfy.sh from passing it on to Google's push service for Android phones: the fetch script reads the topic itself.
+ */
+export function agentRequest(message: string, topic: URL): { url: string; init: RequestInit } {
+    return {
+        url: topic.href,
+        init: {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Firebase': 'no' },
+            body: message,
+            redirect: 'manual',
+            signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+        },
+    };
+}
+
 export type Outcome = 'sent' | 'skipped' | 'repeat' | 'no-channel' | 'failed';
 
 /** What delivering needs from Devvit, passed in so the tests can stand in for it. */
 export type Deps = {
-    setting: (name: 'ntfyUrl' | 'ntfyToken' | 'quietUsernames') => Promise<unknown>;
+    setting: (name: 'ntfyUrl' | 'ntfyToken' | 'quietUsernames' | 'agentNtfyUrl') => Promise<unknown>;
     /** Marks the item seen; true the first time. */
     firstTime: (key: string) => Promise<boolean>;
     /** Takes the mark off again, so a repeat delivery can try once more after a failed send. */
@@ -60,54 +80,51 @@ export type Deps = {
 
 const say = (deps: Deps, line: string) => deps.log(`[reddit-watcher] ${line}`);
 
-/** One trigger delivery: its notice, once, to the topic. Never throws. */
-export async function deliver(event: unknown, deps: Deps): Promise<Outcome> {
-    let quiet = new Set<string>();
+async function readQuiet(deps: Deps): Promise<Set<string>> {
     try {
-        quiet = quietNames(await deps.setting('quietUsernames'));
+        return quietNames(await deps.setting('quietUsernames'));
     } catch {
-        // unread: everyone pings
+        return new Set(); // unread: everyone pings
     }
-    const notice = toNotice(event, quiet);
-    if (!notice) {
-        say(deps, 'nothing to tell (not a new post or comment, or removed, spam, the team\'s own or AutoModerator\'s)');
-        return 'skipped';
-    }
-    const kind = notice.id.startsWith('t1_') ? 'comment' : 'post';
-    let topic: URL | null = null;
+}
+
+async function readTopic(deps: Deps, name: 'ntfyUrl' | 'agentNtfyUrl'): Promise<URL | null> {
     try {
-        topic = topicUrl(await deps.setting('ntfyUrl'));
+        return topicUrl(await deps.setting(name));
     } catch {
-        topic = null;
+        return null;
     }
-    if (!topic) {
-        say(deps, `a new ${kind}, not told: ntfyUrl is not set to an https topic on ${NTFY_HOSTS.join(' or ')} (npx devvit settings set ntfyUrl)`);
-        return 'no-channel';
-    }
-    const key = `seen:${notice.id}`;
+}
+
+/**
+ * Marks the item seen under `key`, sends it, and takes the mark off again when the send fails, so a repeat delivery
+ * from Reddit can try once more. The request is built only when it is sent, so its deadline starts then. `about`
+ * begins each log line.
+ */
+async function sendOnce(
+    deps: Deps,
+    key: string,
+    kind: string,
+    about: string,
+    request: () => { url: string; init: RequestInit },
+): Promise<Outcome> {
     let marked = false;
     try {
         if (!(await deps.firstTime(key))) {
-            say(deps, `a new ${kind}, already told`);
+            say(deps, `${about}a new ${kind}, already told`);
             return 'repeat';
         }
         marked = true;
     } catch {
         // Without the repeat check a ping may come twice; that beats none.
-        say(deps, `the repeat check is unavailable; telling the new ${kind} anyway`);
+        say(deps, `${about}the repeat check is unavailable; telling the new ${kind} anyway`);
     }
-    let token: unknown;
-    try {
-        token = await deps.setting('ntfyToken');
-    } catch {
-        token = undefined;
-    }
-    const { url, init } = ntfyRequest(notice, topic, token);
+    const { url, init } = request();
     let status = 'unreachable';
     try {
         const res = await deps.fetch(url, init);
         if (res.status >= 200 && res.status < 300) {
-            say(deps, `a new ${kind}, told (HTTP ${res.status})`);
+            say(deps, `${about}a new ${kind}, told (HTTP ${res.status})`);
             return 'sent';
         }
         status = `HTTP ${res.status}`;
@@ -115,6 +132,62 @@ export async function deliver(event: unknown, deps: Deps): Promise<Outcome> {
         // the status says it: unreachable
     }
     if (marked) await deps.forget(key).catch(() => undefined);
-    say(deps, `a new ${kind}, not told: ntfy ${status}`);
+    say(deps, `${about}a new ${kind}, not told: ntfy ${status}`);
     return 'failed';
+}
+
+/** One trigger delivery: its notice, once, to the topic. Never throws. */
+export async function deliver(event: unknown, deps: Deps): Promise<Outcome> {
+    const quiet = await readQuiet(deps);
+    const notice = toNotice(event, quiet);
+    if (!notice) {
+        say(deps, 'nothing to tell (not a new post or comment, or removed, spam, the team\'s own or AutoModerator\'s)');
+        return 'skipped';
+    }
+    const kind = notice.id.startsWith('t1_') ? 'comment' : 'post';
+    const topic = await readTopic(deps, 'ntfyUrl');
+    if (!topic) {
+        say(deps, `a new ${kind}, not told: ntfyUrl is not set to an https topic on ${NTFY_HOSTS.join(' or ')} (npx devvit settings set ntfyUrl)`);
+        return 'no-channel';
+    }
+    let token: unknown;
+    try {
+        token = await deps.setting('ntfyToken');
+    } catch {
+        token = undefined;
+    }
+    return sendOnce(deps, `seen:${notice.id}`, kind, '', () => ntfyRequest(notice, topic, token));
+}
+
+/**
+ * One trigger delivery to the team's inbox: its item, once, to the agentNtfyUrl topic, beside the phone's notice and
+ * apart from it (its own repeat mark, so one send failing never stops the other). Unset, it does nothing and says
+ * nothing. Never sends to the phone's own topic: that one shows each message on a phone. Never throws.
+ */
+export async function deliverAgent(event: unknown, deps: Deps): Promise<Outcome> {
+    let raw: unknown;
+    try {
+        raw = await deps.setting('agentNtfyUrl');
+    } catch {
+        raw = undefined;
+    }
+    if (raw === undefined || raw === null || (typeof raw === 'string' && !raw.trim())) return 'no-channel';
+    const item = toAgentItem(event, await readQuiet(deps));
+    if (!item) return 'skipped';
+    const kind = item.kind;
+    const topic = topicUrl(raw);
+    if (!topic) {
+        say(deps, `the inbox: a new ${kind}, not told: agentNtfyUrl is not an https topic on ${NTFY_HOSTS.join(' or ')} (npx devvit settings set agentNtfyUrl)`);
+        return 'no-channel';
+    }
+    if ((await readTopic(deps, 'ntfyUrl'))?.href === topic.href) {
+        say(deps, `the inbox: a new ${kind}, not told: agentNtfyUrl is the phone's topic; give the inbox a new one (npx devvit settings set agentNtfyUrl)`);
+        return 'no-channel';
+    }
+    const message = agentMessage(item);
+    if (!message) {
+        say(deps, `the inbox: a new ${kind}, not told: too large for one ntfy message`);
+        return 'skipped';
+    }
+    return sendOnce(deps, `inbox:${item.id}`, kind, 'the inbox: ', () => agentRequest(message, topic));
 }

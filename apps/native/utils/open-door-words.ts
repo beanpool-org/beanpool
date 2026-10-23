@@ -53,6 +53,23 @@ export function phoneDoorLineWords(english: string): string {
     return Object.prototype.hasOwnProperty.call(PHONE_DOOR_LINES, english) ? t(PHONE_DOOR_LINES[english]) : english;
 }
 
+/**
+ * global-join-existing.ts joinedGlobalNotice's body, paragraph by paragraph: what came with the member, what their sign-in
+ * now does for the account (by the sign-in's name), and, when it had, whose account it used to protect (no-words-copy.ts
+ * signInReplacedNote). A paragraph read no other way is shown as given.
+ */
+export function joinedGlobalBodyWords(body: string): string {
+    return body.split('\n\n').map((paragraph) => {
+        const everywhere = paragraph.match(/^Your (.+) sign-in is now also a way back into your account, in every community\.$/);
+        if (everywhere) return t('Your {name} sign-in is now also a way back into your account, in every community.', { name: everywhere[1] });
+        const here = paragraph.match(/^Your (.+) sign-in is now also a way back into your account here\.$/);
+        if (here) return t('Your {name} sign-in is now also a way back into your account here.', { name: here[1] });
+        const replaced = paragraph.match(/^This (.+) account used to protect a different BeanPool account\. It protects this one now, and that one has only its 12 words\.$/);
+        if (replaced) return t('This {provider} account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.', { provider: replaced[1] });
+        return phoneDoorLineWords(paragraph);
+    }).join('\n\n');
+}
+
 /** The community a door is for, as the screen names it. */
 export interface DoorPlace {
     /** The global community: every sentence as it was. */

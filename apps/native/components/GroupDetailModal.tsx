@@ -34,6 +34,7 @@ import { buildRosterView, rosterHeading } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 import { KEY_CHANGED_HINT } from '../utils/name-key-memory';
 import { chatLineWords } from '../utils/chat-line-words';
+import { signedRequestWords } from './signed-request-lines';
 
 /** Sentences marked in core, translated here where they are shown. */
 const LINES = { observerFirst: MAKE_OBSERVER_MEMBER_FIRST, closed: GROUP_CLOSED_NOTE };
@@ -435,7 +436,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (e: any) {
-            Alert.alert(t('Join Failed'), e.message || t('Failed to join group'));
+            Alert.alert(t('Join Failed'), e.message ? signedRequestWords(e.message) : t('Failed to join group'));
         } finally {
             setActionLoading(false);
         }
@@ -450,7 +451,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (e: any) {
-            Alert.alert(t('Hand Over Failed'), e.message || t('Could not hand the lead over'));
+            Alert.alert(t('Hand Over Failed'), e.message ? signedRequestWords(e.message) : t('Could not hand the lead over'));
         } finally {
             setActionLoading(false);
         }
@@ -544,7 +545,7 @@ export function GroupDetailModal({
                             await loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert(t('Leave Failed'), e.message || t('Failed to leave group'));
+                            Alert.alert(t('Leave Failed'), e.message ? signedRequestWords(e.message) : t('Failed to leave group'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -562,7 +563,7 @@ export function GroupDetailModal({
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
         } catch (e: any) {
-            Alert.alert(t('Approval Failed'), e.message || t('Failed to approve request'));
+            Alert.alert(t('Approval Failed'), e.message ? signedRequestWords(e.message) : t('Failed to approve request'));
         } finally {
             setActionLoading(false);
         }
@@ -595,7 +596,7 @@ export function GroupDetailModal({
                         } catch (e: any) {
                             Alert.alert(
                                 decline ? t('Decline Failed') : t('Removal Failed'),
-                                e.message || (decline ? t('Failed to decline the request') : t('Failed to remove member')),
+                                e.message ? signedRequestWords(e.message) : (decline ? t('Failed to decline the request') : t('Failed to remove member')),
                             );
                         } finally {
                             setActionLoading(false);
@@ -620,7 +621,7 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert(t('Error'), e.message || t('Failed to set role'));
+                            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to set role'));
                         }
                     }
                 },
@@ -633,7 +634,7 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert(t('Error'), e.message || t('Failed to set role'));
+                            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to set role'));
                         }
                     }
                 },
@@ -646,7 +647,7 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert(t('Error'), e.message || t('Failed to set role'));
+                            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to set role'));
                         }
                     }
                 },
@@ -671,7 +672,7 @@ export function GroupDetailModal({
                             loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert(t('Error'), e.message || t('Failed to update policy'));
+                            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to update policy'));
                         }
                     }
                 }

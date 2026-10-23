@@ -394,6 +394,25 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(classes).toContain('md:max-w-[calc(100vw-17.5rem)]');
     });
 
+    it("the New Post panel in the member's language: its title, the reach chooser and the submit button for an Offer, an Event and a Poll", async () => {
+        const { bypassing } = await import('../words-xx.test-support');
+        setLanguage('xx');
+        try {
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+            const panel = await view!.findByTestId('map-new-post-panel');
+            expect(panel.textContent).toContain(pseudoLocalise('New Post'));
+            expect(bypassing(panel)).toEqual([]);
+            for (const type of ['Event', '🗳️ Poll']) {
+                await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: pseudoLocalise(type) })); });
+                expect(bypassing(panel), type).toEqual([]);
+            }
+            expect(panel.textContent).toContain(pseudoLocalise('🗳️ Create Poll'));
+        } finally {
+            setLanguage('en');
+        }
+    });
+
 });
 
 describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {

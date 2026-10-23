@@ -26,9 +26,10 @@ import {
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
-    currentLanguage, formatCount, formatNumber, tn, word, type WordKey,
+    currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
+import { TIER_WORDS } from './trust-tier';
 import { toolHomeCardIds } from '../tools/index';
 import type { ShopHomeCard } from './shop';
 import { eventHomeWhen } from './events';
@@ -1022,7 +1023,9 @@ export function beansLines(b: NonNullable<HomeCards['beans']>): { main: string; 
         return { main: beansAmount(b.balance), sub: t('Spending is paused for now. You can still receive and sell.') };
     }
     if (!b.activated) return { main: beansAmount(b.balance), sub: t('Your credit opens with a first trade.') };
-    return { main: t('{amount} · room to spend {room}', { amount: beansAmount(b.balance), room: formatBeans(b.room) }), sub: b.tier || null };
+    // The node names the tier by its English id: shown as the tier's word (utils/trust-tier.ts), one it doesn't know as it came.
+    const tier = b.tier && Object.prototype.hasOwnProperty.call(TIER_WORDS, b.tier) ? t(TIER_WORDS[b.tier as TierName]) : b.tier || null;
+    return { main: t('{amount} · room to spend {room}', { amount: beansAmount(b.balance), room: formatBeans(b.room) }), sub: tier };
 }
 
 /** The community's card (§3.1): its name and totals, public by rule. */

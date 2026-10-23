@@ -37,6 +37,10 @@ import {
     withheldLineMessage, type WithheldConversation,
     overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
 } from './withheld-lines.js';
+import {
+    openRequest, acceptOnOpen, acceptOnTrade, requestBecameReal, dropRequestOf, lineThroughRequest, nodeLineInRequest, reactionRefusal,
+    requestPushDue, requestPushBody, DM_REQUEST_PENDING_CODE,
+} from './dm-requests.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
@@ -283,6 +287,9 @@ export function createConversation(
 
     const existing = findDirectConversationRow(participants[0], participants[1]);
     if (existing) {
+        // The person a message request in it waits for, asking for it themselves (Message on the opener's profile): that is
+        // reaching out to its opener, as their own line is, so it accepts the request (engine/dm-requests.ts). Never the node.
+        if (!opts.asNode) acceptOnOpen(existing.id, createdBy);
         const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(existing.id) as any[];
         return {
             id: existing.id,
@@ -301,9 +308,17 @@ export function createConversation(
     // same one. Every refusal and limit above has run first, so the answer is the one anybody else would get.
     const other = participants.find(p => p !== createdBy);
     if (!opts.asNode && other && hasBlocked(other, createdBy)) {
-        const { conversation: kept, created } = openWithheldConversation(createdBy, other, crypto.randomUUID(), createdAt);
-        // A conversation already opened lists its two as a real one does, by key; a new one as the opener named them.
-        const conv: Conversation = { id: kept.id, type, name: name || null, createdBy: kept.owner_pubkey, createdAt: kept.created_at, participants: created ? participants : [...participants].sort() };
+        const { conversation: kept, created } = db.transaction(() => {
+            const opened = openWithheldConversation(createdBy, other, crypto.randomUUID(), createdAt);
+            // The message request a real one would have (engine/dm-requests.ts), under the id it keeps when it becomes real,
+            // so its opener's answers are a real conversation's.
+            if (opened.created) openRequest(opened.conversation.id, createdBy, other, createdAt);
+            return opened;
+        })();
+        // A conversation already opened answers as a real one found again does: its two by key, and its (absent) listing.
+        const conv: Conversation = created
+            ? { id: kept.id, type, name: name || null, createdBy: kept.owner_pubkey, createdAt: kept.created_at, participants }
+            : { id: kept.id, type, postId: null as any, name: name || null, createdBy: kept.owner_pubkey, createdAt: kept.created_at, participants: [...participants].sort() };
         if (created) cb.broadcast({ type: 'conversation_created', conversation: conv }, [createdBy]);
         return conv;
     }
@@ -318,6 +333,15 @@ export function createConversation(
         const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
         for (const p of participants) insertPart.run(id, p);
         if (kept) keepOwnersReadMarker(kept);
+        // A message request when the rule says so (engine/dm-requests.ts). A kept conversation becoming this one keeps the
+        // request it had, which now travels with it; one its other person opened is accepted by this open, as asking for
+        // it is (above). The node's own opening is never a request.
+        if (kept) {
+            requestBecameReal(id);
+            if (!opts.asNode) acceptOnOpen(id, createdBy);
+        } else if (other && !opts.asNode) {
+            openRequest(id, createdBy, other, createdAt);
+        }
     })();
 
     const conv: Conversation = { id, type, name: name || null, createdBy, createdAt, participants };
@@ -339,6 +363,8 @@ function promoteWithheldConversation(cb: MessagingCallbacks, kept: WithheldConve
     const real = findDirectConversationRow(participants[0], participants[1]);
     if (real) {
         dropWithheldConversation(kept.id);
+        // Its message request goes with it (engine/dm-requests.ts): the real one has its own, or none.
+        dropRequestOf(kept.id);
         return real.id;
     }
     const createdAt = new Date().toISOString();
@@ -348,6 +374,8 @@ function promoteWithheldConversation(cb: MessagingCallbacks, kept: WithheldConve
         const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
         for (const p of participants) insertPart.run(kept.id, p);
         keepOwnersReadMarker(kept);
+        // Its message request, if it has one, now travels with it (engine/dm-requests.ts).
+        requestBecameReal(kept.id);
     })();
     const conv: Conversation = { id: kept.id, type: 'dm', name: null, createdBy: author, createdAt, participants };
     // Its owner was told of it when they opened it: only the other, for whom it is new, hears of it now.
@@ -506,6 +534,14 @@ export function sendMessage(
     const attBytes = (!opts.nodeAuthored && attachment?.data) ? incomingPhotoBytes(attachment.data) : 0;
     if (attBytes > 0) assertMayStorePhotoBytes(authorPubkey, attBytes);
     opts.beforeStore?.({ ciphertext, metadata });
+    // A message request (engine/dm-requests.ts): its opener's second line while it waits is refused here, after every other
+    // refusal and before the line is stored or kept for them alone, so the answer is the same whether or not they are
+    // blocked. The person it waits for writing in it accepts it. The node's own words are never held, but written as the
+    // admin a request waits for, they are that admin's line and accept it too.
+    if (opts.nodeAuthored) nodeLineInRequest(effectiveConvId, authorPubkey);
+    const through = opts.nodeAuthored ? undefined : lineThroughRequest(effectiveConvId, authorPubkey);
+    if (through?.kind === 'refused') throw new MessagingError(through.message, 403, DM_REQUEST_PENDING_CODE);
+    const requestLine = through?.kind === 'request';
 
     const participantKeys = participants.map(p => p.public_key as string);
     // Someone in it has blocked the author (engine/member-blocks.ts): the line is kept for the author alone
@@ -537,7 +573,7 @@ export function sendMessage(
                     unmutedRecipients(withheldConvId, participantKeys),
                     authorPubkey,
                     '💬 New Message',
-                    `${senderName} sent you a message`,
+                    requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
                     { screen: 'chat', conversationId: withheldConvId },
                     'chat',
                     'chat.message'
@@ -601,11 +637,16 @@ export function sendMessage(
                 const senderMember = getMember(db, authorPubkey) as any;
                 // A push names people in words, never a slice of their key.
                 const senderName = senderMember?.callsign || 'A member';
-                cb.dispatchPushNotification(
+                // A message request's line says so, at most once an hour per person (engine/dm-requests.ts). One folded into
+                // the hour's single push does the push's work all the same and drops it, as a withheld line does above.
+                const send = through?.kind === 'request' && !requestPushDue(through.to, pushConvId)
+                    ? cb.rehearsePushNotification
+                    : cb.dispatchPushNotification;
+                send?.(
                     unmutedRecipients(pushConvId, recipients),
                     authorPubkey,
                     '💬 New Message',
-                    `${senderName} sent you a message`,
+                    requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
                     { screen: 'chat', conversationId: pushConvId },
                     'chat',
                     'chat.message'
@@ -631,6 +672,9 @@ export function toggleMessageReaction(
         // To anyone else it is an id nobody has.
         const own = ownWithheldLine(messageId, authorPubkey);
         if (!own) return null;
+        // The opener of a message request still waiting, as for a stored line of theirs (below).
+        const held = reactionRefusal(own.conversation_id, authorPubkey);
+        if (held) throw new MessagingError(held, 403, DM_REQUEST_PENDING_CODE);
         if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
         const toggled = JSON.stringify(toggledReactions(own.metadata, authorPubkey, emoji).metadata);
         setWithheldLineMetadata(own.id, toggled);
@@ -677,6 +721,12 @@ export function toggleMessageReaction(
         // An event chat carries text the host can remove and nothing else, and it is read-only once the event
         // ends — a reaction would be a write this route cannot rule on.
         if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
+        // The opener of a message request still waiting reacts once it is accepted, as they write more then
+        // (engine/dm-requests.ts). Before the tombstone's refusal, as for a withheld line of theirs (above).
+        if (convType?.type === 'dm') {
+            const held = reactionRefusal(row.conversation_id, authorPubkey);
+            if (held) throw new MessagingError(held, 403, DM_REQUEST_PENDING_CODE);
+        }
     }
 
     // A tombstone takes no reactions, in any chat: the message it stood for is gone.
@@ -1196,6 +1246,8 @@ export function ensureTransactionConversation(
     // A trade's chat is the node's: a block never withholds it, or a deal under way would lose its notices.
     const conv = createConversation(cb, 'dm', [buyerPubkey, sellerPubkey], buyerPubkey, undefined, undefined, { asNode: true });
     if (!conv) throw new Error(word('Failed to create transaction conversation'));
+    // A trade between the two opening accepts a message request between them (engine/dm-requests.ts).
+    acceptOnTrade(conv.id);
     return conv.id;
 }
 

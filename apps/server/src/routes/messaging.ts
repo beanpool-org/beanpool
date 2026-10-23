@@ -8,8 +8,8 @@ import {
     createConversation, sendMessage, editMessage, deleteOwnMessage,
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
-    markConversationRead, getListedUnreadCounts,
-    getMember,
+    markConversationRead, getListedUnreadCounts, getUnreadCounts,
+    getMember, isNodeMember, getNodeRole,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -34,6 +34,8 @@ import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member
 import {
     withheldConversationOwnedBy, withheldConversationById, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
 } from '../engine/withheld-lines.js';
+import { withRequestFor, sortRequestsOut, decideRequest, ignoreAllRequests, RequestDecisionError } from '../engine/dm-requests.js';
+import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -182,7 +184,8 @@ router.post('/api/messages/conversation', async (ctx) => {
             ctx.body = { error: word('Failed to create conversation — check all participants are registered') };
             return;
         }
-        ctx.body = { success: true, conversation: conv };
+        // Where requests are on, whether it is a message request and whose (engine/dm-requests.ts), as the opener reads it.
+        ctx.body = { success: true, conversation: withRequestFor(conv, createdBy) };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'create the conversation');
@@ -402,21 +405,95 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     // by them, ordered as if nothing had been withheld; nobody else's list ever names one.
     const viewer: string = publicKey; // the verified signer, held above
     const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
+    // Where requests are on (engine/dm-requests.ts): each direct conversation says whether it is a message request, the
+    // ones waiting for the viewer are listed apart in `requests`, and one they ignored, or from someone they blocked, in
+    // neither. Their unread lines are in neither the list's count nor the badge (getListedUnreadCounts). Where requests are
+    // off, the list as it always was, less one the viewer ignored while they were on.
+    const sorted = sortRequestsOut(viewer, convs);
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     // A DM's re-keyed people's signed former keys, to someone in it (engine/key-succession.ts withDmFormerKeys).
-    const conversations = withDmFormerKeys(convs.map(c => ({ ...withEventChatReaders(c), unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
+    const shaped = <C extends { id: string }>(list: C[], counts: Record<string, number>) =>
+        withDmFormerKeys(list.map(c => ({ ...withEventChatReaders(c as any), unreadCount: counts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
+    const conversations = shaped(sorted.listed, unreadCounts);
+    const requests = sorted.requests && sorted.requests.length > 0 ? shaped(sorted.requests, getUnreadCounts(publicKey)) : [];
     // The people in these chats who deleted their accounts, every line of whose is now blanked: the phone blanks the older
     // lines of theirs it holds, which its sync (the newest 50 of each chat) never brings again (accountsDeletedAmong).
     // Only people already listed above as in the caller's chats.
     const others = new Set<string>();
-    for (const c of conversations) for (const p of c.participants) if (p !== publicKey) others.add(p);
+    for (const c of [...conversations, ...requests]) for (const p of c.participants) if (p !== publicKey) others.add(p);
     // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
     ctx.body = {
         conversations,
         totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0),
         deletedAccounts: accountsDeletedAmong(others),
+        ...(sorted.requests ? { requests: { count: sorted.count, conversations: requests } } : {}),
     };
+});
+
+/**
+ * A message request (engine/dm-requests.ts) is decided by the person it was sent to, signed by them, a member here, on the
+ * main server: a standby answers 503 `standby` and writes nothing, as a block's change does (routes/blocks.ts). The actor,
+ * or undefined once the refusal is written.
+ */
+function requestDecider(ctx: any): string | undefined {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return undefined;
+    }
+    if (!isNodeMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
+        return undefined;
+    }
+    if (getNodeRole() !== 'primary') {
+        ctx.status = 503;
+        ctx.body = { error: word('This server is a standby copy of the community, not its main server. Message requests are answered on the main server.'), code: 'standby' };
+        return undefined;
+    }
+    return actor;
+}
+
+/**
+ * Accept or ignore a message request: `{ conversationId, decision: 'accept' | 'ignore' }`, by the person it was sent to
+ * (engine/dm-requests.ts decideRequest). Answers `{ success, request }`, the request as they now read it. Accepting rings
+ * both people's sockets (`dm_request_updated`), but not the opener's if they have blocked the person accepting; ignoring
+ * only the ignorer's, and its opener is never told.
+ */
+router.post('/api/messages/request', async (ctx) => {
+    const actor = requestDecider(ctx);
+    if (!actor) return;
+    const { conversationId, decision } = (ctx as any).requestBody || {};
+    if (typeof conversationId !== 'string' || !conversationId || (decision !== 'accept' && decision !== 'ignore')) {
+        ctx.status = 400;
+        ctx.body = { error: word("Send conversationId, the chat, and decision, 'accept' or 'ignore'.") };
+        return;
+    }
+    try {
+        ctx.body = { success: true, request: decideRequest(conversationId, actor, decision) };
+    } catch (e) {
+        if (e instanceof RequestDecisionError) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        if (respondProfileRefusal(ctx, e)) return;
+        respondToMessagingError(ctx, e, 'answer the message request');
+    }
+});
+
+/** Ignore all: every message request waiting for the signer, at once (engine/dm-requests.ts). `{ success, ignored }`. */
+router.post('/api/messages/request/ignore-all', async (ctx) => {
+    const actor = requestDecider(ctx);
+    if (!actor) return;
+    try {
+        ctx.body = { success: true, ignored: ignoreAllRequests(actor) };
+    } catch (e) {
+        if (respondProfileRefusal(ctx, e)) return;
+        respondToMessagingError(ctx, e, 'ignore the message requests');
+    }
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {
@@ -555,7 +632,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         const kept = withheldConversationOwnedBy(conversationId, viewer);
         if (kept) {
             ctx.body = {
-                conversation: withDmFormerKeys([withheldConversationView(kept)], viewer)[0],
+                conversation: withRequestFor(withDmFormerKeys([withheldConversationView(kept)], viewer)[0], viewer),
                 messages: pageWithOwnWithheld(conversationId, viewer, clampLimit(ctx.query.limit), clampOffset(ctx.query.offset), () => []),
             };
             return;
@@ -651,8 +728,9 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ? getConversationMessages(conversationId, l, o).filter((m: any) => groupLineForReader(m.metadata, fromEpoch))
         : getConversationMessages(conversationId, l, o);
     ctx.body = {
-        // As the list serves it: a DM's re-keyed people's former keys, to someone in it (withDmFormerKeys).
-        conversation: withDmFormerKeys([withEventChatReaders(conv)], viewer)[0],
+        // As the list serves it: a DM's re-keyed people's former keys, to someone in it (withDmFormerKeys), and whether it
+        // is a message request, with the other's read marker left out until it is accepted (engine/dm-requests.ts).
+        conversation: withRequestFor(withDmFormerKeys([withEventChatReaders(conv)], viewer)[0], viewer),
         // A DM's lines with the signed reader's own withheld ones among them (engine/withheld-lines.ts): what they sent,
         // as they sent it. Only the reader's own, so the other person's read is the lines and nothing else.
         messages: conv.type === 'dm' && viewer && conv.participants.includes(viewer)

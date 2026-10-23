@@ -283,7 +283,7 @@ export default function ProjectsScreen() {
         }
     }, [modesKnown, beansPreview, enterprisesPreview, decisionsPreview]);
 
-    // The node's rule (earned standing, or a node admin); earned credit only when the node hasn't said.
+    // The node's rule (a completed trade, or a node admin); earned credit only when the node hasn't said.
     const canProposeDecision = nodeSaysCanPropose ?? (balanceState.earnedCredit || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;

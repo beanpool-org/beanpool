@@ -44,13 +44,13 @@ export function KnownConsentCard() {
             const next = await go();
             if (next) { setConsent(next); setNote(done); }
         } catch (e) {
-            setNote(e instanceof Error && e.message ? e.message : 'Not saved. Try again later.');
+            setNote(e instanceof Error && e.message ? e.message : t('Not saved. Try again later.'));
         } finally {
             setBusy(false);
         }
     };
-    const agree = () => send(() => agreeToConsent(consent.version), 'Saved. You can take it back here at any time.');
-    const withdraw = () => send(withdrawConsent, 'Withdrawn. From now on the admins don\'t see your balance.');
+    const agree = () => send(() => agreeToConsent(consent.version), t('Saved. You can take it back here at any time.'));
+    const withdraw = () => send(withdrawConsent, t("Withdrawn. From now on the admins don't see your balance."));
     const agreedOn = consent.consentedAt ? new Date(consent.consentedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 
     const button: React.CSSProperties = {

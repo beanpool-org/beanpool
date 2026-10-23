@@ -44,6 +44,7 @@ import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';
 import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
 import { t } from '@beanpool/core';
+import { signedRequestWords } from './signed-request-lines';
 
 interface Props {
     /** The event's post id, which is also the chat's conversation id. */
@@ -135,7 +136,7 @@ export function EventChatView({ eventId }: Props) {
             await load();
             scrollChatToBottom(listRef, true);
         } catch (e: any) {
-            Alert.alert(t('Not sent'), e?.message || t('Could not reach the node. Try again when you have signal.'));
+            Alert.alert(t('Not sent'), e?.message ? signedRequestWords(e.message) : t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setSending(false);
         }
@@ -152,7 +153,7 @@ export function EventChatView({ eventId }: Props) {
                         await removeEventChatMessage(eventId, item.id);
                         await load();
                     } catch (e: any) {
-                        Alert.alert(t('Not removed'), e?.message || (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove Member's message.")));
+                        Alert.alert(t('Not removed'), e?.message ? signedRequestWords(e.message) : (author ? t("Could not remove {name}'s message.", { name: author }) : t("Could not remove Member's message.")));
                     }
                 },
             },
@@ -178,7 +179,7 @@ export function EventChatView({ eventId }: Props) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 {header}
-                <Text style={chat.errorText} accessibilityRole="alert">{error}</Text>
+                <Text style={chat.errorText} accessibilityRole="alert">{signedRequestWords(error)}</Text>
                 <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setError(null); load(); }}>
                     <Text style={chat.retryText}>{t('Try again')}</Text>
                 </Pressable>

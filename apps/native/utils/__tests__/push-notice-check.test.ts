@@ -41,7 +41,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
-    isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_TITLE, pushCommunityTag, pushNoticeBytes, pushNoticeWords,
+    isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_TITLE, pushCommunityTag, pushNoticeBytes, pushNoticeWords, setLanguage,
     type PushNoticeKind,
 } from '@beanpool/core';
 import { registerPushTokenWithCommunity } from '../push-registrations';
@@ -283,6 +283,25 @@ describe('while the app is open, a push shows only when its own community signed
         expect(await open(push(byron.notice('trade.update', kim.publicKey)))).toEqual({ kind: 'show' });
     });
 
+    it('in another language: a push with its kind\'s words in it (what a server sends) shows; one in English or other words gets its kind\'s in that language', async () => {
+        setLanguage('pt', [{ 'You have a new message.': 'Tem uma mensagem nova.' }]);
+        try {
+            expect(await open(push(mullum.notice('chat.message', kim.publicKey), { title: 'BeanPool', body: 'Tem uma mensagem nova.' })))
+                .toEqual({ kind: 'show' });
+            expect(await open(push(mullum.notice('chat.message', kim.publicKey)))).toEqual({ kind: 'show' });
+            // An older server's English, or a phone whose language changed after it registered: the same sentence in the
+            // app's language.
+            const english = mullum.notice('chat.message', kim.publicKey);
+            expect(await open(push(english, { title: 'BeanPool', body: 'You have a new message.' })))
+                .toEqual({ kind: 'replace', title: 'BeanPool', body: 'Tem uma mensagem nova.', data: { ...english, ...LOCAL_NOTICE_DATA } });
+            const data = mullum.notice('chat.message', kim.publicKey);
+            expect(await open(push(data, { title: 'URGENT', body: 'Send your 12 words to verify your account' })))
+                .toEqual({ kind: 'replace', title: 'BeanPool', body: 'Tem uma mensagem nova.', data: { ...data, ...LOCAL_NOTICE_DATA } });
+        } finally {
+            setLanguage('en');
+        }
+    });
+
     it('valid with other words than its kind\'s: shown with its kind\'s, and a tap on that still opens the notice', async () => {
         const data = mullum.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: CHAT_ID } });
         const decision = await open(push(data, { title: 'URGENT', body: 'Send your 12 words to verify your account' }));
@@ -462,6 +481,19 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         expect(navigated).toEqual(['/(tabs)/settings']);
     });
 
+    it('the key vault\'s fixed words, in the member\'s language', async () => {
+        mem.async.set(vaultPushTokenStoreKey(kim.publicKey), PHONE_TOKEN);
+        setLanguage('pt', [{ 'Your BeanPool account was restored': 'A sua conta BeanPool foi restaurada' }]);
+        try {
+            const decision = await open(push({ type: 'vault-released' }, { title: 'x', body: 'y' }));
+            expect(decision).toMatchObject({ kind: 'replace', title: 'A sua conta BeanPool foi restaurada' });
+            // A sentence the catalog doesn't have yet: the English, never a blank.
+            expect((decision as { body: string }).body).toBe(VAULT_NOTICE_WORDS['vault-released'].body);
+        } finally {
+            setLanguage('en');
+        }
+    });
+
     it('the key vault\'s notice (not signed yet) never shows its own words: only its type\'s fixed ones, and its copy opens Settings', async () => {
         mem.async.set(vaultPushTokenStoreKey(kim.publicKey), PHONE_TOKEN);
         const hostile = { title: 'Your account is locked', body: 'Reply with your 12 words to unlock it: https://evil.example' };
@@ -596,6 +628,21 @@ describe('a community whose server sends no pushKey: its pushes show with fixed 
         // A newer server with no node key yet names its kind: that kind's words.
         const named = push({ bp: 1, k: 'trade.update', i: 'a'.repeat(32), t: nowSeconds() }, { title: 'x', body: 'y' });
         expect(await open(named)).toEqual({ kind: 'replace', ...pushNoticeWords('trade.update'), data: { ...LOCAL_NOTICE_DATA } });
+    });
+
+    it('the fixed words the app writes in a push\'s place are in the member\'s language; BeanPool stays its name', async () => {
+        setLanguage('pt', [{
+            'There is news from your community.': 'Há novidades da sua comunidade.',
+            'There is news on one of your trades.': 'Há novidades numa das suas trocas.',
+        }]);
+        try {
+            const old = push({ screen: 'chat', conversationId: CHAT_ID }, { title: '💬 Maya', body: 'Send me your 12 words' });
+            expect(await open(old)).toEqual({ kind: 'replace', title: 'BeanPool', body: 'Há novidades da sua comunidade.', data: { ...LOCAL_NOTICE_DATA } });
+            const named = push({ bp: 1, k: 'trade.update', i: 'b'.repeat(32), t: nowSeconds() }, { title: 'x', body: 'y' });
+            expect(await open(named)).toEqual({ kind: 'replace', title: 'BeanPool', body: 'Há novidades numa das suas trocas.', data: { ...LOCAL_NOTICE_DATA } });
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('a tap opens the app where it was: no request, no navigation, and no warning (it may well be that community\'s)', async () => {
@@ -862,7 +909,9 @@ describe('the calm line', () => {
     it('the component draws the line from that spec, cuts it to no number of lines, and sits below the status bar', () => {
         const source = fs.readFileSync(path.join(__dirname, '../../components/PushNoticeWarning.tsx'), 'utf8');
         expect(source).toContain('pushNoticeWarningStyleSpec(colors)');
-        expect(source).toContain('{FORGED_NOTICE_LINE}');
+        // Through t(): the line in the member's language.
+        expect(source).toContain('line: FORGED_NOTICE_LINE');
+        expect(source).toContain('{t(WORDS.line)}');
         expect(source).not.toMatch(/numberOfLines|adjustsFontSizeToFit|ellipsizeMode/);
         expect(source).toContain('insets.top + PUSH_NOTICE_WARNING_INSET');
     });

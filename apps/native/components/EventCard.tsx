@@ -22,6 +22,7 @@ import {
     formatEventWhenFor, eventWhen, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
     formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
+import { eventLineWords } from './event-lines';
 
 export const EVENT_ACCENT = '#7c3aed';
 
@@ -90,7 +91,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
             onRsvpChanged?.();
         } catch (err: any) {
             setCounts(before);
-            Alert.alert(t('RSVP not saved'), err?.message || t('Could not reach the node. Try again when you have signal.'));
+            Alert.alert(t('RSVP not saved'), err?.message ? eventLineWords(err.message) : t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setPending(null);
         }

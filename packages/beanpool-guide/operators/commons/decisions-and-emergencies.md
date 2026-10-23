@@ -32,6 +32,8 @@ On the global community there are no community votes. There the list shows emerg
 For when someone is doing harm now. Open the person (People & Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it.
 
 - They are suspended at once and their role, if any, is set aside.
+- While it lasts, their listings are off the Market and the map, and they bring nobody in: no invite, no answer to a request to join, and an invite or paper ticket they made earlier admits nobody. They can still answer in conversations they are in and finish or cancel the deals they have open. Their listings and invites come back as they were when it ends.
+- A suspension made when acting on a report is the same suspension, and the same vote opens, with the reason given, or that a report about them was upheld.
 - A 7-day vote opens: "Keep the suspension?". One member, one vote, 60% to keep it.
 - If it does not pass, the suspension lifts by itself and their role comes back.
 - If it passes, they stay suspended until someone lifts it, and any role it set aside is gone for good.

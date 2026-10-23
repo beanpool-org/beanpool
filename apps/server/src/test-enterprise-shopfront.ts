@@ -513,13 +513,21 @@ async function main(): Promise<void> {
     const whilePaused = await call('PUT', kit, featurePath(shelf[7]), { featured: true });
     assert(paused === true && sentence(whilePaused, 409, 'feature_shelf_full') && featuredAtOf(shelf[1]) !== null,
         `a paused featured Offer keeps its place on the shelf (${show(whilePaused)})`);
-    // Its keepers read its Offers as it would (engine readsAsAuthor), the paused one too, as the console's Featured does to
-    // count the shelf and take one off; and while it is paused for the season, when everyone else reads none. Anyone who
-    // keeps nothing here reads them as the board has them (review of #2405, utils/shop.ts readEnterpriseOffers).
-    const offersRoute = `/api/marketplace/posts?author=${ent}&type=offer&limit=200`;
+    // Its keepers read its Offers as it would when they ask (`keeper=1`, engine readsAsAuthor), the paused one too, as the
+    // console's Featured does to count the shelf and take one off; and while it is paused for the season, when everyone
+    // else reads none. Anyone who keeps nothing here reads them as the board has them, asking or not (review of #2405,
+    // utils/shop.ts readEnterpriseOffers). Its public page's read never asks (utils/shopfront.ts readOwnerListings): a
+    // keeper reads there what every member does (PR #2405 review 4355985890).
+    const offersRoute = `/api/marketplace/posts?author=${ent}&keeper=1&type=offer&limit=200`;
+    const pageRoute = `/api/marketplace/posts?author=${ent}&limit=200`;
     const idsOf = (r: Res): string[] => (Array.isArray(r.body) ? r.body : []).map((p: any) => p.id);
     const kitReads = await call('GET', kit, offersRoute);
     const maxReads = await call('GET', max, offersRoute);
+    const kitPage = await call('GET', kit, pageRoute);
+    const maxPage = await call('GET', max, pageRoute);
+    assert(kitPage.status === 200 && !idsOf(kitPage).includes(shelf[1]) && idsOf(kitPage).includes(shelf[0])
+        && JSON.stringify(idsOf(kitPage)) === JSON.stringify(idsOf(maxPage)),
+        `on its public page a keeper reads its listings as every member does: no paused Offer (${idsOf(kitPage).join(',')} | ${idsOf(maxPage).join(',')})`);
     const pausedRow = (Array.isArray(kitReads.body) ? kitReads.body : []).find((p: any) => p.id === shelf[1]);
     assert(kitReads.status === 200 && pausedRow?.status === 'paused' && typeof pausedRow?.featuredAt === 'string' && pausedRow.featuredAt === featuredAtOf(shelf[1])
         && maxReads.status === 200 && !idsOf(maxReads).includes(shelf[1]) && idsOf(maxReads).includes(shelf[0]),
@@ -527,7 +535,10 @@ async function main(): Promise<void> {
     const seasonPaused = attempt(() => pauseEnterprise(ent, lou.pk).paused);
     const kitInSeason = await call('GET', kit, offersRoute);
     const maxInSeason = await call('GET', max, offersRoute);
+    const kitPageInSeason = await call('GET', kit, pageRoute);
     attempt(() => resumeEnterprise(ent, lou.pk));
+    assert(seasonPaused === true && kitPageInSeason.status === 200 && idsOf(kitPageInSeason).length === 0,
+        `paused for the season, its public page draws a keeper no listings, as it draws every member (${show(kitPageInSeason)})`);
     assert(seasonPaused === true && idsOf(kitInSeason).includes(shelf[0]) && idsOf(kitInSeason).includes(shelf[1])
         && maxInSeason.status === 200 && idsOf(maxInSeason).length === 0,
         `paused for the season, its keepers still read its Offers, and everyone else none (${idsOf(kitInSeason).length} | ${show(maxInSeason)})`);

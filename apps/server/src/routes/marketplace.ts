@@ -369,6 +369,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // `shop=<id>`: that shop's listings only (S1, engine/shops.ts), as any read of the board reads them for this reader; with
     // `author=` its owner's paused ones too. A visitor reads a shop's listings with nobody in them, as every listing.
     const shopId = typeof ctx.query.shop === 'string' && ctx.query.shop !== '' ? ctx.query.shop : undefined;
+    // `keeper=1` with `author=`: an enterprise's listings as its keeper's Manage console reads them, as the enterprise would
+    // (engine PostFilter.asKeeper), for a reader who keeps it only. Without it a keeper reads them as every member does, so
+    // its public page shows a keeper what it shows everyone (PR #2405 review 4355985890).
+    const asKeeper = ctx.query.keeper === '1' && !!author;
     // A few listings by id at once (`ids=a,b,c`, at most IDS_MAX), each read as `id=` reads one: a phone fetches the
     // listings of its set it doesn't hold (DESIGN-global-sync-by-area §2.3). Garbage is a 400, never a quiet empty list.
     let ids: string[] | undefined;
@@ -479,8 +483,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // `online=1`: online events only, wherever they are (DESIGN-event-times §9). They have no place, so a read within a
     // radius never meets them; an app reading by radius asks for them beside it. Only with events asked for.
     const eventOnline = wantsEvents && ctx.query.online === '1' ? true : undefined;
-    // viewerPubkey (the signed requester) lets an author see their OWN paused posts, and a keeper those of an enterprise
-    // they keep (engine readsAsAuthor); others don't. A post hidden by reports (G3) reaches its author, and the moderators
+    // viewerPubkey (the signed requester) lets an author see their OWN paused posts, and a keeper who asks (`keeper=1`)
+    // those of an enterprise they keep (engine readsAsAuthor); others don't. A post hidden by reports (G3) reaches its author, and the moderators
     // (includeHidden), and nobody else. The visitors' view is read for nobody in particular: no own posts, no hidden ones,
     // no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
@@ -529,10 +533,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
     // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
     const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
-    // A keeper reads one enterprise's listings as it would (engine readsAsAuthor: its paused ones too, and while it is off the
-    // board), so the tag says which view this is: a member bound as a keeper, or unbound, changes the answer and no listing,
-    // and the copy they held must not be confirmed with a 304. The author's own read, and every other, is tagged as before.
-    const keeperPart = author && reader && author !== reader && readsAsAuthor(db, reader, author) ? ':keeper' : '';
+    // A keeper who asks (`keeper=1`) reads one enterprise's listings as it would (engine readsAsAuthor: its paused ones too,
+    // and while it is off the board), so the tag says which view this is: a member bound as a keeper, or unbound, changes
+    // the answer and no listing, and the copy they held must not be confirmed with a 304. Every other read is tagged as before.
+    const keeperPart = asKeeper && reader && author !== reader && readsAsAuthor(db, reader, author) ? ':keeper' : '';
     const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
@@ -593,7 +597,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
-        neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId,
+        neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId, asKeeper: asKeeper || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,

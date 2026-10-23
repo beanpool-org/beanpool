@@ -52,7 +52,7 @@ vi.mock('../db', () => ({
 
 import {
     SHOP_KIND_WORDS, addOffersToMyShop, backOnChoices, changeMyShop, closeMyShop, localDay, movedCount, offersToAdd, readListingShopId,
-    SHOP_TOGGLE_READ_MS, readMyLiveOffers, readMyShop, readShop, readShopListings, shopCountsLine, shopStateLine, shopTitle,
+    SHOP_TOGGLE_READ_MS, readEnterpriseOffers, readMyLiveOffers, readMyShop, readShop, readShopListings, shopCountsLine, shopStateLine, shopTitle,
 } from '../shop';
 import { SHOP_CHOICE_HOLDS_MS, SHOP_CHOICE_KEY, SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, rememberShopChoice, shopChoiceFor } from '../shop-choice';
 import { SHOP_KINDS } from '@beanpool/core';
@@ -160,6 +160,15 @@ describe('the member\'s own shop, read', () => {
         expect(offersToAdd(mine ?? [], 'shop-1').map((l) => l.id)).toEqual(['c', 'd']);
         node.get = () => 'down';
         expect(await readShopListings('shop-1', 'dave')).toBeNull();
+    });
+
+    // Only the keepers' console asks for the enterprise's own view; its public page reads as every member does
+    // (shopfront.test.ts, readOwnerListings), a keeper too (PR #2405 review 4355985890).
+    it("an enterprise's Offers in the keepers' console: its keeper's view, asked for", async () => {
+        node.get = () => ({ status: 200, json: [{ id: 'a', title: 'Drill', type: 'offer', status: 'paused', shopId: 'shop-1' }] });
+        const got = await readEnterpriseOffers('e'.repeat(64));
+        expect(node.gets[0]).toBe(`/api/marketplace/posts?author=${'e'.repeat(64)}&keeper=1&type=offer&limit=200`);
+        expect(got?.map((l) => [l.id, l.status])).toEqual([['a', 'paused']]);
     });
 
     it('which shop one listing is in, as the node says now', async () => {

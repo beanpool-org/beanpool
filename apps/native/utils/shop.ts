@@ -268,11 +268,12 @@ export async function addOffersToEnterpriseShop(treasury: string, postIds: strin
 
 /**
  * The enterprise's Offers as its keeper reads them, for Featured and "put them in its shop": as it would read them (`author=`
- * from a keeper: the paused ones too, and all of them while it is paused for the season; engine readsAsAuthor), since a
- * paused one keeps its place on the shelf. Null with no answer.
+ * with `keeper=1` from a keeper: the paused ones too, and all of them while it is paused for the season; engine
+ * readsAsAuthor), since a paused one keeps its place on the shelf. Only the console asks for that view: a keeper's read
+ * without it, as its public page's (utils/shopfront.ts readOwnerListings), is every member's. Null with no answer.
  */
 export function readEnterpriseOffers(treasury: string): Promise<ShopListing[] | null> {
-    return readListings(`/api/marketplace/posts?author=${encodeURIComponent(treasury)}&type=offer&limit=200`);
+    return readListings(`/api/marketplace/posts?author=${encodeURIComponent(treasury)}&keeper=1&type=offer&limit=200`);
 }
 
 /** One Offer on its shop's shelf, or off it (PUT /api/marketplace/posts/:id/feature): when it was featured, or null. */

@@ -642,10 +642,10 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     contactPhone: { kind: 'community-settings', reason: "the community's contact, sent to the directory" },
     currencyType: { kind: 'community-settings', reason: "the currency's display" },
     currencyValue: { kind: 'community-settings', reason: "the currency's display" },
-    thresholds: { kind: 'community-settings', reason: 'demurrage rate and epoch, health flags' },
+    thresholds: { kind: 'community-settings', reason: 'the health flags' },
     gateway: {
         kind: 'community-settings',
-        reason: "the web app's other origins, the subsystem switches and the request limit; not the admin IP allowlist in it, which "
+        reason: "the web app's other origins, whether it is served and the request limit; not the admin IP allowlist in it, which "
             + "names addresses on one server's own network, stays with each server and is never in the record",
     },
     adminHash: { kind: 'takeover-bundle', reason: "the community's admin password" },

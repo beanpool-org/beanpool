@@ -16,6 +16,7 @@ import {
     profileLimits, BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
+import { upgradeLegacyShapeAtBoot } from './config/community-shape-upgrade.js';
 import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
@@ -697,6 +698,9 @@ export function initStateEngine(): void {
     // from its main server, once (config/community-settings.ts): before the ledger audit below holds the ledger to the
     // community's baseline, and before anything publishes the community's name or directory choices. Never throws.
     installCommunitySettingsAtBoot(getNodeRole());
+    // What a main server stored before How this community works S3 (the gateway's old switches, the directory schedule's
+    // Never) carried over to the settings that took their place, once, before anything serves (config/community-shape-upgrade.ts).
+    upgradeLegacyShapeAtBoot(getNodeRole());
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
@@ -1113,6 +1117,7 @@ export function becomeMainServerInPlace(): void {
         console.warn('[Topology] Becoming the main server: the node profile failed:', e);
     }
     step("the community's settings", () => installCommunitySettingsAtBoot('primary'));
+    step('the settings from before How this community works', () => upgradeLegacyShapeAtBoot('primary'));
     step("the database's main-server passes", () => runMainServerSchemaPasses());
     step("the listing-photo URLs' shape", () => notePhotoUrlShapeNow());
     step("the face URLs' shape", () => noteFaceUrlShapeNow());

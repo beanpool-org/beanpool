@@ -70,6 +70,7 @@ const { updateLocalConfig } = await import('./config/local-config.js');
 const { startP2P } = await import('./p2p.js');
 const { initDirectoryPublisher, pushDirectoryNow, directoryHeldBack, HELD_BACK_NAME_MESSAGE, HELD_BACK_UNLISTED_MESSAGE, HELD_BACK_PROBATION_MESSAGE } = await import('./services/directory-publisher.js');
 const { db } = await import('./db/db.js');
+const { setSwitchOverride } = await import('./config/node-profile.js');
 
 let run = 0;
 let passed = 0;
@@ -306,9 +307,15 @@ async function main() {
     );
 
     // ── 5. Disabled publisher check ───────────────────────────────────────
+    // Listed off (How this community works) is the one way not to be listed: the schedule's 0, Never, is gone (S3). A
+    // stored 0 is carried over to Listed off at boot (config/community-shape-upgrade.ts), before the publisher starts;
+    // one that is there all the same is no schedule, and reads as the default.
     updateNodeConfig({ directoryPushIntervalHours: 0 });
-    assert(initDirectoryPublisher() === false, 'with the push interval at 0 no timer is set: this is how a community is not listed');
-    assert(getNodeConfig().directoryPushIntervalHours === 0, 'directoryPushIntervalHours can be set to 0');
+    assert(initDirectoryPublisher() === true, 'a stored interval that is no schedule (the old 0) reads as the default: the publisher runs');
+    setSwitchOverride('publishToDirectory', false);
+    assert(initDirectoryPublisher() === false, 'with Listed off no timer is set: this is how a community is not listed');
+    setSwitchOverride('publishToDirectory', true);
+    updateNodeConfig({ directoryPushIntervalHours: 12 });
 
     // Cleanup
     await new Promise<void>((resolve) => server.close(() => resolve()));

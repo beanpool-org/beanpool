@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { getMember, getConversation, type Conversation } from '@beanpool/engine';
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, word } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
 import { avatarUrlOf } from '@beanpool/core';
@@ -171,11 +171,11 @@ export function assertThreadMemberCanPost(authorPubkey: string): void {
     }
     const member = db.prepare("SELECT status, COALESCE(credit_frozen, 0) as credit_frozen, is_visitor FROM members WHERE public_key = ?").get(cleanKey) as any;
     if (!member || member.is_visitor) throw new Error('Member not found');
-    if (member.status === 'disabled') throw new Error('Account is disabled');
-    if (member.status === 'suspended') throw new Error('Account is suspended');
-    if (member.status === 'pruned') throw new Error('Account has been pruned');
-    if (member.status === 'completed') throw new Error('Account closed');
-    if (member.credit_frozen === 1) throw new Error('Frozen members cannot post in discussion threads');
+    if (member.status === 'disabled') throw new Error(word('Account is disabled'));
+    if (member.status === 'suspended') throw new Error(word('Account is suspended'));
+    if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
+    if (member.status === 'completed') throw new Error(word('Account closed'));
+    if (member.credit_frozen === 1) throw new Error(word('Frozen members cannot post in discussion threads'));
 }
 
 export function postEnterpriseThreadMessage(
@@ -192,20 +192,20 @@ export function postEnterpriseThreadMessage(
         throw new Error('Enterprise not found');
     }
     if (enterprise.status === 'completed') {
-        throw new Error('Enterprise has wound up — discussion thread is read-only');
+        throw new Error(word('Enterprise has wound up — discussion thread is read-only'));
     }
     // "Enterprise is closed", never the bare status word: the route maps an error naming "suspended" or
     // "disabled" to the AUTHOR's account being blocked (403), and this is the enterprise, not the author.
     if (isEnterpriseThreadReadOnly(enterprise.status)) {
-        throw new Error('Enterprise is closed — discussion thread is read-only');
+        throw new Error(word('Enterprise is closed — discussion thread is read-only'));
     }
     // Paused enterprise stays open: pausing is exactly when people need to talk about it.
 
     assertThreadMemberCanPost(authorPubkey);
 
     const cleanText = (text || '').trim();
-    if (!cleanText) throw new Error('Message text cannot be empty');
-    if (cleanText.length > 2000) throw new Error('Message is too long (maximum 2000 characters)');
+    if (!cleanText) throw new Error(word('Message text cannot be empty'));
+    if (cleanText.length > 2000) throw new Error(word('Message is too long (maximum 2000 characters)'));
 
     ensureEnterpriseThread(enterprisePubkey);
 
@@ -281,7 +281,7 @@ export function removeEnterpriseThreadMessage(
     }
 
     if (!isKeeperOfEnterprise(actorPubkey, enterprisePubkey)) {
-        throw new Error('Only a keeper of this enterprise can remove messages from its thread');
+        throw new Error(word('Only a keeper of this enterprise can remove messages from its thread'));
     }
 
     const msgRow = db.prepare("SELECT * FROM messages WHERE id = ? AND conversation_id = ?").get(messageId, enterprisePubkey) as any;

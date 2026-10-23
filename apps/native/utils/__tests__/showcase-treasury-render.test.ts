@@ -80,6 +80,8 @@ vi.mock('expo-router', async () => {
 });
 
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+// The shopfront's pictures (S5) are expo-image's, as the Market's are.
+vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('react-native-safe-area-context', () => ({
     SafeAreaView: ({ children }: any) => createElement('div', null, children),
 }));

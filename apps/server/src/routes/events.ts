@@ -25,6 +25,7 @@ import { SKIP_HOST_ONLY } from '../engine/event-series-roll.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { zoneOfPin, describeZone, acceptedZones } from '../engine/event-zone.js';
+import { word } from '@beanpool/core';
 
 export function createEventsRoutes(_deps: RouteDeps): Router {
     const router = new Router();
@@ -79,7 +80,7 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'A signed request is required' };
+            ctx.body = { error: word('A signed request is required') };
             return;
         }
         ctx.body = { events: listMyEvents(actor) };
@@ -96,7 +97,7 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'A signed request is required' };
+            ctx.body = { error: word('A signed request is required') };
             return;
         }
         const body = (ctx as any).requestBody || {};
@@ -136,7 +137,7 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'A signed request is required' };
+            ctx.body = { error: word('A signed request is required') };
             return;
         }
         if (!membersOnlyHere(ctx)) return;

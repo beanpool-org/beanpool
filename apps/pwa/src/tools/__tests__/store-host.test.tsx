@@ -241,16 +241,20 @@ describe('the host', () => {
         owner: { kind: 'member' as const, publicKey: 'ana', name: 'Ana' },
         node: { url: null, profile: 'local', features: null },
         navigate: vi.fn(),
+        back: vi.fn(),
         openComposer: vi.fn(),
     };
     const doc = { get: () => ({ v: 1, items: [] }), set: async () => {} };
 
     it('given only what the manifest declared: an undeclared door is absent, and the web grants none it has not built', () => {
-        expect(Object.keys(webHostFor(tool, ctx, doc)).sort()).toEqual(['doc', 'navigate', 'node', 'now', 'owner']);
-        const withDoors = webHostFor({ ...tool, permissions: ['need-door', 'deals', 'photos', 'reminders'] as const }, ctx, doc);
-        expect(Object.keys(withDoors).sort()).toEqual(['doc', 'navigate', 'needDoor', 'node', 'now', 'owner']);
+        expect(Object.keys(webHostFor(tool, ctx, doc)).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);
+        const withDoors = webHostFor({ ...tool, permissions: ['need-door', 'place', 'event-door', 'reminders'] as const }, ctx, doc);
+        expect(Object.keys(withDoors).sort()).toEqual(['back', 'doc', 'navigate', 'needDoor', 'node', 'now', 'owner']);
         expect('offerDoor' in withDoors).toBe(false);
-        expect('deals' in withDoors).toBe(false);
+        expect('place' in withDoors).toBe(false);
+        // What the Tool shed asks for was built with it (T1.3).
+        const shed = webHostFor({ ...tool, permissions: ['photos', 'camera', 'posts', 'deals', 'pricing-guide'] as const }, ctx, doc);
+        expect(Object.keys(shed).sort()).toEqual(['back', 'camera', 'deals', 'doc', 'navigate', 'node', 'now', 'owner', 'photos', 'posts', 'pricingGuide']);
     });
 
     it("an offer draft as the composer takes it: unknown fields dropped, an unknown category or a bad price left to the member", () => {
@@ -286,9 +290,9 @@ describe("the covered page's place, and Home", () => {
         expect(parseToolTarget(toolTarget('things', 'thing', 't 1'))).toEqual({ id: 'things', screen: 'thing', key: 't 1' });
     });
 
-    it("a tool's card is drawn on Home only for a tool with a card and a web half; none ship yet", () => {
-        expect(drawnToolCardTypes()).toEqual([]);
-        expect([...HOME_DRAWN].filter((t) => t.startsWith('tool-'))).toEqual([]);
+    it("a tool's card is drawn on Home only for a tool with a card and a web half; the Tool shed's ships (T1.3)", () => {
+        expect(drawnToolCardTypes()).toEqual(['tool-things']);
+        expect([...HOME_DRAWN].filter((t) => t.startsWith('tool-'))).toEqual(['tool-things']);
         expect(drawnToolCardTypes([tool], { notes: () => null })).toEqual(['tool-notes']);
         expect(drawnToolCardTypes([tool], {})).toEqual([]);
         expect(drawnToolCardTypes([{ ...tool, homeCard: undefined }], { notes: () => null })).toEqual([]);

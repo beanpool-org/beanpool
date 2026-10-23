@@ -220,4 +220,91 @@ These represent next-generation design specifications for decentralized, federat
 
 ---
 
+## History
+
+A release log moved here from the README on 23 October 2026, kept for the record. It says what shipped at the time, not how BeanPool works today: the members' guide and the operator manual are current. Lines marked ⛔ were replaced or removed, and other lines may be out of date too. About half of these titles (43 of 80) also appear under Recently Completed above.
+
+- ✅ **Alternative Palettes, Light Mode Map, and Chat Upgrades (v1.1.40)** — Shipped color tokenization across the native app (the Earth and Slate palettes have since been removed), defaulted maps to Light Mode with CartoDB Positron and a custom slate-blue dusk theme, generated transparent logos/icons, consolidated inbox tabs into a single list, added tap-to-enlarge chat images, lazy caches, 15-minute edit windows, node status mismatch checks, and Ed25519 PKCS8 signing fixes.
+- ✅ **Active/Passive Collision & Deadlock HUD (v1.0.87 / v1.0.88)** — Resolves P2P Yamux concurrent dial-racing and silent listener deadlocks. Configures Active Dialer (`enabled: true`) and Passive Listener (`enabled: false`) roles that exchange enabled states on handshake, automatically rendering red `⚠️ Collision` and yellow `⚠️ Deadlock` warning badges with custom inline warning instructions.
+- ⛔ **Push-on-Write Real-Time Replication (v1.0.87 / v1.0.88)** — replaced: a backup now pulls a signed snapshot from its primary over HTTPS (`apps/server/src/services/backup-puller.ts`). Originally: — Real-time event delta broadcasts using `/beanpool/sync/delta/2.0.0` secure WebSockets. Instantly signs delta event payloads with the node's libp2p Ed25519 private key upon any SQLite write, verified cryptographically by target mirrors.
+- ✅ **15-Min Reconcile & 24h Tombstone Pruning** — Shipped a robust 15-minute background full Merkle-tree state comparison safety net to repair dropped delta frames, paired with a 24-hour database garbage collector that prunes soft-deleted tombstones older than 30 days once downstream peers' cursors have synced past them.
+- ✅ **P2P WebSockets & Self-Healing (v1.0.85 / v1.0.86)** — libp2p links between nodes can run over WebSockets (`:4002`) as well as TCP (`:4001`). Automatic periodic Yamux handshake checks prune stale socket references forcefully using `p2pNode.hangUp` and trigger clean recovery dials within 30 seconds of a node restart.
+- ✅ **SQLite Diagnostics & Health Gates (v1.0.83 / v1.0.84)** — Active `PRAGMA integrity_check` scans and multi-table counters (Members, Posts, DMs, Txns) displaying database health indicators in Settings. Includes Koa health check `minAppVersion` gates matched dynamically on client boot to overlay updates.
+- ✅ Dynamic Node-Centered Mapping — Leaflet map bounds are dynamically tethered to the node's configured radius, and GPS pin-drop race conditions have been resolved
+- ✅ Invite-only membership with single-use codes + hierarchical invite tree
+- ✅ 12-word BIP-39 seed phrase — deterministic Ed25519 key derivation + recovery
+- ✅ People tab — Friends, Community browser, Invites (Guardians were removed with keeper recovery in September 2026)
+- ✅ Landing page welcome hub (HTTPS `/`) — 3 paths (join, transfer, recover) + admin contact info
+- ✅ Admin community config — name, email, phone in Settings → Community tab
+- ✅ Member profiles (avatar via camera/gallery, editable callsign, bio, contact visibility)
+- ✅ 🫘 Bean reputation system — 5-bean ratings with comments on marketplace tiles + detail
+- ✅ Abuse reporting with reason dropdown + admin panel
+- ✅ Marketplace with 13 categories, photos (up to 3), post validation, "My Posts" view
+- ✅ E2E messaging — DMs and group chats
+- ✅ PWA with map, marketplace, messaging, people, ledger
+- ✅ Post detail view with author profile, photos, bean rating, Message/Rate/Report actions
+- ✅ Community health dashboard (admin settings)
+- ✅ Moderation Centre — reported posts, health-flagged wash trading, batch operations, member audit
+- ✅ Software update notifications — Docker Desktop-style header badge, auto-check with configurable interval
+- ✅ REST APIs (67+ endpoints) including friends, ratings, reports, admin thresholds, version check, push tokens, escrow lifecycle, and quadratic voting.
+- ✅ WebSocket real-time state feed
+- ✅ Federation protocol — peer/mirror/blocked trust levels (cross-community trading tried only between two test communities, off unless both operators switch it on)
+- ✅ Cross-community marketplace browsing (Connected Communities UI)
+- ✅ Mirror state sync — a backup pulls a signed snapshot from its primary every 60 seconds, with a full re-compare every 15 minutes
+- ✅ Handshake protocol (~570ms latency between continents)
+- ✅ Let's Encrypt auto-TLS via DNS-01 challenge (Cloudflare API)
+- ⛔ Earlier five-node test fleet (no longer how BeanPool runs; see the map on beanpool.org).
+- ✅ Node admin setup guide with LE and no-domain instructions
+- ✅ Database (SQLite) — `better-sqlite3` with WAL mode, self-healing schema migrations
+- ✅ FTS5 full-text search — marketplace search with synonym mapping
+- ✅ Cryptographically signed APIs — Ed25519 client-side signatures on all POST requests to prevent spoofing
+- ✅ CI/CD pipeline — GitHub Actions auto-builds Docker image, auto-creates Releases from git tags
+- ✅ **Directory Publisher (Decentralized)** — nodes push metadata to beanpool.org Supabase global directory using Libp2p Ed25519 cryptographic signatures to prevent spoofing and replay attacks.
+- ✅ Push Notifications — Expo push tokens, DM/marketplace alerts, per-member notification preferences
+- ✅ Native Background Sync — SQLite `dbSyncLock` Mutex Queue safely handling parallel `applyDelta` and foreground Map/Inbox requests without `database is locked` panics.
+- ✅ Offline Outbox — Draft and queue marketplace posts while offline, syncs automatically when connection restores.
+- ✅ Live Inbox Parity — Base64 E2E plaintext message decryption, real-time polling, and global unread notification tab badges.
+- ✅ Native Identity Flow — self-managed identity creation and 12-word recovery via Expo SecureStore
+- ✅ Community Projects Tab — native-only crowdfunding feature with progress bars and proposal creation
+- ✅ Neon-Vine Tab Bar — branded tab navigation with artwork background and dark overlay
+- ✅ Guest Mode — multi-node onboarding with membership probe, guest UI indicators in header and sync status
+- ✅ Native App (Expo) — 7-tab React Native companion app: Map, Projects, Market (14 cats), Chat, People, Ledger, Settings
+- ✅ Native SQLite + SecureStore — local persistence and self-managed identity on device
+- ✅ Map Phase 6 — pin clustering, modern markers, elder glow effects (both PWA + Native)
+- ✅ Map Clustering Stabilization — custom patching to prevent marker disappearance on iOS scroll/zoom.
+- ✅ Marketplace UX Modernization — horizontal category chips, trust badges, MyDeals sheet/modal, post author trust display
+- ✅ Community Projects — native-only crowdfunding tab with progress tracking
+- ✅ Escrow Demurrage Exemption — escrow wallets exempt from circulation decay
+- ✅ **Sanitized Syncing** — Synthetic "Visitor" and escrow accounts automatically filtered from local member directories and map views.
+- ✅ **Admin Node Restore** — Supports offline restoration of system states via `.tar.gz` database upload.
+- ⛔ **Social Recovery (3-of-N)** — shipped, then **removed in September 2026**. Client entry points are gone; see [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md).
+- ✅ **Identity Spoofing Security** — Hardened identity endpoints against impersonation attacks.
+- ✅ **A11y & Stability** — Fixed P2P yamux stream crash loops and applied accessibility enhancements across the frontend.
+- ✅ **Security Hardening (Sentinel)** — Mitigated Stored XSS vulnerabilities across the Admin Dashboard and fixed Command Injection in server backup routines. Established automated security auditing via `.jules/sentinel.md`.
+- ✅ **Performance & Accessibility** — Fixed an O(N^2) array filtering bottleneck for relational data and added ARIA labels to the PWA WelcomePage.
+- ✅ **PWA Parity Phase 1-4** — Community status indicator, avatar trust badges with profile navigation, People page search/avatars/relative dates/message button, synonym-expanded marketplace search (417-entry map), localStorage-based blocked user filtering, Settings security section (backup reminder, private key viewer, wipe identity).
+- ✅ **Native Invite Fix** — Updated invite share text to include Node URL for manual code entry.
+- ✅ **Cross-platform Avatar Sync** — Implemented `bundled://` protocol for avatars, fixing missing pin icons and broken clustering on Android.
+- ✅ **Native Quadratic Voting** — Restored native QV governance engine, CommonsInfoModal, voting stepper, and dual progress bars.
+- ✅ **Sybil Hardening v3** — Implemented funnel detection, ghost velocity gate, and interactive audit filters.
+- ✅ **Profile Completeness Enforcement** — Added server-side enforcement for profile completeness.
+- ✅ **Onboarding UX Overhaul** — Refined into a friendly 3-step onboarding flow.
+- ✅ **Haptic Feedback** — Phase 1 essentials implemented for native app interactions.
+- ✅ **Admin Dashboard Reorganization** — Redistributed System tab settings to contextual tabs; fixed login ReferenceError.
+- ✅ **Continuous Health Ping** — Added offline red dot indicator and continuous health ping to mobile app header, mapped using unique public keys to prevent UI collisions.
+- ✅ **Author Request Review Flow** — Enhanced deals management allowing sellers to review buyer requests with integrated messaging and standardized decline reasons.
+- ✅ **Ledger UI Enhancements** — Corrected credit slider visual representation for negative balances and improved feedback for locked 'Send Credits' functionality.
+- ✅ **Sentinel Security Hardening & Deny-by-Default (Sentinel)** — Inverted the Koa server `requireSignature` auth filter to deny-by-default on all mutating endpoints (`POST`, `PUT`, `DELETE` under `/api/*`), eliminating opt-in security drift. Binds verified request keys to `ctx.state.actor` as the authenticated source of truth, and enforces dynamic body spoof protection.
+- ✅ **Auth Boundary Verification** — Shipped `scripts/verify-auth-boundary.mjs` which dynamically asserts all 38 mutating endpoints across 114 test vectors (unsigned, wrong-key, spoofed-body) against the live server.
+- ✅ **Cryptographic Sync Signatures** — Replication payloads are signed with the node's Ed25519 key (`data/libp2p_key`) and verified before database writes; replication is now one-way, primary → backup. Includes a dedicated `test-sync-signature.ts` integration suite.
+- ✅ **Native Identity SecureStore & Clipboard Privacy** — Eliminated plaintext fallback storage for identity private keys in favor of hardware-backed Expo `SecureStore`, and resolved OS spyware notifications by replacing background clipboard sniffing with user-initiated pasting.
+- ✅ Monorepo ESLint Flat Config — Configured monorepo-wide flat linting rules via `eslint.config.mjs` to maintain code health standards.
+- ✅ Release v1.0.76 Settings Lockout Fix — Resolved Admin Settings CSP lockouts by explicitly permitting Leaflet, OpenStreetMap, and geocoding API domains (`https://unpkg.com`, `https://*.tile.openstreetmap.org`, `https://nominatim.openstreetmap.org`).
+- ✅ Release v1.0.76 Password Complexity Engine — Enforced high-entropy complexity rules (minimum 8 chars, requiring uppercase, lowercase, digit, and special character check) dynamically evaluated at system boot, settings inputs, and API boundaries.
+- ✅ Release v1.0.77 "Never" Sync Schedule — Added a "Never (Disabled)" option to Directory settings, allowing admins to completely bypass periodic directory pushes.
+- ✅ Production EAS Native Builds (v1.0.76-b97) — Successfully generated production iOS ipa bundle and Android aab bundle, distributing them to local and desktop build stores.
+- ⛔ Deployment of v1.1.40 to the earlier five-node test fleet, with Let's Encrypt TLS (June 2026; superseded).
+
+---
+
 _Suggestions? Open an issue or discuss with your node admin._

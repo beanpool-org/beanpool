@@ -3,8 +3,9 @@
  * phone's block list (utils/blocklist.ts): Beans from someone blocked here show BLOCKED_BEANS_NOTE in place of whatever
  * came with them (Marty on the board, 2026-10-01: "Drop the note, keep the Beans").
  *
- * A block made in the phone app stays on the phone, so the community still sends their note; this keeps it off the
- * ledger. One the community kept from the member (a block made in the web app) already comes as BLOCKED_BEANS_NOTE.
+ * A block made in the phone app reaches the community only once the phone is connected (utils/blocklist.ts syncBlocks),
+ * and never one whose node has no block list; until then the community still sends their note, and this keeps it off the
+ * ledger. One the community kept from the member already comes as BLOCKED_BEANS_NOTE.
  */
 import { BLOCKED_BEANS_NOTE, ledgerLineNote } from '@beanpool/core';
 

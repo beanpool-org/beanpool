@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, isLang, type Lang } from '@beanpool/core';
+import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -9191,14 +9192,15 @@ export function createProject(proposerPubkey: string, title: string, description
         db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
         const existingMember = db.prepare("SELECT public_key FROM members WHERE public_key = ?").get(project.id);
         if (!existingMember) {
+            // The description is its purpose; its About (members.bio) is its keepers' own words, so it starts with none.
             db.prepare(`
                 INSERT INTO members (
-                    public_key, callsign, joined_at, bio, status,
+                    public_key, callsign, joined_at, status,
                     is_treasury, earned_credit, earned_surplus,
                     purpose, goal_amount, lifecycle, paused, updated_at
-                ) VALUES (?, ?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
+                ) VALUES (?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
             `).run(
-                project.id, callsign, now, project.description,
+                project.id, callsign, now,
                 project.description || project.title, project.requestedAmount, now
             );
             db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
@@ -9235,21 +9237,23 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
     
     const now = new Date().toISOString();
     // The enterprise row's name, by the one name rule, as at the create (engine projectRowName): the title is kept as typed.
+    // Its name and purpose, never its About (members.bio): that is its keepers' (PUT /api/treasury/:t/profile).
     const rowName = engine.projectRowName(db, projects[index].title, projectId);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`
             UPDATE members
-            SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
+            SET callsign = ?, purpose = ?, goal_amount = ?, updated_at = ?
             WHERE public_key = ?
         `).run(
             rowName,
             projects[index].description || projects[index].title,
-            projects[index].description,
             projects[index].requestedAmount,
             now,
             projectId
         );
+        // Its chat is titled by its name: a rename carries over, as the face's does (engine/enterprise-shopfront.ts).
+        db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'enterprise_thread'").run(rowName, projectId);
     })();
     broadcast({ type: 'project_updated', project: projects[index] });
     return true;
@@ -9535,9 +9539,14 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  *
  * The token is stored locked (services/push-token-seal.ts): the row is keyed by its id, and holds it only in a box this
  * server's key opens. Without the key ('failed') nothing is stored.
+ *
+ * `lang` is the language the phone writes in, from its registration (one of core's LANGS, or null for English): its pushes
+ * are written in it (dispatchPushNotification). Each registration names it again, so a member who changes language is
+ * written to in the new one from their app's next start.
  */
 export function registerPushToken(
     publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null, address: string | null = null,
+    lang: Lang | null = null,
 ): PushRegistration {
     // A standby's tokens are its main server's (a plain table, design G4): the phone registers there.
     assertPlainTablesWritable();
@@ -9569,12 +9578,12 @@ export function registerPushToken(
                 }
             }
             // The same phone again keeps its box: it opens to this token, and a new one would only be churn.
-            db.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, registered_at) VALUES (?, ?, ?, ?, ?)
+            db.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, lang, registered_at) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (public_key, token_id) DO UPDATE SET
-                    platform = excluded.platform, created_at = excluded.created_at,
+                    platform = excluded.platform, lang = excluded.lang, created_at = excluded.created_at,
                     registered_at = COALESCE(excluded.registered_at, push_tokens.registered_at)
                 WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
-                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, tokenId, tokenBox, platform, registeredAt);
+                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, tokenId, tokenBox, platform, lang, registeredAt);
             if (!held) dropStalestTokens(publicKey, tokenId);
             console.log(`[Push] Registered a phone for ${publicKey.slice(0, 8)}`);
             return 'registered';
@@ -9776,13 +9785,14 @@ export function removePushToken(publicKey: string, token?: string): boolean {
  * memory, never stores. A row this server's key doesn't open is left out (its boot removes such rows). `open`: a send to
  * many members passes one opener, so the key file is read once.
  */
-export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTokenOpener()): { tokenId: string; token: string; platform: string }[] {
-    const rows = db.prepare(`SELECT token_id, token_box, platform FROM push_tokens WHERE public_key = ?`).all(publicKey) as
-        { token_id: string; token_box: string; platform: string }[];
-    const phones: { tokenId: string; token: string; platform: string }[] = [];
+export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTokenOpener()): { tokenId: string; token: string; platform: string; lang: Lang | null }[] {
+    const rows = db.prepare(`SELECT token_id, token_box, platform, lang FROM push_tokens WHERE public_key = ?`).all(publicKey) as
+        { token_id: string; token_box: string; platform: string; lang: string | null }[];
+    const phones: { tokenId: string; token: string; platform: string; lang: Lang | null }[] = [];
     for (const r of rows) {
         const token = open(publicKey, r.token_id, r.token_box);
-        if (token !== null) phones.push({ tokenId: r.token_id, token, platform: r.platform });
+        // Only a language BeanPool writes: a row a hand or an older build wrote otherwise is English.
+        if (token !== null) phones.push({ tokenId: r.token_id, token, platform: r.platform, lang: isLang(r.lang) ? r.lang : null });
     }
     return phones;
 }
@@ -10046,7 +10056,13 @@ export function dispatchPushNotification(
         recovery: 'default',
     };
 
-    const words = pushNoticeWords(kind);
+    // The kind's words in each phone's language (its registration's `lang`; English without one), once per language a send.
+    const wordsByLang = new Map<Lang | null, { title: string; body: string }>();
+    const phoneWords = (lang: Lang | null) => {
+        let w = wordsByLang.get(lang);
+        if (!w) wordsByLang.set(lang, w = pushNoticeWords(kind, wordsIn(lang)));
+        return w;
+    };
     const sentAt = Math.floor(Date.now() / 1000);
     const allMessages: any[] = [];
     // Whose phone each message is for, by position: Expo answers with a ticket per message, in the order sent. The token
@@ -10075,7 +10091,8 @@ export function dispatchPushNotification(
         const notice = newPushNotice(kind, pk, sentAt);
         notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
 
-        for (const { tokenId, token, platform } of tokens) {
+        for (const { tokenId, token, platform, lang } of tokens) {
+            const words = phoneWords(lang);
             const msg: any = {
                 to: token,
                 sound: soundMap[categoryId] || 'default',

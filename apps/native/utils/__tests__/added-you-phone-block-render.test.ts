@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
  * The People tab's "added you" lines (components/AddedYouLines.tsx) rendered for real, against the phone's own block list
- * (utils/blocklist.ts, real, over an in-memory AsyncStorage). A block made in the phone app stays on that phone and the
- * node never hears of it (guide settings/blocking.md), so the node's own filter (server engine/friends-added-you.ts) can't
- * leave them out. The phone does, as its People lists do (#1913 review, finding 2):
+ * (utils/blocklist.ts, real, over an in-memory AsyncStorage). A block made in the phone app reaches the node only once the
+ * phone is connected, and never a node with no block list (guide settings/blocking.md), so the node's own filter (server
+ * engine/friends-added-you.ts) can't be counted on to leave them out. The phone does, as its People lists do (#1913
+ * review, finding 2):
  *   - someone blocked on this phone is never drawn, and Add back is never offered for them;
  *   - blocking someone while their line shows takes it away at once (BLOCKLIST_UPDATED_EVENT); unblocking brings it back.
  * React Native's host components are plain tags in react-dom, as enterprise-decisions-render.test.ts does.

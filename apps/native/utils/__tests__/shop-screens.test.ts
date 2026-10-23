@@ -333,6 +333,9 @@ describe('Your shop (app/shop/mine.tsx)', () => {
             atTheFloor(dark ? darkColors : lightColors);
             await click('shop-tools');
             expect(nav.pushed.at(-1)).toBe('/tools');
+            // Its shopfront as members see it (S5).
+            await click('shop-see-front');
+            expect(nav.pushed.at(-1)).toEqual({ pathname: '/shop/[id]', params: { id: 'shop-1' } });
             act(() => root.unmount());
             root = createRoot(host);
         }
@@ -717,7 +720,7 @@ describe('Home\'s "Your shop and tools" body', () => {
 
 describe('the shop screens take every colour from the central tokens', () => {
     it('no colour is written in them: no hex, rgb, or named colour', () => {
-        const files = ['app/shop/mine.tsx', 'components/shop/ShopToggle.tsx', 'components/shop/ShopSheets.tsx', 'components/shop/ShopHomeBody.tsx'];
+        const files = ['app/shop/mine.tsx', 'app/shop/[id].tsx', 'components/shop/ShopToggle.tsx', 'components/shop/ShopSheets.tsx', 'components/shop/ShopHomeBody.tsx', 'components/shopfront/Shopfront.tsx'];
         for (const f of files) {
             const src = fs.readFileSync(path.join(__dirname, '../..', f), 'utf8');
             expect(src, f).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|'(white|black|red|green|blue|grey|gray)'/);

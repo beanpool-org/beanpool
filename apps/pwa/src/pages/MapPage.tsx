@@ -511,7 +511,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setNewPostCashAlsoNeeded(openDraft.cashAlsoNeeded);
         setNewPostReach('local');
         setNewPostReachPeers([]);
-        setNewPostPhotos([]);
+        setNewPostPhotos(openDraft.photos ?? []);
         setAudienceScope('public');
         setTargetGroupId('');
         setPostLat(null);

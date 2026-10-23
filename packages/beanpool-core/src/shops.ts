@@ -19,6 +19,12 @@ export function isShopKind(kind: unknown): kind is ShopKind {
 export const SHOP_BACK_ON_MAX_DAYS = 366;
 
 /**
+ * The shelf: the most of a shop's Offers featured at once (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 7, §4;
+ * Marty, 23 Oct 2026). The shopfront draws them as tiles under the banner, and the Market's shop card prefers them.
+ */
+export const SHOP_FEATURED_MAX = 6;
+
+/**
  * A shop's counts, as a reader sees its listings (the node's GET /api/shops/:id): its live Offers ("things", on the board
  * or out on loan), those on the board ("available"), to borrow (lendable) and to buy (the rest), out on loan, and the
  * live ones listed in the last seven days.

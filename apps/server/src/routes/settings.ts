@@ -288,8 +288,9 @@ router.get('/api/node/config', async (ctx) => {
     // A private preview (config/private-preview.ts): the phone map reads this unsigned for the community's service area
     // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
     // is) gets the area alone: the place the community serves (null with "Share Location & Radius" off), no member's
-    // anything, and none of the other settings.
-    if (isPrivatePreview() && !isNodeMember(signer)) {
+    // anything, and none of the other settings. An owner or admin gets the whole config, as off a preview: the node
+    // password names no member, and the Node Identity screen that reads with it saves every setting back.
+    if (isPrivatePreview() && !ownerOrAdmin && !isNodeMember(signer)) {
         ctx.body = { serviceRadius: config.serviceRadius ?? null };
         return;
     }

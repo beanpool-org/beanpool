@@ -24,7 +24,11 @@ In the phone app, confirm with **Block User**. In the web app, your browser asks
 
 ## What your community does about it
 
-Your community does this for blocks it keeps for you. Today that is a block made in the web app. A block made in the phone app stays on that phone, and your community does not know about it.
+Your community keeps your blocks for you, from the phone app and from the web app. A block made in the phone app reaches your community as soon as the phone is connected. Without a connection, the phone blocks them at once and tells your community when it is back online.
+
+If you belong to more than one community on the phone, your blocks reach each one when you next use it on that phone. A community you are only looking around as a guest gets none of them. If you join it, they reach it then.
+
+If your community's server is too old to keep blocks, a block made in the phone app stays on that phone. The phone tries again each day, until the server is updated.
 
 - Their direct messages never reach you. Your community does not deliver them to you, on any phone or computer, and you get no notification and no unread count for them.
 - If they start a new chat with you, it does not appear in your chats.
@@ -46,17 +50,20 @@ Your community does this for blocks it keeps for you. Today that is a block made
 - If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.
 - Notices from your community still come, even when they started them. For example, you are told when someone opens a vote to replace you as a group's lead convenor, and you get messages from the people who run your community.
 - They can still see your posts.
-- In the phone app, the block is kept on this phone, for your account only. Another account on this phone does not get your blocks.
+- The phone app also keeps your blocks on the phone, for your account only, so they work without a connection. Another account on this phone does not get your blocks.
 - In the phone app, if you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.
-- In the phone app, if you reinstall the app or use another phone, block them again.
+- In the phone app, if you reinstall the app or use another phone, your community still keeps your blocks, so their messages still don't reach you. The phone app does not get your list back: block them again there to hide their posts.
 - In the web app, your community keeps your blocks with your account. Sign in on any browser and they come back. Signing out leaves nothing about them on that computer. See "Using BeanPool in a web browser".
-- The people who run your community's server can see whom you blocked in the web app, as they can see reports.
-- The phone app and the web app keep separate lists. A block in one does not show in the other.
+- The people who run your community's server can see whom you blocked, in either app, as they can see reports.
+- A block made in the phone app shows in the web app too. A block made in the web app does not show in the phone app, but your community keeps it, so their messages don't reach you on either.
+- If you unblock someone in the web app whom you blocked in the phone app, unblock them in the phone app too. The phone keeps its own list, and still hides them.
 
 ## Unblocking
 
 - Open **Settings**. Under **Legal & Privacy**, tap **Manage Blocked Users**.
 - Tap **Unblock** next to a name, or **Unblock All**.
 - In the phone app you can also unblock someone from their profile. Under their name it says "You blocked" and their name. Tap **Unblock** there.
+
+In the phone app, blocking and unblocking work without a connection. The phone tells your community when it is back online. If you tap **Unblock All** after blocking a lot of people, the phone tells your community about them a few at a time, so it can take some minutes.
 
 In the web app, blocking and unblocking need a connection to your community. Without one, the app says so and nothing changes. Try again when you are back online.

@@ -2,8 +2,9 @@
  * The one store of every tool on the web (scratch/tools/DESIGN-tool-template-fable.md §1.6, slice T0.3): IndexedDB, one
  * object store `tool_docs`, one record per community, owner and tool, the document whole as JSON with the browser's write
  * time and its last sync with the node's private copy (tools/node-copy.ts, slice T0.4). Beside each record, under the same
- * key and `|settings`, the host's settings for that tool (the node copy's toggle). The phone keeps the same rows in its
- * community's SQLite file (T0.2).
+ * key and `|settings`, the host's settings for that tool (the node copy's toggle), and under `|photo|<ref>` each photo
+ * the tool keeps (a JPEG data URL at 800 px, never inside the document and never on the node until a listing is posted
+ * with it). The phone keeps the same rows in its community's SQLite file and its photos as files (T0.2).
  *
  * The documents are the member's own (their things, their garden), so they go wherever this browser's account storage
  * goes: {@link clearToolStore} is part of lib/device-prefs.ts `clearAccountStorage`, which every sign-out and delete runs,
@@ -237,13 +238,67 @@ export function writeToolSettings(owner: string, tool: string, next: ToolSetting
     return update(settingsKeyOf(owner, tool), () => ({ ...next }));
 }
 
-/** Remove my data from this browser: the document of `tool` for `owner`, gone. True once it is. */
+type KeyRangeMaker = { bound(lower: string, upper: string, lowerOpen?: boolean, upperOpen?: boolean): unknown };
+
+/** The browser's IDBKeyRange (a test's stand-in where it has none), or null. */
+function keyRange(): KeyRangeMaker | null {
+    const KeyRange: KeyRangeMaker | undefined = typeof IDBKeyRange !== 'undefined'
+        ? IDBKeyRange
+        : (globalThis as unknown as { IDBKeyRange?: KeyRangeMaker }).IDBKeyRange;
+    return KeyRange ?? null;
+}
+
+/** Every key that starts with `prefix`. */
+const prefixRange = (KeyRange: KeyRangeMaker, prefix: string) => KeyRange.bound(prefix, prefix + '\ufffd', false, false);
+
+/** Remove my data from this browser: the document of `tool` for `owner`, and every photo it kept, gone. True once it is. */
 export async function removeToolRecord(owner: string, tool: string): Promise<boolean> {
     const db = await openDb();
     if (!db) return true;
-    const ok = await run(db, (s) => s.delete(toolRecordKey(owner, tool)));
+    const KeyRange = keyRange();
+    const ok = await run(db, (s) => {
+        s.delete(toolRecordKey(owner, tool));
+        if (KeyRange) (s as unknown as { delete(r: unknown): IDBRequest }).delete(prefixRange(KeyRange, photoPrefix(owner, tool)));
+    });
     if (ok) notifyToolStore(owner, tool);
     return ok;
+}
+
+// ── Photos ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const photoPrefix = (owner: string, tool: string) => `${toolRecordKey(owner, tool)}|photo|`;
+
+/** A photo ref as a key part: letters, digits, `_` and `-` only (the phone's file names keep the same rule). */
+export const photoRef = (ref: string) => ref.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 96) || '_';
+
+/**
+ * Keep a photo (a JPEG data URL, already drawn at 800 px) for `tool` under `ref`; true once it is on disk. False when it
+ * couldn't be, or the account has left this browser.
+ */
+export async function keepToolPhoto(owner: string, tool: string, ref: string, dataUrl: string): Promise<boolean> {
+    return update(`${photoPrefix(owner, tool)}${photoRef(ref)}`, () => dataUrl);
+}
+
+/** A kept photo as its data URL, or null when there is none or it can't be read. */
+export async function readToolPhoto(owner: string, tool: string, ref: string): Promise<string | null> {
+    const db = await openDb();
+    if (!db) return null;
+    return new Promise<string | null>((resolve) => {
+        try {
+            const req = db.transaction(TOOL_STORE, 'readonly').objectStore(TOOL_STORE).get(`${photoPrefix(owner, tool)}${photoRef(ref)}`);
+            req.onsuccess = () => resolve(typeof req.result === 'string' && req.result.startsWith('data:image/') ? req.result : null);
+            req.onerror = () => resolve(null);
+        } catch {
+            resolve(null);
+        }
+    });
+}
+
+/** One photo gone. True once it is (or there was none to remove). */
+export async function removeToolPhoto(owner: string, tool: string, ref: string): Promise<boolean> {
+    const db = await openDb();
+    if (!db) return true;
+    return run(db, (s) => s.delete(`${photoPrefix(owner, tool)}${photoRef(ref)}`));
 }
 
 /**
@@ -255,11 +310,9 @@ export async function clearToolRecordsFor(nodeUrl: string): Promise<boolean> {
     if (!db) return true;
     const normalized = (nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')).trim().replace(/\/+$/, '');
     const prefix = `${normalized}|`;
-    const KeyRange = typeof IDBKeyRange !== 'undefined'
-        ? IDBKeyRange
-        : (globalThis as unknown as { IDBKeyRange?: { bound: (...a: unknown[]) => unknown } }).IDBKeyRange;
+    const KeyRange = keyRange();
     if (!KeyRange) return false;
-    const range = KeyRange.bound(prefix, prefix + '\ufffd', false, false);
+    const range = prefixRange(KeyRange, prefix);
     const ok = await run(db, (s) => (s as unknown as { delete(r: unknown): IDBRequest }).delete(range));
     notifyToolStore('*', '*');
     return ok;

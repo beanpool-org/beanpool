@@ -132,6 +132,7 @@ describe('the host, narrowed to the manifest (narrowHost)', () => {
         node: { url: null, profile: 'local', features: null },
         doc: { get: () => ({ v: 1 }), set: async () => undefined },
         navigate: () => undefined,
+        back: () => undefined,
         now: () => 0,
     };
     const grants: ToolHostGrants = {
@@ -143,18 +144,18 @@ describe('the host, narrowed to the manifest (narrowHost)', () => {
         eventDoor: () => undefined,
         deals: async () => [],
         pricingGuide: async () => null,
-        posts: { pause: async () => undefined, resume: async () => undefined, status: async () => 'active' },
+        posts: { pause: async () => undefined, resume: async () => undefined, status: async () => 'active', mine: async () => [] },
         nodeCopy: { on: true },
     };
     const full = { ...base, ...grants };
 
     it('a tool that asked for nothing gets the base and nothing else', () => {
-        expect(Object.keys(narrowHost(full, [])).sort()).toEqual(['doc', 'navigate', 'node', 'now', 'owner']);
+        expect(Object.keys(narrowHost(full, [])).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);
     });
 
     it('each permission grants its one function, and an undeclared one is absent, not undefined', () => {
         const host = narrowHost(full, ['offer-door', 'photos', 'reminders']);
-        expect(Object.keys(host).sort()).toEqual(['doc', 'navigate', 'node', 'now', 'offerDoor', 'owner', 'photos']);
+        expect(Object.keys(host).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'offerDoor', 'owner', 'photos']);
         expect(host.offerDoor).toBe(grants.offerDoor);
         expect('deals' in host).toBe(false);
         expect('camera' in host).toBe(false);
@@ -165,7 +166,7 @@ describe('the host, narrowed to the manifest (narrowHost)', () => {
         const granted = Object.values(TOOL_PERMISSION_GRANTS).filter((g) => g !== null);
         expect(new Set(granted).size).toBe(granted.length);
         expect(granted.sort()).toEqual(Object.keys(grants).sort());
-        expect(Object.keys(narrowHost(full, TOOL_PERMISSIONS)).length).toBe(5 + granted.length);
+        expect(Object.keys(narrowHost(full, TOOL_PERMISSIONS)).length).toBe(6 + granted.length);
     });
 
     it("a grant the app's host lacks (a feature not built there yet) is absent too", () => {

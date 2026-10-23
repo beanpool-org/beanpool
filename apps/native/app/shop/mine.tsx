@@ -11,6 +11,8 @@
  *   the node's sentence is shown, with the way to the deals.
  * - No answer, and a node from before shops, are each said; nothing is offered that would fail.
  *
+ * - See it as members do: its shopfront, /shop/<id> (slice S5).
+ *
  * Not here: "Give the shop its own account" (slice S7, after the node's step S6), and an enterprise's shopfront.
  */
 import React, { useCallback, useState } from 'react';
@@ -222,6 +224,11 @@ export default function YourShopScreen() {
                                 {refusedAt('screen') ? <Text style={[s.note, { color: colors.feedback.danger.fg }]} testID="shop-error">{refusal!.message}</Text> : null}
                             </ToolSection>
                         ) : null}
+
+                        <ToolSection testID="shop-as-members">
+                            <ToolRow icon="🪟" title={t('See it as members do')} state={t('Your shopfront, as members here see it')}
+                                onPress={() => router.push({ pathname: '/shop/[id]', params: { id: shop.id } })} testID="shop-see-front" />
+                        </ToolSection>
 
                         <ToolSection title={t('About your shop')} testID="shop-fields">
                             <ToolRow title={t('Name')} state={shop.name ?? t('Not named yet')} onPress={() => { setRefusal(null); setEditing('name'); }} testID="shop-field-name" />

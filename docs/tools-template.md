@@ -6,7 +6,8 @@ and three lines, never a hunt through Home, the router and the shop.
 
 Design: `scratch/tools/DESIGN-tool-template-fable.md` (Fable 5.1, 20 Oct 2026; Marty: "Yes, build as designed"). This page
 is its §4 for contributors. Slice T0.1 built the contract and the checks; the phone's host (the Tools screen, the host
-route, the primitives) is T0.2 and the web's is T0.3. Until they land, a tool's screens draw nothing.
+route, the primitives) is T0.2 and the web's is T0.3. The **Tool shed** (`things`, slices T1.1 to T1.3) is the first tool
+written to it: read its three folders for a worked example.
 
 ## What a tool is
 
@@ -21,10 +22,28 @@ route, the primitives) is T0.2 and the web's is T0.3. Until they land, a tool's 
 A tool imports React, `@beanpool/core`, its own folder and the template's host and primitives, and nothing else (the
 eslint fence). It talks to the app only through `host`, which has exactly the functions its permissions grant
 (`narrowHost` in `packages/beanpool-core/src/tools/host.ts`). Its data is one JSON document with `v` at the top, at most
-64 KB, kept on the phone (or in the browser); photos stay files on the phone. A tool whose permissions include
+64 KB, kept on the phone (or in the browser); photos stay on the device (files on the phone, this browser's tool store on
+the web), and reach the node only inside a listing the member posts. A tool whose permissions include
 `node-copy` also has a private copy on the community's server, on by default and switched off by the member in the
 tool's Settings (`apps/*/tools/node-copy.ts`, the rule in `packages/beanpool-core/src/tools/reconcile.ts`); without that
 permission nothing of it leaves the device.
+
+**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`, and `set`, which writes the document whole), `navigate`
+(to another of its screens) and `back` (as the header's Back goes: what a form does once it is saved), and `now`. Each
+permission grants one more: `photos` and `camera` (pick or take a photo, 800 px, kept on the device, by `ref`), `offerDoor`
+and `needDoor` (the composer, prefilled; nothing is posted until the member taps Post), `posts` (pause, resume and the
+status of the owner's own Offers, and `mine()` to list them, so a record can be linked to the Offer posted from its
+draft; the status is the server's, asked each time; a pause is the owner's own, taken for an Offer live or already paused,
+so one a shop "closed for now" paused stays down when it reopens; a resume while its shop is closed rejects with core's
+`TOOL_SHOP_CLOSED`, which `isShopClosedRefusal` tells from no answer), `deals` (the owner's deals as seller or lender, a loan's `backAround` when known), `pricingGuide` (a hint from the
+community's guide, never a price set), `nodeCopy`, and `reminders` (which grants no function: the host schedules what
+`due()` says). `place` and `eventDoor` are not built yet: a phone route refuses a tool that asks for them.
+
+**The primitives** (`apps/native/tools/ui.tsx`, `apps/pwa/src/tools/ui.tsx`, the same names): `ToolScreen` (phone;
+it scrolls a box being typed in, and the buttons under it, above the keyboard),
+`ToolSection`, `ToolRow` (an emoji or a photo, a title, a one-line state; `wrap` for a record's own screen), `ToolField`,
+`ToolChips` (`heading` to show its label), `ToolButton` (primary, danger), `ToolEmpty`, `ToolNote` (warning, danger),
+`ToolInput` (one line, several, or numbers) and `ToolPhoto`. One column, 48 px targets, colours from the central tokens.
 
 ## Adding a tool
 
@@ -32,18 +51,23 @@ permission nothing of it leaves the device.
    compiling empty tool with its fixtures and a test) and writes the three registry lines. Pick the id: 2 to 16 lowercase
    letters and hyphens, never two together; new-tool refuses one whose names in core are already taken (`tools`, `tool`).
    Then the shelf (`stock`, `trade` or `books`), the shop kinds, the owner.
-2. **Fill the manifest** (`<id>/manifest.ts` in core): words through `word()`, one emoji, the permissions you need and no
-   more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the
+2. **Fill the manifest** (`<id>/manifest.ts` in core): words through `word()` (a line with a count is a
+   `wordn('{n} thing', '{n} things')` pair with its count as `n`, so "1 thing" reads right in every language), one emoji,
+   the permissions you need and no more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the
    tool has something to say on Home or at a time. A tool's Home card is offered once from inside the tool, never added
    to Home by itself.
 3. **Write the document's rules and tests in core** (`<id>/doc.ts`, `<id>/__tests__/`), and `<id>/fixtures.ts`: a stored
    value of every version the tool ever wrote, and the empty, small and full documents. `read()` never throws, reads every
    older version, and keeps the keys of a newer one it doesn't know.
 4. **Write the phone screens** with the host's primitives (`apps/native/tools/ui`) and `host`; **then the web screens**,
-   the same screens. Every sentence in `t()`.
+   the same screens. Every sentence in `t()`. Rules both apps share (a record's state, each change to the document)
+   belong in core beside the manifest, so the two halves never disagree (the Tool shed's `things/shed.ts`). The phone
+   half's screens are a thunk, `require('./screens')`, which vitest can't load (a `.tsx` through Node's own `require`): a
+   tool's phone tests import its screens module instead (`vi.mock('../index', …)`, as `apps/native/tools/things/__tests__`
+   does, and the generic test does for every registered tool).
 5. **Run** `pnpm words:check`, `pnpm words:lint` (your folders start at 0),
-   `node scripts/tools/check-tool-budgets.mjs`, the package tests, and the emulator at 320 dp with 1.3× text. Put the
-   screenshots in the PR, light and dark.
+   `node scripts/tools/check-tool-budgets.mjs`, the package tests, and the emulator at 320 dp with 1.3× text. On the web,
+   a real-browser check at 320 px like `apps/pwa/e2e/tool-shed-320.mjs`. Put the screenshots in the PR, light and dark.
 6. **Open the PR** with: what leaves the phone (the permissions, in words), the budget check's output, the tier, the
    screenshots. The words lane drafts the other languages after merge (machine drafts are labelled).
 

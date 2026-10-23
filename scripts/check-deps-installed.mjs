@@ -20,14 +20,21 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The workspace globs in pnpm-workspace.yaml, each `dir/*` or a plain dir, plus the root itself. */
+/**
+ * The workspace globs in pnpm-workspace.yaml, each `dir/*` or a plain dir, plus the root itself. A `!` glob leaves a
+ * folder out, as pnpm does: apps/reddit-watcher has its own npm install, so its packages are never in node_modules here.
+ */
 function workspaces() {
     const dirs = ['.'];
+    const excluded = [];
     let yaml = '';
     try { yaml = readFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'utf8'); } catch { return dirs; }
     for (const m of yaml.matchAll(/^\s*-\s*["']?([^"'\s#]+)["']?/gm)) {
         const glob = m[1];
-        if (glob.startsWith('!')) continue;
+        if (glob.startsWith('!')) {
+            excluded.push(glob.slice(1));
+            continue;
+        }
         if (glob.endsWith('/*')) {
             const parent = glob.slice(0, -2);
             let names = [];
@@ -37,7 +44,8 @@ function workspaces() {
             dirs.push(glob);
         }
     }
-    return dirs.filter((d) => existsSync(join(repoRoot, d, 'package.json')));
+    const left = (d) => excluded.some((x) => (x.endsWith('/*') ? dirname(d) === join(x.slice(0, -2)) : d === join(x)));
+    return dirs.filter((d) => !left(d) && existsSync(join(repoRoot, d, 'package.json')));
 }
 
 const missing = new Map(); // workspace -> [names]

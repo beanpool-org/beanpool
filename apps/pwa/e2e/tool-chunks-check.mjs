@@ -2,16 +2,17 @@
 /**
  * One chunk per tool, on the real build output (scratch/tools/DESIGN-tool-template-fable.md §2.3 step 6, §2.4; slice T0.3).
  *
- * The registry ships no tools yet, so this builds the web app with its own vite config and the scaffold registered as a
- * tool under TOOL_ID, as `node scripts/tools/new-tool.mjs <id>` would write it, without touching the tree: a plugin
- * serves the scaffold's web half at apps/pwa/src/tools/<id>/ and src/tools/index.ts with its one line added
- * (scripts/tools/registry.mjs registerIn). Then it reads what came out:
- *   - exactly one `tool-<id>` chunk, holding the tool's screens (a sentence only they draw), and only what is the tool's
- *     own (a few KB for the scaffold: React, core and the primitives stay where the app has them);
- *   - no other file holds that sentence, and none imports the tool's chunk statically: the first chunk and the Tools
- *     page load the tool only when it is opened (`import()`);
+ * This builds the web app with its own vite config and, beside the tools the registry ships (the Tool shed since T1.3),
+ * the scaffold registered as a tool under TOOL_ID, as `node scripts/tools/new-tool.mjs <id>` would write it, without
+ * touching the tree: a plugin serves the scaffold's web half at apps/pwa/src/tools/<id>/ and src/tools/index.ts with its
+ * one line added (scripts/tools/registry.mjs registerIn). Then it reads what came out:
+ *   - exactly one `tool-<id>` chunk for the scaffold and for each tool the registry ships, and none for any other id;
+ *   - the scaffold's chunk holds its screens (a sentence only they draw), and only what is the tool's own (a few KB:
+ *     React, core and the primitives stay where the app has them); no other file holds that sentence;
+ *   - no file imports a tool's chunk statically: the first chunk and the Tools page load a tool only when it is opened
+ *     (`import()`);
  *   - the Tools page is its own chunk too, and the first chunk holds none of its sentences.
- * It prints the sizes: the first chunk (raw and gzipped), the Tools page chunk and the tool's chunk.
+ * It prints the sizes: the first chunk (raw and gzipped), the Tools page chunk and each tool's chunk.
  *
  * Run:  pnpm --filter @beanpool/pwa tool-chunks-check   (needs @beanpool/core built; it builds nothing else)
  *   TOOL_CHUNKS_DIR=<dir>   read an existing build output instead of building (it must have been built with the scaffold)
@@ -28,8 +29,11 @@ import { build } from 'vite';
 const PWA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(PWA, '../..');
 const ID = process.env.TOOL_ID || 'demo';
-const { PARTS, registerIn, scaffoldFiles } = await import(pathToFileURL(path.join(REPO, 'scripts/tools/registry.mjs')).href);
+const { PARTS, readRegistry, registerIn, scaffoldFiles } = await import(pathToFileURL(path.join(REPO, 'scripts/tools/registry.mjs')).href);
 const web = PARTS.find((p) => p.part === 'pwa');
+/** The tools the web registry ships, each its own chunk too. */
+const shipped = readRegistry(web, fs.readFileSync(path.join(REPO, web.index), 'utf8')).entries.map((e) => e.id);
+if (shipped.includes(ID)) throw new Error(`TOOL_ID ${ID} is a tool the registry ships: pick another id for the scaffold`);
 
 /** Files the build sees that the tree hasn't got: the scaffold's web half, and the registry with its line. */
 const overlay = new Map();
@@ -76,14 +80,20 @@ const gz = (f) => zlib.gzipSync(fs.readFileSync(path.join(assets, f))).length;
 
 const problems = [];
 const toolChunks = js.filter((f) => /^tool-[a-z]+(?:-[a-z]+)*-[A-Za-z0-9_-]{8}\.js$/.test(f));
-const mine = toolChunks.filter((f) => f.startsWith(`tool-${ID}-`));
+const chunkOf = (id) => toolChunks.filter((f) => f.startsWith(`tool-${id}-`) && /^[A-Za-z0-9_-]{8}\.js$/.test(f.slice(`tool-${id}-`.length)));
+const mine = chunkOf(ID);
 if (mine.length !== 1) problems.push(`${mine.length} tool-${ID} chunks (${mine.join(', ') || 'none'}): exactly one is wanted`);
-for (const f of toolChunks) if (!mine.includes(f)) problems.push(`${f}: a tool chunk for a tool that isn't registered`);
+const theirs = shipped.flatMap((id) => {
+    const c = chunkOf(id);
+    if (c.length !== 1) problems.push(`${c.length} tool-${id} chunks (${c.join(', ') || 'none'}): exactly one is wanted for a tool the registry ships`);
+    return c;
+});
+for (const f of toolChunks) if (!mine.includes(f) && !theirs.includes(f)) problems.push(`${f}: a tool chunk for a tool that isn't registered`);
 if (mine.length === 1 && !read(mine[0]).includes(MARK)) problems.push(`${mine[0]}: the tool's screens are not in its chunk`);
 for (const f of js) if (!mine.includes(f) && read(f).includes(MARK)) problems.push(`${f}: holds the tool's screens, outside its chunk`);
 // Loaded only when opened: no chunk imports the tool's statically (`from"./tool-…"`, `import"./tool-…"`); only `import("./tool-…")`.
 for (const f of js) {
-    for (const t of mine) {
+    for (const t of [...mine, ...theirs]) {
         if (f === t) continue;
         const name = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         if (new RegExp(`(?:from|import)\\s*["']\\./${name}["']`).test(read(f))) problems.push(`${f}: imports ${t} statically, so it loads at start`);
@@ -103,10 +113,10 @@ if (entry && read(entry).includes('tools-page')) problems.push(`${entry}: the fi
 const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
 if (entry) console.log(`first chunk ${entry}: ${kb(size(entry))} raw, ${kb(gz(entry))} gzipped`);
 if (page) console.log(`Tools page chunk ${page}: ${kb(size(page))} raw, ${kb(gz(page))} gzipped`);
-for (const f of mine) console.log(`tool chunk ${f}: ${kb(size(f))} raw, ${kb(gz(f))} gzipped`);
+for (const f of [...mine, ...theirs]) console.log(`tool chunk ${f}: ${kb(size(f))} raw, ${kb(gz(f))} gzipped`);
 console.log(`${js.length} js files read in ${out}`);
 if (problems.length) {
     for (const p of problems) console.log(`FAIL ${p}`);
     process.exit(1);
 }
-console.log(`tool-chunks-check: ok — the tool ${ID} is one chunk of its own, loaded only when opened, and the Tools page is another`);
+console.log(`tool-chunks-check: ok — the scaffold (${ID})${shipped.map((id) => ` and ${id}`).join('')}: each one chunk of its own, loaded only when opened, and the Tools page is another`);

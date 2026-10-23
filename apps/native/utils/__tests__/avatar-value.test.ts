@@ -78,6 +78,7 @@ vi.mock('../identity', () => ({ loadIdentity: h.loadIdentity }));
 vi.mock('../nodes', () => ({
     getDatabaseFilenameForNode: () => 'beanpool_test.db',
     addSavedNode: vi.fn().mockResolvedValue(undefined),
+    clearGuestNode: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../canonical-profile', () => ({
     getCanonicalProfile: h.getCanonicalProfile,

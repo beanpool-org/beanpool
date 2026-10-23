@@ -2,8 +2,9 @@
  * "Also remove from friends" under a name on Settings → Manage Blocked Users, shown only while that person is still your
  * friend. A block does not end a friendship (guide settings/blocking.md): they still have you as a friend, and see your
  * contact if it is set to Friends. This ends it in one step, through the same node route as any removal
- * (utils/db.removeFriendOnNode), and the block stays. A block made on this phone never reaches the node; the removal
- * does, as any removal does. They can notice a removal, so it says so before it is done.
+ * (utils/db.removeFriendOnNode), and the block stays. A block made on this phone reaches the node only once the phone is
+ * connected (utils/blocklist.ts syncBlocks); the removal goes as any removal does. They can notice a removal, so it says
+ * so before it is done.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Alert } from 'react-native';

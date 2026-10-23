@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, type PushNoticeKind, word } from '@beanpool/core';
 import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -80,8 +80,8 @@ function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new MessagingError('Member not found');
-    if (member.status === 'disabled') throw new MessagingError('Account is disabled');
-    if (member.status === 'pruned') throw new MessagingError('Account has been pruned');
+    if (member.status === 'disabled') throw new MessagingError(word('Account is disabled'));
+    if (member.status === 'pruned') throw new MessagingError(word('Account has been pruned'));
     // The old key of a member being re-keyed (a lost or stolen phone): its row is 'suspended', which the lines above
     // let write, so it would go on messaging people as them.
     if (isInvalidatedKey(db, publicKey)) throw new MessagingError(NOT_A_MEMBER_ERROR, 403);
@@ -880,14 +880,14 @@ export function editMessage(
         // "not found" would tell a second account that the id is a withheld one).
         const own = ownWithheldLine(messageId, authorPubkey);
         if (!own) {
-            if (withheldLine(messageId)) throw new MessagingError('You are not a participant in this conversation', 403);
+            if (withheldLine(messageId)) throw new MessagingError(word('You are not a participant in this conversation'), 403);
             throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
         }
         if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
         refuseUnencryptedDm(ciphertext, nonce);
         const sentMs = new Date(own.timestamp).getTime();
         if (Number.isNaN(sentMs) || Date.now() - sentMs > MESSAGE_EDIT_WINDOW_MS) {
-            throw new MessagingError('Messages can only be edited within 15 minutes of sending');
+            throw new MessagingError(word('Messages can only be edited within 15 minutes of sending'));
         }
         beforeStore?.();
         const editedAt = new Date().toISOString();
@@ -923,10 +923,10 @@ export function editMessage(
             : new MessagingError(refusal.error, refusal.status);
     } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
         .get(row.conversation_id, authorPubkey)) {
-        throw new MessagingError('You are not a participant in this conversation', 403);
+        throw new MessagingError(word('You are not a participant in this conversation'), 403);
     }
-    if (row.author_pubkey !== authorPubkey) throw new MessagingError('Only the author can edit a message');
-    if (row.type === 'system') throw new MessagingError('System messages cannot be edited');
+    if (row.author_pubkey !== authorPubkey) throw new MessagingError(word('Only the author can edit a message'));
+    if (row.type === 'system') throw new MessagingError(word('System messages cannot be edited'));
     // A keeper-removed message is a tombstone: never editable, by any route.
     if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
     // An edit is new words: in a direct conversation, encrypted or not at all (see sendMessage).
@@ -954,7 +954,7 @@ export function editMessage(
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
-        throw new MessagingError('Messages can only be edited within 15 minutes of sending');
+        throw new MessagingError(word('Messages can only be edited within 15 minutes of sending'));
     }
     beforeStore?.();
 
@@ -1039,7 +1039,7 @@ export function deleteOwnMessage(
         // (#1403 re-review: "not found" would tell a second account that the id is a withheld one).
         const own = ownWithheldLine(messageId, authorPubkey);
         if (!own) {
-            if (withheldLine(messageId)) throw new MessagingError('You are not a participant in this conversation', 403);
+            if (withheldLine(messageId)) throw new MessagingError(word('You are not a participant in this conversation'), 403);
             throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
         }
         // A withheld line has no system type: null, as a stored line's answer has it, so the two answers have one shape.
@@ -1074,7 +1074,7 @@ export function deleteOwnMessage(
             : new MessagingError(refusal.error, refusal.status);
     } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
         .get(row.conversation_id, authorPubkey)) {
-        throw new MessagingError('You are not a participant in this conversation', 403);
+        throw new MessagingError(word('You are not a participant in this conversation'), 403);
     }
 
     // A system line's author is 'SYSTEM', so "only the author" would refuse it for the wrong reason and tell a
@@ -1245,7 +1245,7 @@ export function ensureTransactionConversation(
 ): string {
     // A trade's chat is the node's: a block never withholds it, or a deal under way would lose its notices.
     const conv = createConversation(cb, 'dm', [buyerPubkey, sellerPubkey], buyerPubkey, undefined, undefined, { asNode: true });
-    if (!conv) throw new Error('Failed to create transaction conversation');
+    if (!conv) throw new Error(word('Failed to create transaction conversation'));
     // A trade between the two opening accepts a message request between them (engine/dm-requests.ts).
     acceptOnTrade(conv.id);
     return conv.id;

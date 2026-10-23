@@ -19,6 +19,9 @@
  *   (components/AddCardDialog.tsx) and Edit home (components/EditHomeDialog.tsx) on the community card; the version-2
  *   list is saved on the account (`home.layout`) with this browser's copy. Which copy stands, what is asked and every edit
  *   are lib/home-layout.ts, the phone's rules (apps/native/utils/home-cards.ts).
+ * - **A wide screen** (scratch/global-node/DESIGN-home-wide-and-content-fable.md D1, slice W2): the cards stand in as many
+ *   320–576 px columns as the page's own width holds, up to three, row first in the saved order; Needs you and the
+ *   community card span the row. A phone's width is one column, as before. Auto only: a saved choice of columns is W0's.
  * - **Interests** (§4.3): the chips save on the account and in this browser's Market (`bp_fav_categories`); a tap reorders
  *   the Market card in place, the same second.
  * - **No dark patterns** (§6.3): real numbers or nothing, amber (never red) only for what waits on the member, nothing

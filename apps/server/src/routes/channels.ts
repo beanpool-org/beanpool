@@ -32,6 +32,7 @@ import {
 import { platformRequest, readPlatformIdentity, IdentityUnavailable, type PlatformIdentity } from '../engine/platform-identity.js';
 import type { RouteDeps } from './types.js';
 import { respondIfMuted } from './profile-feature-gate.js';
+import { word } from '@beanpool/core';
 
 export function getPulseOAuthConfig(): {
     tiktok: { enabled: boolean; clientKey: string | null };
@@ -70,7 +71,7 @@ function channelErrorStatus(code: string): number {
 }
 
 const UPDATE_REQUIRED_MESSAGE =
-    'Update BeanPool to connect this channel: the node now asks the platform which account you signed in to.';
+    word('Update BeanPool to connect this channel: the node now asks the platform which account you signed in to.');
 
 /**
  * Every exchange spends OUR platform app's quota, so the relay is capped: 10 an hour per member and
@@ -132,7 +133,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         ctx.body = { channels: listChannels(actor) };
@@ -153,7 +154,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         // A channel's items reach everyone's Pulse feed, so a muted member (G3) adds or changes none. Deleting one,
@@ -166,7 +167,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         const raw = typeof url === 'string' && url.trim() ? url : handle;
         if (typeof raw !== 'string' || !raw.trim()) {
             ctx.status = 400;
-            ctx.body = { error: 'A link or handle is required' };
+            ctx.body = { error: word('A link or handle is required') };
             return;
         }
 
@@ -198,7 +199,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         if (respondIfMuted(ctx, actor)) return;
@@ -227,7 +228,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
     router.post('/api/member/channels/:id/verify-oauth', async (ctx) => {
         if (!ctx.state.actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         ctx.status = 410;
@@ -243,7 +244,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 
@@ -271,7 +272,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         try {
@@ -331,7 +332,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 
@@ -384,12 +385,12 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
         const instagramSecret = process.env.INSTAGRAM_APP_SECRET || process.env.INSTAGRAM_CLIENT_SECRET;
         if (platform === 'tiktok' && (!tiktokKey || !tiktokSecret)) {
             ctx.status = 503;
-            ctx.body = { error: 'TikTok client secret is not configured on this node.' };
+            ctx.body = { error: word('TikTok client secret is not configured on this node.') };
             return;
         }
         if (platform === 'instagram' && (!instagramAppId || !instagramSecret)) {
             ctx.status = 503;
-            ctx.body = { error: 'Instagram app secret is not configured on this node.' };
+            ctx.body = { error: word('Instagram app secret is not configured on this node.') };
             return;
         }
 
@@ -485,7 +486,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
             } catch (e: any) {
                 console.error('[PulseOAuthRelay] TikTok token endpoint unreachable:', e?.message);
                 ctx.status = 502;
-                ctx.body = { error: 'Failed to contact TikTok token endpoint', message: e?.message };
+                ctx.body = { error: word('Failed to contact TikTok token endpoint'), message: e?.message };
                 return;
             }
             json = json && typeof json === 'object' ? json : {};
@@ -548,7 +549,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
         } catch (e: any) {
             console.error('[PulseOAuthRelay] Instagram token endpoint unreachable:', e?.message);
             ctx.status = 502;
-            ctx.body = { error: 'Failed to contact Instagram token endpoint', message: e?.message };
+            ctx.body = { error: word('Failed to contact Instagram token endpoint'), message: e?.message };
             return;
         }
         tokenJson = tokenJson && typeof tokenJson === 'object' ? tokenJson : {};

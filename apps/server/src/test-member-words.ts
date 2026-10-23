@@ -443,6 +443,11 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     await family("the community's Decisions, standing to propose", 'Proposing a Decision requires earned trade standing (earnedCredit > 0)',
         'POST', ann, '/api/commons/decisions', { title: 'Seeds', touches: 'pool', effect: 'grant', description: 'Seeds for the garden beds', subject: ann.pk, params: { amount: 5 } });
     const tools = se.createGroup({ name: 'Tool Library', joinPolicy: 'open', createdBy: ann.pk });
+    // The names list, creator channels and the open join door (routes/names-list.ts, engine/creator-channels.ts, routes/open-join.ts).
+    await family('the names list, to a member who is no admin', 'Only the community’s owners and admins can open the names list.', 'GET', ann, '/api/names/state');
+    await family('creator channels, a link of another site (a sentence for each article)', 'That is not an Instagram link.',
+        'POST', ann, '/api/member/channels', { platform: 'instagram', url: 'https://example.com/ann', category: 'other' }, 'message');
+    await family('joining, a community that takes invites only', 'This community is invite-only.', 'POST', stranger, '/api/join', { callsign: 'Stranger' });
     await family('groups, a vote with nobody to vote with', 'Nobody else in this group can vote, so there is nobody to vote with.',
         'POST', ann, `/api/groups/${tools.id}/decisions`, { effect: 'close_group', title: 'Close it', description: 'We have finished with the library' });
 }
@@ -452,6 +457,17 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
  * What the apps match a node's words on (each found where it is written), so a sentence holding one stays English until
  * its branch reads a code: translated, the app's branch would stop matching.
  */
+/**
+ * A sentence that holds an app's match but never reaches the place that matches: what the match reads is named, and the
+ * sentence comes from elsewhere. The offline check on the People, profile, shop and enterprise screens reads those
+ * screens' own loads ('Network request failed'), never a join door's answer, which says "your network".
+ */
+const NEVER_WHERE_MATCHED: { sentence: RegExp; matcher: RegExp; why: string }[] = [
+    { sentence: /^(?:Lots of people|Too many new accounts) have joined from your network/, matcher: /off-grid\|network/,
+        why: "a join door's refusal: the offline check reads the People, profile, shop and enterprise screens' own loads" },
+];
+const neverWhereMatched = (text: string, matcher: string) => NEVER_WHERE_MATCHED.some(n => n.sentence.test(text) && n.matcher.test(matcher));
+
 const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i, where: 'apps/native/app/(tabs)/people.tsx, public-profile.tsx (offline)' },
     { phrase: /not found|not authorized|not active/i, where: 'apps/native/app/post/[id].tsx (a deal changed elsewhere)' },
@@ -545,7 +561,8 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     // values in it); a count's both forms.
     const marked = extracted.flatMap((p: any) => p.calls.filter((c: any) => typeof c.text === 'string')
         .flatMap((c: any) => (typeof c.other === 'string' ? [c, { ...c, text: c.other }] : [c])));
-    const matched = marked.flatMap((c: any) => APP_MATCHES.filter(m => m.phrase.test(c.text)).map(m => `${c.at} "${c.text}" (${m.where})`));
+    const matched = marked.flatMap((c: any) => APP_MATCHES.filter(m => m.phrase.test(c.text) && !neverWhereMatched(c.text, m.phrase.source))
+        .map(m => `${c.at} "${c.text}" (${m.where})`));
     const prefixed = marked.filter((c: any) => /^[A-Z_]{3,}:/.test(c.text)).map((c: any) => `${c.at} "${c.text}"`);
     assert(marked.length >= 100, `the server and the engine mark their members' refusals (${marked.length} marks)`);
     assert(matched.length === 0, `no marked sentence is one an app matches on${matched.length ? `: ${matched.join('; ')}` : ''}`);
@@ -559,7 +576,8 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     assert(listed.every(l => matchers.some(m => m.looksFor === l)) && matchers.length >= 40,
         `the apps' matches are found where they are written (${matchers.length}, the hand-kept list's among them)`);
     const filled = (s: string) => s.replace(/\{[A-Za-z0-9_]+\}/g, 'Ann');
-    const caught = marked.flatMap((c: any) => matchers.filter(m => !known(m) && m.test(filled(c.text))).map(m => `${c.at} "${c.text}" (${m.at} ${m.shown})`));
+    const caught = marked.flatMap((c: any) => matchers.filter(m => !known(m) && m.test(filled(c.text)) && !neverWhereMatched(c.text, m.looksFor))
+        .map(m => `${c.at} "${c.text}" (${m.at} ${m.shown})`));
     assert(caught.length === 0, `no marked sentence is one an app's source matches on${caught.length ? `: ${caught.join('; ')}` : ''}`);
     assert(NEVER_A_NODES_WORDS.every(n => matchers.some(m => m.file === n.file && m.looksFor === n.looksFor)),
         "each match set aside as never a node's words is still in its file (else it comes off the list)");

@@ -66,8 +66,11 @@ import path from 'node:path';
 import { getMember, isVisitorKey, confirmationDialOn, knownFloor } from '@beanpool/engine';
 import {
     isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
-    readNamesCopy, NAMES_COPY_MAX_BYTES,
+    readNamesCopy, NAMES_COPY_MAX_BYTES, word, wordsFor,
 } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
@@ -91,15 +94,14 @@ export class NamesListError extends Error {
 }
 
 export const NAMES_MESSAGES = {
-    adminsOnly: 'Only the community’s owners and admins can open the names list.',
-    ownerOnly: 'Only an owner can change how the names list works.',
-    newKeyFirst: 'Someone stopped being an admin, so the names list needs a new key before anything more is written. '
-        + 'Open the names list on the phone of an admin who holds its key: it makes one.',
-    noKey: 'You don’t hold the names list’s key yet. An admin who holds it sends it the next time they open the names list, once your phones have checked each other.',
-    askForShare: 'Another admin holds the names list’s key, so they make the next one. Their phone sends it to yours the next time they open the names list.',
-    stale: 'The names list’s key history moved on since this phone looked. Open the list again.',
-    staleKey: 'The names list has a newer key than this phone used. Open the list again and try once more.',
-    notBuilt: 'Showing real names to members isn’t built yet. Only the community’s admins can read the names list.',
+    adminsOnly: word('Only the community’s owners and admins can open the names list.'),
+    ownerOnly: word('Only an owner can change how the names list works.'),
+    newKeyFirst: word('Someone stopped being an admin, so the names list needs a new key before anything more is written. Open the names list on the phone of an admin who holds its key: it makes one.'),
+    noKey: word('You don’t hold the names list’s key yet. An admin who holds it sends it the next time they open the names list, once your phones have checked each other.'),
+    askForShare: word('Another admin holds the names list’s key, so they make the next one. Their phone sends it to yours the next time they open the names list.'),
+    stale: word('The names list’s key history moved on since this phone looked. Open the list again.'),
+    staleKey: word('The names list has a newer key than this phone used. Open the list again and try once more.'),
+    notBuilt: word('Showing real names to members isn’t built yet. Only the community’s admins can read the names list.'),
 } as const;
 
 // ── Who ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -179,7 +181,7 @@ export function namesCommunityId(): string {
             return id;
         }
     } catch { /* said below */ }
-    throw new NamesListError(503, 'no_community_id', 'This server has no community id yet (its genesis.json), so the names list’s keys can’t be checked. Restart the server.');
+    throw new NamesListError(503, 'no_community_id', word('This server has no community id yet (its genesis.json), so the names list’s keys can’t be checked. Restart the server.'));
 }
 
 interface GenerationRow { id: string; n: number; parent_id: string | null; maker: string; drops: string; statement: string; signature: string; created_at: string }
@@ -323,7 +325,7 @@ export function addShare(actor: string, body: { header?: unknown; signature?: un
     if (!s.box) refuse('bad_box', 'A share carries the box its header names.');
     // A header addressed to its own sender is that admin's claim to hold the keys it names (design Addendum 5): its box is
     // sealed to the sender alone, and it counts in `holdsOf` like any header the sender signs.
-    if (!isNamesAdmin(s.to)) throw new NamesListError(400, 'not_admin', 'The keys are only for the community’s owners and admins.');
+    if (!isNamesAdmin(s.to)) throw new NamesListError(400, 'not_admin', word('The keys are only for the community’s owners and admins.'));
     if (!generationRow(s.headId) || s.keyIds.some((id) => !generationRow(id))) refuse('unknown_key', 'A share names only keys this server has a statement for.');
     const box = s.box;
     db.transaction(() => {
@@ -346,7 +348,7 @@ export function addShare(actor: string, body: { header?: unknown; signature?: un
 /** Throws unless a write may be sealed under `keyId` by `actor` now: no freeze, the current key, and a holder of it. */
 function assertMayWrite(actor: string, keyId: unknown): string {
     const current = currentGeneration();
-    if (!current) throw new NamesListError(409, 'no_list_key', 'The names list has no key yet. Open it on your phone: it makes one.');
+    if (!current) throw new NamesListError(409, 'no_list_key', word('The names list has no key yet. Open it on your phone: it makes one.'));
     if (newKeyNeeded(current)) throw new NamesListError(409, 'new_key_first', NAMES_MESSAGES.newKeyFirst);
     if (keyId !== current.id) throw new NamesListError(409, 'stale_key', NAMES_MESSAGES.staleKey);
     if (!holdersOf(current.id).has(actor)) throw new NamesListError(403, 'no_key', NAMES_MESSAGES.noKey);
@@ -369,7 +371,7 @@ function entryRow(id: string): EntryRow | undefined {
 function requireEntry(id: unknown): EntryRow {
     if (!isNamesEntryId(id)) throw new NamesListError(400, 'bad_entry_id', 'An entry id is 32 hexadecimal characters.');
     const row = entryRow(id);
-    if (!row) throw new NamesListError(404, 'no_entry', 'There is no such entry in the names list.');
+    if (!row) throw new NamesListError(404, 'no_entry', word('There is no such entry in the names list.'));
     return row;
 }
 
@@ -381,7 +383,7 @@ export function addEntry(actor: string, body: { id?: unknown; ciphertext?: unkno
     const id = body.id;
     if (entryRow(id)) throw new NamesListError(409, 'entry_exists', 'There is already an entry with that id.');
     const count = (db.prepare('SELECT COUNT(*) AS c FROM names_entries').get() as { c: number }).c;
-    if (count >= NAMES_LIMITS.entries) throw new NamesListError(409, 'list_full', `The names list holds at most ${NAMES_LIMITS.entries} entries.`);
+    if (count >= NAMES_LIMITS.entries) throw new NamesListError(409, 'list_full', tr('The names list holds at most {n} entries.', { n: NAMES_LIMITS.entries }));
     db.transaction(() => {
         db.prepare('INSERT INTO names_entries (id, ciphertext, key_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?)')
             .run(id, ciphertext, keyId, actor, actor);
@@ -408,7 +410,7 @@ export function deleteEntry(actor: string, id: unknown): { id: string } {
     assertPlainTablesWritable();
     const row = requireEntry(id);
     if (liveConfirmationOfEntry(row.id)) {
-        throw new NamesListError(409, 'entry_confirmed', 'A member is confirmed against this entry. Revoke the confirmation first.');
+        throw new NamesListError(409, 'entry_confirmed', word('A member is confirmed against this entry. Revoke the confirmation first.'));
     }
     db.transaction(() => {
         deletePlainRows('names_entries', 'id = ?', row.id);
@@ -439,7 +441,7 @@ function liveConfirmationOfEntry(entryId: string): ConfirmationRow | undefined {
 function confirmationRow(id: unknown): ConfirmationRow {
     if (typeof id !== 'string' || !/^[0-9a-f]{32}$/.test(id)) throw new NamesListError(400, 'bad_confirmation_id', 'A confirmation id is 32 hexadecimal characters.');
     const row = db.prepare('SELECT * FROM confirmations WHERE id = ?').get(id) as ConfirmationRow | undefined;
-    if (!row) throw new NamesListError(404, 'no_confirmation', 'There is no such confirmation.');
+    if (!row) throw new NamesListError(404, 'no_confirmation', word('There is no such confirmation.'));
     return row;
 }
 
@@ -453,7 +455,7 @@ export function twoAdminsToConfirm(): boolean {
 function assertConfirmable(pubkey: string): void {
     const m = getMember(db, pubkey);
     if (!m || m.status !== 'active' || isVisitorKey(db, pubkey) || m.isTreasury || pubkey === 'SYSTEM') {
-        throw new NamesListError(404, 'not_member', 'Only an active member of this community can be confirmed.');
+        throw new NamesListError(404, 'not_member', word('Only an active member of this community can be confirmed.'));
     }
 }
 
@@ -463,19 +465,19 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
     if (!/^[0-9a-f]{64}$/.test(member)) throw new NamesListError(400, 'bad_member', "'memberPubkey' is a member's key, 64 hexadecimal characters.");
     const entry = requireEntry(body.entryId);
     assertConfirmable(member);
-    if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t confirm anyone against it.');
+    if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', word('You can’t open that entry, so you can’t confirm anyone against it.'));
     const admins = namesAdmins();
     if (member === actor && admins.length > 1) {
-        throw new NamesListError(403, 'self_confirm', 'Another admin confirms you. An admin confirms themselves only where they are the community’s only admin.');
+        throw new NamesListError(403, 'self_confirm', word('Another admin confirms you. An admin confirms themselves only where they are the community’s only admin.'));
     }
     // A second chance is an admin's decision once the debt is addressed (design §4.2): paid back, worked off or forgiven.
     const debt = openDebtOfEntry(entry.id);
     if (debt && debt.id !== workOff?.debtId) {
-        throw new NamesListError(409, 'open_debt', `The person on this entry left owing the Commons ${debt.amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.`, { debtId: debt.id });
+        throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: debt.amount }), { debtId: debt.id });
     }
-    if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', 'A member is confirmed against this entry already. One person, one entry.');
+    if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', word('A member is confirmed against this entry already. One person, one entry.'));
     if (db.prepare('SELECT 1 FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(member)) {
-        throw new NamesListError(409, 'already_confirmed', 'This member is confirmed already. Revoke that confirmation first.');
+        throw new NamesListError(409, 'already_confirmed', word('This member is confirmed already. Revoke that confirmation first.'));
     }
     // A second admin must be neither the first nor the member: counted without the member, so a community of two admins
     // can still confirm each of them (one confirms the other; nobody else could second it).
@@ -497,9 +499,9 @@ export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberP
     const debt = typeof debtId === 'string' ? debtRecord(debtId) : undefined;
     if (!debt) throw new NamesListError(404, 'no_debt', 'There is no such debt record.');
     if (debt.status !== 'open') throw new NamesListError(409, 'not_open', `That debt is ${debt.status} already.`);
-    if (debt.repaying_pubkey) throw new NamesListError(409, 'repaying', 'Someone is working that debt off already.');
+    if (debt.repaying_pubkey) throw new NamesListError(409, 'repaying', word('Someone is working that debt off already.'));
     // Only while something is left: payments made for the debt count toward it as they are paid (engine/names-debts.ts).
-    if (!(Math.round((debt.amount - debt.repaid) * 100) > 0)) throw new NamesListError(409, 'nothing_left', 'Nothing is left to repay on that debt.');
+    if (!(Math.round((debt.amount - debt.repaid) * 100) > 0)) throw new NamesListError(409, 'nothing_left', word('Nothing is left to repay on that debt.'));
     return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id });
 }
 
@@ -513,11 +515,11 @@ export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberP
 export function assertMayBindInvite(actor: string, entryId: unknown): string {
     assertNamesAdmin(actor);
     const entry = requireEntry(entryId);
-    if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t invite anyone as that person.');
-    if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', 'A member is confirmed against this entry already. One person, one entry.');
+    if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', word('You can’t open that entry, so you can’t invite anyone as that person.'));
+    if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', word('A member is confirmed against this entry already. One person, one entry.'));
     // The second-chance rule binds an invite too (design §4.2): no confirming against an entry whose debt is still open.
     const debt = openDebtOfEntry(entry.id);
-    if (debt) throw new NamesListError(409, 'open_debt', `The person on this entry left owing the Commons ${debt.amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.`, { debtId: debt.id });
+    if (debt) throw new NamesListError(409, 'open_debt', tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: debt.amount }), { debtId: debt.id });
     return entry.id;
 }
 
@@ -568,12 +570,12 @@ export function readBoundInvites(): BoundInvite[] {
 export function secondConfirmation(actor: string, id: unknown): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const row = confirmationRow(id);
-    if (row.revoked_at) throw new NamesListError(409, 'revoked', 'That confirmation was revoked.');
-    if (!row.needs_second || row.seconded_at) throw new NamesListError(409, 'not_awaiting', 'That confirmation doesn’t need a second admin.');
-    if (row.confirmed_by === actor) throw new NamesListError(403, 'same_admin', 'A second admin, not the one who confirmed, confirms it again.');
-    if (row.member_pubkey === actor) throw new NamesListError(403, 'self_confirm', 'Another admin confirms you.');
+    if (row.revoked_at) throw new NamesListError(409, 'revoked', word('That confirmation was revoked.'));
+    if (!row.needs_second || row.seconded_at) throw new NamesListError(409, 'not_awaiting', word('That confirmation doesn’t need a second admin.'));
+    if (row.confirmed_by === actor) throw new NamesListError(403, 'same_admin', word('A second admin, not the one who confirmed, confirms it again.'));
+    if (row.member_pubkey === actor) throw new NamesListError(403, 'self_confirm', word('Another admin confirms you.'));
     const entry = entryRow(row.entry_id);
-    if (!entry || !holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t confirm anyone against it.');
+    if (!entry || !holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', word('You can’t open that entry, so you can’t confirm anyone against it.'));
     db.transaction(() => {
         db.prepare("UPDATE confirmations SET seconded_by = ?, seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(actor, row.id);
         log(actor, 'second', row.entry_id, row.member_pubkey);
@@ -585,7 +587,7 @@ export function secondConfirmation(actor: string, id: unknown): { id: string; st
 export function revokeConfirmation(actor: string, id: unknown): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const row = confirmationRow(id);
-    if (row.revoked_at) throw new NamesListError(409, 'revoked', 'That confirmation was revoked already.');
+    if (row.revoked_at) throw new NamesListError(409, 'revoked', word('That confirmation was revoked already.'));
     db.transaction(() => {
         db.prepare("UPDATE confirmations SET revoked_by = ?, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'admin' WHERE id = ?")
             .run(actor, row.id);
@@ -642,7 +644,7 @@ export function myNamesCopy(actor: string): { seq: number; headN: number; headId
 /** The requester's own copy, as their phone sent it, for a phone that lost its record: logged (`copy_restored`). */
 export function readNamesCopyOf(actor: string): { header: string; signature: string; box: Record<string, string> } {
     const r = copyRow(actor);
-    if (!r) throw new NamesListError(404, 'no_copy', 'This server keeps no copy of your names-list record.');
+    if (!r) throw new NamesListError(404, 'no_copy', word('This server keeps no copy of your names-list record.'));
     log(actor, 'copy_restored');
     return {
         header: r.header, signature: r.signature,
@@ -655,7 +657,7 @@ function chargeCopySave(actor: string, now = Date.now()): void {
     const recent = (copySaves.get(actor) ?? []).filter((t) => now - t < COPY_WINDOW_MS);
     if (recent.length >= NAMES_COPIES_PER_HOUR) {
         copySaves.set(actor, recent);
-        throw new NamesListError(429, 'too_many_copies', 'This phone saved its names-list record too often in the last hour. Try again later.');
+        throw new NamesListError(429, 'too_many_copies', word('This phone saved its names-list record too often in the last hour. Try again later.'));
     }
     recent.push(now);
     copySaves.set(actor, recent);
@@ -670,17 +672,17 @@ export function saveNamesCopy(actor: string, body: { header?: unknown; signature
     chargeCopySave(actor);
     const sealed = (body.box as { sealedCopy?: unknown } | null | undefined)?.sealedCopy;
     if (typeof sealed === 'string' && Buffer.byteLength(sealed, 'base64') > NAMES_COPY_MAX_BYTES) {
-        throw new NamesListError(413, 'copy_too_big', 'Your names-list record is too big to keep a copy on this server.');
+        throw new NamesListError(413, 'copy_too_big', word('Your names-list record is too big to keep a copy on this server.'));
     }
     const read = readNamesCopy(body);
     if (!read.ok) throw new NamesListError(400, 'bad_copy', 'That isn’t a copy of a names-list record signed by the key that sent it.');
     const c = read.copy;
-    if (c.owner !== actor) throw new NamesListError(403, 'not_yours', 'Each admin saves only their own copy.');
+    if (c.owner !== actor) throw new NamesListError(403, 'not_yours', word('Each admin saves only their own copy.'));
     if (c.communityId !== namesCommunityId()) throw new NamesListError(400, 'other_community', 'That copy is of another community’s names list.');
     const kept = copyRow(actor);
     if (kept && kept.header === c.header) return { seq: kept.seq, exists: true };
     if (kept && c.seq <= kept.seq) {
-        throw new NamesListError(409, 'stale_copy', 'This server already keeps a newer copy of your names-list record.', { seq: kept.seq });
+        throw new NamesListError(409, 'stale_copy', word('This server already keeps a newer copy of your names-list record.'), { seq: kept.seq });
     }
     db.prepare(
         `INSERT INTO names_copies (owner_pubkey, seq, head_n, head_id, saved_at, sealed_copy, copy_iv, copy_tag, ephemeral_pubkey, kdf_params, box_digest, header, signature)

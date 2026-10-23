@@ -54,8 +54,8 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 If you keep an enterprise, or help run a project, tap **Manage** at the top of its page on the phone. Everything only its keepers do is there, so its page shows what every member sees. **Manage** shows only what you can do:
 
 - requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See "Keepers".
-- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. Change what you want, then tap **Save** once.
-- **Featured:** tap an Offer to put it on its shelf, or take it off. Six at most. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in.
+- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its kind or **How we deal**. Change what you want, then tap **Save** once.
+- **Featured** (its keepers only): tap an Offer to put it on its shelf, or take it off. Six at most. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in.
 - **Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay.
 - **Decisions:** its keepers' votes.
 - Removing a keeper, and stepping down.

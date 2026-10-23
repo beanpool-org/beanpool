@@ -17,7 +17,8 @@
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
  *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
  *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance never rings
- *      someone who has blocked the one whose act it was
+ *      someone who has blocked the one whose act it was, and an opener who blocked Ann reads an acceptance she made after
+ *      the block as a request still waiting, until they lift it
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
@@ -32,8 +33,10 @@
  *  15. off by default: a stranger's open and two lines arrive as today, and nothing says requests (R1)
  *  16. the operator turns them on in Settings; then a stranger's open is a request, and a chat opened before stays open
  *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7)
- *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's, stays out of her
- *      chats and her unread count until one of them writes in it again or she opens it herself
+ *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's (one that had lapsed
+ *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself
+ *  19. on again: what Ann did while off (her line, a friend add, her own open) accepted what waited for her, so each chat
+ *      stays in her chats
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -532,6 +535,51 @@ async function globalRun(): Promise<void> {
         'Ann hears her own acceptances (her other devices)');
     assert(updated(annSock, yulConv, annHeard6).length === 0, 'and Ann, who blocked Yul, hears nothing of his line accepting his');
     for (const s of [wesSock, xanSock]) s.ws.close();
+    // Nor does it show in what they read (the director's option b on review 4354581168): while Zak blocks Ann, her reply
+    // reads to him as a request still waiting, and so does her adding Ora; each one's next line is refused as a waiting
+    // request's is. Pip, who blocked Ann too, waits, for the comparison. It shows once the block is lifted.
+    const [zak, ora, pip] = [member('Zak'), member('Ora'), member('Pip')];
+    const zakConv: string = (await open(zak, ann)).body?.conversation?.id;
+    const oraConv: string = (await open(ora, ann)).body?.conversation?.id;
+    const pipConv: string = (await open(pip, ann)).body?.conversation?.id;
+    const zakLine: string = (await send(zakConv, zak)).body?.message?.id;
+    const oraLine: string = (await send(oraConv, ora)).body?.message?.id;
+    const pipLine: string = (await send(pipConv, pip)).body?.message?.id;
+    const blocks6b: Res[] = [];
+    for (const s of [zak, ora, pip]) blocks6b.push(await call('POST', s, '/api/blocks', { targetPubkey: ann.pk }));
+    const zReply = await send(zakConv, ann);
+    const addOra = await call('POST', ann, '/api/friends/add', { friendPubkey: ora.pk });
+    assert(blocks6b.every(r => r.status === 200) && zReply.status === 200 && addOra.status === 200
+        && rowOf(zakConv)?.state === 'accepted' && rowOf(oraConv)?.state === 'accepted' && rowOf(pipConv)?.state === 'pending',
+        `after each blocks Ann, her reply accepts Zak's and her add Ora's (${show(zReply)}; ${show(addOra)})`);
+    const pipSees = await senderSees(pip, pipConv, pipLine, ann);
+    const zakSees = await senderSees(zak, zakConv, zakLine, ann);
+    const oraSees = await senderSees(ora, oraConv, oraLine, ann);
+    assert(zakSees === pipSees, `Zak reads Ann's reply as a request still waiting\n    blocker: ${zakSees}\n    waiting: ${pipSees}`);
+    assert(oraSees === pipSees, `Ora reads Ann's add the same\n    blocker: ${oraSees}\n    waiting: ${pipSees}`);
+    const annList6c = await listOf(ann);
+    const annReadZak = await call('GET', ann, `/api/messages/${zakConv}`);
+    assert(inChats(annList6c, zakConv) && inChats(annList6c, oraConv) && entryOf(annList6c, zakConv)?.request?.state === 'accepted'
+        && entryOf(annList6c, oraConv)?.request?.state === 'accepted' && annReadZak.body?.conversation?.request?.state === 'accepted',
+        `Ann reads both as she left them: accepted, in her chats (${annReadZak.body?.conversation?.request?.state})`);
+    // After 30 days, Ora reads it as lapsed, as Pip does his: the next line goes through and is the request's line again, and
+    // the one after it waits.
+    ageRequest(oraConv, 31);
+    ageRequest(pipConv, 31);
+    const oraLapsed = entryOf(await listOf(ora), oraConv)?.request?.state;
+    const [o2, o3] = [await send(oraConv, ora), await send(oraConv, ora)];
+    const [p2, p3] = [await send(pipConv, pip), await send(pipConv, pip)];
+    const oraAfter = entryOf(await listOf(ora), oraConv)?.request?.state;
+    assert(oraLapsed === 'expired' && oraAfter === 'pending' && o2.status === 200 && o3.status === 403 && o3.body?.code === 'dm_request_pending'
+        && p2.status === 200 && p3.status === 403,
+        `after 30 days Ora reads it as lapsed and writes once more, as Pip does (${oraLapsed} → ${oraAfter}; ${o2.status}/${o3.status}; Pip ${p2.status}/${p3.status})`);
+    const unZak = await call('POST', zak, '/api/blocks/remove', { targetPubkey: ann.pk });
+    const zakReadAfter = await call('GET', zak, `/api/messages/${zakConv}`);
+    const zakListAfter = await listOf(zak);
+    const z2 = await send(zakConv, zak);
+    assert(unZak.status === 200 && zakReadAfter.body?.conversation?.request?.state === 'accepted'
+        && entryOf(zakListAfter, zakConv)?.request?.state === 'accepted' && z2.status === 200,
+        `once Zak lifts the block, Ann's acceptance shows to him, and his next line goes through (${show(z2)})`);
 
     // ── 7. read receipts ────────────────────────────────────────────────────────────────────────
     console.log('── 7. no read receipt either way until accepted ──');
@@ -808,6 +856,14 @@ async function localRun(): Promise<void> {
     const ignoreIke = await decide(ann, ikeConv, 'ignore');
     const ignoreKit = await decide(ann, kitConv, 'ignore');
     attempt(() => adminPruneUser(jem.pk, 'owner:password'));
+    // And one that lapsed before its opener was removed (PR #2392 review 4354806402): Op's.
+    const op = member('Op');
+    const opConv: string = (await open(op, ann)).body?.conversation?.id;
+    await send(opConv, op);
+    ageRequest(opConv, 31);
+    attempt(() => requestsEngine.expireOldRequests(Date.now()));
+    const opLapsed = rowOf(opConv)?.state;
+    attempt(() => adminPruneUser(op.pk, 'owner:password'));
     const unreadOn = (await listOf(ann))?.totalUnread;
     const off = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
     const c3 = await send(cyConv, cy);
@@ -835,6 +891,42 @@ async function localRun(): Promise<void> {
     assert(annAsksKit.status === 200 && annAsksKit.body?.conversation?.id === kitConv && inChats(annBack, kitConv) && rowOf(kitConv)?.state === 'accepted',
         `Ann asks for the chat with Kit herself: it accepts his request, and it is in her chats (${show(annAsksKit)})`);
     assert(!inChats(annBack, jemConv), 'the removed member\'s stays out');
+    const countsBack = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [opConv]: 1 };
+    assert(opLapsed === 'expired' && rowOf(opConv)?.state === 'ignored' && !inChats(annOff, opConv) && !inChats(annBack, opConv) && !(opConv in countsBack),
+        `so does one that had lapsed before its opener was removed: ignored, out of her chats and her badge (${opLapsed} → ${rowOf(opConv)?.state})`);
+
+    // ── 19. on again ────────────────────────────────────────────────────────────────────────────
+    console.log('── 19. on again ──');
+    // What Ann did while they were off accepts what was waiting for her then (PR #2392 review 4354806252), so turning them
+    // on again leaves each chat where she put it. Lu, Mo and Nia each write while on; while off, Ann answers Lu, who
+    // writes again, she adds Mo, and she asks for the chat with Nia.
+    const on2 = await call('POST', null, '/api/local/admin/node/config', { dmRequests: true }, admin);
+    const [lu, mo, nia] = [member('Lu'), member('Mo'), member('Nia')];
+    const luConv: string = (await open(lu, ann)).body?.conversation?.id;
+    const moConv: string = (await open(mo, ann)).body?.conversation?.id;
+    const niaConv: string = (await open(nia, ann)).body?.conversation?.id;
+    for (const [c, s] of [[luConv, lu], [moConv, mo], [niaConv, nia]] as [string, Id][]) await send(c, s);
+    const waitingOn = [luConv, moConv, niaConv].map(c => rowOf(c)?.state);
+    const off2 = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
+    const acts19 = [
+        await send(luConv, ann), await send(luConv, ann), await send(luConv, lu), await send(luConv, lu),
+        await call('POST', ann, '/api/friends/add', { friendPubkey: mo.pk }),
+        await open(ann, nia),
+    ];
+    await sleep(100);
+    const annOff2 = await listOf(ann);
+    assert(on2.status === 200 && off2.status === 200 && waitingOn.every(st => st === 'pending') && acts19.every(r => r.status === 200)
+        && [luConv, moConv, niaConv].every(c => inChats(annOff2, c) && rowOf(c)?.state === 'accepted'),
+        `while off, her answer, her add and her own open each accept the one waiting for her (${[luConv, moConv, niaConv].map(c => rowOf(c)?.state).join(', ')})`);
+    const on3 = await call('POST', null, '/api/local/admin/node/config', { dmRequests: true }, admin);
+    const annOn2 = await listOf(ann);
+    const counts19 = attempt(() => getListedUnreadCounts(ann.pk)) ?? {};
+    const luReads = await call('GET', lu, `/api/messages/${luConv}`);
+    const unread19 = (list: any) => [luConv, moConv, niaConv].map(c => entryOf(list, c)?.unreadCount ?? 0);
+    assert(on3.status === 200 && [luConv, moConv, niaConv].every(c => inChats(annOn2, c) && !inRequests(annOn2, c) && c in counts19)
+        && JSON.stringify(unread19(annOn2)) === JSON.stringify(unread19(annOff2)) && unread19(annOn2).reduce((n, u) => n + u, 0) === 5,
+        `on again, each stays in her chats with its unread lines, and in her badge (${JSON.stringify(unread19(annOff2))} → ${JSON.stringify(unread19(annOn2))}; requests ${annOn2?.requests?.count})`);
+    assert(luReads.body?.conversation?.request?.state === 'accepted', `and Lu reads it as accepted (${JSON.stringify(luReads.body?.conversation?.request)})`);
 }
 
 main().then(() => process.exit(0)).catch((e) => {

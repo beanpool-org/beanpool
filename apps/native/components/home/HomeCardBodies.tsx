@@ -175,10 +175,12 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
     if (typeof card.keepers === 'number') {
         const lifecycleWord = card.lifecycle === 'bounded' ? t('project') : t('enterprise');
         const nameLine = t('{name} · {lifecycle}', { name: card.name, lifecycle: lifecycleWord });
-        const balanceLine = t('Balance {balance} · {keepers}', {
-            balance: beansAmount(card.balance ?? 0),
-            keepers: tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers }),
-        });
+        const balanceLine = typeof card.balance === 'number'
+            ? t('Balance {balance} · {keepers}', {
+                balance: beansAmount(card.balance),
+                keepers: tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers }),
+            })
+            : tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers });
         const openTreasury = () => router.push({ pathname: '/treasury-detail', params: { publicKey: card.id, name: card.name } });
 
         let monthLine: string | null = null;
@@ -222,7 +224,11 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
                 <HomeRow
                     colors={colors}
                     text={balanceLine}
-                    a11y={t('{line}. Opens the enterprise ledger.', { line: balanceLine })}
+                    a11y={typeof card.balance === 'number'
+                        ? t('{line}. Opens the enterprise ledger.', { line: balanceLine })
+                        : (card.lifecycle === 'bounded'
+                            ? t('{line}. Opens the project.', { line: balanceLine })
+                            : t('{line}. Opens the enterprise.', { line: balanceLine }))}
                     onPress={openTreasury}
                     testID="home-enterprise-balance"
                 />

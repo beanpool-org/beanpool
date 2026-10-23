@@ -1040,11 +1040,18 @@ async function main(): Promise<void> {
         // The enterprise card's server time over a book of a thousand lines (§7 "Not verified": getEnterpriseLedger reads
         // the enterprise's whole book, its `since` filtering in JavaScript), printed beside the card it costs.
         if (MONEY) {
-            const entTimes = async () => {
+            const medianOf = async (path: string, who: Id) => {
                 const ms: number[] = [];
-                for (let i = 0; i < 11; i++) ms.push((await get('/api/home?cards=enterprise', alice)).ms);
+                for (let i = 0; i < 11; i++) ms.push((await get(path, who)).ms);
                 return ms.sort((a, b) => a - b)[5];
             };
+            const entTimes = () => medianOf('/api/home?cards=enterprise', alice);
+            const bobsBeans = async () => [(db.prepare('SELECT COUNT(*) AS c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?').get(bob.pk, bob.pk) as { c: number }).c,
+                await medianOf('/api/home?cards=beans', bob)];
+            const [bobFewLines, bobFew] = await bobsBeans();
+            // The control: a card that reads no ledger, measured beside them (the writes themselves slow every read a little).
+            const control = () => medianOf('/api/home?cards=community', alice);
+            const controlFew = await control();
             const lines = () => (db.prepare('SELECT COUNT(*) AS c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?').get(w3.ent.publicKey, w3.ent.publicKey) as { c: number }).c;
             const [fewLines, few] = [lines(), await entTimes()];
             const t0 = performance.now();
@@ -1055,6 +1062,10 @@ async function main(): Promise<void> {
             const book = (await get('/api/home?cards=enterprise', alice)).body?.cards?.enterprise;
             console.log(`  the enterprise card: median ${few.toFixed(1)} ms a request with ${fewLines} lines on its book, ${many.toFixed(1)} ms with ${manyLines}`
                 + ` (${writeMs.toFixed(0)} ms to write them); month ${JSON.stringify(book?.month)}`);
+            const [bobManyLines, bobMany] = await bobsBeans();
+            const controlMany = await control();
+            console.log(`  the Beans card (the payer's own month): median ${bobFew.toFixed(1)} ms with ${bobFewLines} lines in his history, ${bobMany.toFixed(1)} ms with ${bobManyLines};`
+                + ` the control (cards=community, no ledger read): ${controlFew.toFixed(1)} ms before the writes, ${controlMany.toFixed(1)} ms after`);
             assert(paid === 1000 && book?.month?.trades === 1001, `setup: a thousand more lines on the bakery's book this month (${paid}, month ${JSON.stringify(book?.month)})`);
         }
 

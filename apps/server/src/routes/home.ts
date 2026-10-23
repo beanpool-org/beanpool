@@ -24,7 +24,8 @@
  *
  * ## The ETag
  *
- * `W/"home-<hash>"`, a hash of the reader and of the answer itself (without `generatedAt`), `Cache-Control: private,
+ * `W/"home-<hash>"`, a hash of the reader, of the newest line in the reader's chats where the answer read them (the chat
+ * stamp, W3: a line no card shows still moves it) and of the answer itself (without `generatedAt`), `Cache-Control: private,
  * max-age=0, must-revalidate`, and a 304 when the app's copy is still the answer (as routes/activity.ts answers). Not a
  * tag made of the version counters alone, as the design first proposed (§5.2): most of what Home shows has no counter to
  * bump (a message read or unread, a kept notice, a vote cast, a mute, a probation limit coming back, the layout and
@@ -42,10 +43,13 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
 import { word } from '@beanpool/core';
 
-/** The answer's tag: the reader and the answer, never the moment it was made. */
-export function homeEtag(actor: string | undefined, body: { generatedAt: string }): string {
+/**
+ * The answer's tag: the reader, the answer and its chat stamp (home-answer.ts HomeBuilt: the newest line in the reader's
+ * chats, when the answer read them), never the moment it was made.
+ */
+export function homeEtag(actor: string | undefined, body: { generatedAt: string }, chatStamp: string | null = null): string {
     const { generatedAt: _at, ...rest } = body;
-    const hash = crypto.createHash('sha256').update(`${actor ?? ''}\n${JSON.stringify(rest)}`).digest('hex').slice(0, 24);
+    const hash = crypto.createHash('sha256').update(`${actor ?? ''}\n${chatStamp ?? ''}\n${JSON.stringify(rest)}`).digest('hex').slice(0, 24);
     return `W/"home-${hash}"`;
 }
 
@@ -73,8 +77,8 @@ export function createHomeRoutes(_deps: RouteDeps): Router {
             return;
         }
 
-        const body = buildHome({ actor, point: point.value, asked, lands: parseLands(ctx.query.lands) });
-        const etag = homeEtag(actor, body);
+        const { body, chatStamp } = buildHome({ actor, point: point.value, asked, lands: parseLands(ctx.query.lands) });
+        const etag = homeEtag(actor, body, chatStamp);
         ctx.set('ETag', etag);
         // `private`: the answer is the reader's own, so no shared cache (a CDN or proxy in front of the node) may store it.
         ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');

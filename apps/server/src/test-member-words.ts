@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 import Koa from 'koa';
 import ts from 'typescript';
 import { setMemberPhoto } from '@beanpool/engine';
-import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, wordKey } from '@beanpool/core';
+import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, pluralKey, wordKey } from '@beanpool/core';
 import { memberWordsOnTheWayOut, requestLanguage, useCatalogsForTests, wordsIn } from './member-words.js';
 import { scrubServerFaults, SERVER_FAULT_TEXT } from './routes/member-error-text.js';
 
@@ -53,8 +53,16 @@ const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => s
 const DAY = 24 * 60 * 60 * 1000;
 
 const POLL_CLOSED = 'This poll is closed';
-const FR = {
+const FR: Record<string, unknown> = {
     [POLL_CLOSED]: 'Ce sondage est clos',
+    // Sentences with values in them, a count, and one after a code the apps read.
+    'A post can have at most {n} photos': 'Une annonce peut avoir au plus {n} photos',
+    'You have {n} active trade in progress.|You have {n} active trades in progress.': { one: 'Vous avez {n} échange en cours.', other: 'Vous avez {n} échanges en cours.' },
+    'You hold {held} Beans: you can pay the Commons only what you hold.': 'Vous avez {held} Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
+    'Only {who} can remove this': 'Seul {who} peut retirer ceci',
+    'Only a convenor can do that': 'Seul un animateur peut faire cela',
+    'Post another Offer to spend deeper.': 'Publiez une autre Offre pour aller plus loin.',
+    'Your {n} active Offer unlock a −{cap} credit line.|Your {n} active Offers unlock a −{cap} credit line.': { one: 'Votre Offre active ouvre un crédit de −{cap}.', other: 'Vos {n} Offres actives ouvrent un crédit de −{cap}.' },
     [SERVER_FAULT_TEXT]: "Une erreur s'est produite sur le serveur. Veuillez réessayer.",
     'You may only read your own conversations': 'Vous ne pouvez lire que vos propres conversations',
     'Membership request already pending': "Une demande d'adhésion est déjà en attente",
@@ -92,6 +100,17 @@ async function testWayOut(): Promise<void> {
             '/api/local/admin/refused': [400, { error: POLL_CLOSED }],
             '/api/admin/refused': [400, { error: POLL_CLOSED }],
             '/api/text': [400, POLL_CLOSED],
+            '/api/valued': [400, { error: 'A post can have at most 6 photos' }],
+            '/api/count-one': [400, { error: 'You have 1 active trade in progress.' }],
+            '/api/count-many': [400, { error: 'You have 3 active trades in progress.' }],
+            '/api/decimal': [400, { error: 'You hold 2.5 Beans: you can pay the Commons only what you hold.' }],
+            '/api/odd-value': [400, { error: 'Only Ann (a.k.a. [x]+?) can remove this' }],
+            '/api/no-fit': [400, { error: 'A post can have at most photos' }],
+            '/api/coded-sentence': [403, { error: 'UNAUTHORIZED: Only a convenor can do that' }],
+            '/api/floor': [400, { error: 'FLOOR_LOCKED:1:2:200:500: Post another Offer to spend deeper.' }],
+            '/api/coded-unknown': [403, { error: 'UNAUTHORIZED: A sentence no catalog has' }],
+            '/api/two': [400, { error: 'FLOOR_LOCKED:2:3:500:1000: Your 2 active Offers unlock a −500 credit line. Post another Offer to spend deeper.' }],
+            '/api/two-half-known': [400, { error: 'Your 2 active Offers unlock a −500 credit line. A sentence no catalog has.' }],
         };
         const [status, body] = answers[ctx.path] ?? [404, { error: 'Not found' }];
         ctx.status = status;
@@ -129,7 +148,7 @@ async function testWayOut(): Promise<void> {
 
         // A language's words are built once, not for each refusal: a catalog changed in place after the first refusal is
         // not seen by the next one; given again (as a new file read would be), it is.
-        const live: Record<string, string> = { ...FR };
+        const live: Record<string, unknown> = { ...FR };
         useCatalogsForTests('fr', { server: live, core: FR_CORE });
         const before = await get('/api/refused', 'fr');
         live[POLL_CLOSED] = 'Ce sondage est fermé';
@@ -162,6 +181,39 @@ async function testWayOut(): Promise<void> {
             "the operator's routes stay English (/api/local/…, /api/admin/…)");
         const plain = await get('/api/text', 'fr');
         assert(plain.status === 400 && plain.text === POLL_CLOSED, 'a body that is not a JSON object is left alone');
+
+        // A sentence with values in it: found by the catalog's sentence it fits, its values written into the translation.
+        const valued = await get('/api/valued', 'fr');
+        assert(valued.status === 400 && valued.body?.error === 'Une annonce peut avoir au plus 6 photos', `a sentence with a value in it comes in French (${valued.text})`);
+        const one = await get('/api/count-one', 'fr');
+        const many = await get('/api/count-many', 'fr');
+        assert(one.body?.error === 'Vous avez 1 échange en cours.' && many.body?.error === 'Vous avez 3 échanges en cours.',
+            `a sentence with a count, singular and plural, in French's own forms (${one.body?.error} / ${many.body?.error})`);
+        const decimal = await get('/api/decimal', 'fr');
+        assert(decimal.body?.error === 'Vous avez 2,5 Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
+            `a number read back out of the English is written the language's way (${decimal.body?.error})`);
+        const odd = await get('/api/odd-value', 'fr');
+        assert(odd.body?.error === 'Seul Ann (a.k.a. [x]+?) peut retirer ceci', `a value with a pattern's own characters in it is kept as it was (${odd.body?.error})`);
+        const noFit = await get('/api/no-fit', 'fr');
+        assert(noFit.body?.error === 'A post can have at most photos', 'a sentence that fits no sentence of the catalog stays English');
+        const codeFirst = await get('/api/coded-sentence', 'fr');
+        const floor = await get('/api/floor', 'fr');
+        const codedUnknown = await get('/api/coded-unknown', 'fr');
+        assert(codeFirst.status === 403 && codeFirst.body?.error === 'UNAUTHORIZED: Seul un animateur peut faire cela'
+            && floor.body?.error === 'FLOOR_LOCKED:1:2:200:500: Publiez une autre Offre pour aller plus loin.',
+            `a code the apps read before the sentence stays as it came, the sentence after it in French (${codeFirst.body?.error} / ${floor.body?.error})`);
+        assert(codedUnknown.body?.error === 'UNAUTHORIZED: A sentence no catalog has', 'and with a sentence the catalog lacks, all of it stays English');
+        const two = await get('/api/two', 'fr');
+        const halfKnown = await get('/api/two-half-known', 'fr');
+        assert(two.body?.error === 'FLOOR_LOCKED:2:3:500:1000: Vos 2 Offres actives ouvrent un crédit de −500. Publiez une autre Offre pour aller plus loin.',
+            `two sentences each written on its own come in French, each with its own values (${two.body?.error})`);
+        assert(halfKnown.body?.error === 'Your 2 active Offers unlock a −500 credit line. A sentence no catalog has.',
+            'and when one of them is not the catalog\'s, the whole stays English, never half translated');
+        const valuedEn = await get('/api/valued');
+        const floorEn = await get('/api/floor');
+        assert(valuedEn.text === JSON.stringify({ error: 'A post can have at most 6 photos' })
+            && floorEn.text === JSON.stringify({ error: 'FLOOR_LOCKED:1:2:200:500: Post another Offer to spend deeper.' }),
+            'without the header, those are the English byte for byte');
 
         // The loader reads the real files: core's French catalog is drafted, so a sentence of core's comes in French.
         useCatalogsForTests('fr', null);
@@ -334,12 +386,14 @@ async function marks(): Promise<any[]> {
         const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
         const words: any = await import(path.join(root, 'scripts/words/words.mjs'));
         const extracted = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'server' || p.name === 'engine'));
-        markedSentences = extracted.flatMap((p: any) => p.calls.filter((c: any) => c.fn === 'word' && typeof c.text === 'string'));
+        markedSentences = extracted.flatMap((p: any) => p.calls.filter((c: any) => typeof c.text === 'string'));
     }
     return markedSentences!;
 }
-async function everyMarkInFrench(): Promise<Record<string, string>> {
-    return Object.fromEntries((await marks()).map((c: any) => [wordKey(c.text, c.context), `${FR_SIGN}${c.text}`]));
+async function everyMarkInFrench(): Promise<Record<string, unknown>> {
+    return Object.fromEntries((await marks()).map((c: any) => (typeof c.other === 'string'
+        ? [pluralKey(c.text, c.other), { one: `${FR_SIGN}${c.text}`, other: `${FR_SIGN}${c.other}` }]
+        : [wordKey(c.text, c.context), `${FR_SIGN}${c.text}`])));
 }
 
 interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
@@ -375,6 +429,10 @@ async function testFamilies({ owner, ann, bob }: People): Promise<void> {
     await family('community, invites', 'You may only read your own invites', 'GET', ann, `/api/invite/mine/${bob.pk}`);
     await family('community, profile', 'Your name needs at least 2 characters.', 'POST', ann, '/api/profile/update', { callsign: 'A' }, 'message');
     await family('community, preferences', 'You may only read your own preferences', 'GET', ann, `/api/members/preferences?publicKey=${owner.pk}`);
+
+    // The engine's refusals through a route (state-engine.ts): a sentence, and one with a value in it.
+    await family('trust, vouching', 'You cannot vouch for yourself', 'POST', ann, '/api/profile/vouch', { targetPubkey: ann.pk });
+    await family('the Commons, a payment', 'You hold 0 Beans: you can pay the Commons only what you hold.', 'POST', ann, '/api/commons/pay', { amount: 5 });
 }
 
 // ── 5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -471,7 +529,10 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
     const words: any = await import(path.join(root, 'scripts/words/words.mjs'));
     const extracted = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'server' || p.name === 'engine'));
-    const marked = extracted.flatMap((p: any) => p.calls.filter((c: any) => c.fn === 'word' && typeof c.text === 'string'));
+    // A sentence of the server's catalog: marked with word() or wordn(), or written with English's own t() / tn() (one with
+    // values in it); a count's both forms.
+    const marked = extracted.flatMap((p: any) => p.calls.filter((c: any) => typeof c.text === 'string')
+        .flatMap((c: any) => (typeof c.other === 'string' ? [c, { ...c, text: c.other }] : [c])));
     const matched = marked.flatMap((c: any) => APP_MATCHES.filter(m => m.phrase.test(c.text)).map(m => `${c.at} "${c.text}" (${m.where})`));
     const prefixed = marked.filter((c: any) => /^[A-Z_]{3,}:/.test(c.text)).map((c: any) => `${c.at} "${c.text}"`);
     assert(marked.length >= 100, `the server and the engine mark their members' refusals (${marked.length} marks)`);

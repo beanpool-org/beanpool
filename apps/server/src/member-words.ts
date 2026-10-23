@@ -9,11 +9,16 @@
  *     server still sees the English (every check on a message, every status chosen from one), and is translated once, on
  *     the way out, when the request names a language and the server's catalog has the sentence. A request with no
  *     `X-Language` is answered byte for byte as before. An `error` that is a code (`not_found`) is no sentence and stays.
+ *     A sentence with values in it is written with English's own t(), `tr('A post can have at most {n} photos', { n })`
+ *     (the very text a template literal wrote), and found again on the way out by the catalog's sentence it fits, its
+ *     values read back out of the English and written into the translation ({@link sentenceTemplates}). A code the apps
+ *     read before the sentence (`UNAUTHORIZED: …`, `FLOOR_LOCKED:1:2:200:500: …`) stays as it came, the sentence after it
+ *     translated.
  *   - **Pushes**: the lock screen's sentence for the push's kind, in the language the phone registered with
  *     ({@link wordsIn}, state-engine.ts dispatchPushNotification).
  *
- * Never marked: a sentence an app matches on (`includes('already a member')`, `/set a profile photo/i`) or one that
- * starts with a code the apps read (`FLOOR_LOCKED: …`, `UNAUTHORIZED: …`). Translated, the app's branch would stop
+ * Never marked: a sentence an app matches on (`includes('already a member')`, `/set a profile photo/i`), or the code at the
+ * start of one (`UNAUTHORIZED: `, marked after it: `unauthorized(word('…'))`). Translated, the app's branch would stop
  * matching; those move to a `code` first (test-member-words.ts holds the list, and reads the apps' sources for any match
  * on a marked sentence).
  *
@@ -28,7 +33,10 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type Koa from 'koa';
-import { LANGUAGE_HEADER, normaliseLang, wordsFor, type Catalog, type Lang, type WordKey, type Words } from '@beanpool/core';
+import {
+    CONTEXT_SEPARATOR, LANGUAGE_HEADER, PLURAL_SEPARATOR, normaliseLang, wordsFor,
+    type Catalog, type Lang, type WordKey, type WordValues, type Words,
+} from '@beanpool/core';
 import { isOperatorPath } from './routes/member-error-text.js';
 
 /** apps/server/words, from src/ (tsx) and from dist/ (the image) alike. */
@@ -43,7 +51,7 @@ const forTests = new Map<Lang, Partial<Catalogs>>();
  * Each language's words, built once from its catalogs: the table holds every sentence of both catalogs, so building it
  * for each refused request was a cost per refusal that grew with the catalogs.
  */
-const built = new Map<Lang, { all: Words; refusals: Words }>();
+const built = new Map<Lang, { all: Words; refusals: Words; templates: SentenceTemplate[] }>();
 
 function readCatalog(file: () => string): Catalog | null {
     try {
@@ -70,7 +78,7 @@ function catalogsOf(lang: Lang): Catalogs {
 const present = (list: (Catalog | null)[]): Catalog[] => list.filter((c): c is Catalog => c !== null);
 const ENGLISH = wordsFor('en');
 
-function builtFor(lang: Lang): { all: Words; refusals: Words } {
+function builtFor(lang: Lang): { all: Words; refusals: Words; templates: SentenceTemplate[] } {
     let words = built.get(lang);
     if (!words) {
         const { server, core } = catalogsOf(lang);
@@ -79,10 +87,116 @@ function builtFor(lang: Lang): { all: Words; refusals: Words } {
             // A refusal is translated with the server's catalog alone, so only a sentence the server or the engine marked
             // is ever translated, never one that happens to match a sentence of core's the apps write.
             refusals: wordsFor(lang, present([server])),
+            templates: sentenceTemplates(server),
         };
         built.set(lang, words);
     }
     return words;
+}
+
+/**
+ * One of the catalog's sentences with values in it, as the way out finds it again in the English a route wrote:
+ * `A post can have at most {n} photos` is /^A post can have at most ([\s\S]+?) photos$/. A sentence with a count is
+ * two, its English singular and plural, either of which may have been written.
+ */
+interface SentenceTemplate {
+    pattern: RegExp;
+    names: string[];
+    /** The characters of the sentence that are not a value: when two fit, the one that says more is the one meant. */
+    fixed: number;
+    sentence: string;
+    context?: string;
+    count?: { one: string; other: string };
+}
+
+const PLACEHOLDER = /\{([A-Za-z0-9_]+)\}/g;
+const escapeForPattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The catalog's sentences that hold a value, each as a pattern of its English (a count's both). */
+function sentenceTemplates(catalog: Catalog | null): SentenceTemplate[] {
+    const out: SentenceTemplate[] = [];
+    for (const [key, value] of Object.entries(catalog ?? {})) {
+        if (key === '_meta' || !value) continue;
+        const [sentence, context] = key.split(CONTEXT_SEPARATOR);
+        const isCount = typeof value === 'object' && sentence.includes(PLURAL_SEPARATOR);
+        const [one, other] = isCount ? [sentence.slice(0, sentence.indexOf(PLURAL_SEPARATOR)), sentence.slice(sentence.indexOf(PLURAL_SEPARATOR) + 1)] : [sentence, ''];
+        for (const english of isCount ? [one, other] : [sentence]) {
+            const names: string[] = [];
+            const parts = english.split(PLACEHOLDER);
+            // split() with a group: the text between the values at the even places, the values' names at the odd ones.
+            let source = '^';
+            let fixed = 0;
+            parts.forEach((part, i) => {
+                if (i % 2 === 1) { names.push(part); source += '([\\s\\S]+?)'; } else { source += escapeForPattern(part); fixed += part.length; }
+            });
+            // A sentence that is nearly all values would fit nearly anything.
+            if (names.length === 0 || fixed < 6) continue;
+            out.push({ pattern: new RegExp(`${source}$`), names, fixed, sentence: english, context: context || undefined, count: isCount ? { one, other } : undefined });
+        }
+    }
+    return out.sort((a, b) => b.fixed - a.fixed);
+}
+
+/** A value read back out of the English: a plain number is a number again, so the language writes it its own way. */
+function valueOf(text: string): string | number {
+    return /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text) ? Number(text) : text;
+}
+
+/** One sentence of a refusal in `words`' language: as a whole sentence, or as one with values in it. */
+function translatedSentence(text: string, words: Words, templates: SentenceTemplate[]): string {
+    // Looked up as it came: words:check saw the sentence where it was marked, word('…').
+    const whole = words.t(text as WordKey);
+    if (whole !== text) return whole;
+    for (const template of templates) {
+        const found = template.pattern.exec(text);
+        if (!found) continue;
+        const values: WordValues = {};
+        let fits = true;
+        template.names.forEach((name, i) => {
+            const v = valueOf(found[i + 1]);
+            // The same value twice in one sentence is one value.
+            if (name in values && values[name] !== v) fits = false;
+            values[name] = v;
+        });
+        if (!fits) continue;
+        if (template.count) {
+            if (typeof values.n !== 'number') continue;
+            return words.tn(values.n, template.count.one as WordKey, template.count.other as WordKey, values);
+        }
+        return words.t(template.sentence as WordKey, values, template.context);
+    }
+    return text;
+}
+
+/** Where one sentence ends and the next begins: after its stop, before the next one's capital. */
+const BETWEEN_SENTENCES = /(?<=[.!?])(\s+)(?=[A-Z])/;
+
+/**
+ * A text of one sentence, or of several each written on its own (`tr('This enterprise is {n} beans in debt.') + ' ' + …`),
+ * in `words`' language: several only when every one of them is the catalog's, else the whole stays as it came.
+ */
+function translatedText(text: string, words: Words, templates: SentenceTemplate[]): string {
+    const whole = translatedSentence(text, words, templates);
+    if (whole !== text) return whole;
+    const pieces = text.split(BETWEEN_SENTENCES);
+    if (pieces.length < 3) return text;
+    // split() with a group: the sentences at the even places, the space between them at the odd ones.
+    const translated = pieces.map((piece, i) => (i % 2 === 1 ? piece : translatedSentence(piece, words, templates)));
+    return translated.every((piece, i) => i % 2 === 1 || piece !== pieces[i]) ? translated.join('') : text;
+}
+
+/** A code the apps read before a sentence: `UNAUTHORIZED: `, `FLOOR_LOCKED:1:2:200:500: `. */
+const CODE_BEFORE_SENTENCE = /^([A-Z][A-Z_]{2,}(?::[^\s:]+)*:\s*)(?=\S)/;
+
+/** A refusal's `error` or `message` in `words`' language: a code before its sentence stays as it came. */
+function translatedRefusal(text: string, words: Words, templates: SentenceTemplate[]): string {
+    const said = translatedText(text, words, templates);
+    if (said !== text) return said;
+    const code = CODE_BEFORE_SENTENCE.exec(text);
+    if (!code) return text;
+    const sentence = text.slice(code[1].length);
+    const translated = translatedText(sentence, words, templates);
+    return translated === sentence ? text : `${code[1]}${translated}`;
 }
 
 /** The server's words and core's in `lang`; English for no language. */
@@ -91,10 +205,6 @@ export function wordsIn(lang: Lang | null | undefined): Words {
     return builtFor(lang).all;
 }
 
-/** The words a refusal is translated with (builtFor). */
-function refusalWordsIn(lang: Lang): Words {
-    return builtFor(lang).refusals;
-}
 
 /** The language a request names in `X-Language`, when it is one BeanPool writes; null when it names none. */
 export function requestLanguage(ctx: Pick<Koa.Context, 'get'>): Lang | null {
@@ -123,13 +233,12 @@ export function memberWordsOnTheWayOut(): Koa.Middleware {
         ctx.vary(LANGUAGE_HEADER);
         const lang = requestLanguage(ctx);
         if (!lang || lang === 'en') return;
-        const { t } = refusalWordsIn(lang);
+        const { refusals, templates } = builtFor(lang);
         let said: Record<string, unknown> | null = null;
         for (const field of ['error', 'message'] as const) {
             const text = body[field];
             if (typeof text !== 'string') continue;
-            // Looked up as it came: words:check saw the sentence where it was marked, word('…').
-            const translated = t(text as WordKey);
+            const translated = translatedRefusal(text, refusals, templates);
             // A copy: the body may be an object a route shares between answers.
             if (translated !== text) said = { ...(said ?? body), [field]: translated };
         }

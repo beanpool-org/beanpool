@@ -180,7 +180,6 @@ export function NodeIdentityPanel({
                 }
             } catch (err) {
                 console.warn('Failed to load initial node identity config:', err);
-                if (mounted) setDirectory((d) => (d === 'loaded' ? d : 'failed'));
             }
         };
 

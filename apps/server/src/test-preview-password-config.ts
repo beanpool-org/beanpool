@@ -13,8 +13,8 @@
  *      defaults where the read gave nothing) leaves every setting as stored: "Share Location & Radius" stays off.
  *   3. Everyone else keeps #2387's answer on a preview: a stranger, unsigned or signed, the service area alone (null with
  *      the switch off); a member the whole config with the place to two decimals; a wrong password, a session the node
- *      doesn't know, the password session while the node's 2FA is off (held to the 2FA card) and the password header
- *      with 2FA off get the stranger's answer, byte for byte, never a refusal.
+ *      doesn't know, a password session a 2FA change ended, one held to the 2FA card (the node's 2FA off) and the
+ *      password header with 2FA off get the stranger's answer, byte for byte, never a refusal.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-preview-password-config.ts
  */
@@ -187,11 +187,20 @@ async function main() {
     const stale = await readConfig({ headers: { Cookie: `admin_session=${'a'.repeat(64)}` } });
     assert(stale.status === 200 && stale.text === unsigned.text,
         `a session the node doesn't know: the stranger's answer (${stale.status} ${stale.text})`);
-    // The node's 2FA off again: the password session is held to the 2FA card (#1537), and the header alone opens nothing.
+    // The node's 2FA off again. That ends the session the password opened under it, and a password sign-in now opens one
+    // held to the 2FA card (#1537): checkAdminAuth names it the owner, then refuses it every route but the card's.
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
-    const gated = await readConfig({ headers: PASSWORD_SESSION });
+    const ended = await readConfig({ headers: PASSWORD_SESSION });
+    assert(ended.status === 200 && ended.text === unsigned.text,
+        `the password session the 2FA change ended: the stranger's answer (${ended.status} ${ended.text})`);
+    const heldSignIn = await call('POST', '/api/local/admin/auth/password', { body: { password: PW } });
+    const heldCookie = (heldSignIn.headers.getSetCookie().find(c => c.startsWith('admin_session=')) ?? '').split(';')[0];
+    if (heldSignIn.status !== 200 || heldSignIn.body?.totpSetupRequired !== true || !heldCookie) {
+        throw new Error(`setup: no password session held to the 2FA card (${heldSignIn.status} ${heldSignIn.text})`);
+    }
+    const gated = await readConfig({ headers: { Cookie: heldCookie } });
     assert(gated.status === 200 && gated.text === unsigned.text,
-        `the password session while the node's 2FA is off (held to the 2FA card): the stranger's answer (${gated.status} ${gated.text})`);
+        `a password session held to the 2FA card (the node's 2FA off): the stranger's answer (${gated.status} ${gated.text})`);
     const headerNo2fa = await readConfig({ headers: { 'X-Admin-Password': PW } });
     assert(headerNo2fa.status === 200 && headerNo2fa.text === unsigned.text,
         `the password header with the node's 2FA off: the stranger's answer (${headerNo2fa.status} ${headerNo2fa.text})`);

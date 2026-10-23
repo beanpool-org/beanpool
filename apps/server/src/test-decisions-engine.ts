@@ -1164,6 +1164,8 @@ async function runDecisionsSuite() {
     // A paused member whom a removal a member proposed puts in its grace window: the community has spoken, even with their
     // credit unfrozen by an admin.
     const kit = fresh('GraceKit');
+    grantNodeRole(kit, 'moderator', admin);
+    const kitRole = roleRow(kit);
     const kitPause = pause(kit);
     const removeKit = createDecision({ authorPubkey: authorD, title: 'Remove Kit', description: 'A removal a member proposes while Kit is paused', touches: 'member', effect: 'remove_member', subject: kit });
     vote(removeKit.id, 4, 0);
@@ -1171,8 +1173,14 @@ async function runDecisionsSuite() {
     adminSetCreditFrozen(kit, false);
     testAssert(!checkVoterEligibility(kit, other).ok && !countsIn(other.id, kit),
         'A member in a removal\'s grace window votes on nothing and is in no electorate, whatever their credit says');
-    adminHaltDecision(removeKit.id, admin, 'Out of the way of the time travel below');
-    adminHaltDecision(kitPause.id, admin, 'Out of the way of the time travel below');
+    // Kit's pause vote then says No: the removal holds Kit, and the role the pause held aside moves to it, so a halt of the
+    // removal gives it back (liftEmergencySuspensionRow's "held elsewhere", now that both are removal votes).
+    vote(kitPause.id, 0, 4);
+    const kitPauseEnd = closeAndTick(kitPause.id);
+    testAssert(kitPauseEnd.status === 'failed' && statusOf(kit) === 'disabled' && !heldAside(kitPause.id) && heldAside(removeKit.id)?.role === 'moderator',
+        `No on a pause vote while a removal holds the member: they stay held, the role moves to the removal (${kitPauseEnd.status}, ${statusOf(kit)}, ${heldAside(removeKit.id)?.role})`);
+    adminHaltDecision(removeKit.id, admin, 'The removal was a mistake; halting it');
+    testAssert(statusOf(kit) === 'active' && sameRole(kitRole, roleRow(kit)), 'Halting that removal gives Kit back, with the moderator role');
     retire(kit);
     // Only a pause's own vote (the node's, rule 2) keeps a paused member's vote: not a member's removal written with its
     // marks, nor a removal vote of the node's without them.

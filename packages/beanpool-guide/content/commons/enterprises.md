@@ -22,13 +22,24 @@ Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each
 
 ## What an enterprise page shows
 
-Every member can see:
+An enterprise's page is its shop front. On the phone, every member sees, from the top:
 
-- its **Purpose**;
-- its **Balance**, credit line, live Offers and surplus;
-- **Income & Spend**: every bean in and out. Its keepers see who paid or was paid and the note with it; other members see the amounts, and their own payments in full;
-- its keepers;
-- its **Listings**, **Recent activity** and a **Discussion** you can write in.
+- its picture, its name, what kind of shop it is and since when it has been here;
+- what it is for;
+- who keeps it (**Kept by**; **Run by** on a project), each with their trust level, stars and how many trades they have done. These badges show what each person has done. They don't decide anything;
+- a project's goal and its pledge box;
+- **About**: what its keepers say about it;
+- **Featured**: up to six of its Offers its keepers chose to show first;
+- **What we do together**: the kinds of thing its keepers offer;
+- its listings, in sections: **To buy**, **Book a time**, **To borrow** and **Looking for**. Tap one to open it;
+- **How we deal**;
+- **Message**, which opens a chat with its lead keeper (its leader on a project);
+- its balance and credit line in one line. Tap **Money and backing** to see its live Offers, surplus and capital ceiling, what its keepers back it with, and **Income & Spend**: every bean in and out. Its keepers see who paid or was paid and the note with it; other members see the amounts, and their own payments in full;
+- **Recent activity** and a **Discussion** you can write in.
+
+Someone who is not a member of the community sees its picture, name and kind, what it is for, its keepers' names and About, and nothing more.
+
+In the web app the page still shows the balance and its keepers near the top.
 
 At the bottom, **Report Enterprise** (**Report Project** on a project) if something is wrong.
 

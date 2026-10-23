@@ -102,6 +102,11 @@ vi.mock('../../components/CommonsInfoModal', () => ({
 }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/CurrencyDisplay', () => ({ CurrencyDisplay: ({ amount }: { amount: string | number }) => createElement('span', null, `${amount} Beans`) }));
+// The Tools row draws with tools/ui, whose ToolScreen is the keyboard library's scroll: the real one loads react-native.
+vi.mock('react-native-keyboard-controller', () => {
+    const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
+    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
+});
 // The net spy.
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, name => net.answer?.(name)));

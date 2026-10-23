@@ -15,7 +15,7 @@ import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
-import { retryPendingReports } from '../utils/blocklist';
+import { retryPendingReports, syncBlocks } from '../utils/blocklist';
 import { presentLeaveStatements } from '../utils/push-leave';
 import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
@@ -968,6 +968,10 @@ export default function RootLayout() {
         // An account that left this phone with no connection: its push alerts stop once each of its communities has
         // its leave statement (utils/push-leave.ts). Now, on each return, and with the 5-minute sync below.
         presentLeaveStatements();
+        // The member's blocks reach the community the phone is set to (utils/blocklist.ts syncBlocks): the first run of this
+        // build sends the blocks the phone held before it. Now, on each return, and with the 5-minute sync below; nothing is
+        // sent when nothing changed.
+        void syncBlocks();
         // A push registration that didn't land (no connection, no answer, an error) is tried again on each return and
         // with the 5-minute sync, until it does (utils/push-registrations.ts `retryDueRegistrations`). At start, the
         // account's own registration goes anyway (RootLayoutNav).
@@ -978,6 +982,7 @@ export default function RootLayout() {
                 requestSync();
                 presentLeaveStatements();
                 retryPushRegistrations();
+                void syncBlocks();
             }
         }, 300000);
 
@@ -986,6 +991,7 @@ export default function RootLayout() {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 requestSync();
                 retryPendingReports();
+                void syncBlocks();
                 presentLeaveStatements();
                 retryPushRegistrations();
                 // Clear app icon badge when user opens the app (only in custom client / standalone builds)

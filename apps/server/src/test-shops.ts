@@ -39,6 +39,9 @@
  *  12. Home's "Your shop and tools" (slice S4′, built by the node): asked by its id, the reader's own shop (its name or
  *      none, its owner's name, kind, counts as their own read says, closed for now and back on), or none in it, never left
  *      out; nothing of another member's; not asked, not built; with no `cards=`, built when the member's layout holds it
+ *  13. the owner's word over a shop closed for now: their pause of an Offer the shop paused is taken (anyone else's is
+ *      not) and makes the pause theirs, as ending it or editing it out of the shop does; a pause of one they paused already
+ *      is taken too; the reopen puts back up only what the shop paused and still holds
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -739,6 +742,46 @@ async function main(): Promise<void> {
         `with no cards=, built when the member's own layout holds it (${show(fromLayout)})`);
     const joNoCard = await home(ida, null);
     assert(joNoCard.status === 200 && joNoCard.body?.cards?.shop === undefined, 'and not when it doesn\'t');
+
+    // ── 13. the owner's word over a closed shop's ───────────────────────────────────────────────
+    console.log('\n── 13. the owner\'s own pause, end or edit wins over a shop closed for now ──');
+    // The Tool shed pauses a thing's Offer when it is lent, taken out or deleted (#2373). With the shop closed for now, that
+    // Offer is already paused, by the shop: the owner's pause makes it theirs, so the reopen leaves it down.
+    const kit = member('KitSentinel');
+    const kitShop: string = (await call('PUT', kit, MINE, {})).body?.shop?.id;
+    const hammerId = await offerId(kit, 'Kit hammer', { shopId: kitShop });
+    const kitDrillId = await offerId(kit, 'Kit drill', { shopId: kitShop });
+    const kitTentId = await offerId(kit, 'Kit tent', { shopId: kitShop });
+    const rakeId = await offerId(kit, 'Kit rake', { shopId: kitShop });
+    const held = () => { try { return JSON.parse(shopRowOf(kit.pk)?.paused_posts ?? 'null'); } catch { return 'unreadable'; } };
+    const kitPause = (postId: string, who: Id = kit) => call('POST', who, '/api/marketplace/posts/pause', { postId, authorPublicKey: who.pk });
+    await call('PUT', kit, MINE, { paused: true });
+    assert(same([...(held() ?? [])].sort(), [hammerId, kitDrillId, kitTentId, rakeId].sort()), `closed for now, the shop holds its four Offers (${JSON.stringify(held())})`);
+    const strangerPause = await kitPause(hammerId, cy);
+    assert(strangerPause.status === 400 && (held() ?? []).includes(hammerId) && postRow(hammerId)?.status === 'paused',
+        `someone else's pause of one is refused, and the shop still holds it (${show(strangerPause)})`);
+    const ownPause = await kitPause(kitDrillId);
+    assert(ownPause.status === 200 && ownPause.body?.success === true && postRow(kitDrillId)?.status === 'paused' && !(held() ?? []).includes(kitDrillId),
+        `its owner's pause of one the shop paused is taken, and the pause is theirs now: the shop holds it no more (${show(ownPause)})`);
+    const pauseAgain = await kitPause(kitDrillId);
+    assert(pauseAgain.status === 200 && postRow(kitDrillId)?.status === 'paused', `paused by its owner already, a pause is still taken, changing nothing (${show(pauseAgain)})`);
+    const resumeWhileClosed = await call('POST', kit, '/api/marketplace/posts/resume', { postId: kitDrillId, authorPublicKey: kit.pk });
+    assert(resumeWhileClosed.status === 409 && resumeWhileClosed.body?.code === 'shop_paused' && postRow(kitDrillId)?.status === 'paused',
+        `still in the shop, it can't be put back up alone while the shop is closed (${show(resumeWhileClosed)})`);
+    const ended = await call('POST', kit, '/api/marketplace/posts/remove', { id: kitTentId, authorPublicKey: kit.pk });
+    assert(ended.status === 200 && postRow(kitTentId)?.status === 'cancelled' && !(held() ?? []).includes(kitTentId),
+        `its owner ends one: the shop holds it no more (${show(ended)})`);
+    const editedOut = await edit(kit, rakeId, { shopId: null });
+    assert(editedOut.status === 200 && shopIdOf(rakeId) === null && postRow(rakeId)?.status === 'paused' && !(held() ?? []).includes(rakeId),
+        `an edit takes one out of the shop: the shop holds it no more (${show(editedOut)})`);
+    assert(same(held(), [hammerId]), `what the shop still holds is only what it paused and nobody has since (${JSON.stringify(held())})`);
+    const kitReopened = await call('PUT', kit, MINE, { paused: false });
+    assert(kitReopened.status === 200 && same(kitReopened.body?.resumed, [hammerId]) && postRow(hammerId)?.status === 'active',
+        `reopened, the shop puts back up only what it paused and still holds (${show(kitReopened)})`);
+    assert(postRow(kitDrillId)?.status === 'paused' && postRow(kitTentId)?.status === 'cancelled' && postRow(kitTentId)?.active === 0 && postRow(rakeId)?.status === 'paused',
+        `the one its owner paused stays paused, the ended one stays ended, the one edited out stays paused (${[kitDrillId, kitTentId, rakeId].map(id => postRow(id)?.status).join(', ')})`);
+    const ownResume = await call('POST', kit, '/api/marketplace/posts/resume', { postId: kitDrillId, authorPublicKey: kit.pk });
+    assert(ownResume.status === 200 && postRow(kitDrillId)?.status === 'active', `its owner puts theirs back up once the shop is open (${show(ownResume)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

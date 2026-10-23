@@ -900,3 +900,15 @@ describe('the Commons reads nothing of the reader\'s where its features are in p
         expect(getTreasuries).not.toHaveBeenCalled();
     });
 });
+
+describe('Commons → Tools (the Tool shed on the web, T1.3)', () => {
+    it('a row opens the Tools page, where this build has a tool for a member here', async () => {
+        const onNavigate = vi.fn();
+        render(<ProjectsPage identity={creatorIdentity} onNavigate={onNavigate} isMember={true} />);
+        const row = await screen.findByTestId('commons-tools-row');
+        expect(row).toHaveTextContent('Tools');
+        expect(row).toHaveTextContent('Things you can do on your own');
+        fireEvent.click(row);
+        expect(onNavigate).toHaveBeenCalledWith('tools');
+    });
+});

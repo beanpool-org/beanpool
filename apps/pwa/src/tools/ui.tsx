@@ -11,17 +11,20 @@
  *
  * A tool's folder imports this file as `../ui` (the fence in eslint.config.mjs allows it and the host, nothing else).
  */
-import type { ReactNode } from 'react';
+import { createContext, useContext, useId, type ReactNode } from 'react';
+import { useToolPhotoSrc } from './photos';
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand';
 
-/** A heading and what is under it. */
-export function ToolSection({ title, children, testId }: { title: string; children: ReactNode; testId?: string }) {
+/** A heading (or none) and what is under it. */
+export function ToolSection({ title, children, testId }: { title?: string; children: ReactNode; testId?: string }) {
     return (
         <section className="mb-4 min-w-0" data-testid={testId}>
-            <h2 className="m-0 mb-1 px-1 min-w-0 break-words text-xs font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                {title}
-            </h2>
+            {title ? (
+                <h2 className="m-0 mb-1 px-1 min-w-0 break-words text-xs font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                    {title}
+                </h2>
+            ) : null}
             <div className="min-w-0 rounded-2xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 divide-y divide-nature-200 dark:divide-nature-800">
                 {children}
             </div>
@@ -30,21 +33,30 @@ export function ToolSection({ title, children, testId }: { title: string; childr
 }
 
 /**
- * One row: an icon, a title of up to two lines, a state line cut to one, and a chevron when it opens something. The whole
- * row is the target (at least 48 px) and its name is its words, the title and the state, so a screen reader hears both.
+ * One row: an icon (or a photo the host keeps, as a small square in its place), a title of up to two lines, a state line
+ * cut to one, and a chevron when it opens something. The whole row is the target (at least 48 px) and its name is its
+ * words, the title and the state, so a screen reader hears both.
  */
-export function ToolRow({ icon, title, state, onClick, testId }: {
+export function ToolRow({ icon, image, title, wrap, state, onClick, testId }: {
     icon?: string;
+    /** A photo's uri from the host (host.photos.uri): drawn instead of the icon. */
+    image?: string | null;
     title: string;
+    /** The whole title, on as many lines as it takes (a record's own screen), rather than two at most. */
+    wrap?: boolean;
     state?: string | null;
     onClick?: () => void;
     testId?: string;
 }) {
+    // A photo this device hasn't (one taken on another, its ref brought by the server's copy): the icon instead.
+    const src = useToolPhotoSrc(image);
     const inner = (
         <>
-            {icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
+            {image && src !== null
+                ? <RowPhoto src={src} />
+                : icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
             <span className="min-w-0 flex-1">
-                <span className="block min-w-0 break-words line-clamp-2 text-[0.95rem] font-semibold text-nature-900 dark:text-white">{title}</span>
+                <span className={`block min-w-0 break-words ${wrap ? '' : 'line-clamp-2'} text-[0.95rem] font-semibold text-nature-900 dark:text-white`}>{title}</span>
                 {state && <span className="block min-w-0 truncate text-xs text-nature-600 dark:text-nature-300">{state}</span>}
             </span>
             {onClick && <span aria-hidden="true" className="shrink-0 text-lg text-nature-500 dark:text-nature-400">›</span>}
@@ -70,27 +82,135 @@ export function ToolField({ label, children }: { label: string; children: ReactN
     );
 }
 
-/** Chips that wrap to another row rather than shrink their words; the picked one is pressed. */
-export function ToolChips({ chips, picked, onPick, label }: {
+/** A row's photo: a small square, decorative (the row's words name it); empty until it is read. */
+function RowPhoto({ src }: { src: string | undefined }) {
+    return (
+        <span aria-hidden="true" className="shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-nature-100 dark:bg-nature-800">
+            {src && <img src={src} alt="" className="w-full h-full object-cover" />}
+        </span>
+    );
+}
+
+/**
+ * Chips that wrap to another row rather than shrink their words; the picked one is pressed. `heading` shows the group's
+ * label over the chips, as a field's label.
+ */
+export function ToolChips({ chips, picked, onPick, label, heading, testId }: {
     chips: readonly { id: string; label: string }[];
     picked: string | null;
     onPick: (id: string) => void;
     /** What the group of chips chooses, for a screen reader. */
     label: string;
+    heading?: boolean;
+    /** Each chip is `<testId>-<id>`. */
+    testId?: string;
 }) {
-    return (
-        <div role="group" aria-label={label} className="flex flex-wrap gap-2 min-w-0">
+    const group = (
+        <div role="group" aria-label={label} data-testid={testId} className="flex flex-wrap gap-2 min-w-0">
             {chips.map((c) => {
                 const on = c.id === picked;
                 return (
-                    <button key={c.id} type="button" aria-pressed={on} onClick={() => onPick(c.id)}
+                    <button key={c.id} type="button" aria-pressed={on} onClick={() => onPick(c.id)} data-testid={testId ? `${testId}-${c.id}` : undefined}
                         className={`shrink-0 max-w-full min-h-[48px] px-4 rounded-full border text-sm font-semibold break-words cursor-pointer ${FOCUS} ${on
-                            ? 'bg-bp-chip-accent-tint text-bp-chip-accent-ink border-bp-chip-accent-border'
+                            ? 'bg-bp-accent-fill text-bp-accent-on border-transparent'
                             : 'bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 border-nature-300 dark:border-nature-700'}`}>
                         {c.label}
                     </button>
                 );
             })}
+        </div>
+    );
+    if (!heading) return group;
+    return (
+        <div className="min-w-0">
+            <div aria-hidden="true" className="mb-1 text-xs font-bold text-nature-700 dark:text-nature-200 break-words">{label}</div>
+            {group}
+        </div>
+    );
+}
+
+/**
+ * A text box with its label over it, one column: one line, or several (`lines`) for longer words; the number keyboard
+ * for `numeric`. At most `max` characters (the document holds each field to its bound in code points, so this is never
+ * looser). A hint under it, or what is wrong with it in its place; both are read with it, and what is wrong is announced
+ * as it shows (as the phone's twin does), the hint never.
+ */
+export function ToolInput({ label, value, onChange, max, lines, numeric, hint, error, testId }: {
+    label: string;
+    value: string;
+    onChange: (next: string) => void;
+    max: number;
+    lines?: number;
+    numeric?: boolean;
+    hint?: string;
+    error?: string | null;
+    testId?: string;
+}) {
+    const id = useId();
+    const noteId = `${id}-note`;
+    const note = error || hint;
+    const cls = `w-full min-w-0 min-h-[48px] px-3 py-2 rounded-xl border text-base bg-white dark:bg-nature-950 text-nature-900 dark:text-white ${error
+        ? 'border-bp-danger-fill'
+        : 'border-nature-300 dark:border-nature-700'} ${FOCUS}`;
+    const common = {
+        id, value, maxLength: max, 'aria-invalid': error ? true : undefined, 'aria-describedby': note ? noteId : undefined, 'data-testid': testId,
+    };
+    return (
+        <div className="px-3 py-2 min-w-0" data-testid={testId ? `${testId}-field` : undefined}>
+            <label htmlFor={id} className="block mb-1 text-xs font-bold text-nature-700 dark:text-nature-200 break-words">{label}</label>
+            {lines && lines > 1
+                ? <textarea {...common} rows={lines} onChange={(e) => onChange(e.target.value)} className={`${cls} resize-y`} />
+                : <input {...common} type="text" inputMode={numeric ? 'numeric' : undefined} onChange={(e) => onChange(e.target.value)} className={cls} />}
+            {/* What is wrong goes in a region that is there, empty, before it does: one made with its words in it is often not read out. */}
+            <div aria-live="polite">
+                {error ? <p id={noteId} className="m-0 mt-1 text-xs font-semibold text-bp-ink-danger break-words">{error}</p> : null}
+            </div>
+            {!error && hint ? <p id={noteId} className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">{hint}</p> : null}
+        </div>
+    );
+}
+
+/** A photo the host keeps (host.photos.uri), as wide as the column and never taller than it is wide. */
+export function ToolPhoto({ uri, label, testId }: { uri: string; label: string; testId?: string }) {
+    const src = useToolPhotoSrc(uri);
+    // Not on this device (taken on another one): no box, rather than an empty one.
+    if (src === null) return null;
+    return (
+        <div className="px-3 pt-3 min-w-0">
+            <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-nature-100 dark:bg-nature-800">
+                {src
+                    ? <img src={src} alt={label} data-testid={testId} className="w-full h-full object-cover" />
+                    : <span role="img" aria-label={label} data-testid={testId} className="block w-full h-full" />}
+            </div>
+        </div>
+    );
+}
+
+/** Inside a ToolLive, whose region announces a note: the note isn't a region of its own too, or it is read out twice. */
+const InLive = createContext(false);
+
+/**
+ * A sentence under a section: a note, a hint. Wraps; never cut. `warning` for what needs the member's eye before they go
+ * on, `danger` for what stopped. One that comes and goes as the member acts is drawn in a ToolLive, so it is announced as
+ * it shows (as the phone's twin is); one drawn with the screen is a status.
+ */
+export function ToolNote({ text, tone, testId }: { text: string; tone?: 'warning' | 'danger'; testId?: string }) {
+    const live = useContext(InLive);
+    const look = tone === 'danger' ? 'font-semibold text-bp-ink-danger' : tone === 'warning' ? 'font-semibold text-bp-ink-warning' : 'text-nature-700 dark:text-nature-200';
+    return <p role={tone && !live ? 'status' : undefined} data-testid={testId} className={`m-0 px-3 py-2 text-sm break-words min-w-0 ${look}`}>{text}</p>;
+}
+
+/**
+ * Where a note that comes and goes is drawn (what stopped a change, what couldn't be checked): a region that is there,
+ * empty, before the note is, so its words are announced as it shows; one made with its words in it is often not read out
+ * (ToolInput's error does the same). Polite, as the phone's notes are. Empty, it draws nothing, not even a section's
+ * divider.
+ */
+export function ToolLive({ children, testId }: { children?: ReactNode; testId?: string }) {
+    const empty = children === null || children === undefined || children === false;
+    return (
+        <div aria-live="polite" data-testid={testId} className={`min-w-0${empty ? ' !border-0' : ''}`}>
+            <InLive.Provider value>{children}</InLive.Provider>
         </div>
     );
 }

@@ -882,6 +882,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 
     let removed = false;
     db.transaction(() => {
+        const shopId = (db.prepare('SELECT shop_id FROM posts WHERE id = ?').get(id) as { shop_id: string | null } | undefined)?.shop_id;
         const result = db.prepare(`
             UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
             WHERE id = ? AND (
@@ -899,6 +900,8 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
+        // Ended while its shop is closed for now: the shop's pause no longer holds it.
+        if (shopId) forgetPausedPost(shopId, id);
         cancelPostFollowOns(id);
     })();
     if (!removed) return false;
@@ -1979,10 +1982,25 @@ export function votePoll(
     return { success: true, post: forActor(updatedPost, voterPublicKey) };
 }
 
+/**
+ * The author's pause: a live post goes off the board. One of theirs already paused is taken too, and changes nothing on
+ * the board: paused by its shop's "closed for now", the pause becomes theirs (the shop holds it no more, so its reopen
+ * leaves it down, engine/shops.ts); paused by them, it stays so. Anyone else's, or one ended, is false.
+ */
 export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {
     const postRow = db.prepare("SELECT audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
-    const res = db.prepare(`UPDATE posts SET status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'active'`).run(postId, authorPublicKey);
-    if (res.changes > 0) {
+    let paused = false;
+    let theirsAlready = false;
+    db.transaction(() => {
+        paused = db.prepare(`UPDATE posts SET status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'active'`).run(postId, authorPublicKey).changes > 0;
+        if (paused) return;
+        const held = db.prepare("SELECT shop_id FROM posts WHERE id = ? AND author_pubkey = ? AND active = 1 AND status = 'paused'").get(postId, authorPublicKey) as { shop_id: string | null } | undefined;
+        if (!held) return;
+        if (held.shop_id) forgetPausedPost(held.shop_id, postId);
+        theirsAlready = true;
+    })();
+    if (theirsAlready) return true;
+    if (paused) {
         let recipients: string[] | undefined;
         if (postRow?.audience_scope === 'group' && postRow.target_group_id) {
             const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];

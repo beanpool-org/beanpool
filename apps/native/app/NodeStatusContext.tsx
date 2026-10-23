@@ -67,6 +67,13 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
                 : answer.kind === 'closed' ? 'closed'
                 : answer.recovering ? 'recovering' : 'stranger';
             if (mounted.current) setRecognition(result);
+            // No member here, so this community keeps no block list for the key (a removed account's went with it): the
+            // phone counts none of its blocks as on it, and sends them again once the key is a member here (blocklist.ts).
+            if (result === 'closed' || result === 'stranger') {
+                void import('../utils/blocklist')
+                    .then(({ communityKeepsNoBlocks }) => communityKeepsNoBlocks(identity.publicKey, url))
+                    .catch(() => {});
+            }
             return result;
         } catch {
             // Unreachable / network error — leave it as unknown, never 'stranger'.

@@ -49,6 +49,14 @@ const bakery = {
     flow: [],
 };
 
+/**
+ * The money is one line on the shopfront, its figures and P&L behind "Money and backing" (DESIGN-shops-round3-enterprise-
+ * shopfront-fable.md §0 row 9, slice S8): opened here before what is behind it is read.
+ */
+async function openMoney() {
+    fireEvent.click(await screen.findByTestId('shopfront-money-toggle'));
+}
+
 const ledger = {
     enterprise: { publicKey: 'enterprise-bakery-pubkey', name: 'Community Bakery', status: 'active', balance: 150 },
     period: { since: null, until: null },
@@ -85,9 +93,10 @@ describe('Enterprise page for a guest', () => {
         expect(screen.queryByText("Couldn't load this group")).not.toBeInTheDocument();
         expect(api.getBalance).not.toHaveBeenCalled();
 
-        // What the node returned is shown: purpose, funding, P&L, the thread.
+        // What the node returned is shown: purpose, funding, P&L (behind Money and backing), the thread.
         expect(screen.getByText('Fresh sourdough for everyone')).toBeInTheDocument();
         expect(screen.getByText('Funding Progress')).toBeInTheDocument();
+        await openMoney();
         expect(screen.getByText('Income & Spend (P&L)')).toBeInTheDocument();
         expect(await screen.findByText('Loaves are ready at 7')).toBeInTheDocument();
     });
@@ -112,6 +121,7 @@ describe('Enterprise page for a guest', () => {
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
         await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
+        await openMoney();
         expect(await screen.findByTestId('ledger-members-only')).toBeInTheDocument();
         expect(await screen.findByTestId('thread-members-only')).toBeInTheDocument();
         expect(screen.queryByText('Members only')).not.toBeInTheDocument();
@@ -169,7 +179,9 @@ describe('Enterprise page at 320px with 1.3x text', () => {
 
         const heading = await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
         expect(heading).not.toHaveClass('truncate');
-        expect(heading).toHaveClass('line-clamp-2');
+        // The shopfront's name wraps whole, as the phone's (S5), where the old banner cut it at two lines.
+        expect(heading).not.toHaveClass('line-clamp-2');
+        expect(heading).toHaveClass('break-words');
     });
 
     it('stacks each P&L transaction below sm instead of a six-column table that scrolls sideways', async () => {
@@ -185,6 +197,7 @@ describe('Enterprise page at 320px with 1.3x text', () => {
         } as any);
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
+        await openMoney();
         const region = await screen.findByRole('region', { name: 'Project ledger transactions' });
         // Only sm and up may scroll sideways; the table has no minimum width below sm.
         expect(region).not.toHaveClass('overflow-x-auto');
@@ -213,6 +226,7 @@ describe('Enterprise page at 320px with 1.3x text', () => {
         } as any);
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
+        await openMoney();
         expect(await screen.findByTestId('ledger-fee-note')).toHaveTextContent('Came in is before fees: 0.18 🫘 in fees came off it.');
         // Nothing went out: no "-0.00".
         expect(screen.queryByText(/-0\.00/)).not.toBeInTheDocument();
@@ -223,6 +237,7 @@ describe('Enterprise page at 320px with 1.3x text', () => {
         vi.spyOn(api, 'getTreasury').mockResolvedValue(bakery);
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
+        await openMoney();
         await screen.findByText('Income & Spend (P&L)');
         await screen.findByText('No transactions recorded for this period.');
         expect(screen.queryByTestId('ledger-fee-note')).not.toBeInTheDocument();
@@ -233,6 +248,7 @@ describe('Enterprise page at 320px with 1.3x text', () => {
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
         await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
+        await openMoney();
         const tiles = screen.getByTestId('enterprise-balance-tiles');
         expect(tiles).toHaveTextContent('Uncapped');
         // rem-based minimum, so the switch follows the phone's text size as well as its width.

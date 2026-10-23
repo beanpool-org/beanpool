@@ -227,8 +227,11 @@ export function ShopfrontTogether({ categories }: { categories: string[] }) {
     );
 }
 
-/** Its sections, each a heading and its rows (picture, title, price or state); past five, "Show all". */
-export function ShopfrontSections({ sections, showsBeans, empty, onOpen }: { sections: ShopSection[]; showsBeans: boolean; empty: string; onOpen?: (id: string) => void }) {
+/**
+ * Its sections, each a heading and its rows (picture, title, price or state); past five, "Show all". `note` is what every
+ * row says of the account's own state (paused for the season, winding up, closed), in place of a row's own.
+ */
+export function ShopfrontSections({ sections, showsBeans, empty, note, onOpen }: { sections: ShopSection[]; showsBeans: boolean; empty: string; note?: string | null; onOpen?: (id: string) => void }) {
     const [open, setOpen] = useState<Record<string, boolean>>({});
     return (
         <section data-testid="shopfront-sections" aria-label={t('What it offers')} className={card}>
@@ -242,7 +245,7 @@ export function ShopfrontSections({ sections, showsBeans, empty, onOpen }: { sec
                         <h3 className="m-0 mb-1 text-sm font-extrabold text-nature-900 dark:text-white">{section.title}</h3>
                         <ul className="m-0 p-0 list-none divide-y divide-nature-100 dark:divide-nature-800">
                             {shown.map((l) => {
-                                const lines = [listingPriceLine(l, showsBeans), listingStateLine(l)].filter((x): x is string => !!x);
+                                const lines = [listingPriceLine(l, showsBeans), note ?? listingStateLine(l)].filter((x): x is string => !!x);
                                 return (
                                     <li key={l.id}>
                                         <button
@@ -255,7 +258,11 @@ export function ShopfrontSections({ sections, showsBeans, empty, onOpen }: { sec
                                             <ListingPicture l={l} className="w-12 h-12 shrink-0 rounded-lg" emojiClass="text-2xl" />
                                             <span className="flex-1 min-w-0">
                                                 <span className="block text-sm font-semibold text-nature-900 dark:text-white line-clamp-2 break-words">{l.title}</span>
-                                                {lines.length > 0 && <span className={`block ${muted}`}>{lines.join(' · ')}</span>}
+                                                {lines.length > 0 && (
+                                                    <span className={`block ${muted}`}>
+                                                        {lines.map((line, i) => <span key={i}>{i > 0 && ' · '}<span>{line}</span></span>)}
+                                                    </span>
+                                                )}
                                             </span>
                                         </button>
                                     </li>

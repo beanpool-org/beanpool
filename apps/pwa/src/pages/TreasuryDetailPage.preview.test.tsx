@@ -72,6 +72,13 @@ function renderPage(pubkey: string, extra: Partial<Parameters<typeof TreasuryDet
     return props;
 }
 
+/** Example Valley's keepers' controls, as markers, are in its Manage tab (DESIGN-shops-round3-enterprise-shopfront §3, S8). */
+async function openManage() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Manage' }));
+    return screen.findByTestId('manage-panel');
+}
+const markerNames = () => screen.getAllByTestId('local-community-action').map(b => b.textContent?.replace(/🏘️.*$/u, '').trim());
+
 describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
     it('is the real page fed the sample, marked, and asks the node nothing', async () => {
         renderPage(BAKERY.id);
@@ -98,31 +105,39 @@ describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
         const props = renderPage(BAKERY.id);
         await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
 
-        const markers = screen.getAllByTestId('local-community-action').map(b => b.textContent?.replace(/🏘️.*$/u, '').trim());
-        expect(markers).toEqual(['Post Offer', 'Post Need', 'To Commons', 'Pause for season', 'Start wind-up', 'Join as keeper']);
-        for (const name of markers) {
-            fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
-            const sheet = await screen.findByTestId('local-community-sheet');
-            expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.enterprises);
-            fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
-            expect(screen.queryByTestId('local-community-sheet')).toBeNull();
-        }
+        const tryEach = async (markers: Array<string | undefined>) => {
+            for (const name of markers) {
+                fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
+                const sheet = await screen.findByTestId('local-community-sheet');
+                expect(sheet).toHaveTextContent(LOCAL_COMMUNITY_SHEET.features.enterprises);
+                fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+                expect(screen.queryByTestId('local-community-sheet')).toBeNull();
+            }
+        };
+        // The page: what a member does.
+        expect(markerNames()).toEqual(['Join as keeper']);
+        await tryEach(markerNames());
         // The sheet's ways forward are the app's (review N2).
         fireEvent.click(screen.getByRole('button', { name: /^Join as keeper/ }));
         fireEvent.click(await screen.findByTestId('local-community-near-you'));
         expect(props.onNearYou).toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: /^Post Offer/ }));
-        fireEvent.click(await screen.findByTestId('local-community-guide'));
-        expect(props.onGuide).toHaveBeenCalledWith(LOCAL_COMMUNITY_SHEET.guide.enterprises);
         // A listing tap goes nowhere.
         fireEvent.click(screen.getByText(BAKERY.listing));
         expect(props.onNavigatePost).not.toHaveBeenCalled();
+
+        // Manage: what its keepers do.
+        await openManage();
+        expect(markerNames()).toEqual(['Post Offer', 'Post Need', 'To Commons', 'Pause for season', 'Start wind-up']);
+        await tryEach(markerNames());
+        fireEvent.click(screen.getByRole('button', { name: /^Post Offer/ }));
+        fireEvent.click(await screen.findByTestId('local-community-guide'));
+        expect(props.onGuide).toHaveBeenCalledWith(LOCAL_COMMUNITY_SHEET.guide.enterprises);
         await askedNothing();
     });
 
     it('a keeper row is not a button: no profile opens, nothing is sent (B3)', async () => {
         const props = renderPage(BAKERY.id);
-        const keepers = (await screen.findByText(/^Keepers \(3\)$/)).parentElement!;
+        const keepers = (await screen.findByRole('heading', { name: 'Kept by' })).parentElement!;
         expect(within(keepers).getAllByText('a neighbour')).toHaveLength(3);
         expect(within(keepers).queryAllByRole('button')).toEqual([]);
         expect(screen.queryAllByRole('button', { name: /a neighbour/ })).toEqual([]);
@@ -134,6 +149,7 @@ describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
     it('the markers stand one to a row, so at 320 px no pill runs off its button (B4)', async () => {
         renderPage(BAKERY.id);
         await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
+        await openManage();
         for (const name of [/^Post Offer/, /^Post Need/, /^Pause for season/, /^Start wind-up/]) {
             const grid = screen.getByRole('button', { name }).closest('.grid');
             expect(grid).toHaveClass('grid-cols-1');
@@ -144,6 +160,7 @@ describe('TreasuryDetailPage in preview: Example Valley\'s enterprise', () => {
     it('Escape on a marker\'s sheet closes the sheet and leaves the page open; the next Escape goes back (N1)', async () => {
         const props = renderPage(BAKERY.id);
         await waitFor(() => expect(screen.getAllByText(BAKERY.name).length).toBeGreaterThan(0));
+        await openManage();
         fireEvent.click(screen.getByRole('button', { name: /^Start wind-up/ }));
         await screen.findByTestId('local-community-sheet');
         fireEvent.keyDown(window, { key: 'Escape' });

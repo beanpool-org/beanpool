@@ -1006,6 +1006,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const leadKeeper = leadKeeperOf(shopfrontKeepers);
     const memberView = isEffectivePreview || readsAsMember(detail);
     const shopListings: ShopfrontListing[] = ownListings ?? listingsFromDetailPosts(detail?.posts);
+    // What each of its listings says of it while it is paused, winding up or closed (the old listing rows' badge).
+    const listingNote = detail?.status === 'completed'
+        ? t('Closed', undefined, 'a listing')
+        : detail?.status === 'winding_up' ? t('⏳ Winding up') : detail?.paused ? t('⏸️ Paused') : null;
     // Example Valley's listings open nothing: they are no listing here.
     const openListing = !isEffectivePreview && onNavigatePost ? onNavigatePost : undefined;
     // Manage: its keepers, a node admin whose keeper requests they are, and Example Valley's visitor (its controls as markers).
@@ -1780,6 +1784,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 </div>
                                                 <div className="flex flex-col sm:flex-row gap-2">
                                                     <select
+                                                        aria-label={project ? t('Propose an Active Collaborator as Leader') : t('Propose an Active Keeper as Lead')}
                                                         value={selectedSuccessionCandidate}
                                                         onChange={(e) => setSelectedSuccessionCandidate(e.target.value)}
                                                         className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[44px]"
@@ -1870,6 +1875,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             onClick={() => handleRemoveThreadMessage(m.id)}
                                                             disabled={threadRemovingId === m.id}
                                                             aria-label={t('Remove message from {name}', { name: authorName })}
+                                                            title={t('Remove message')}
                                                             className="shrink-0 min-h-[44px] px-3 rounded-lg border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-sm font-bold text-bp-ink-danger hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors disabled:opacity-50"
                                                         >
                                                             {threadRemovingId === m.id ? t('Removing...') : t('Remove')}
@@ -2124,7 +2130,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <>
                                         <ShopfrontFeatured listings={featuredOf(shopListings)} showsBeans onOpen={openListing} />
                                         <ShopfrontTogether categories={Array.isArray(detail?.offerCategories) ? detail.offerCategories : []} />
-                                        <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} onOpen={openListing} />
+                                        <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} note={listingNote} onOpen={openListing} />
                                     </>
                                 )}
 

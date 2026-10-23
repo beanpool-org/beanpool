@@ -118,7 +118,11 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
         <form onSubmit={save} data-testid="manage-face" aria-labelledby={`${id}-heading`} className={card}>
             <div>
                 <h2 id={`${id}-heading`} className={heading}>{project ? t('Its page: what members see') : t('Its shopfront: what members see')}</h2>
-                <p className={`${muted} mt-1`}>{t('Any keeper can change the picture, About, the kind of shop and how you deal.')}</p>
+                <p className={`${muted} mt-1`}>
+                    {project
+                        ? t('Any collaborator can change the picture, About, the kind of shop and how you deal.')
+                        : t('Any keeper can change the picture, About, the kind of shop and how you deal.')}
+                </p>
             </div>
 
             <div className="flex items-center gap-3">

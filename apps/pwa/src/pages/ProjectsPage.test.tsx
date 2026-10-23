@@ -266,6 +266,8 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
     it('renders keeper operational controls for enterprise keeper and preserves treasury actions', async () => {
         render(<TreasuryDetailPage identity={creatorIdentity} pubkey="treasury-mine" onBack={vi.fn()} />);
 
+        // A keeper's controls are the page's Manage tab (DESIGN-shops-round3-enterprise-shopfront §3, S8).
+        fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
         await waitFor(() => {
             expect(screen.getByText('Operator Controls')).toBeInTheDocument();
         });
@@ -283,6 +285,7 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
 
         render(<TreasuryDetailPage identity={creatorIdentity} pubkey="treasury-mine" onBack={handleBack} />);
 
+        fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
         await waitFor(() => {
             expect(screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i })).toBeInTheDocument();
         });

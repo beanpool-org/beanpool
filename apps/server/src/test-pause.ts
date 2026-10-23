@@ -45,7 +45,8 @@
  *  6. Where the operator turns message requests on (engine/dm-requests.ts), a pause and a request agree. Pip, paused, is held
  *     by her own requests as Quin, who isn't, is held by his (403 dm_request_pending), to Una and to Bly, who blocked her,
  *     alike; she gets each again with her request pending, the one kept for her alone as Una's; and she finds Quin's request
- *     waiting for her, accepts it, which is answering in a conversation she is in, and answers him.
+ *     waiting for her, accepts it, which is answering in a conversation she is in, and answers him. Xan, a visitor's row Mia
+ *     wrote to, decides a request sent to him as a member does (PR #2410): paused, he still accepts hers, and writes no line.
  *
  * The re-key's interplay with a report's pause is test-rekey-cancel's (sections H to J); a standby's copy of a pause is
  * test-standby-board-standing's; what a paused member reads is test-suspended-and-visitor-reads'.
@@ -620,6 +621,20 @@ async function main() {
         assert(quinWaits && accepted.status === 200 && accepted.body?.request?.state === 'accepted' && requestState(quinDm) === 'accepted',
             `Quin's request waits in her list, and she accepts it (${listed.status} ${quinWaits}, ${accepted.status} ${accepted.body?.request?.state})`);
         assert(quinWritesOn.status === 200 && pipAnswers.status === 200, `Quin writes on, and she answers him (${quinWritesOn.status}, ${pipAnswers.status})`);
+
+        // A visitor's row decides a request sent to it as a member does (PR #2410). The pause takes its lines (section 5), not
+        // that: paused, Xan accepts Mia's request as Pip accepts Quin's, and still writes no line.
+        const xan = keypair('VisitingXan');
+        const xanDm = se.createConversation('dm', [mia.pubKeyHex, xan.pubKeyHex], mia.pubKeyHex)!.id;
+        const miaAsks = await writes(mia, xanDm);
+        const xanPaused = await asAdmin(ownerSession, `/api/local/admin/users/${xan.pubKeyHex}/suspend`, { reason: 'Threats to a member in a direct message' });
+        assert(miaAsks.status === 200 && requestState(xanDm) === 'pending' && row(xan.pubKeyHex)?.is_visitor === 1 && xanPaused.status === 200 && statusOf(xan) === 'disabled',
+            `setup: Mia's first line to Xan, a visitor's row, waits as a request, and an owner pauses his row (${miaAsks.status} ${requestState(xanDm)}, ${xanPaused.status} ${statusOf(xan)})`);
+        const xanAccepts = await post('/api/messages/request', { conversationId: xanDm, decision: 'accept' }, xan);
+        const xanWrites = await writes(xan, xanDm);
+        assert(xanAccepts.status === 200 && xanAccepts.body?.request?.state === 'accepted' && requestState(xanDm) === 'accepted'
+            && xanWrites.status === 400 && xanWrites.body?.error === 'Account is disabled',
+            `paused, Xan accepts it, and still answers nothing (${xanAccepts.status} ${xanAccepts.body?.request?.state}, ${refusal(xanWrites)})`);
     } finally {
         db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.dmRequests`);
     }

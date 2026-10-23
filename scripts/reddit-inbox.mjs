@@ -88,6 +88,30 @@ export function readTopic(file = TOPIC_FILE) {
 
 const isStr = (v, max) => typeof v === 'string' && Array.from(v).length <= max;
 
+// What Unicode draws as nothing, kept only where it changes what is drawn: the app's visible()
+// (apps/reddit-watcher/src/agent-item.ts), the same rules. The app's text has been through it already; it runs again
+// here because anyone who learns the topic's address can put an item on it without the app.
+const HIDDEN = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
+const EMOJI = /\p{Emoji}/u;
+const JOINERS = new Set(['\u200C', '\u200D']);
+const shown = (c) => c !== undefined && !HIDDEN.test(c);
+
+/** Text without what a reader cannot see: one U+FE0F after an emoji, and a joiner alone between drawn characters, stay. */
+export function visible(raw) {
+    const chars = Array.from(typeof raw === 'string' ? raw : '');
+    let out = '';
+    let keptLast = false;
+    chars.forEach((c, i) => {
+        const prev = chars[i - 1];
+        keptLast =
+            shown(c) ||
+            (c === '\uFE0F' && shown(prev) && EMOJI.test(prev)) ||
+            (JOINERS.has(c) && keptLast && shown(chars[i + 1]));
+        if (keptLast) out += c;
+    });
+    return out;
+}
+
 function redditLink(v) {
     if (!isStr(v, LIMITS.link)) return false;
     try {
@@ -100,7 +124,7 @@ function redditLink(v) {
 
 /**
  * One message's text as an inbox item, or null when it is not one the app sends (agent-item.ts): the fields and their
- * limits are checked, and only those fields are kept.
+ * limits are checked, only those fields are kept, and their text is kept without what a reader cannot see.
  */
 export function toInboxItem(text) {
     if (typeof text !== 'string' || text.length > 16_384) return null;
@@ -115,7 +139,7 @@ export function toInboxItem(text) {
     if (typeof m.id !== 'string' || !REDDIT_ID.test(m.id) || m.id.startsWith('t3_') !== (m.kind === 'post')) return null;
     if (!redditLink(m.permalink) || !isStr(m.title, LIMITS.title) || !isStr(m.body, LIMITS.body) || !isStr(m.flair, LIMITS.flair)) return null;
     if (m.createdAt !== null && !(typeof m.createdAt === 'string' && m.createdAt.length <= 40 && Number.isFinite(Date.parse(m.createdAt)))) return null;
-    const item = { v: 1, kind: m.kind, id: m.id, permalink: m.permalink, title: m.title, body: m.body, flair: m.flair, createdAt: m.createdAt };
+    const item = { v: 1, kind: m.kind, id: m.id, permalink: m.permalink, title: visible(m.title), body: visible(m.body), flair: visible(m.flair), createdAt: m.createdAt };
     if (m.kind === 'comment') {
         if (!redditLink(m.parentPermalink)) return null;
         item.parentPermalink = m.parentPermalink;

@@ -9,7 +9,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadState, readTopic, run, SEEN_MAX, toInboxItem, topicUrl } from './reddit-inbox.mjs';
+import { loadState, readTopic, run, SEEN_MAX, toInboxItem, topicUrl, visible } from './reddit-inbox.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'reddit-inbox.mjs');
@@ -274,6 +274,32 @@ test('toInboxItem: the app\'s item, and only its fields', () => {
     for (const bad of [undefined, 7, '', 'null', '[]', '"x"', JSON.stringify({ ...POST, title: 7 }), JSON.stringify({ ...POST, flair: 'f'.repeat(65) })]) {
         assert.equal(toInboxItem(bad), null, String(bad));
     }
+});
+
+test('an item put on the topic without the app is kept without what a reader cannot see, by the app\'s own rules', () => {
+    const app = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/src/agent-item.ts'), 'utf8');
+    const mine = fs.readFileSync(SCRIPT, 'utf8');
+    for (const rule of [
+        'const HIDDEN = /[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/u;',
+        'const EMOJI = /\\p{Emoji}/u;',
+        "const JOINERS = new Set(['\\u200C', '\\u200D']);",
+        "(c === '\\uFE0F' && shown(prev) && EMOJI.test(prev)) ||",
+        '(JOINERS.has(c) && keptLast && shown(chars[i + 1]));',
+    ]) {
+        assert.ok(app.includes(rule), `the app: ${rule}`);
+        assert.ok(mine.includes(rule), `the script: ${rule}`);
+    }
+    // The review's two probes (#2402): 16 variation selectors, and a run of 16 joiners.
+    const selectors = Array.from({ length: 16 }, (_, i) => String.fromCodePoint(0xe0100 + i)).join('');
+    const joiners = Array.from({ length: 16 }, (_, i) => (i % 2 ? '\u200D' : '\u200C')).join('');
+    assert.equal(visible(`ok${selectors}`), 'ok');
+    assert.equal(visible(`x${joiners}y`), 'xy');
+    const hidden = { ...POST, title: `How\u202E do${selectors} I?`, body: `x${joiners}y tag\u{E0068}\u{E0069}\nok\u200B`, flair: `Q\u2060${joiners}` };
+    assert.deepEqual(toInboxItem(JSON.stringify(hidden)), { ...POST, title: 'How do I?', body: 'xy tag\nok', flair: 'Q' });
+    // What the app keeps stays: emoji and the scripts that need a joiner.
+    const drawn = '❤\uFE0F\u200D🔥 🏳\uFE0F\u200D🌈 👩🏽\u200D🌾 1\uFE0F\u20E3 می\u200Cخواهم क्\u200Dष';
+    assert.equal(visible(drawn), drawn);
+    assert.equal(toInboxItem(JSON.stringify({ ...POST, body: drawn }))?.body, drawn);
 });
 
 test('a topic that cannot be read changes nothing, and says why without the address', async () => {

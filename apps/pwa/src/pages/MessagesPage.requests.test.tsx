@@ -42,10 +42,11 @@ vi.mock('../components/ReportModal', () => ({
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 
 /** The node: each member's list, and each conversation as GET /api/messages/:id reads it. */
-const node = vi.hoisted(() => ({ list: null as any, reads: {} as Record<string, { conversation: any; messages: any[] }> }));
+const node = vi.hoisted(() => ({ list: null as any, reads: {} as Record<string, { conversation: any; messages: any[] }>, gates: {} as Record<string, Promise<void>> }));
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => node.list),
     getConversationMessages: vi.fn(async (id: string) => {
+        if (node.gates[id]) await node.gates[id];
         const read = node.reads[id];
         if (!read) throw Object.assign(new Error('Conversation not found'), { status: 404 });
         return read;
@@ -161,6 +162,7 @@ beforeEach(() => {
     forgetGroupKeys();
     doorbell.listeners = [];
     node.reads = {};
+    node.gates = {};
     vi.mocked(decideMessageRequest).mockReset();
     vi.mocked(ignoreAllMessageRequests).mockReset();
     vi.mocked(blockUser).mockClear();
@@ -310,6 +312,42 @@ describe('a request card', () => {
         expect(await within(card).findByText(OFFLINE)).toBeInTheDocument();
         for (const b of ['Accept', 'Ignore', 'Block']) expect(within(card).getByRole('button', { name: b })).toBeEnabled();
         expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+    });
+
+    it('a request that is gone by the time Ann decides (ignored on another device) leaves the list', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(decideMessageRequest).mockImplementation(async () => {
+            node.list = annListWith([]);
+            throw Object.assign(new Error('There is no message request for you in this chat.'), { status: 404, code: 'request_not_found' });
+        });
+        render(<MessagesPage identity={idOf(ann)} />);
+        fireEvent.click(within(await openRequests()).getByRole('button', { name: 'Accept' }));
+        await waitFor(() => expect(screen.queryByTestId('request-card')).toBeNull());
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+    });
+
+    it('a card still reads its line when the list changes while that line is being read', async () => {
+        const cy = person('Cy');
+        const CY = crypto.randomUUID();
+        let open!: () => void;
+        node.gates[CY] = new Promise<void>((r) => { open = r; });
+        node.list = annListWith([requestEntry(bo, CONV), requestEntry(cy, CY)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        node.reads[CY] = { ...readOf(pending(cy.publicKey), []), messages: [] };
+        const cyChat = { id: CY, type: 'dm', participants: [ann.publicKey, cy.publicKey] };
+        const id = crypto.randomUUID();
+        node.reads[CY].conversation = { ...node.reads[CY].conversation, id: CY, participants: [ann.publicKey, cy.publicKey], createdBy: cy.publicKey };
+        node.reads[CY].messages = [{ id, conversationId: CY, authorPubkey: cy.publicKey, ...lockForDm('Cy here', cyChat, cy, { messageId: id, after: null }),
+            type: 'text', systemType: null, metadata: null, timestamp: LINE_AT, editedAt: null, updatedAt: LINE_AT }];
+        vi.mocked(decideMessageRequest).mockImplementation(async () => { node.list = annListWith([requestEntry(cy, CY)]); return IGNORED as never; });
+        render(<MessagesPage identity={idOf(ann)} />);
+        const list = await openRequests();
+        await within(list).findByText('Hello');
+        fireEvent.click(within(within(list).getAllByTestId('request-card')[0]).getByRole('button', { name: 'Ignore' }));
+        await waitFor(() => expect(screen.getAllByTestId('request-card')).toHaveLength(1));
+        await act(async () => { open(); });
+        expect(await screen.findByText('Cy here')).toBeInTheDocument();
     });
 
     it('a refusal from the node is said in its own words (a standby)', async () => {

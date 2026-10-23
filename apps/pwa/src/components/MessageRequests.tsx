@@ -49,7 +49,7 @@ export function RequestActions({ conversationId, peerPubkey, peerName, identity,
     const [busy, setBusy] = useState(false);
     const [failure, setFailure] = useState<string | null>(null);
     const alive = useRef(true);
-    useEffect(() => () => { alive.current = false; }, []);
+    useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
     async function decide(decision: 'accept' | 'ignore') {
         if (busy) return;
@@ -64,6 +64,8 @@ export function RequestActions({ conversationId, peerPubkey, peerName, identity,
         } catch (e) {
             if (!alive.current) return;
             setBusy(false);
+            // The request is gone (ignored on another device, its sender removed): nothing is left to decide here.
+            if ((e as { code?: unknown } | null)?.code === 'request_not_found') { onIgnored(); return; }
             setFailure(decisionFailureWords(e));
         }
     }
@@ -232,12 +234,15 @@ export function MessageRequestsList({ entries, count, identity, avatar, joinedWo
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
     const [previews, setPreviews] = useState<Record<string, Preview>>({});
     const asked = useRef<Set<string>>(new Set());
+    const alive = useRef(true);
+    useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
     const keyOf = (e: DmRequestEntry) => `${e.id}@${e.request.at}`;
     const [ignoringAll, setIgnoringAll] = useState(false);
     const [allFailure, setAllFailure] = useState<string | null>(null);
 
+    // A preview is kept by its request's id and time, so one that lands after the list has changed still lands on its own
+    // card (or on none): nothing asked is ever dropped, so no card waits on a read that won't come.
     useEffect(() => {
-        let cancelled = false;
         const wanted = shown.filter((e) => !asked.current.has(keyOf(e)));
         if (wanted.length === 0) return;
         wanted.forEach((e) => asked.current.add(keyOf(e)));
@@ -254,11 +259,10 @@ export function MessageRequestsList({ entries, count, identity, avatar, joinedWo
                 preview = 'failed';
                 asked.current.delete(keyOf(e));
             }
-            if (!cancelled) setPreviews((p) => ({ ...p, [keyOf(e)]: preview }));
+            if (alive.current) setPreviews((p) => ({ ...p, [keyOf(e)]: preview }));
             return next();
         };
         void Promise.all([next(), next(), next()]);
-        return () => { cancelled = true; };
     }, [shown.map(keyOf).join(','), identity.publicKey]);
 
     async function ignoreAll() {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     getTreasury, getBalance, treasurySweep,
     treasuryApprove, treasuryReject, treasuryComplete,
@@ -130,10 +130,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
     // The page or its keepers' Manage tab (round 3 §3, S8). Each enterprise opens on its page.
     const [tab, setTab] = useState<'page' | 'manage'>('page');
-    useEffect(() => { setTab('page'); }, [pubkey]);
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
+    // Another enterprise can open over this one (a keeper's profile, a link: App.tsx changes the key, not the page). It opens
+    // on its page with none of the one before's listings, and a read for the one before that lands late is dropped.
+    const shownPubkey = useRef(pubkey);
+    shownPubkey.current = pubkey;
+    useEffect(() => { setTab('page'); setOwnListings(undefined); }, [pubkey]);
 
     // Operator Action States
     const [sweepAmount, setSweepAmount] = useState('');
@@ -483,13 +487,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setLoading(false);
             return;
         }
+        // Still the enterprise on the page: another opened over it meanwhile leaves its answers unused.
+        const current = () => shownPubkey.current === pubkey;
         try {
             if (!quiet) setLoading(true);
             setError(null);
             const d = await getTreasury(pubkey);
+            if (!current()) return;
             setDetail(d);
             // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
-            if (hasShopfront(d) && readsAsMember(d)) void readOwnerListings(pubkey).then(setOwnListings);
+            if (hasShopfront(d) && readsAsMember(d)) void readOwnerListings(pubkey).then((l) => { if (current()) setOwnListings(l); });
 
             if (identity?.publicKey && viewerIsMember) {
                 const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
@@ -502,15 +509,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 } catch {
                     // fall back to the keeper list the enterprise itself returned
                 }
+                if (!current()) return;
                 setIsKeeperOfThis(mine.includes(pubkey) || inKeepers);
             } else {
                 setIsKeeperOfThis(false);
             }
         } catch (e: any) {
             // A quiet read again that fails leaves the page as it was.
-            if (!quiet) setError(e.message || t('Check your connection and try again.'));
+            if (!quiet && current()) setError(e.message || t('Check your connection and try again.'));
         } finally {
-            if (!quiet) setLoading(false);
+            if (!quiet && current()) setLoading(false);
         }
     }, [pubkey, identity?.publicKey, viewerIsMember, isEffectivePreview, elsewhere]);
 
@@ -1895,7 +1903,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <EnterpriseFace treasury={pubkey} detail={detail} project={project} lead={isLeadOrSoleKeeperOrAdmin} shopEditable={isKeeperOfThis} onSaved={() => load(true)} />
                                 )}
                                 {!isEffectivePreview && faceOpen && isKeeperOfThis && (
-                                    <EnterpriseFeatured treasury={pubkey} shopId={typeof detail?.shop?.id === 'string' ? detail.shop.id : null} onShopOpened={() => load(true)} onListingsChanged={setOwnListings} />
+                                    <EnterpriseFeatured treasury={pubkey} shopId={typeof detail?.shop?.id === 'string' ? detail.shop.id : null} onShopOpened={() => load(true)}
+                                        onListingsChanged={(l) => { if (shownPubkey.current === pubkey) setOwnListings(l); }} />
                                 )}
                             </div>
                         ) : (

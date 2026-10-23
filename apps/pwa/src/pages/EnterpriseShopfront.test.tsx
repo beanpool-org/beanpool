@@ -15,7 +15,7 @@
  * api.ts calls are what is measured. Rendered at 320 px.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup, act } from '@testing-library/react';
 import axe from 'axe-core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
@@ -303,6 +303,96 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         await screen.findByTestId('shopfront-featured');
         fireEvent.click(byId('shopfront-money-toggle')!);
         expect(await axeProblems(container)).toEqual([]);
+    });
+});
+
+/** Another enterprise opened over this one (a keeper row's profile, a link): App.tsx changes the key, not the page. */
+describe('from one enterprise to another', () => {
+    const MILL = '8'.repeat(64);
+    const millsView = () => membersView({
+        publicKey: MILL, name: 'River Mill', shop: { ...SHOP, id: 'shop-2', name: 'River Mill', ownerPublicKey: MILL, ownerName: 'River Mill' },
+        posts: [{ id: 'f2', type: 'offer', category: 'baking', title: 'Rye flour', credits: 3, price_type: 'fixed', status: 'active' }],
+    });
+    const MILLS = [{ id: 'f1', type: 'offer', category: 'baking', title: 'Wholemeal flour', credits: 3, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: 'shop-2' }];
+    /** The node answers for the mill too; a read named in `held` waits until its gate opens. */
+    function serveTheMillToo(held: Record<string, Promise<void>>) {
+        const base = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+            const u = new URL(String(url), 'http://node');
+            const answered = u.pathname === `/api/treasury/${MILL}` ? answer({ status: 200, body: millsView() })
+                : u.pathname === '/api/marketplace/posts' && u.searchParams.get('author') === MILL ? answer({ status: 200, body: MILLS })
+                : base(url, init);
+            const gate = held[u.pathname + u.search];
+            return gate ? gate.then(() => answered) : answered;
+        });
+    }
+    const gate = () => { let open!: () => void; const shut = new Promise<void>((r) => { open = r; }); return { shut, open }; };
+    const toTheMill = (rerender: (ui: React.ReactElement) => void) => rerender(<TreasuryDetailPage identity={me} pubkey={MILL} onBack={vi.fn()} />);
+    const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+
+    it("the one before's listings never show under the next one's name while its own are read", async () => {
+        const mills = gate();
+        serveTheMillToo({ [`/api/marketplace/posts?author=${MILL}&limit=200`]: mills.shut });
+        const { rerender } = await open({ detail: membersView(), keeperOf: [] });
+        await screen.findByTestId('shopfront-featured-p1');
+        toTheMill(rerender);
+        await waitFor(() => expect(byId('shopfront-name')?.textContent).toBe('River Mill'));
+        expect(byId('shopfront-featured-p1')).toBeNull();
+        expect(byId('shopfront-row-p3')).toBeNull();
+        // Its own text listings stand in meanwhile.
+        expect(byId('shopfront-row-f2')).not.toBeNull();
+        await act(async () => { mills.open(); });
+        expect(await screen.findByTestId('shopfront-featured-f1')).toBeInTheDocument();
+        expect(byId('shopfront-featured-p1')).toBeNull();
+    });
+
+    it("the one before's listings, read late, are dropped", async () => {
+        const bakery = gate();
+        serveTheMillToo({ [`/api/marketplace/posts?author=${ENT}&limit=200`]: bakery.shut });
+        const { rerender } = await open({ detail: membersView(), keeperOf: [] });
+        await waitFor(() => expect(reads()).toContain(`/api/marketplace/posts?author=${ENT}&limit=200`));
+        toTheMill(rerender);
+        await screen.findByTestId('shopfront-featured-f1');
+        bakery.open();
+        await settle();
+        expect(byId('shopfront-name')?.textContent).toBe('River Mill');
+        expect(byId('shopfront-featured-f1')).not.toBeNull();
+        expect(byId('shopfront-featured-p1')).toBeNull();
+        expect(byId('shopfront-row-p3')).toBeNull();
+    });
+
+    it('the one before, read late, never takes the page', async () => {
+        const bakery = gate();
+        serveTheMillToo({ [`/api/treasury/${ENT}`]: bakery.shut });
+        node = { detail: membersView(), keeperOf: [] };
+        const { rerender } = render(<TreasuryDetailPage identity={me} pubkey={ENT} onBack={vi.fn()} />);
+        await waitFor(() => expect(reads()).toContain(`/api/treasury/${ENT}`));
+        toTheMill(rerender);
+        await screen.findByTestId('shopfront-featured-f1');
+        bakery.open();
+        await settle();
+        expect(byId('shopfront-name')?.textContent).toBe('River Mill');
+        expect(byId('shopfront-featured-f1')).not.toBeNull();
+        expect(byId('shopfront-featured-p1')).toBeNull();
+        expect(reads()).not.toContain(`/api/marketplace/posts?author=${ENT}&limit=200`);
+    });
+
+    it("a Featured change for the one before, answered late, stays off the next one's page", async () => {
+        const feature = gate();
+        serveTheMillToo({ '/api/marketplace/posts/p3/feature': feature.shut });
+        const { rerender } = await open();
+        const panel = await manage();
+        await within(panel).findByTestId('manage-featured');
+        fireEvent.click(byId('manage-feature-p3')!);
+        await waitFor(() => expect(writes()).toEqual([{ method: 'PUT', path: '/api/marketplace/posts/p3/feature', body: { featured: true } }]));
+        toTheMill(rerender);
+        await screen.findByTestId('shopfront-featured-f1');
+        feature.open();
+        await settle();
+        expect(byId('shopfront-name')?.textContent).toBe('River Mill');
+        expect(byId('shopfront-featured-f1')).not.toBeNull();
+        expect(byId('shopfront-featured-p1')).toBeNull();
+        expect(byId('shopfront-featured-p3')).toBeNull();
     });
 });
 

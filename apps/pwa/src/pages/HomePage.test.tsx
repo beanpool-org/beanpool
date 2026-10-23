@@ -2607,7 +2607,8 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         const fewer = await screen.findByTestId('home-fewer');
         expect(cardIds()[0]).not.toBe('needs');
         aboveTheGrid(fewer);
-        aboveTheGrid(screen.getByTestId('home-hint'));
+        // The hint opens once the answer is drawn (§6.2), a render after the fewer-cards note.
+        aboveTheGrid(await screen.findByTestId('home-hint'));
     });
 
     it('in one column the hint stays straight under the first card, with or without Needs you, as before', async () => {
@@ -2633,8 +2634,9 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         const fewer = await screen.findByTestId('home-fewer');
         aboveTheGrid(fewer);
         expect(fewer).toHaveTextContent(xx(FEWER_CARDS_LINE));
-        expect(screen.getByTestId('home-hint')).toHaveTextContent(xx(HOME_HINT));
-        for (const note of [fewer, screen.getByTestId('home-hint')]) expect(bypassing(note), note.dataset.testid).toEqual([]);
+        const above = await screen.findByTestId('home-hint');
+        expect(above).toHaveTextContent(xx(HOME_HINT));
+        for (const note of [fewer, above]) expect(bypassing(note), note.dataset.testid).toEqual([]);
         cleanup();
         await landAt(1400);
         const hint = await screen.findByTestId('home-hint');

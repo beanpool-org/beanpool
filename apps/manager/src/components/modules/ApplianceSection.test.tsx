@@ -29,7 +29,7 @@ const mockDiag: DiagnosticsResponse = {
 };
 
 const mockGateway: GatewayConfig = {
-    features: { marketplace: true, messaging: true, federation: true, invites: true, servePwa: true },
+    features: { servePwa: true },
     corsAllowedOrigins: ['*'],
     rateLimiting: { enabled: true, maxRequestsPerMinute: 60 },
     adminIpAllowlist: [],

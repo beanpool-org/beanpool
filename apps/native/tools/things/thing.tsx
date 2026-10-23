@@ -57,6 +57,12 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const [asking, setAsking] = useState(false);
     const [links, setLinks] = useState<ToolOwnOffer[] | null>(null);
     const [offerStatus, setOfferStatus] = useState<ToolPostStatus | null>(null);
+    /**
+     * How many times a change here has said how its Offer stands, once the server answered it: a read sent before that and
+     * landing after is older, and never puts back how the Offer stood before Take out, Put back or It's back.
+     */
+    const statusAt = useRef(0);
+    const showStatus = (s: ToolPostStatus) => { statusAt.current++; setOfferStatus(s); };
     const [hint, setHint] = useState<ToolPriceHint | null>(null);
     const beans = host.node.features?.beans !== false;
     const postId = thing?.postId;
@@ -71,12 +77,14 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     }, []);
 
     // A linked Offer as the Market has it now: gone (ended, deleted) or paused from elsewhere is said, and so is a taken-out
-    // one put back up without the Tool shed (its shop's reopen, the Market's own resume).
+    // one put back up without the Tool shed (its shop's reopen, the Market's own resume). Its answer is dropped when a change
+    // here has said how the Offer stands since it was asked: a slow read never undoes a Take out or a Put back.
     useEffect(() => {
         setOfferStatus(null);
         if (!linked) return;
         let gone = false;
-        host.posts.status(linked).then((s) => { if (!gone) setOfferStatus(s); }).catch(() => {});
+        const at = statusAt.current;
+        host.posts.status(linked).then((s) => { if (!gone && statusAt.current === at) setOfferStatus(s); }).catch(() => {});
         return () => { gone = true; };
     }, [linked]);
 
@@ -159,16 +167,20 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
      * one already paused alike: a paused one may be its shop's ("closed for now"), which the shop's reopen would put back
      * up, and the owner's pause makes it theirs, so it stays down. One gone is left as the Market has it. What it returns
      * puts back a pause it made of a live Offer: the Offer resumed, or, when the server can't be reached then, the screen
-     * says it is paused, with Put back. The screen holds the Offer as paused once it is (Take out keeps the same Offer, so
-     * nothing reads it again): never "up in the Market again" over a pause just made.
+     * says it is paused, with Put back. The screen holds the Offer as paused once it is, or gone (Take out keeps the same
+     * Offer, so nothing reads it again, and the screen's first read, should it land later, is dropped): never "up in the
+     * Market again" over a pause just made.
      */
     const pauseOffer = async (offerId: string): Promise<(() => Promise<void>) | undefined> => {
         const status = await host.posts.status(offerId);
-        if (status === 'gone') return undefined;
+        if (status === 'gone') {
+            showStatus('gone');
+            return undefined;
+        }
         await host.posts.pause(offerId);
-        setOfferStatus('paused');
+        showStatus('paused');
         if (status === 'paused') return undefined;
-        return () => host.posts.resume(offerId).then(() => setOfferStatus('active'), () => {});
+        return () => host.posts.resume(offerId).then(() => showStatus('active'), () => {});
     };
 
     const list = () => {
@@ -186,7 +198,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
             const status = await host.posts.status(paused);
             if (status === 'gone') return { make: (d: ThingsDoc) => forgetOffer(d, id, host.now()), kept: () => setGoneNote(true) };
             if (status === 'paused') await host.posts.resume(paused);
-            setOfferStatus('active');
+            showStatus('active');
             return { make: (d: ThingsDoc) => setListed(d, id, paused, host.now()) };
         });
     });
@@ -207,7 +219,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
             try {
                 const status = await host.posts.status(postId);
                 if (status === 'paused') await host.posts.resume(postId);
-                setOfferStatus(status === 'paused' ? 'active' : status);
+                showStatus(status === 'paused' ? 'active' : status);
                 if (status === 'gone') return { make: (d: ThingsDoc) => forgetOffer(home(d), id, now), kept: () => setGoneNote(true) };
                 return { make: home };
             } catch {
@@ -244,7 +256,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     });
     const resumeHere = () => act(async () => {
         await host.posts.resume(postId!);
-        setOfferStatus('active');
+        showStatus('active');
     });
 
     const hintLine = !beans || !hint || state !== 'shelf' ? null

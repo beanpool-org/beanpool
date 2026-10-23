@@ -140,7 +140,8 @@ const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
  * the member's other device), none when null; `copyGate` holds a read of it and `marketGate` a pause or resume (each
  * in `marketAsks` as it is asked) until each settles; `puts` are the documents sent to it. `rows` are the Offers as the
  * server has them; `phoneRows` is the phone's own row of one where it says something else (a sync not yet run), and the
- * server's reads of an Offer are in `postReads`. A shop closed for now (`closeShop`) paused what is in `shopHeld` and
+ * server's reads of an Offer are in `postReads`; `readGate` holds the next one, its answer as the Offer stood when asked,
+ * until it settles (a slow reply on a poor link). A shop closed for now (`closeShop`) paused what is in `shopHeld` and
  * refuses to put back up anything in `inClosedShop` (409 shop_paused); its reopen puts back what it still holds.
  */
 const market = vi.hoisted(() => ({
@@ -158,6 +159,7 @@ const market = vi.hoisted(() => ({
     copy: null as { doc: unknown; updatedAt: string } | null,
     copyGate: null as Promise<void> | null,
     marketGate: null as Promise<void> | null,
+    readGate: null as Promise<void> | null,
     marketAsks: [] as string[],
     puts: [] as unknown[],
 }));
@@ -221,7 +223,13 @@ vi.mock('../../../utils/db', () => ({
             market.postReads.push(p);
             if (market.down) throw new TypeError('Network request failed');
             const row = market.rows.get(url.searchParams.get('id') ?? '');
-            return { ok: true, status: 200, headers: new Headers(), json: async () => (row ? [{ ...row, authorPublicKey: row.author_pubkey }] : []) };
+            const asked = row ? [{ ...row, authorPublicKey: row.author_pubkey }] : [];
+            if (market.readGate) {
+                const gate = market.readGate;
+                market.readGate = null;
+                await gate;
+            }
+            return { ok: true, status: 200, headers: new Headers(), json: async () => asked };
         }
         market.requests.push(`GET ${p}`);
         if (market.down) throw new TypeError('Network request failed');
@@ -354,6 +362,7 @@ beforeEach(() => {
     market.copy = null;
     market.copyGate = null;
     market.marketGate = null;
+    market.readGate = null;
     market.marketAsks.length = 0;
     market.puts.length = 0;
     node.profile = { profile: 'local', features: { beans: true } };
@@ -1168,6 +1177,36 @@ describe('A thing', () => {
         expect(text('thing-state')).toContain('Taken out of your shop');
         expect(byTestId('thing-offer-live')).toBeNull();
         expect(market.marketAsks).toEqual(['pause post-1']);
+    });
+
+    it("a read of its Offer that lands after Take out or Put back never undoes it: no \"up again\" over the pause, no \"paused\" and no second Put back over the resume", async () => {
+        let release!: () => void;
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        market.readGate = new Promise<void>((r) => { release = r; });
+        await open('thing', { key: 't-1' });
+        await click('thing-take-out');
+        expect(market.rows.get('post-1')?.status).toBe('paused');
+        expect(text('thing-state')).toContain('Taken out of your shop');
+        // The screen's own first read, sent as it opened while the Offer was live, lands now.
+        release();
+        await settle();
+        expect(text('thing-state')).toContain('Taken out of your shop');
+        expect(byTestId('thing-offer-live')).toBeNull();
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        market.readGate = new Promise<void>((r) => { release = r; });
+        await open('thing', { key: 't-1' });
+        await click('thing-put-back');
+        expect(market.rows.get('post-1')?.status).toBe('active');
+        expect(text('thing-state')).toContain('In your shop');
+        // Its first read, sent while the Offer was paused, lands now.
+        release();
+        await settle();
+        expect(text('thing-state')).toContain('In your shop');
+        expect(['thing-offer-paused', 'thing-resume'].map((id) => byTestId(id))).toEqual([null, null]);
+        expect(byTestId('thing-take-out')).not.toBeNull();
     });
 
     it("taken out, its deals not yet known: Lend and Delete wait for them, as for a thing in the shop", async () => {

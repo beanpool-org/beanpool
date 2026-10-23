@@ -49,9 +49,12 @@ const { ME_PUBKEY, BOB_PUBKEY, data } = vi.hoisted(() => {
         members: [
             { public_key: BOB_PUBKEY, callsign: 'Bob', avatar_url: null, joined_at: '2026-01-01T00:00:00.000Z' },
         ],
+        friends: [] as any[],
         conversationsCreated: [] as any[],
         /** While set, the community has not answered the ask for the chat yet. */
         answerGate: null as Promise<void> | null,
+        /** While set, the community refuses the chat: utils/db.ts throws the node's words as the error's message. */
+        createConvError: null as Error | null,
     };
     return { ME_PUBKEY, BOB_PUBKEY, data };
 });
@@ -64,10 +67,11 @@ vi.mock('../db', () => ({
     getDb: async () => ({
         getAllAsync: async () => data.members,
     }),
-    getFriendsLocal: async () => [],
+    getFriendsLocal: async () => data.friends,
     addFriendLocal: async () => {},
     removeFriendLocal: async () => {},
     createConversationApi: vi.fn(async (type: string, participants: string[], createdBy: string) => {
+        if (data.createConvError) throw data.createConvError;
         data.conversationsCreated.push({ type, participants, createdBy });
         if (data.answerGate) await data.answerGate;
         return { id: 'conv-dm-bob', participants, type };
@@ -92,6 +96,7 @@ vi.mock('../node-post', () => ({
 vi.mock('../../components/WantsToJoin', () => ({ WantsToJoin: () => null }));
 vi.mock('../../components/MyJoinRequests', () => ({ MyJoinRequests: () => null }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+vi.mock('../../components/AddedYouLines', () => ({ AddedYouLines: () => null }));
 
 import PeopleScreen from '../../app/(tabs)/people';
 import { LanguageProvider } from '../../components/LanguageProvider';
@@ -104,8 +109,12 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     nav.pushed.length = 0;
+    nav.params = { view: 'community' };
+    alerts.said.length = 0;
+    data.friends = [];
     data.conversationsCreated.length = 0;
     data.answerGate = null;
+    data.createConvError = null;
 });
 
 afterEach(() => {
@@ -180,5 +189,31 @@ describe('Phone Community rows message action (S0)', () => {
         expect(nav.pushed).toEqual(['/chat/conv-dm-bob']);
         const after = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Message');
         expect(after?.textContent).toBe('💬');
+    });
+
+    // A paused account opens no new conversation (removal by vote S1): the node answers 403 `paused` in its words.
+    const PAUSED_OPEN_WORDS = 'Your account here is paused for now, so you can’t start a new conversation. You can still answer the ones you’re in.';
+    it.each([
+        { way: "a community row's 💬", view: 'community' },
+        { way: "a friend's 💬", view: 'friends' },
+    ])("$way while the account is paused (403 paused): the node's words, and no chat opens", async ({ view }) => {
+        nav.params = { view };
+        if (view === 'friends') data.friends = [{ publicKey: BOB_PUBKEY, callsign: 'Bob', avatar_url: null, addedAt: '2026-10-01T00:00:00.000Z' }];
+        data.createConvError = new Error(PAUSED_OPEN_WORDS);
+        await act(async () => {
+            root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(PeopleScreen)) as any);
+        });
+        await settle();
+
+        const msgBtn = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Message');
+        expect(msgBtn, `💬 on ${view}`).toBeTruthy();
+        await act(async () => {
+            msgBtn!.click();
+        });
+        await settle();
+
+        expect(alerts.said).toContain(PAUSED_OPEN_WORDS);
+        expect(alerts.said.some(s => s.includes('Connect to your community'))).toBe(false);
+        expect(nav.pushed).toEqual([]);
     });
 });

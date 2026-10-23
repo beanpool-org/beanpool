@@ -7,7 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes, word } from '@beanpool/core';
 import { prepared } from './statements.js';
 import { foldName } from './names.js';
 
@@ -508,10 +508,11 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
             return { ok: false, reason: 'unknown_inviter', error: INVITER_KEY_SPELLING };
         }
 
-        // A member of this node who may bring someone in (mayBringSomeoneIn), not just a row: a pruned account keeps its
-        // row, and so does the old key of a member being re-keyed, and a ticket either signs would bring its holder in as
-        // someone new (engine/invites.ts); a visitor's row never joined, and its ticket would admit anyone, itself too.
-        if (!mayBringSomeoneIn(db, inviterPubkey)) {
+        // A member of this node (isNodeMember, the invite test's first half; whether they may bring someone in now is
+        // asked once the signature checks out, below), not just a row: a pruned account keeps its row, and so does the
+        // old key of a member being re-keyed, and a ticket either signs would bring its holder in as someone new
+        // (engine/invites.ts); a visitor's row never joined, and its ticket would admit anyone, itself too.
+        if (!isNodeMember(db, inviterPubkey)) {
             return { ok: false, reason: 'unknown_inviter', error: 'Inviter is not a formally recognized member of this decentralized mesh' };
         }
 
@@ -547,6 +548,20 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         );
 
         if (!isValid) return { ok: false, reason: 'invalid', error: 'Invalid cryptographic signature structure' };
+
+        // The whole invite test (mayBringSomeoneIn): not while the inviter's account is paused. Only once the signature
+        // checks out: a member's key is in every ticket they gave out, so anyone can write one naming it, and a forged
+        // ticket reads the same whether that member is paused or not (as a replaced key is answered only past its
+        // signature, https-server.ts). A member whose account is paused is still a member here: the words say the ticket
+        // can't be used for now, and nothing of why (the same reason, so each app's own words for it still fit).
+        if (!mayBringSomeoneIn(db, inviterPubkey)) {
+            return {
+                ok: false, reason: 'unknown_inviter',
+                error: isSuspendedAccount(db, inviterPubkey)
+                    ? word('The member who made this ticket can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.')
+                    : 'Inviter is not a formally recognized member of this decentralized mesh',
+            };
+        }
 
         const refused = binding?.({ format: bound ? 2 : 1, audience, inviter: inviterPubkey });
         if (refused) return { ok: false, reason: refused.reason, error: refused.error };
@@ -703,7 +718,7 @@ export function alreadyJoined(db: Db, pubkey: string | null | undefined): boolea
  *
  * Every other status counts, 'suspended' and 'disabled' included: what a suspended member may still do is suspension's
  * own rule (assertMemberActive, and each route's). The re-key is caught by its invalidated key, not by 'suspended',
- * because a report suspension writes the same status.
+ * because a report's suspension from before the pause wrote the same status.
  *
  * NOT the test for what only members may read: that is readsAsMember, which is stricter. Pass the verified signer (the
  * route's ctx.state.actor), never a key from the request.
@@ -719,10 +734,11 @@ export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean
 const READS_AS_NON_MEMBER_WHILE: ReadonlySet<string> = new Set(['suspended', 'disabled']);
 
 /**
- * Whether `pubkey`'s account is suspended: 'disabled' by an admin, a report or a community vote, or 'suspended' (the old
- * key of a member being re-keyed). The same two statuses readsAsMember holds back. Every role the member holds is kept
- * while it lasts; what a role lets them DO rests until it ends (a group convenor's powers: groups.ts
- * assertConvenorPowersActive). Pass the verified signer.
+ * Whether `pubkey`'s account is suspended: 'disabled' by an admin's or a report's pause or a community vote, or
+ * 'suspended' (the old key of a member being re-keyed, or a report's suspension made before the pause wrote 'disabled').
+ * The same two statuses readsAsMember holds back. Every role the member holds is kept while it lasts; what a role lets
+ * them DO rests until it ends (a group convenor's powers: groups.ts assertConvenorPowersActive), and they bring nobody
+ * in (mayBringSomeoneIn). Pass the verified signer.
  */
 export function isSuspendedAccount(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
@@ -769,16 +785,22 @@ export function passesReadGate(db: Db, pubkey: string | null | undefined): boole
  * THE INVITE TEST: whether `pubkey` may bring someone into this node: make an invite (apps/server engine/invites.ts
  * canInvite), sign an offline ticket that admits someone (verifyOfflineTicket), or answer a request to join (the knock
  * routes). The act test (isNodeMember), which a visitor's row fails: a visitor never joined, and an invite, a ticket or a
- * knock's invite of its own would admit anyone, itself included. Suspended and disabled members pass, as they did
- * (#1177): what suspension stops is each route's own rule (answering a knock asks assertMemberActive too). Pass the
- * verified signer, or the maker a code or a ticket names.
+ * knock's invite of its own would admit anyone, itself included.
+ *
+ * And not while their account is paused or suspended (isSuspendedAccount; removal by vote S1, scratch/fable-design/
+ * DESIGN-removal-by-vote-fable.md §3.1, G4): an admin's pause, a report's or a community vote's. #1177 let them, so a
+ * member paused for bringing in fake accounts kept bringing them in. It holds the moment the pause starts, and a code they
+ * made before it is refused until it ends (engine/invites.ts redeemInvite asks this of its maker at the redeem). The
+ * re-key's hold is caught first, by its invalidated key.
  *
  * Only a key in the one spelling (isMemberKeySpelling). A row an old door stored under another spelling of a member's
  * key is nobody who signs now: a code it made before that rule, or a ticket naming it (verifyOfflineTicket), would let
  * that key's holder keep admitting people through it, even once the member whose key it is was removed.
+ *
+ * Pass the verified signer, or the maker a code or a ticket names.
  */
 export function mayBringSomeoneIn(db: Db, pubkey: string | null | undefined): boolean {
-    return isMemberKeySpelling(pubkey) && isNodeMember(db, pubkey);
+    return isMemberKeySpelling(pubkey) && isNodeMember(db, pubkey) && !isSuspendedAccount(db, pubkey);
 }
 
 /** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade-triggers-visitors.ts). */

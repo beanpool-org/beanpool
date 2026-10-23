@@ -26,9 +26,11 @@
  *      groups: the key-less sockets get exactly this node's row of the table, bare, and never a member-only event; the
  *      member's socket gets every one in full; the visitor's and the suspended member's every public one, bare
  *   6. listings that leave the board or come back with no post event of their own (review 4113937195): a community
- *      removal (tickDecisions at the end of the grace), an admin prune of a member with two listings, an enterprise
+ *      removal's grace window, which pauses the member (removal by vote S1), and its end (tickDecisions), an admin prune
+ *      of a member with two listings, an enterprise
  *      paused and resumed, winding up and cancelled, and paused when its only keeper, the lead, is unbound; a member on
- *      holiday and back; a report actioned with a suspension; a Delete account over HTTP; a trade's step
+ *      holiday and back; an admin's pause and its lift; a report actioned with a suspension; a Delete account over HTTP;
+ *      a trade's step
  *      (othersGetDoorbell). Every socket off the member feed gets one bare listing doorbell per change, and an unsigned
  *      reader's board changes to match; the member's socket gets that change's own events and no listing doorbell, as
  *      before
@@ -435,10 +437,16 @@ async function main(): Promise<void> {
         se.grantNodeRole(proposer.pk, 'admin', 'owner:password');
         const removal = createDecision({ authorPubkey: proposer.pk, title: 'Remove Dora', description: 'A doorbell test of a community removal', touches: 'member',
             effect: 'remove_member', subject: dora.pk });
+        assert((await board()).includes(doraOffer), `setup: ${READER} reads Dora's offer`);
+        await sleep(100);
+        clear();
+        // The grace window pauses her ('disabled', removal by vote S1), so her listings leave the board now, with a doorbell
+        // of their own, and the removal at its end rings again.
         const graced = executeDecision(removal.id);
+        await rings("a removal's grace window", 'post_removed', ['profile_updated', 'decision_updated']);
+        assert(graced.status === 'execution_pending_grace' && !(await board()).includes(doraOffer),
+            `a removal's grace window: ${READER} no longer reads her offer (${graced.status})`);
         db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), removal.id);
-        assert(graced.status === 'execution_pending_grace' && (await board()).includes(doraOffer),
-            `setup: the removal of Dora is in its grace, past its end, and ${READER} still reads her offer (${graced.status})`);
         await sleep(100);
         clear();
         const tick = tickDecisions();
@@ -492,6 +500,20 @@ async function main(): Promise<void> {
         await rings('back from holiday', 'post_updated', ['profile_updated']);
         assert((await board()).includes(fayOffer), `back from holiday: ${READER} reads her offer again`);
 
+        // An admin pauses a member, and lifts it (removal by vote S1): their listings leave the board, and come back.
+        const pat = member('DoorbellPat');
+        const patOffer = await offer(pat, 'Doorbell Pat offer');
+        await sleep(100);
+        clear();
+        assert(se.adminEmergencySuspend(pat.pk, 'owner:password', 'A doorbell test of a pause and its lift').success, 'an admin pauses Pat');
+        await rings("an admin's pause", 'post_removed', ['profile_updated', 'decision_created']);
+        assert(!(await board()).includes(patOffer), `an admin's pause: ${READER} no longer reads his offer`);
+        await sleep(100);
+        clear();
+        assert(se.adminLiftSuspension(pat.pk, 'owner:password').success, 'and lifts it');
+        await rings('its lift', 'post_updated', ['profile_updated']);
+        assert((await board()).includes(patOffer), `its lift: ${READER} reads his offer again`);
+
         // A report actioned with a suspension: the member's listings are paused.
         const gus = member('DoorbellGus');
         const gusOffer = await offer(gus, 'Doorbell Gus offer');
@@ -499,7 +521,8 @@ async function main(): Promise<void> {
         await sleep(100);
         clear();
         assert(se.actionReport('doorbell-report', false, true), 'a moderator actions a report on Gus and suspends him');
-        await rings("a report's suspension", 'post_removed', ['profile_updated']);
+        // It is a pause (removal by vote S1): its record is a vote, announced as an admin's is.
+        await rings("a report's suspension", 'post_removed', ['profile_updated', 'decision_created']);
         assert(!(await board()).includes(gusOffer), `a report's suspension: ${READER} no longer reads his offer`);
 
         // Delete account, over HTTP.

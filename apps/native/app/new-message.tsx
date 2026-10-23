@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, FlatList, Pressable, TextInput,
-    Platform, Image, ActivityIndicator, Animated
+    Platform, Image, ActivityIndicator, Animated, Alert
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
 import { joinedWords, pickerEmpty, pickerHeading } from '../utils/community-list-note';
 import { t, tn } from '@beanpool/core';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { signedRequestWords } from '../components/signed-request-lines';
 import { useTheme, useStyles } from './ThemeContext';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────
@@ -261,6 +262,11 @@ export default function NewMessageScreen() {
         } catch (e: any) {
             console.error('[NewMessage] Create conversation error:', e);
             setCreating(null);
+            // Said, as Profile and People say it: the node's words when it refused (a paused account opens no new
+            // conversation, 403 `paused`), db.ts's own sentence in the member's language when it gave none, else that
+            // the phone isn't connected. Never a tap that does nothing.
+            const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
+            Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
         }
     }, [identity?.publicKey, creating, nodeResults]);
 

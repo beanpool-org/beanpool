@@ -131,6 +131,25 @@ export function adminsOnlyRefusal(status: number, body: unknown): string | null 
     return typeof b.error === 'string' && b.error.trim() ? b.error : t(ADMINS_ONLY_WORDS.fallback);
 }
 
+// ── A member whose account is paused ─────────────────────────────────────────────────────────────
+// While a member's account is paused (removal by vote S1) they bring nobody in: the node refuses their generate, and a
+// ticket they sign admits nobody until the pause ends (mayBringSomeoneIn in @beanpool/engine).
+
+/** Said where the node's own words are missing. */
+export const PAUSED_FALLBACK = word('Your account here is paused for now, so you can’t invite anyone.');
+const PAUSED_WORDS = { fallback: PAUSED_FALLBACK };
+
+/**
+ * The node's answer to a generate from a member whose account is paused (403 `paused`), in its own words, or null for
+ * any other answer. Read so the screen says so and makes no offline ticket, which the node would refuse at the join
+ * just the same, and never tells them they are offline.
+ */
+export function pausedRefusal(status: number, body: unknown): string | null {
+    const b = body as { code?: unknown; error?: unknown } | null | undefined;
+    if (status !== 403 || !b || typeof b !== 'object' || b.code !== 'paused') return null;
+    return typeof b.error === 'string' && b.error.trim() ? b.error : t(PAUSED_WORDS.fallback);
+}
+
 /**
  * Whether the screen may fall back to an offline ticket (the node unreachable). Where only admins invite, only for a
  * member the node has said is an owner or admin: a member's ticket is refused at the join (apps/server config/door.ts),

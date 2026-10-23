@@ -2018,7 +2018,7 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
 router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const { deletePost, suspendUser, removePulseItem, reasonCategory } = (ctx as any).requestBody || {};
+        const { deletePost, suspendUser, removePulseItem, reasonCategory, reason } = (ctx as any).requestBody || {};
         if (!admitSuggestion(ctx, { kind: 'remove_reported', reportId: ctx.params.id, body: (ctx as any).requestBody || {} })) return;
         // Moderators remove what was reported; suspending a member stays with owners and admins.
         if (suspendUser && (ctx.state as any)?.adminRole === 'moderator') {
@@ -2026,10 +2026,21 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
-        // Suspending through a report takes the member's role away: an owner's or admin's, only an owner may (the engine
-        // refuses anyone else, given the actor). Read only to suspend: a moderator, refused that above, is no node admin.
+        // Suspending through a report is the pause an emergency suspension is (decisions-engine.ts pauseMember): it holds
+        // the member's role aside, an owner's or admin's only by an owner (the engine refuses anyone else, given the
+        // actor). Read only to suspend: a moderator, refused that above, is no node admin.
         const actor = suspendUser ? resolveAdminActor(ctx) : null;
         if (suspendUser && !actor) return;
+        // The pause's own reason, when the admin gives one, held to an emergency suspension's rule before the proof: a code
+        // is spent when it is checked, so a short reason must not cost it (#2018 NB1). None given, the record says the
+        // report was upheld (state-engine.ts reportPauseReason).
+        const pauseReason = suspendUser && reason != null ? reason : null;
+        const reasonProblem = pauseReason !== null ? suspendReasonProblem(pauseReason) : null;
+        if (reasonProblem) {
+            ctx.status = 400;
+            ctx.body = { success: false, error: reasonProblem };
+            return;
+        }
         if (suspendUser && !(await ownerRemovalProof(ctx, 'report-suspend', ctx.params.id))) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
@@ -2056,6 +2067,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             reasonCategory,
             onRefundShortfall: s => refundShortfalls.push(s),
             actor,
+            reason: pauseReason,
         });
         if (!ok) {
             ctx.status = 404;

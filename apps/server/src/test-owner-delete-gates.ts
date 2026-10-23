@@ -551,6 +551,28 @@ async function main(): Promise<void> {
             assert(notListed.status === 404 && appAddressHeld(), `3-NB2. removing an app address that is not on the list → 404, unchanged (${short(notListed)})`);
             const removedListed = await call('POST', '/api/local/admin/app-addresses/remove', pwSession(), { address: APP_ADDRESS, code });
             assert(removedListed.status === 200 && !appAddressHeld(), `3-NB2. …and the same code still removes one that is: it was not spent (${short(removedListed)})`);
+
+            // A report's pause of an owner with a reason too short (removal by vote S1): the reason is checked before the
+            // proof, as the emergency route checks it (#2018 NB1). The owner is lifted again after, role and all.
+            const pauseTarget = addMember('PauseOrder');
+            grantNodeRole(pauseTarget, 'owner', owner);
+            const orderReport = `rpt-order-${crypto.randomBytes(6).toString('hex')}`;
+            db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, 'gates suite', 'pending', ?)`)
+                .run(orderReport, admin, pauseTarget, new Date().toISOString());
+            const pauseTargetStatus = () => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pauseTarget) as any)?.status;
+            code = tfa.code();
+            const shortReason = await call('POST', `/api/local/admin/reports/${orderReport}/action`, pwSession(), { suspendUser: true, reason: 'too short', code });
+            assert(shortReason.status === 400 && /at least 10 characters/.test(shortReason.json?.error || '') && pauseTargetStatus() === 'active',
+                `3-NB2. a report's pause of an owner with a reason too short → 400, still active (${short(shortReason)})`);
+            const pausedByReport = await call('POST', `/api/local/admin/reports/${orderReport}/action`, pwSession(),
+                { suspendUser: true, reason: 'Threats made in the market chat', code });
+            assert(pausedByReport.status === 200 && pauseTargetStatus() === 'disabled',
+                `3-NB2. …and the same code still pauses them: it was not spent (${short(pausedByReport)})`);
+            const liftedAgain = await call('POST', `/api/local/admin/users/${pauseTarget}/status`, pwSession(), { status: 'active' });
+            const roleAgain = (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pauseTarget) as any)?.role;
+            assert(liftedAgain.status === 200 && pauseTargetStatus() === 'active' && roleAgain === 'owner', `3-NB2. (lifted again, an owner again) (${short(liftedAgain)})`);
+            // And no owner more for the sections after, which ask about the only owner.
+            db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(pauseTarget);
         }
 
         // ── 3a. A standby (design case 19, rows a and g): no session makes another key its main server's pin ──

@@ -403,6 +403,35 @@ describe('Phone public profile message and friend actions (S0)', () => {
         expect(nav.pushed).toEqual([]);
     });
 
+    // A paused account opens no new conversation (removal by vote S1): the node answers 403 `paused` in its words.
+    const PAUSED_OPEN_WORDS = 'Your account here is paused for now, so you can’t start a new conversation. You can still answer the ones you’re in.';
+
+    it("Message while the account is paused (403 paused): the node's words, never as offline, and no chat opens", async () => {
+        await tapMessageFailing(new Error(PAUSED_OPEN_WORDS));
+
+        expect(alerts.said).toContain(PAUSED_OPEN_WORDS);
+        expect(alerts.said.some(s => s.includes('Connect to your community'))).toBe(false);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it("the chat nudge while the account is paused (403 paused): the node's words, and no chat opens with it waiting", async () => {
+        data.createConvError = new Error(PAUSED_OPEN_WORDS);
+        data.profiles[OWN] = { ...data.profiles[OWN]!, archetype: 'spark' };
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        const nudgeBtn = host.querySelector(`[aria-label="Nudge Kofi to take the working style quiz"]`);
+        expect(nudgeBtn).toBeTruthy();
+        await act(async () => {
+            (nudgeBtn as HTMLElement).click();
+        });
+        await settle();
+
+        expect(alerts.said).toContain(PAUSED_OPEN_WORDS);
+        expect(alerts.said.some(s => s.includes('Connect to your community'))).toBe(false);
+        expect(nav.pushed).toEqual([]);
+    });
+
     it('collaboration chemistry nudge uses DM creation handler with prefill instead of pubkey', async () => {
         data.profiles[OWN] = { ...data.profiles[OWN]!, archetype: 'spark' };
         nav.params = { publicKey: KOFI, callsign: 'Kofi' };

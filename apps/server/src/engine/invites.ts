@@ -16,6 +16,8 @@ import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, word } from '@bean
 import {
     getMember,
     mayBringSomeoneIn,
+    isNodeMember,
+    isSuspendedAccount,
     isInvalidatedKey,
     isVisitorKey,
     generateShortCode,
@@ -35,9 +37,19 @@ import { assertMayBindInvite, confirmByInvite } from './names-list.js';
  * code from either would let its holder straight back in as someone new, so neither makes one, and one made before is
  * refused. Nor a visitor's row (a key a member messaged or sent Beans to, or a member of another community): it never
  * joined, and its code would admit anyone, itself included. A code a visitor made before this version is refused too.
+ * Nor a member while their account is paused: none made, and one made before admits nobody until the pause ends.
  */
 function canInvite(inviterPubkey: string): boolean {
     return mayBringSomeoneIn(db, inviterPubkey);
+}
+
+/**
+ * A member here whose account is paused or suspended (@beanpool/engine isSuspendedAccount): the invite test refuses them
+ * while it lasts (mayBringSomeoneIn), and they are told so (routes/community.ts, redeemInvite) rather than that they are
+ * no member.
+ */
+export function isPausedMember(pubkey: string): boolean {
+    return isNodeMember(db, pubkey) && isSuspendedAccount(db, pubkey);
 }
 
 /** Whether an invite row is an owner's or admin's (a private preview admits no other: redeemInvite). */
@@ -267,6 +279,12 @@ export function redeemInvite(
     }
 
     if (!canInvite(invite.created_by)) {
+        // A maker whose account is paused is still in the community, and their code admits someone again once the pause
+        // ends (within its 30 days): the words say it can't be used now, and nothing of why.
+        if (isPausedMember(invite.created_by)) {
+            recordFunnelEvent('invite_failed', 'inviter_paused');
+            return { success: false, error: word('The member who made this invite can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.') };
+        }
         recordFunnelEvent('invite_failed', 'inviter_gone');
         return { success: false, error: INVITER_GONE };
     }

@@ -1004,3 +1004,33 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** DELIBERATE DECISION
 - **Claim:** `useLocalSearchParams` can return `string[]`, so take `[0]` on the tool screen.
 - **Why not to re-file:** a link that repeats a parameter is ambiguous and refused on purpose; the tool screen's senders (`tools/frame.tsx`, `tools/reminders.ts`) emit single values. Expo: this applies to EVERY screen; re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-24 — Shield: KEY_ITEM_OPTIONS constant in LocalAuth, second filing (#2418) — CLOSED, NO-OP (#2380)
+- **Category:** NO-OP
+- **Claim:** LocalAuth's secure-store writes should use the device-tied options constant.
+- **Why not to re-file:** every LocalAuth write already passes `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY`; naming the literal as a constant changes no stored item.
+
+### 2026-10-24 — Flow: spinner and "Updating…" on ConnectedAssistantsPanel buttons (#2419) — CLOSED, COSMETIC (#1497)
+- **Category:** COSMETIC
+- **Claim:** the assistant actions need a loading indicator.
+- **Why not to re-file:** both buttons are already `disabled={busy}`, so the user can tell something is happening. Flow: a loader only where a user can't.
+
+### 2026-10-24 — Forge: 404/403 on crowdfund project delete (#2420) — CLOSED
+- **Category:** NEEDS A TYPED ERROR
+- **Claim:** deleting a missing or someone else's project should answer 404/403, not 400.
+- **Why not to re-file:** the PR picked the status by matching error text and loosened an existing money-limits refusal assertion to `400 || 404`. Re-file only with a typed error from `deleteCrowdfundProject` and every refusal test kept strict.
+
+### 2026-10-24 — Sentinel: signer must equal publicKey on POST /api/members/preferences (#2422) — CLOSED, CLAIM FALSE
+- **Category:** PHANTOM SECURITY
+- **Claim:** a member could write another member's preferences.
+- **Why not to re-file:** the route requires a signed request and writes only to the signer (`setMemberPreferences(activeKey, …)`); the body's `publicKey` is ignored. No cross-member write is possible; the PR only turned a harmless save into a 403.
+
+### 2026-10-24 — Palette: focus-visible rings on Shopfront MoreLess and AddressSearch (#2423) — CLOSED, CLAIM FALSE (#1369)
+- **Category:** NO-OP A11Y
+- **Claim:** these controls have no visible focus.
+- **Why not to re-file:** the PWA styles `:focus-visible` globally in `index.css`; both controls already show it. The PR's test asserted class names only.
+
+### 2026-10-24 — Expo: first of repeated params in tool/[id].tsx, seventh filing (#2425) — CLOSED, DECIDED (#2384, #1753, #2073, #2118, #2174, #2343)
+- **Category:** DELIBERATE DECISION
+- **Claim:** take `[0]` of a repeated parameter on the tool screen.
+- **Why not to re-file:** a repeated parameter is refused on purpose. Re-file only with a real link that produces the array AND Marty's decision.

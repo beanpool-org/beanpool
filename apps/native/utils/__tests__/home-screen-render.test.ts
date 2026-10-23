@@ -690,7 +690,8 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
             find: findBody(),
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: variant === 1, firstPost: variant === 1, photo: false, interests: false, invited: false, area: false, knocked: null },
             deals: { open: 2, waiting: 1, waitingOnMe: variant === 1 ? { txId: 't1', postId: 'p1', title: 'Sourdough' } : null },
-            enterprise: { id: 'ent1', name: 'Tool Library', requests: 1, others: 0 },
+            // A request waiting opens its keepers' console, where it is approved (S7); none waiting, the enterprise's page.
+            enterprise: { id: 'ent1', name: 'Tool Library', requests: variant === 1 ? 1 : 0, others: 0 },
             events: { items: [{ id: 'e1', title: 'Seed swap', startsAt: iso(now + 24 * H), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: local ? null : 50 },
             market: { items: [{ id: 'p1', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null }], total14d: 1, more: false, ...(local ? {} : { examples: true as const }) },
             decide: variant === 1
@@ -773,7 +774,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-step-invite → /(tabs)/people view=invites',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-deals-line → /post/[id] id=p1&txId=t1',
-            'home-enterprise-line → /treasury-detail publicKey=ent1&name=Tool Library',
+            'home-enterprise-line → /treasury-manage publicKey=ent1&name=Tool Library',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
@@ -909,6 +910,17 @@ describe('every line on Home opens a screen this node shows, with what the line 
             });
         }
     }
+
+    // Its requests are approved in its keepers' console, not on its page (S7; PR #2405 review 4355985757).
+    it('Your enterprise with a request waiting: the line says it opens Manage', async () => {
+        await linksOn('local', 1);
+        expect(byLabel('Tool Library: 1 request to approve. Opens Manage.')).not.toBeNull();
+    });
+
+    it('Your enterprise with no request waiting: the line says it opens the enterprise', async () => {
+        await linksOn('local', 2);
+        expect(byLabel('Tool Library: No requests waiting. Opens the enterprise.')).not.toBeNull();
+    });
 
     it('a poll on the global node: the line says where it goes, and goes there; never to Commons, which global hides', async () => {
         await linksOn('global', 1);

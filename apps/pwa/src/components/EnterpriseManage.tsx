@@ -159,13 +159,16 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
                 </>
             ) : (
                 <div className="space-y-2">
-                    <p data-testid="manage-face-name-shown" className="m-0 text-sm text-nature-800 dark:text-nature-200 break-words">
-                        <span className="font-bold">{t('Name')}: </span>{was.name}
-                    </p>
+                    {/* Each a label over its value, as the fields above it are: never a sentence made of two. */}
+                    <div data-testid="manage-face-name-shown">
+                        <p className={label}>{t('Name')}</p>
+                        <p className="m-0 text-base text-nature-900 dark:text-nature-100 break-words">{was.name}</p>
+                    </div>
                     {was.purpose && (
-                        <p data-testid="manage-face-purpose-shown" className="m-0 text-sm text-nature-800 dark:text-nature-200 break-words whitespace-pre-line">
-                            <span className="font-bold">{t('What it is for')}: </span>{was.purpose}
-                        </p>
+                        <div data-testid="manage-face-purpose-shown">
+                            <p className={label}>{t('What it is for')}</p>
+                            <p className="m-0 text-base text-nature-900 dark:text-nature-100 break-words whitespace-pre-line">{was.purpose}</p>
+                        </div>
                     )}
                     <p data-testid="manage-face-lead-only" className={muted}>
                         {project

@@ -1278,7 +1278,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 <LocalCommunityAction feature="enterprises" label={t('To Commons')} className="w-full" {...ways} />
                                             </div>
                                         ) : (
-                                            <form onSubmit={handleSweep} className="flex gap-2 items-center pt-2">
+                                            <form onSubmit={handleSweep} className="flex flex-wrap gap-2 items-center pt-2">
                                                 {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                                 <input
                                                     type="text"
@@ -1286,7 +1286,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     placeholder={t('Sweep surplus…')}
                                                     value={sweepAmount}
                                                     onChange={(e) => setSweepAmount(e.target.value)}
-                                                    className="flex-1 bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded-xl px-4 py-2.5 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                    className="flex-1 min-w-[8rem] bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 rounded-xl px-4 py-2.5 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                                 />
                                                 <button
                                                     type="submit"
@@ -1349,7 +1349,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             key={b.id}
                                                             className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3.5 space-y-2.5 shadow-sm"
                                                         >
-                                                            <div className="flex justify-between items-start gap-2">
+                                                            <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-0.5">
                                                                 <div className="font-bold text-sm text-nature-900 dark:text-white leading-snug">
                                                                     {b.post_title}
                                                                 </div>
@@ -1400,7 +1400,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             key={d.id}
                                                             className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3.5 space-y-2.5 shadow-sm"
                                                         >
-                                                            <div className="flex justify-between items-start gap-2">
+                                                            <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-0.5">
                                                                 <div className="font-bold text-sm text-nature-900 dark:text-white leading-snug">
                                                                     {d.post_title}
                                                                 </div>
@@ -2072,7 +2072,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                                             {t('Back this initiative')}
                                                         </div>
-                                                        <div className="flex gap-2">
+                                                        {/* Wraps: at 320px with 1.3x text the three in one row ran 327px past the screen's edge. */}
+                                                        <div className="flex flex-wrap gap-2">
                                                             {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                                                             <input
                                                                 type="text"
@@ -2087,7 +2088,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 placeholder={t('Memo (optional)')}
                                                                 value={pledgeMemo}
                                                                 onChange={(e) => setPledgeMemo(e.target.value)}
-                                                                className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                                className="flex-1 min-w-[8rem] bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                                             />
                                                             <button
                                                                 type="submit"
@@ -2655,7 +2656,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     disabled={threadPosting}
                                                     placeholder={project ? t('Message the project...') : t('Message the enterprise...')}
                                                     maxLength={2000}
-                                                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="flex-1 min-w-0 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 />
                                                 <button
                                                     type="submit"

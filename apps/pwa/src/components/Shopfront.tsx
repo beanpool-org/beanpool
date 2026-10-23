@@ -189,7 +189,7 @@ export function ShopfrontFeatured({ listings, showsBeans, onOpen }: { listings: 
                             onClick={onOpen ? () => onOpen(l.id) : undefined}
                             disabled={!onOpen}
                             aria-label={price ? t('{title}, {price}', { title: l.title, price }) : l.title}
-                            className="min-w-0 p-0 text-left rounded-xl overflow-hidden bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 cursor-pointer hover:border-nature-400 dark:hover:border-nature-600 transition-colors"
+                            className="min-w-0 p-0 flex flex-col justify-start text-left rounded-xl overflow-hidden bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 cursor-pointer hover:border-nature-400 dark:hover:border-nature-600 transition-colors"
                         >
                             <ListingPicture l={l} className="block w-full aspect-square" emojiClass="text-4xl" />
                             <span className="block p-2">

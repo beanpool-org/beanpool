@@ -294,7 +294,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Why the last paste or drop went nowhere — shown inline above the composer.
     const [imageNotice, setImageNotice] = useState<string | null>(null);
     // The node's own words when it refused a message or a new conversation: a new account's limit (429
-    // probation_limit) or a moderation pause (403 moderation_muted). Shown in place, the draft kept.
+    // probation_limit), a moderation pause (403 moderation_muted) or an account's pause, which opens no new
+    // conversation (403 paused). Shown in place, the draft kept.
     const [chatRefusal, setChatRefusal] = useState<string | null>(null);
     /** A failed send or opening: the node's refusal in place, anything else as before. */
     function showChatError(err: any, fallback: string) {
@@ -584,7 +585,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         if (created.conversation && !conv) setChatRefusal(GROUP_HOLD_STARTED_DM_TEXT);
                         await loadConversations();
                     } catch (e) {
-                        // Offline stays quiet; the node refusing to open it (a new account's limit) says why.
+                        // Offline stays quiet; the node refusing to open it (a new account's limit, an account's pause)
+                        // says why. Every way in by someone's key lands here: a profile's Message and Collaborate, People.
                         const refusal = nodeRefusal(e);
                         if (refusal) setChatRefusal(refusal.message);
                     }

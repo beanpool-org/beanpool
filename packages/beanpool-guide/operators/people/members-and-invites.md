@@ -44,7 +44,7 @@ Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** 
 
 Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
 
-Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. The server's log says who changed it.
+Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. Each change is logged with who made it, the owners get an alert, and every member is told in a notice from the community.
 
 When you switch to Known:
 

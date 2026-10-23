@@ -346,7 +346,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         if (!isSsoProvider(body.provider)) {
             ctx.status = 400;
-            ctx.body = { error: `'${String(body.provider)}' is not a sign-in provider this node can verify.` };
+            // At most 40 characters of what was sent, as distance-query.ts writes a value it could not read: a refusal is
+            // no place for whatever a stranger chose to send.
+            ctx.body = { error: `'${String(body.provider).slice(0, 40)}' is not a sign-in provider this node can verify.` };
             return;
         }
         try {

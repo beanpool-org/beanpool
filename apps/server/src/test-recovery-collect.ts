@@ -192,6 +192,10 @@ async function main(): Promise<void> {
     // Until S1 a non-JWT Facebook "token" went to Graph, which vouches for any app's access token.
     assert(providerRequests.length === requestsBefore,
         '...and a Facebook token that is not an id_token is refused without asking Graph');
+    const longProvider = await call('/api/recovery/collect/sso', ssoDevice,
+        { collectionId: ssoId, provider: 'x'.repeat(80_000), idToken: 'x', nonce: nonceRes.body.nonce });
+    assert(longProvider.status === 400 && longProvider.body?.error === `'${'x'.repeat(40)}' is not a sign-in provider this node can verify.`,
+        `a provider of 80 KB is refused, the refusal holding 40 characters of it (${String(longProvider.body?.error).length} characters)`);
     const garbage = await call('/api/recovery/collect/sso', ssoDevice,
         { collectionId: ssoId, provider: 'google', idToken: 'not-a-token', nonce: nonceRes.body.nonce });
     assert(garbage.status === 400, 'and a token that does not verify releases nothing');

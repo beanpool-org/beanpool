@@ -51,7 +51,22 @@ const forTests = new Map<Lang, Partial<Catalogs>>();
  * Each language's words, built once from its catalogs: the table holds every sentence of both catalogs, so building it
  * for each refused request was a cost per refusal that grew with the catalogs.
  */
-const built = new Map<Lang, { all: Words; refusals: Words; templates: SentenceTemplate[] }>();
+const built = new Map<Lang, BuiltWords>();
+interface BuiltWords {
+    all: Words;
+    refusals: Words;
+    templates: SentenceTemplate[];
+    /** The most sentences one of the server catalog's sentences holds: no run of sentences the way out tries is longer. */
+    mostSentences: number;
+}
+
+/**
+ * The longest refusal the way out reads, five times the longest sentence marked (about 400 characters, values and all).
+ * A longer one is no sentence of the catalog's, or holds a value as long, and stays as it came: a refusal that echoes
+ * what a request sent (a provider's name, a value it could not read) was read in full on the node's one event loop,
+ * for as long as a stranger chose to make it.
+ */
+export const LONGEST_REFUSAL_READ = 2000;
 
 function readCatalog(file: () => string): Catalog | null {
     try {
@@ -78,7 +93,7 @@ function catalogsOf(lang: Lang): Catalogs {
 const present = (list: (Catalog | null)[]): Catalog[] => list.filter((c): c is Catalog => c !== null);
 const ENGLISH = wordsFor('en');
 
-function builtFor(lang: Lang): { all: Words; refusals: Words; templates: SentenceTemplate[] } {
+function builtFor(lang: Lang): BuiltWords {
     let words = built.get(lang);
     if (!words) {
         const { server, core } = catalogsOf(lang);
@@ -88,6 +103,7 @@ function builtFor(lang: Lang): { all: Words; refusals: Words; templates: Sentenc
             // is ever translated, never one that happens to match a sentence of core's the apps write.
             refusals: wordsFor(lang, present([server])),
             templates: sentenceTemplates(server),
+            mostSentences: mostSentencesIn(server),
         };
         built.set(lang, words);
     }
@@ -175,13 +191,29 @@ function translatedSentence(text: string, words: Words, templates: SentenceTempl
 
 /** Where one sentence ends and the next begins: after its stop, before the next one's capital. */
 const BETWEEN_SENTENCES = /(?<=[.!?])(\s+)(?=[A-Z])/;
+const sentenceCount = (text: string) => (text.split(BETWEEN_SENTENCES).length + 1) / 2;
+
+function mostSentencesIn(catalog: Catalog | null): number {
+    let most = 0;
+    for (const [key, value] of Object.entries(catalog ?? {})) {
+        if (key === '_meta' || !value) continue;
+        const [sentence] = key.split(CONTEXT_SEPARATOR);
+        const forms = typeof value === 'object' && sentence.includes(PLURAL_SEPARATOR)
+            ? [sentence.slice(0, sentence.indexOf(PLURAL_SEPARATOR)), sentence.slice(sentence.indexOf(PLURAL_SEPARATOR) + 1)]
+            : [sentence];
+        for (const form of forms) most = Math.max(most, sentenceCount(form));
+    }
+    return most;
+}
 
 /**
  * A text of one sentence, or of several written apart (`${tr('This enterprise is {n} beans in debt.')} ${…}`, a sentence
  * of two with another after it), in `words`' language: each run of sentences the longest the catalog has, and only when
- * every run is the catalog's; else the whole stays as it came, never half translated.
+ * every run is the catalog's; else the whole stays as it came, never half translated. A run is tried at most as long as
+ * the catalog's longest sentence, so the tries grow with the text, never with its square (a value of several sentences
+ * inside a run past that leaves the whole as it came).
  */
-function translatedText(text: string, words: Words, templates: SentenceTemplate[]): string {
+function translatedText(text: string, words: Words, templates: SentenceTemplate[], mostSentences: number): string {
     const whole = translatedSentence(text, words, templates);
     if (whole !== text) return whole;
     // split() with a group: the sentences at the even places, the space between them at the odd ones.
@@ -191,7 +223,7 @@ function translatedText(text: string, words: Words, templates: SentenceTemplate[
     const run = (from: number, to: number) => pieces.slice(from * 2, to * 2 + 1).join('');
     let said = '';
     for (let from = 0; from < sentences.length;) {
-        let to = sentences.length - 1;
+        let to = Math.min(sentences.length - 1, from + mostSentences - 1);
         let translated = text;
         for (; to >= from; to--) {
             if (from === 0 && to === sentences.length - 1) continue; // the whole: tried above
@@ -209,14 +241,18 @@ function translatedText(text: string, words: Words, templates: SentenceTemplate[
 /** A code the apps read before a sentence: `UNAUTHORIZED: `, `FLOOR_LOCKED:1:2:200:500: `. */
 const CODE_BEFORE_SENTENCE = /^([A-Z][A-Z_]{2,}(?::[^\s:]+)*:\s*)(?=\S)/;
 
-/** A refusal's `error` or `message` in `words`' language: a code before its sentence stays as it came. */
-function translatedRefusal(text: string, words: Words, templates: SentenceTemplate[]): string {
-    const said = translatedText(text, words, templates);
+/**
+ * A refusal's `error` or `message` in its language: a code before its sentence stays as it came, and a refusal longer
+ * than any the catalog could hold is not read at all.
+ */
+function translatedRefusal(text: string, { refusals: words, templates, mostSentences }: BuiltWords): string {
+    if (text.length > LONGEST_REFUSAL_READ) return text;
+    const said = translatedText(text, words, templates, mostSentences);
     if (said !== text) return said;
     const code = CODE_BEFORE_SENTENCE.exec(text);
     if (!code) return text;
     const sentence = text.slice(code[1].length);
-    const translated = translatedText(sentence, words, templates);
+    const translated = translatedText(sentence, words, templates, mostSentences);
     return translated === sentence ? text : `${code[1]}${translated}`;
 }
 
@@ -254,12 +290,12 @@ export function memberWordsOnTheWayOut(): Koa.Middleware {
         ctx.vary(LANGUAGE_HEADER);
         const lang = requestLanguage(ctx);
         if (!lang || lang === 'en') return;
-        const { refusals, templates } = builtFor(lang);
+        const words = builtFor(lang);
         let said: Record<string, unknown> | null = null;
         for (const field of ['error', 'message'] as const) {
             const text = body[field];
             if (typeof text !== 'string') continue;
-            const translated = translatedRefusal(text, refusals, templates);
+            const translated = translatedRefusal(text, words);
             // A copy: the body may be an object a route shares between answers.
             if (translated !== text) said = { ...(said ?? body), [field]: translated };
         }

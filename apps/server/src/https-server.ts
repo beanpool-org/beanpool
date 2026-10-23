@@ -472,7 +472,9 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
 
 /**
  * The headers a web app on another origin may send (CORS): the signature's, the admin's, and the member's language
- * (X-Language, member-words.ts), so a web app served from elsewhere gets refusals in its member's language too.
+ * (X-Language, member-words.ts). Allowed only: BeanPool's web app sends X-Language to its own origin alone
+ * (apps/pwa/src/lib/language.ts languageHeaders, as an older node's preflight would refuse it), so a web app on another
+ * origin still reads refusals in English until that changes.
  */
 const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 

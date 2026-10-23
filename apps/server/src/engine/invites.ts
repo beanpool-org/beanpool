@@ -175,16 +175,16 @@ function unsignedVisitorRefusal(joinerSigned: boolean): { success: false; error:
 }
 
 /**
- * Validates and redeems standard INV- code, registering the member and seeding earned credit. `joinerSigned`: the
- * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal).
- */
-/**
  * The code beside a spent invite's or ticket's sentence, for the apps to read instead of its English (they still match
  * "already been used" / "already been redeemed" until they read this: invite-next.ts, welcome.tsx, _layout.tsx, the
  * web's WelcomePage.tsx), so the sentence can be translated once they do.
  */
 export const INVITE_USED_CODE = 'invite_used';
 
+/**
+ * Validates and redeems standard INV- code, registering the member and seeding earned credit. `joinerSigned`: the
+ * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal).
+ */
 export function redeemInvite(
     broadcast: (event: any) => void,
     code: string,

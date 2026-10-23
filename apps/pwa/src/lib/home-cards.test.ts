@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage } from '@beanpool/core';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
-    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -395,5 +395,23 @@ describe('a pinned Find your community on the web (#1517)', () => {
     it('after 30 days it is a card like any other: drawn where the list puts it', () => {
         expect(shown(global(30), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
         expect(shown(global(30), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+    });
+});
+
+describe('enterprise latest line: positive incoming ("from"), negative outgoing ("to")', () => {
+    it('member: positive incoming is "from", negative outgoing is "to"', () => {
+        expect(enterpriseLatestLine({ kind: 'member', amount: 12, who: 'Ana', at: null })).toBe('Latest: +12 Beans from Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: -50, who: 'Ana', at: null })).toBe('Latest: −50 Beans to Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: -1, who: 'Ana', at: null })).toBe('Latest: −1 Bean to Ana');
+    });
+
+    it('deal / escrow: positive is "from escrow", negative is "to escrow"', () => {
+        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: null })).toBe('Latest: +25 Beans from escrow');
+        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: null })).toBe('Latest: −25 Beans to escrow');
+    });
+
+    it('commons: positive is "from Commons", negative is "to Commons"', () => {
+        expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: null })).toBe('Latest: +10 Beans from Commons');
+        expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: null })).toBe('Latest: −10 Beans to Commons');
     });
 });

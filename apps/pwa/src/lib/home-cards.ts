@@ -707,17 +707,33 @@ export function enterpriseLatestLine(l: EnterpriseLine): string {
     const sign = l.amount >= 0 ? '+' : '−';
     const amount = `${sign}${beansFigure(Math.abs(l.amount))}`;
     const when = l.at ? formatRelativeTime(l.at) : '';
+    const isOut = l.amount < 0;
     if (l.kind === 'member' && l.who) {
+        if (isOut) {
+            return when
+                ? tn(l.amount, 'Latest: {amount} Bean to {who} · {when}', 'Latest: {amount} Beans to {who} · {when}', { amount, who: l.who, when })
+                : tn(l.amount, 'Latest: {amount} Bean to {who}', 'Latest: {amount} Beans to {who}', { amount, who: l.who });
+        }
         return when
             ? tn(l.amount, 'Latest: {amount} Bean from {who} · {when}', 'Latest: {amount} Beans from {who} · {when}', { amount, who: l.who, when })
             : tn(l.amount, 'Latest: {amount} Bean from {who}', 'Latest: {amount} Beans from {who}', { amount, who: l.who });
     }
     if (l.kind === 'deal') {
+        if (isOut) {
+            return when
+                ? tn(l.amount, 'Latest: {amount} Bean to escrow · {when}', 'Latest: {amount} Beans to escrow · {when}', { amount, when })
+                : tn(l.amount, 'Latest: {amount} Bean to escrow', 'Latest: {amount} Beans to escrow', { amount });
+        }
         return when
             ? tn(l.amount, 'Latest: {amount} Bean from escrow · {when}', 'Latest: {amount} Beans from escrow · {when}', { amount, when })
             : tn(l.amount, 'Latest: {amount} Bean from escrow', 'Latest: {amount} Beans from escrow', { amount });
     }
     if (l.kind === 'commons') {
+        if (isOut) {
+            return when
+                ? tn(l.amount, 'Latest: {amount} Bean to Commons · {when}', 'Latest: {amount} Beans to Commons · {when}', { amount, when })
+                : tn(l.amount, 'Latest: {amount} Bean to Commons', 'Latest: {amount} Beans to Commons', { amount });
+        }
         return when
             ? tn(l.amount, 'Latest: {amount} Bean from Commons · {when}', 'Latest: {amount} Beans from Commons · {when}', { amount, when })
             : tn(l.amount, 'Latest: {amount} Bean from Commons', 'Latest: {amount} Beans from Commons', { amount });

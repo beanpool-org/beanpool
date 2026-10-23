@@ -947,6 +947,34 @@ async function main(): Promise<void> {
         const ended = (await get('/api/home?cards=events,community', alice)).body?.cards;
         assert(ended?.community?.eventsSoon === 1 && !(ended?.events?.items ?? []).some((i: any) => i.id === running.id),
             `and once it has ended, in neither (${ended?.community?.eventsSoon}; ${JSON.stringify((ended?.events?.items ?? []).map((i: any) => i.title))})`);
+        // Nor an event the board leaves out for its host's sake (second review of #2416): a host on holiday's, a paused
+        // enterprise's. Bob's in two days and the bakery's in four (posted as Carol's, then moved to the bakery, which posts
+        // no events of its own here); counted as the Events card lists them at each step, then each host put back and both ended.
+        const holidayEvent = post(bob, 'event', 'general', 'HomeSentinel holiday host', {
+            eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 3600_000).toISOString(),
+        });
+        const pausedEvent = post(carol, 'event', 'general', 'HomeSentinel paused bakery', {
+            eventStartAt: new Date(Date.now() + 4 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 4 * DAY + 3600_000).toISOString(),
+        });
+        db.prepare('UPDATE posts SET author_pubkey = ? WHERE id = ?').run(w3.ent.publicKey, pausedEvent.id);
+        const boardStep = async () => {
+            const b = (await get('/api/home?cards=events,community', alice)).body?.cards;
+            return { titles: (b?.events?.items ?? []).map((i: any) => i.title) as string[], soon: b?.community?.eventsSoon };
+        };
+        const onBoard = await boardStep();
+        setPref(bob, 'holiday_mode', true);
+        const onHoliday = await boardStep();
+        db.prepare('UPDATE members SET paused = 1 WHERE public_key = ?').run(w3.ent.publicKey);
+        const paused = await boardStep();
+        db.prepare("DELETE FROM member_preferences WHERE public_key = ? AND pref_key = 'holiday_mode'").run(bob.pk);
+        db.prepare('UPDATE members SET paused = 0 WHERE public_key = ?').run(w3.ent.publicKey);
+        db.prepare('UPDATE posts SET event_end_at = ? WHERE id IN (?, ?)').run(new Date(Date.now() - 60_000).toISOString(), holidayEvent.id, pausedEvent.id);
+        assert(onBoard.titles.length === 3 && onBoard.soon === 3,
+            `setup: with every host on the board, three events in the card and in the figure (${onBoard.soon}; ${JSON.stringify(onBoard.titles)})`);
+        assert(onHoliday.titles.length === 2 && !onHoliday.titles.includes('HomeSentinel holiday host') && onHoliday.soon === onHoliday.titles.length,
+            `community: Bob on holiday, his event in neither the card nor the figure (${onHoliday.soon}; ${JSON.stringify(onHoliday.titles)})`);
+        assert(JSON.stringify(paused.titles) === '["HomeSentinel seed swap"]' && paused.soon === 1,
+            `community: the bakery paused too, its event in neither: one, the seed swap (${paused.soon}; ${JSON.stringify(paused.titles)})`);
 
         // A locked line: its bytes while ciphertext, nonce and metadata come to 512 characters at most, "🔒 Message" always.
         const short = sealedLine(512);

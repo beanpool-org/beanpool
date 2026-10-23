@@ -32,6 +32,7 @@ import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../con
 import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
 import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
+import { readShape } from '../config/community-shape.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
@@ -318,6 +319,16 @@ router.post('/api/local/admin/known-floor', async (ctx) => {
     try {
         ctx.body = setKnownFloorSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
     } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+// How this community works (config/community-shape.ts; the design's §6.1, slice S1): every structural setting as it is set
+// and as the node runs it, with each lock in the server's words. Every owner and admin reads it, and a read token; a
+// moderator's session never gets this far (checkAdminAuth). Reads only: nothing here changes a setting.
+router.get('/api/local/admin/community-shape', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can read how it works.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = readShape();
 });
 
 // The Community health panel in Settings (engine/community-health.ts): every owner and admin reads the totals, the two

@@ -6910,12 +6910,15 @@ async function _signedRequest(endpoint: string, payload: any) {
         // code in `message` (chatActionErrorMessage's old-node refusals, the profile-photo heal below), so a caller whose
         // error the member reads puts it there itself (reportAbuse).
         let nodeMessage: string | undefined;
+        // The node's code beside its sentence (`shop_paused`: an Offer in a shop closed for now), so a screen can say why.
+        let nodeCode: string | undefined;
         try {
             const errJson = await res.json();
             // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
             if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
+            if (typeof errJson.code === 'string') nodeCode = errJson.code;
         } catch {
             try {
                 const txt = await res.text();
@@ -6947,6 +6950,7 @@ async function _signedRequest(endpoint: string, payload: any) {
         err.status = res.status;
         err.nodeAnswered = nodeAnswered;
         err.nodeMessage = nodeMessage;
+        if (nodeCode) err.code = nodeCode;
         throw err;
     }
 
@@ -7634,6 +7638,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             sellerPublicKey: r.seller_pubkey, 
             sellerCallsign: r.sellerCallsign, 
             credits: r.credits, 
+            hours: typeof r.hours === 'number' ? r.hours : null,
             status: r.status, 
             createdAt: r.created_at, 
             completedAt: r.completed_at,

@@ -5,6 +5,7 @@ import {
     DEFAULT_PRICING_CATALOG,
     PRICING_CATEGORIES,
     normalizeCategory,
+    pricingHintFor,
 } from '../pricing-catalog.js';
 
 describe('Pricing Catalog & Utilities (#206)', () => {
@@ -81,5 +82,30 @@ describe('Pricing Catalog & Utilities (#206)', () => {
         expect(multiple.confidence).toBe('high');
         expect(multiple.price).toBeGreaterThan(15);
         expect(multiple.price).toBeLessThan(35);
+    });
+});
+
+describe('pricingHintFor: the guide on one thing a member names (the Tool shed, T1.2)', () => {
+    it('a telling word picks the item, priced by its unit: a ladder is 12 Beans a day', () => {
+        expect(pricingHintFor(DEFAULT_PRICING_CATALOG, 'tools', 'Step ladder')).toEqual({ credits: 12, priceType: 'daily' });
+        expect(pricingHintFor(DEFAULT_PRICING_CATALOG, 'tools', 'Chainsaw')).toEqual({ credits: 30, priceType: 'daily' });
+        expect(pricingHintFor(DEFAULT_PRICING_CATALOG, null, 'pressure washers')).toEqual({ credits: 20, priceType: 'daily' });
+    });
+
+    it('a common word alone is no match: a cordless drill is not priced as a cordless saw', () => {
+        expect(pricingHintFor(DEFAULT_PRICING_CATALOG, 'tools', 'Cordless drill')).toBeNull();
+        expect(pricingHintFor(DEFAULT_PRICING_CATALOG, 'tools', 'hire')).toBeNull();
+        expect(pricingHintFor(DEFAULT_PRICING_CATALOG, 'tools', '')).toBeNull();
+    });
+
+    it('a tie goes to the item in the same category, then to the first; a broken item is skipped', () => {
+        const items = [
+            { id: 'a', category: 'goods' as const, emoji: '📦', name: 'Trailer', description: '', priceBeans: 5, unit: 'each' },
+            { id: 'b', category: 'transport' as const, emoji: '🚚', name: 'Trailer', description: '', priceBeans: 20, unit: 'day' },
+            { id: 'c', category: 'transport' as const, emoji: '🚚', name: 'Trailer', description: '', priceBeans: Number.NaN, unit: 'day' },
+        ];
+        expect(pricingHintFor(items, 'transport', 'box trailer')).toEqual({ credits: 20, priceType: 'daily' });
+        expect(pricingHintFor(items, null, 'box trailer')).toEqual({ credits: 5, priceType: 'fixed' });
+        expect(pricingHintFor([items[2]], 'transport', 'trailer')).toBeNull();
     });
 });

@@ -16,7 +16,7 @@
       "id": "market",
       "title": "Market",
       "summary": "Finding and posting Offers and Needs, and how a deal works from start to finish.",
-      "pages": ["browsing-the-market", "posting", "your-shop", "my-deals", "a-deal-step-by-step", "when-a-deal-goes-wrong"]
+      "pages": ["browsing-the-market", "posting", "your-shop", "my-deals", "a-deal-step-by-step", "when-a-deal-goes-wrong", "lending-and-borrowing"]
     },
     {
       "id": "map",

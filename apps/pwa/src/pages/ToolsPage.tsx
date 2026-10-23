@@ -235,12 +235,18 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     const afterWrite = useCallback(() => {
         if (copyOf && noteRef.current !== 'older-node') toolCopyAfterWrite(copyOf, heard);
     }, [copyOf, heard]);
-    const store = useToolDoc(here, owner, afterWrite, nodeMax);
+    // The server's bound only while its copy is on: with the copy off it holds none of this, and switching on asks it again.
+    const store = useToolDoc(here, owner, afterWrite, copy.setting === false ? undefined : nodeMax);
     reloadRef.current = store.reload;
     const info = useCommunityInfo();
     const [stack, setStack] = useState<Step[]>(() => [{ screen: open.screen, params: open.key ? { key: open.key } : {} as Record<string, string> }]);
     const [panel, setPanel] = useState<Panel>('tool');
     const [pastDoors, setPastDoors] = useState(false);
+    // The doors are for an open that finds the document empty: once this visit has drawn it with something in it, an empty
+    // one (the last thing deleted) is the tool's own screen, as on the phone once a door was taken. Remove my data brings
+    // them back.
+    const holdsSome = store.state.status === 'ready' && !!here && !isEmptyDoc(here, store.state.doc);
+    useEffect(() => { if (holdsSome) setPastDoors(true); }, [holdsSome]);
     // The tool's open: the setting as this browser last heard it, then the server's answer.
     useEffect(() => {
         if (!copyOf) return;
@@ -261,13 +267,15 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         setCopy((c) => ({ ...c, busy: true, failed: null }));
         const done = await switchToolCopy(copyOf, on).catch(() => 'failed' as const);
         // Its answers say the server's bound too, whether or not it switched.
-        void readToolSettings(owner, copyOf.manifest.id).then((s) => setNodeMax(s.nodeMax)).catch(() => {});
+        const kept = await readToolSettings(owner, copyOf.manifest.id).catch(() => null);
+        if (kept) setNodeMax(kept.nodeMax);
         if (done === 'on' || done === 'off') {
             setCopy((c) => ({ ...c, busy: false, failed: null, setting: done === 'on', note: null }));
             // Switching on may have taken the server's copy.
             if (done === 'on') void reloadRef.current();
         } else {
-            setCopy((c) => ({ ...c, busy: false, failed: done }));
+            // More than the server keeps: its line counts what to delete against the `max` its GET just said.
+            setCopy((c) => ({ ...c, busy: false, failed: done, max: done === 'too-big' ? kept?.nodeMax : undefined }));
         }
     }, [copyOf, owner]);
     // Remove my data: the server's copy first, or nothing. It leaves the document empty, so the doors are back, as on a
@@ -337,7 +345,10 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
             <PageBar onBack={back} title={t(manifest.name)} icon={manifest.icon} line={lineText(row)}
                 end={<ToolMenu name={t(manifest.name)} onPick={(p) => setPanel(p)} />} />
             <div className="max-w-xl mx-auto px-4 py-4 min-w-0">
-                {panel === 'settings' && <ToolSettings manifest={manifest} copy={copy} onCopy={(on) => { void switchCopy(on); }} onRemove={remove} />}
+                {panel === 'settings' && (
+                    <ToolSettings manifest={manifest} copy={copy} onCopy={(on) => { void switchCopy(on); }} onRemove={remove}
+                        tooBigLine={copy.failed === 'too-big' ? copyTooBigLine(manifest, store.get(), copy.max) : ''} />
+                )}
                 {panel === 'tool' && copy.note === 'removed' && (
                     <p role="status" data-testid="tool-copy-removed" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 break-words">{keptLine(manifest, copy)}</p>
                 )}
@@ -441,18 +452,28 @@ function EmptyDoors({ manifest, owner, onIn, onGuide, onAddHomeCard }: {
 /**
  * What this page knows of a tool's node copy: the setting as this browser last heard it (undefined: never set, so on),
  * what this open learned (the server keeps no copies yet, or no longer keeps this one: said once), and the toggle's
- * round trip (under way, or the last one failed).
+ * round trip (under way, or the last one failed; a `too-big` one with the server's `max` it heard, for its line).
  */
 interface CopyView {
     setting: boolean | undefined;
     note: 'older-node' | 'removed' | null;
     busy: boolean;
-    failed: 'failed' | 'older-node' | null;
+    failed: 'failed' | 'older-node' | 'too-big' | null;
+    max?: number;
 }
 type RemoveOutcome = 'removed' | 'not-kept' | 'failed';
 
 const olderNodeLine = () => t("Your community's server can't keep a copy yet, so for now it stays in this browser only.");
 const copyFailedLine = () => t("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
+/**
+ * The toggle, when switching on found the document more than the server keeps (its `max`): nothing changed, and trying
+ * again won't either until it is smaller. The tool's own words for how to make room (its manifest's tooBig), or the
+ * template's.
+ */
+function copyTooBigLine(manifest: ToolManifest, doc: unknown, maxBytes: number | undefined): string {
+    if (manifest.tooBig && maxBytes !== undefined) return toolLineText(manifest.tooBig(doc, maxBytes));
+    return t("This is more than your community's server keeps for now, so nothing changed and it stays in this browser only. Make it smaller, then switch the copy on again.");
+}
 
 /** Where a tool's document is kept, in one sentence: this browser only, or with its private copy on the server. */
 function keptLine(manifest: ToolManifest, copy: CopyView, owner: 'member' | 'enterprise' = 'member'): string {
@@ -468,8 +489,10 @@ function keptLine(manifest: ToolManifest, copy: CopyView, owner: 'member' | 'ent
 }
 
 /** The tool's Settings: where its document is kept, the node copy's toggle (for a tool that asks for one), and Remove my data. */
-function ToolSettings({ manifest, copy, onCopy, onRemove }: {
+function ToolSettings({ manifest, copy, onCopy, onRemove, tooBigLine }: {
     manifest: ToolManifest; copy: CopyView; onCopy: (on: boolean) => void; onRemove: () => Promise<RemoveOutcome>;
+    /** What a `too-big` round trip says (copyTooBigLine). */
+    tooBigLine: string;
 }) {
     const [confirming, setConfirming] = useState(false);
     const [said, setSaid] = useState<string | null>(null);
@@ -499,6 +522,9 @@ function ToolSettings({ manifest, copy, onCopy, onRemove }: {
                         </p>
                         {copy.failed === 'failed' && (
                             <p role="status" data-testid="tool-node-copy-failed" className="m-0 p-3 text-sm font-semibold text-bp-ink-danger break-words">{copyFailedLine()}</p>
+                        )}
+                        {copy.failed === 'too-big' && (
+                            <p role="status" data-testid="tool-node-copy-too-big" className="m-0 p-3 text-sm font-semibold text-bp-ink-danger break-words">{tooBigLine}</p>
                         )}
                     </>
                 )}

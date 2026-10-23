@@ -143,8 +143,11 @@ export function toolCopyAfterWrite(c: WebToolCopy, then: (outcome: ToolCopyOutco
     queue.later(keyOf(c), async () => then(await sync(c, epoch)));
 }
 
-/** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
-export function switchToolCopy(c: WebToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
+/**
+ * The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered.
+ * `too-big`: this browser holds more than the server keeps, so nothing was sent.
+ */
+export function switchToolCopy(c: WebToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'too-big' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
     const epoch = accountEpoch();
     return queue.run(keyOf(c), async () => {

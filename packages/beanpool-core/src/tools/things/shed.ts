@@ -9,10 +9,11 @@
  * loan through BeanPool, or lent outside it) → back in the shop → taken out of the shop (its Offer paused, kept so listing
  * it again puts the same Offer back) → gone when it is deleted (taken out of the document: nothing of it is kept).
  */
-import { formatDate, t, tn } from '../../words.js';
+import { formatDate, t, tn, wordn } from '../../words.js';
 import { PRICING_CATEGORIES, normalizeCategory } from '../../pricing-catalog.js';
 import { toolDocBytes } from '../check.js';
 import type { ToolDealSummary, ToolOfferDraft } from '../host.js';
+import type { ToolLine } from '../manifest.js';
 import {
     THINGS_LEND_TERMS_CHARS,
     THINGS_NAME_CHARS,
@@ -322,9 +323,38 @@ const thingBytes = (thing: unknown) => toolDocBytes(thing) + 1;
  * already past the bound (one kept before an older node said it keeps less).
  */
 export function shedRoom(doc: ThingsDoc, maxBytes: number): number {
+    return Math.max(0, Math.floor((maxBytes - toolDocBytes(doc)) / averageThingBytes(doc)));
+}
+
+/** The bytes one of the member's things takes on average, or a typical thing while they have none. */
+function averageThingBytes(doc: ThingsDoc): number {
     const live = (doc.things ?? []).filter(isLiveThing);
-    const each = live.length > 0 ? Math.ceil(live.reduce((sum, thing) => sum + thingBytes(thing), 0) / live.length) : thingBytes(TYPICAL_THING);
-    return Math.max(0, Math.floor((maxBytes - toolDocBytes(doc)) / each));
+    return live.length > 0 ? Math.ceil(live.reduce((sum, thing) => sum + thingBytes(thing), 0) / live.length) : thingBytes(TYPICAL_THING);
+}
+
+/**
+ * About how many things to delete for the document to fit `maxBytes` (a server that keeps less than the device holds):
+ * the bytes over, in things the size of the member's own on average, rounded up; 0 when it fits. A Delete gives all of a
+ * thing's bytes back (removeThing).
+ */
+export function shedToDelete(doc: ThingsDoc, maxBytes: number): number {
+    const over = toolDocBytes(doc) - maxBytes;
+    return over > 0 ? Math.ceil(over / averageThingBytes(doc)) : 0;
+}
+
+/**
+ * The manifest's `tooBig`: switching the server's copy on found the shed more than the server keeps, so nothing changed.
+ * How many things to delete, at least one (what the device sends can be a little more than the shed it shows: a tombstone
+ * an earlier build kept goes with the next write), or the copy left off.
+ */
+export function shedTooBig(doc: ThingsDoc, maxBytes: number): ToolLine {
+    return {
+        key: wordn(
+            "Your Tool shed holds more than your community's server keeps for now, so nothing changed. Delete about {n} thing, then switch the copy on again. Or leave it off, and your things stay on this device only.",
+            "Your Tool shed holds more than your community's server keeps for now, so nothing changed. Delete about {n} things, then switch the copy on again. Or leave it off, and your things stay on this device only.",
+        ),
+        n: Math.max(1, shedToDelete(doc, maxBytes)),
+    };
 }
 
 /** The room in a sentence, in things, never bytes: "Room for about 240 more things". */

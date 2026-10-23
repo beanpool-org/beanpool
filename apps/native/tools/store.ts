@@ -127,10 +127,13 @@ export async function readToolCopy(owner: string, tool: string): Promise<ToolLoc
 }
 
 /**
- * The most the tool's document may take on this phone now: its own bound, never past what this community's server said
- * it keeps (the settings' `nodeMax`; core toolDocMaxBytes). What the host's doc.maxBytes() says, and the write holds to.
+ * The most the tool's document may take on this phone now: its own bound, and while the server's copy is on, never past
+ * what this community's server said it keeps (the settings' `nodeMax`; core toolDocMaxBytes). With the copy off the
+ * server holds none of it, so its bound holds nothing; switching on asks the server again and says so if it is more
+ * (core turnToolCopyOn, `too-big`). What the host's doc.maxBytes() says, and the write holds to.
  */
-export const toolDocMaxHere = (manifest: Pick<ToolManifest, 'doc'>, settings: ToolSettings): number => toolDocMaxBytes(manifest, settings.nodeMax);
+export const toolDocMaxHere = (manifest: Pick<ToolManifest, 'doc'>, settings: ToolSettings): number =>
+    toolDocMaxBytes(manifest, settings.nodeCopy === false ? undefined : settings.nodeMax);
 
 /**
  * The document written whole (§1.6: one writer, last write wins). Over its bound (toolDocMaxHere, with this community's

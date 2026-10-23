@@ -181,8 +181,11 @@ export function toolCopyAfterWrite(c: PhoneToolCopy, then: (outcome: ToolCopyOut
     queue.later(keyOf(c), async () => then(await sync(c, turn)));
 }
 
-/** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
-export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
+/**
+ * The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered.
+ * `too-big`: the phone holds more than the server keeps, so nothing was sent.
+ */
+export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'too-big' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
     const turn = turnFor(c);
     return queue.run(keyOf(c), async () => {

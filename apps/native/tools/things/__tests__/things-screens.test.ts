@@ -805,12 +805,16 @@ describe('Edit', () => {
 
         act(() => root.unmount());
         root = createRoot(host);
+        // The server keeps what the open sent, as a real one does (this stand-in keeps nothing of a PUT), so the next open
+        // finds the copy still on: with it off, the server's bound holds nothing.
+        market.copy = { doc: market.puts.at(-1), updatedAt: '2026-10-21T08:00:00.000Z' };
         const full: Thing[] = [];
         while (toolDocBytes(shed(...full, atCaps(full.length))) <= TOOL_LIMITS.docBytes) full.push(atCaps(full.length));
         await keep(shed(...full));
         // One more fits the shed's own 128 KB, not this server's 64 KB.
         expect(toolDocBytes(shed(...full, atCaps(full.length)))).toBeLessThan(THINGS_DOC_BYTES);
         await open('edit');
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeCopy).not.toBe(false);
         await fillAtCaps();
         await click('edit-save');
         expect(text('edit-problem')).toBe(FULL_LINE);

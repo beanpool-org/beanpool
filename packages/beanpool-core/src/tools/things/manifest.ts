@@ -20,6 +20,7 @@ import {
     readThingsDoc,
     type ThingsDoc,
 } from './doc.js';
+import { shedTooBig } from './shed.js';
 
 export const THINGS_PERMISSIONS = [
     'photos',
@@ -149,6 +150,7 @@ export const THINGS: ToolManifest<ThingsDoc> = {
         const { things, listed, out } = thingsCounts(d, now);
         return { key: wordn('{n} thing · {listed} in your shop · {out} out', '{n} things · {listed} in your shop · {out} out'), n: things, values: { listed, out } };
     },
+    tooBig: shedTooBig,
     examples: [word('a drill'), word('a ladder'), word('a tent')],
     guide: 'lending-and-borrowing',
     homeCard: {

@@ -38,8 +38,8 @@ import {
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
 import { scheduleToolReminders } from '../../tools/reminders';
 import {
-    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, isEmptyDoc, removeQuestion, safeLine, toolBack,
-    type ToolCopyNote,
+    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, copyTooBigLine, isEmptyDoc, removeQuestion, safeLine,
+    toolBack, type ToolCopyNote,
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
 import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
@@ -104,7 +104,8 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
     const [copyNote, setCopyNote] = useState<ToolCopyNote>(null);
-    const [copyRound, setCopyRound] = useState<{ busy: boolean; failed: 'failed' | 'older-node' | null }>({ busy: false, failed: null });
+    /** The toggle's round trip; a `too-big` one keeps the server's `max` it heard, for its line (copyTooBigLine). */
+    const [copyRound, setCopyRound] = useState<{ busy: boolean; failed: 'failed' | 'older-node' | 'too-big' | null; max?: number }>({ busy: false, failed: null });
     const docRef = useRef<unknown>(undefined);
     const settingsRef = useRef<ToolSettings>({});
     const copyNoteRef = useRef<ToolCopyNote>(null);
@@ -224,10 +225,14 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
             tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeCopy: done === 'on' }, copyNote: null });
             // Switching on may have taken the server's copy: the document as the phone holds it now.
             if (done === 'on') heardCopy('taken');
+        } else if (done === 'too-big') {
+            // More than the server keeps: its line counts what to delete against the `max` its GET just said.
+            const s = await readToolSettings(owner, manifest.id, url).catch(() => null);
+            setCopyRound({ busy: false, failed: done, max: s?.nodeMax });
         } else {
             setCopyRound({ busy: false, failed: done });
         }
-    }, [copy, shareKey, heardCopy, heardMax]);
+    }, [copy, shareKey, heardCopy, heardMax, owner, manifest.id, url]);
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {
@@ -390,7 +395,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 settings={settings}
                 copyNote={copyNote}
                 ownerKind={ctx.owner.kind}
-                copy={copyRound}
+                copy={copyRound.failed === 'too-big' ? { ...copyRound, tooBig: copyTooBigLine(manifest, doc, copyRound.max) } : copyRound}
                 notificationsAllowed={notificationsAllowed}
                 colors={colors}
                 onChange={(next) => { void saveSettings(next); }}

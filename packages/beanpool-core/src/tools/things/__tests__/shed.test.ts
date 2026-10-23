@@ -246,7 +246,7 @@ describe('the edit screen: its fields, what stops a save, and saving', () => {
     });
 
     it("too big for the server's copy: about how many things to delete, at the size of the member's own, so it fits", () => {
-        const many = Array.from({ length: 300 }, (_, i) => thing(`t${String(i).padStart(3, '0')}`, 'Cordless drill', { category: 'tools', lendTerms: 'Back within a week, charged.' }));
+        const many = Array.from({ length: 450 }, (_, i) => thing(`t${String(i).padStart(3, '0')}`, 'Cordless drill', { category: 'tools', lendTerms: 'Back within a week, charged.' }));
         const over = doc(...many);
         const max = TOOL_LIMITS.docBytes;
         expect(toolDocBytes(over)).toBeGreaterThan(max);

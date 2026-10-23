@@ -140,6 +140,12 @@ export interface ToolManifest<D = unknown> {
     screens: readonly string[];
     /** The Tools row's state line, or null for none. */
     row(doc: D, now: number): ToolLine | null;
+    /**
+     * Only for a tool that asks for `node-copy`: what its Settings say when switching the copy on finds the document more
+     * than the server keeps (`maxBytes`, its answer's `max`), so nothing changed: how to make room, in the tool's own
+     * words and never bytes. None: the template's own sentence.
+     */
+    tooBig?(doc: D, maxBytes: number): ToolLine;
     /** The empty state's "I'm starting out" door: three example rows, and the members' guide page it links to. */
     examples: readonly WordKey[];
     guide?: string;

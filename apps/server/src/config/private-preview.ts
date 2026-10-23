@@ -19,10 +19,11 @@
  * Nothing here needs our domain, registrar, DNS or tunnels: it is a setting of the node, read from its own env.
  */
 import type { Context, Next } from 'koa';
+import { word } from '@beanpool/core';
 
 export const PRIVATE_PREVIEW_ENV = 'PRIVATE_PREVIEW';
 export const PRIVATE_PREVIEW = 'private_preview';
-export const PRIVATE_PREVIEW_MESSAGE = 'This community is in a private preview. Ask its owner for an invite.';
+export const PRIVATE_PREVIEW_MESSAGE = word('This community is in a private preview. Ask its owner for an invite.');
 
 /** The values that turn a private preview on, and the ones that leave it off (any case, trimmed; unset is off too). */
 export const PRIVATE_PREVIEW_ON_VALUES: readonly string[] = ['1', 'true', 'yes', 'on'];

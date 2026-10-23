@@ -10,7 +10,7 @@ import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js'
 import { bumpMembersVersion } from './versions.js';
 import { PhotoTooBigError, photoValueRefusal } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates, word } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 
@@ -433,7 +433,7 @@ function visitorPlaceholder(publicKey: string): string {
     return `Visitor-${publicKey}-${Date.now()}`;
 }
 
-export const NOT_A_MEMBER_ERROR = 'Only members of this community can do this.';
+export const NOT_A_MEMBER_ERROR = word('Only members of this community can do this.');
 export const NOT_A_MEMBER_CODE = 'not_a_member';
 
 /**

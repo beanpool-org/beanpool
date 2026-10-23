@@ -187,7 +187,7 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
 import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
@@ -472,7 +472,7 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
 
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
 export const LISTINGS_MEMBERS_ONLY = {
-    error: "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    error: word("This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
     code: 'members_only',
     global: 'https://global.beanpool.org',
 } as const;
@@ -483,7 +483,7 @@ export const LISTINGS_MEMBERS_ONLY = {
  * words that fit any of them. The global node refuses them as any gated read, as before.
  */
 export const COMMUNITY_MEMBERS_ONLY = {
-    error: "This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    error: word("This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
     code: 'members_only',
     global: 'https://global.beanpool.org',
 } as const;
@@ -1124,7 +1124,7 @@ function isSignatureBypassed(p: string): boolean {
  * and invite redemption, which refuses it itself) keep their own checks. A flow that ever must take a replaced key is
  * named here, with its reason.
  */
-const REPLACED_KEY_REFUSAL = 'This key was replaced by a new one, so this community no longer accepts it. Use the device or the 12 words that hold the new key.';
+const REPLACED_KEY_REFUSAL = word('This key was replaced by a new one, so this community no longer accepts it. Use the device or the 12 words that hold the new key.');
 
 /**
  * The answer to every signed request from a key whose account here was closed (isClosedAccountKey: its member row is
@@ -1164,7 +1164,7 @@ const REPLACED_KEY_REFUSAL = 'This key was replaced by a new one, so this commun
  * every request, and a prune deletes the role), device pairing (a relay that knows no member), invite redemption. A
  * flow that ever must take a closed account's key is named here, with its reason.
  */
-const CLOSED_ACCOUNT_REFUSAL = 'This key’s account in this community was closed, so the community no longer accepts it.';
+const CLOSED_ACCOUNT_REFUSAL = word('This key’s account in this community was closed, so the community no longer accepts it.');
 
 /** The one request a closed account's key may sign (CLOSED_ACCOUNT_REFUSAL): deleting its own account. */
 function isOwnDeleteAccount(method: string, path: string): boolean {
@@ -1375,23 +1375,23 @@ export async function startHttpsServer(port: number): Promise<number> {
         const lowerPath = ctx.path.toLowerCase();
         if (!gwConfig.features?.marketplace && lowerPath.startsWith('/api/marketplace')) {
             ctx.status = 503;
-            ctx.body = { error: 'Marketplace feature is currently disabled by node gateway' };
+            ctx.body = { error: word('Marketplace feature is currently disabled by node gateway') };
             return;
         }
         if (!gwConfig.features?.messaging && lowerPath.startsWith('/api/messaging')) {
             ctx.status = 503;
-            ctx.body = { error: 'Messaging feature is currently disabled by node gateway' };
+            ctx.body = { error: word('Messaging feature is currently disabled by node gateway') };
             return;
         }
         if (!gwConfig.features?.federation && lowerPath.startsWith('/api/federation')) {
             ctx.status = 503;
-            ctx.body = { error: 'Federation feature is currently disabled by node gateway' };
+            ctx.body = { error: word('Federation feature is currently disabled by node gateway') };
             return;
         }
         // A knock (G6) is answered with an invite, so a node that takes no invites takes no knocks either.
         if (!gwConfig.features?.invites && (lowerPath.startsWith('/api/invite') || lowerPath.startsWith('/api/community/invite') || lowerPath.startsWith('/api/join/knock'))) {
             ctx.status = 503;
-            ctx.body = { error: 'Invites feature is currently disabled by node gateway' };
+            ctx.body = { error: word('Invites feature is currently disabled by node gateway') };
             return;
         }
         if (!gwConfig.features?.servePwa && (ctx.path === '/' || lowerPath.startsWith('/app') || lowerPath.endsWith('.html'))) {
@@ -1514,7 +1514,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                 const declaredLen = Number(ctx.get('content-length'));
                 if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
-                    ctx.body = { error: 'Request body too large' };
+                    ctx.body = { error: word('Request body too large') };
                     return;
                 }
                 const pastSmall = ctx.state.gatewayLargeClaim ? () => gatewayChargeLargeClaim(ctx) : undefined;
@@ -1542,7 +1542,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                     // route runs on a truncated/abandoned request.
                     if (e instanceof BodyTooLargeError) {
                         ctx.status = 413;
-                        ctx.body = { error: 'Request body too large' };
+                        ctx.body = { error: word('Request body too large') };
                         return;
                     }
                     if (e instanceof BodyRefusedError) return; // gatewayChargeLargeClaim answered 429
@@ -1735,7 +1735,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
                 const refusal = membersOnlyRefusal(ctx.path);
-                ctx.body = refusal ? { ...refusal } : { error: 'Read access requires a member identity' };
+                ctx.body = refusal ? { ...refusal } : { error: word('Read access requires a member identity') };
                 return;
             }
 

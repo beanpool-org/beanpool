@@ -89,7 +89,7 @@ import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '..
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
-import { avatarUrlOf, postRulesFor } from '@beanpool/core';
+import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
@@ -861,7 +861,7 @@ router.get('/api/community/me', async (ctx) => {
     // own, as their messages and trades.
     if (!passesReadGate(actor)) {
         ctx.status = 403;
-        ctx.body = { error: 'Read access requires a member identity' };
+        ctx.body = { error: word('Read access requires a member identity') };
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
@@ -914,7 +914,7 @@ router.post('/api/community/me/area', async (ctx) => {
     const member = getActingMember(actor);
     if (!member || (member.status === 'pruned' && !clear)) {
         ctx.status = 403;
-        ctx.body = { error: 'Only a member of this community can set an area here' };
+        ctx.body = { error: word('Only a member of this community can set an area here') };
         return;
     }
     if (!clear && !isPoint(lat, lng)) {
@@ -933,7 +933,7 @@ router.post('/api/community/me/area', async (ctx) => {
  * under the heavy-read cap. Off (a local community), false, and the read goes on exactly as before.
  */
 const MEMBERS_ON_DEMAND_CODE = 'members_on_demand';
-const MEMBERS_ON_DEMAND_ERROR = 'On this community people are found by name or by key, not listed whole';
+const MEMBERS_ON_DEMAND_ERROR = word('On this community people are found by name or by key, not listed whole');
 function refusedWholeDirectory(ctx: any, error = MEMBERS_ON_DEMAND_ERROR): boolean {
     if (!getProfileSwitches().openMembership) return false;
     ctx.status = 403;
@@ -966,7 +966,7 @@ function peoplePoint(ctx: any): Point | null | undefined {
     // non-member sees.
     if (!readsAsMember(actor)) {
         ctx.status = 403;
-        ctx.body = { error: 'Read access requires a member identity' };
+        ctx.body = { error: word('Read access requires a member identity') };
         return undefined;
     }
     return point.value;
@@ -1132,7 +1132,7 @@ router.post('/api/community/register', async (ctx) => {
         const member = registerMember(publicKey, callsign.slice(0, 20));
         if (!member) {
             ctx.status = 400;
-            ctx.body = { error: 'Failed to register member' };
+            ctx.body = { error: word('Failed to register member') };
             return;
         }
         ctx.body = { success: true, member };
@@ -1160,7 +1160,7 @@ router.post('/api/invite/generate', async (ctx) => {
     try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {
         ctx.status = 403;
-        ctx.body = { error: 'Only registered members can generate invites' };
+        ctx.body = { error: word('Only registered members can generate invites') };
         return;
     }
     ctx.body = { success: true, invite };
@@ -1212,7 +1212,7 @@ function signedByKey(ctx: any, publicKey: string): boolean {
 }
 
 /** What an unsigned redeem, or one signed by another key, is answered (401 `redeem_unsigned`). */
-const REDEEM_UNSIGNED_ERROR = 'This join must be signed by the key it registers. Update the BeanPool app and try again.';
+const REDEEM_UNSIGNED_ERROR = word('This join must be signed by the key it registers. Update the BeanPool app and try again.');
 
 /**
  * A redeem registers the key it names, so it must be signed by that key (Fable's security review 2026-10-01, LOW 4).
@@ -1349,7 +1349,7 @@ router.get('/api/invite/tree', async (ctx) => {
     // The whole tree is every member, with the door each came in by. Where anyone can join in a minute, a member reads
     // their own branch only: the people they brought in are theirs to know, as /api/invite/mine says.
     if ((typeof root !== 'string' || root !== ctx.state.actor)
-        && refusedWholeDirectory(ctx, 'On this community you see the people you invited, not everyone: ask with root set to your own key')) return;
+        && refusedWholeDirectory(ctx, word('On this community you see the people you invited, not everyone: ask with root set to your own key'))) return;
     ctx.body = getInviteTree(root);
 });
 
@@ -1368,7 +1368,7 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
     }
     if (actor !== publicKey) {
         ctx.status = 403;
-        ctx.body = { error: 'You may only read your own invites' };
+        ctx.body = { error: word('You may only read your own invites') };
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
@@ -1409,7 +1409,7 @@ router.post('/api/profile/update', async (ctx) => {
         if (respondProfileRefusal(ctx, e)) return;
         if (e?.message === 'CALLSIGN_TAKEN') {
             ctx.status = 409;
-            ctx.body = { error: 'callsign_taken', message: 'That name is already taken on this community. Try another.' };
+            ctx.body = { error: 'callsign_taken', message: word('That name is already taken on this community. Try another.') };
             return;
         }
         if (e?.message === 'AVATAR_INVALID') {
@@ -1424,7 +1424,7 @@ router.post('/api/profile/update', async (ctx) => {
         }
         if (e?.message === 'CALLSIGN_TOO_SHORT') {
             ctx.status = 400;
-            ctx.body = { error: 'callsign_too_short', message: 'Your name needs at least 2 characters.' };
+            ctx.body = { error: 'callsign_too_short', message: word('Your name needs at least 2 characters.') };
             return;
         }
         if (e?.message === 'CONTACT_TOO_LONG') {
@@ -1458,7 +1458,7 @@ router.post('/api/member/purge', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to purge account') };
+        ctx.body = { error: memberErrorText(e, word('Failed to purge account')) };
     }
 });
 
@@ -1530,7 +1530,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
             return;
         }
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to ask for the re-key') };
+        ctx.body = { error: memberErrorText(e, word('Failed to ask for the re-key')) };
     }
 });
 
@@ -1573,7 +1573,7 @@ router.get('/api/profile/:publicKey', async (ctx) => {
 // Decision about a member shows that member's balance to its voters inside that Decision (routes/commons.ts). Held here
 // whatever ENFORCE_READ_AUTH says, as /api/community/me is: the reader is the verified signer only, never a parameter.
 // Both apps have only ever asked for their own, and read a refusal as "nothing": the phone keeps what it holds.
-const OWN_LEDGER_ERROR = 'Balances and trades are private: you can see only your own.';
+const OWN_LEDGER_ERROR = word('Balances and trades are private: you can see only your own.');
 const OWN_LEDGER_CODE = 'own_only';
 
 const isTreasuryAccount = (pk: string): boolean =>
@@ -1687,7 +1687,7 @@ router.post('/api/profile/vouch', async (ctx) => {
         ctx.body = { success: true, level: lvl };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Vouch failed') };
+        ctx.body = { error: memberErrorText(e, word('Vouch failed')) };
     }
 });
 
@@ -1712,7 +1712,7 @@ router.post('/api/profile/unvouch', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Withdraw failed') };
+        ctx.body = { error: memberErrorText(e, word('Withdraw failed')) };
     }
 });
 
@@ -1774,7 +1774,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
     // rather than needing every reject list found and edited — which is how #102 ended up duplicated.
     if (isSyntheticAccount(String(to))) {
         ctx.status = 400;
-        ctx.body = { error: 'Invalid recipient' };
+        ctx.body = { error: word('Invalid recipient') };
         return;
     }
     // One key, one spelling (engine/member-key.ts): a person is named by their key as this community keeps it. A key
@@ -1815,8 +1815,8 @@ router.post('/api/ledger/transfer', async (ctx) => {
         // has joined: a visitor receives Beans and passes them on once it joins. (A visitor with a trade from before
         // visitors were refused one is past the send gate, and gets the words anyone gets.)
         ctx.body = { error: isLiveVisitor(from) && getMemberTrustProfile(from).earnedCredit <= 0
-            ? "Send failed — you can receive Beans before you join, and pass them on once you join this community."
-            : 'Send failed — you can only send beans you currently hold, and only after your first completed trade.' };
+            ? word("Send failed — you can receive Beans before you join, and pass them on once you join this community.")
+            : word('Send failed — you can only send beans you currently hold, and only after your first completed trade.') };
         return;
     }
     ctx.body = { success: true, transaction: txn };
@@ -2026,7 +2026,7 @@ router.get('/api/members/preferences', async (ctx) => {
     }
     if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
         ctx.status = 403;
-        ctx.body = { error: 'You may only read your own preferences' };
+        ctx.body = { error: word('You may only read your own preferences') };
         return;
     }
     // The Home keys (home.layout, interests) only when the verified signer is the member, whatever ENFORCE_READ_AUTH says.
@@ -2055,7 +2055,7 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = success ? { success, ...homePreferencesNamed(activeKey, preferences) } : { success };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to update preferences') };
+        ctx.body = { error: memberErrorText(e, word('Failed to update preferences')) };
     }
 });
 
@@ -2074,7 +2074,7 @@ router.post('/api/members/holiday', async (ctx) => {
         ctx.body = { success: true, enabled: !!enabled, openTrades: result.openTrades };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to update holiday mode'), openTrades: e?.openTrades };
+        ctx.body = { error: memberErrorText(e, word('Failed to update holiday mode')), openTrades: e?.openTrades };
     }
 });
 
@@ -2106,7 +2106,7 @@ router.post('/api/ratings', async (ctx) => {
     const rating = addRating(activeActor, targetPubkey, Number(stars), comment || '', transactionId);
     if (!rating) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed — transaction must be completed, both users must be participants' };
+        ctx.body = { error: word('Failed — transaction must be completed, both users must be participants') };
         return;
     }
     ctx.body = { success: true, rating };
@@ -2183,12 +2183,12 @@ router.post('/api/reports', async (ctx) => {
         const owner = getReportablePulseItemOwner(targetPulseItemId);
         if (!owner) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'That Pulse item no longer exists.' };
+            ctx.body = { error: 'not_found', message: word('That Pulse item no longer exists.') };
             return;
         }
         if (owner === activeReporter) {
             ctx.status = 400;
-            ctx.body = { error: 'own_item', message: 'You cannot report your own item.' };
+            ctx.body = { error: 'own_item', message: word('You cannot report your own item.') };
             return;
         }
         targetPubkey = owner;
@@ -2211,7 +2211,7 @@ router.post('/api/reports', async (ctx) => {
             // isn't here. The one report that carries no post's id there is the phone app's report of an enterprise,
             // which sends the enterprise's key as both (treasury-detail.tsx): that stays a report about the account.
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'That post is not here any more.' };
+            ctx.body = { error: 'not_found', message: word('That post is not here any more.') };
             return;
         }
     }
@@ -2250,7 +2250,7 @@ router.post('/api/reports', async (ctx) => {
     const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);
     if (!report) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed — must be a registered member, cannot report yourself' };
+        ctx.body = { error: word('Failed — must be a registered member, cannot report yourself') };
         return;
     }
     // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
@@ -2289,7 +2289,7 @@ router.get('/api/friends/:publicKey', async (ctx) => {
     }
     if (ctx.params.publicKey !== actor) {
         ctx.status = 403;
-        ctx.body = { error: 'You may only read your own friends' };
+        ctx.body = { error: word('You may only read your own friends') };
         return;
     }
     ctx.body = getFriends(actor);
@@ -2326,7 +2326,7 @@ router.post('/api/friends/add', async (ctx) => {
     }
     if (!entry) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed — both must be registered members' };
+        ctx.body = { error: word('Failed — both must be registered members') };
         return;
     }
     ctx.body = { success: true, friend: entry };

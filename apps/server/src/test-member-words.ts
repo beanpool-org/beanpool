@@ -21,6 +21,8 @@
  *   5. Nothing marked for translation is a sentence an app matches on, or starts with a code the apps read: the hand-kept
  *      list (APP_MATCHES), and every match the apps' sources hold today, found where it is written (appMatchers), so a
  *      new `e.message.includes('…')` on a marked sentence fails here.
+ *   6. Each family a member meets (the gate, join and profile, ledger, …): one of its refusals in English as before, and
+ *      in French with the same status, code and fields; the suite's French is every marked sentence after a sign.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-words.ts
  */
@@ -314,11 +316,65 @@ async function testRealServer(): Promise<void> {
         const copy = exportPlainTables(db as any, PLAIN_TABLES).push_tokens ?? [];
         assert(copy.length >= 1 && copy.every((row: Record<string, unknown>) => !('lang' in row)) && copy.some((row: any) => row.public_key === ann.pk),
             `the standby's copy of the phones never carries their language (${copy.length} rows)`);
+
+        await testFamilies({ owner, ann, bob, cat, se, db });
     } finally {
         useCatalogsForTests('fr', null);
         useCatalogsForTests('ru', null);
         (globalThis as any).fetch = realFetch;
     }
+}
+
+// ── 6: each family ────────────────────────────────────────────────────────────────────────────────────────────────
+/** What the suite's French says for every sentence the server and the engine mark: the English after a sign of its own. */
+const FR_SIGN = 'FR› ';
+let markedSentences: any[] | null = null;
+async function marks(): Promise<any[]> {
+    if (!markedSentences) {
+        const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+        const words: any = await import(path.join(root, 'scripts/words/words.mjs'));
+        const extracted = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'server' || p.name === 'engine'));
+        markedSentences = extracted.flatMap((p: any) => p.calls.filter((c: any) => c.fn === 'word' && typeof c.text === 'string'));
+    }
+    return markedSentences!;
+}
+async function everyMarkInFrench(): Promise<Record<string, string>> {
+    return Object.fromEntries((await marks()).map((c: any) => [wordKey(c.text, c.context), `${FR_SIGN}${c.text}`]));
+}
+
+interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
+
+/**
+ * One refusal of each family a member meets, asked without X-Language and with `fr`: the English as it was, and in French
+ * the same status, the same code and every other field, only the sentence in French. The suite's French is every marked
+ * sentence after FR_SIGN, so a family whose sentence was never marked fails here.
+ */
+async function testFamilies({ owner, ann, bob }: People): Promise<void> {
+    console.log("\n--- 6. Each family's refusals in the member's language ---");
+    useCatalogsForTests('fr', { server: await everyMarkInFrench(), core: FR_CORE });
+    const family = async (name: string, english: string, method: 'GET' | 'POST', who: Id | null, route: string, body?: unknown,
+        field: 'error' | 'message' = 'error'): Promise<void> => {
+        const en = await call(method, who, route, body);
+        const fr = await call(method, who, route, body, 'fr');
+        const same = (a: any, b: any) => JSON.stringify(Object.keys(a ?? {}).sort()) === JSON.stringify(Object.keys(b ?? {}).sort())
+            && Object.keys(a ?? {}).every(k => k === field || JSON.stringify(a[k]) === JSON.stringify(b[k]));
+        assert(en.status >= 400 && en.body?.[field] === english, `${name}: in English as before (${en.status} ${en.text})`);
+        assert(fr.status === en.status && fr.body?.[field] === `${FR_SIGN}${english}` && same(en.body, fr.body),
+            `${name}: in French, with the same status, code and fields (${fr.status} ${fr.text})`);
+    };
+
+    // The gate (https-server.ts).
+    await family('the gate, a community\'s listings to a visitor', "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+        'GET', null, '/api/marketplace/posts');
+    await family('the gate, a members-only read to a visitor', "This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+        'GET', null, '/api/home');
+    const stranger = newId('Stranger');
+    await family('the gate, a gated read to a key that is no member', 'Read access requires a member identity', 'GET', stranger, `/api/ledger/balance/${stranger.pk}`);
+
+    // Join, profile, ledger (routes/community.ts).
+    await family('community, invites', 'You may only read your own invites', 'GET', ann, `/api/invite/mine/${bob.pk}`);
+    await family('community, profile', 'Your name needs at least 2 characters.', 'POST', ann, '/api/profile/update', { callsign: 'A' }, 'message');
+    await family('community, preferences', 'You may only read your own preferences', 'GET', ann, `/api/members/preferences?publicKey=${owner.pk}`);
 }
 
 // ── 5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

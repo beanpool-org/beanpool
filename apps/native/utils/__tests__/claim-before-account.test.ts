@@ -5,7 +5,7 @@
  * lost and nothing said where to go. Now:
  *   1. the claim screen stays with no account (utils/auth-return.ts setupRedirect) and offers "Make my account", which
  *      keeps the claim on the phone (utils/onboarding-state.ts PendingClaim) and opens the first screen;
- *   2. the first screen says, under its doors, that the claim waits, and names the door that needs no invite
+ *   2. the first screen says, under its doors (whose hint names the door that needs no invite), that the claim waits
  *      (components/ClaimWaitingNote.tsx);
  *   3. once an account is made, whichever door made it and after any restart, the root guard's landing from welcome is the
  *      claim screen with the server, the code's id and the code (utils/member-landing.ts landOnClaim);
@@ -196,10 +196,10 @@ describe('the first screen while a claim waits', () => {
     };
     const note = () => host.querySelector('[data-testid="claim-waiting-note"]')?.textContent ?? null;
 
-    it('says the claim waits for the account, names the server, and the door that needs no invite', async () => {
+    it('says the claim waits for the account and names the server, never the code', async () => {
         await setPendingClaim({ node: NODE, codeId: ID, code: CODE });
         await draw();
-        expect(note()).toBe('Make your account first, then BeanPool takes you back to claim beans.example.org. No invite? Tap Explore BeanPool worldwide.');
+        expect(note()).toBe('Make your account first, then BeanPool takes you back to claim beans.example.org.');
         // Never the code.
         expect(host.textContent).not.toContain(CODE.slice(6));
     });
@@ -207,7 +207,7 @@ describe('the first screen while a claim waits', () => {
     it('with no address in the QR, still says so', async () => {
         await setPendingClaim({ node: null, codeId: ID, code: CODE });
         await draw();
-        expect(note()).toBe('Make your account first, then BeanPool takes you back to your claim. No invite? Tap Explore BeanPool worldwide.');
+        expect(note()).toBe('Make your account first, then BeanPool takes you back to your claim.');
     });
 
     it('nothing while no claim waits, and it goes when the claim does', async () => {

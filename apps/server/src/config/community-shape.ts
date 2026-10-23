@@ -100,6 +100,16 @@ export interface ShapeSetting<T> {
 
 /** Who can join: any member invites, only admins do, nobody new for now (invites off), or anyone through the open door. */
 export type JoinState = CommunityDoor | 'paused' | 'open';
+
+/**
+ * Who can join as the switches `cfg` set it, the door row (`door`, asked only where invites are on) beside them: the open
+ * door where it is set and invites are off, which is so even where a moved ledger keeps it shut, and paused where neither
+ * takes anyone. The shape's rule, and the write path's for where a change leaves it (config/community-shape-write.ts).
+ */
+export function configuredJoinOf(cfg: Pick<ProfileSwitches, 'openJoin' | 'invites'>, door: () => CommunityDoor): JoinState {
+    return cfg.openJoin && !cfg.invites ? 'open' : !cfg.invites ? 'paused' : door();
+}
+
 /** What a visitor sees: nothing of the community's, the listings and their rough area, or what only members should. */
 export type VisitorsView = 'nothing' | 'listings' | 'open';
 export interface KnownFloorShape { on: boolean; floor: number; cap: number; capMax: number }
@@ -210,6 +220,14 @@ const LOCK_WORDS = {
         + '. Whoever runs the server changes it.',
     onTheServer: (env: string) => `Set on the server (${env}). ${ASK_THE_SERVER}`,
     scheduleNever: 'Set to be listed, but the directory update schedule is Never: it is sent only when someone presses Publish Now under Node Identity. Choose a schedule there to keep it listed.',
+    pauseBesideOpenDoor: (setBy: string, words: boolean) =>
+        `New members can't be paused here: anyone can also join through the open door, with ${words ? '12 secret words or a sign-in' : 'a sign-in'}, `
+        + `and a pause would leave that door taking everyone. ${setBy} sets it: whoever runs the server shuts it first (nodeProfile.openJoin = false).`,
+    pauseBehindShutDoor: (setBy: string) =>
+        `New members can't be paused here: ${setBy} sets the open door, which stays shut for good now that Beans have moved here. `
+        + 'Paused, this community would read as that shut door, and only whoever runs the server could take the pause back. '
+        + 'Whoever runs the server turns the open door off first (nodeProfile.openJoin = false).',
+    unlockPause: 'Whoever runs the server turns the open door off (nodeProfile.openJoin = false); then new members can be paused here.',
     beansOffWhileOpen: 'Beans stay off while anyone can join through the open door: the first Bean that moved would shut the door for good, since open sign-up must never meet a live credit system. Whoever runs the server closes the open door first (nodeProfile.openJoin).',
     listedByKind: (profile: NodeProfile) => `Set by this server's kind (${profile}): the global community is the lobby, not a place on the directory's map. Whoever runs the server changes that.`,
     standbyListed: 'This server is a standby: it never publishes to the directory.',
@@ -227,10 +245,22 @@ const lock = (code: ShapeLockCode, why: string, unlock?: string): ShapeLock => (
 /**
  * The locks the write path finds where the change it is checking leaves the node, not where the shape read it: requests
  * to join with this request pausing invites, the known floor with this request switching Beans off, Listed switched on
- * while DIRECTORY_UNLISTED holds every push back (config/community-shape-write.ts).
+ * while DIRECTORY_UNLISTED holds every push back, and a pause where the open door is set (config/community-shape-write.ts).
  */
 export const LOCKS_AFTER_A_CHANGE = {
     invitesOff: (): ShapeLock => lock('invites_off', LOCK_WORDS.invitesOff, LOCK_WORDS.unlockInvites),
+    /**
+     * Paused where the open door is set (`before`, the shape the request is checked against): invites off there read as
+     * the open door (configuredJoinOf), which still takes everyone (`profile`), or, shut by the ledger, is a join no owner
+     * may change, so a pause only whoever runs the server could lift (`ledger_moved`).
+     */
+    pausedBesideOpenDoor: (before: Shape): ShapeLock => {
+        const { openDoor, wordsDoor } = before.settings;
+        const setBy = openDoor.source === 'owner' ? "this server's own row" : `this server's kind (${before.kind})`;
+        return openDoor.value
+            ? lock('profile', LOCK_WORDS.pauseBesideOpenDoor(setBy[0].toUpperCase() + setBy.slice(1), wordsDoor?.value === true), LOCK_WORDS.unlockPause)
+            : lock('ledger_moved', LOCK_WORDS.pauseBehindShutDoor(setBy), LOCK_WORDS.unlockPause);
+    },
     beansOff: (): ShapeLock => lock('beans_off', LOCK_WORDS.beansOffFloor),
     unlisted: (): ShapeLock => lock('server_env', HELD_BACK_UNLISTED_MESSAGE),
 };
@@ -351,7 +381,7 @@ export function readShape(): Shape {
 
     // Who can join: the door the gates use (doorFor reads the row only when the setting decides), and invites.
     const door = doorFor(() => doorFromRow(rows.door));
-    const configuredJoin: JoinState = cfg.openJoin && !cfg.invites ? 'open' : !cfg.invites ? 'paused' : doorFromRow(rows.door);
+    const configuredJoin = configuredJoinOf(cfg, () => doorFromRow(rows.door));
     const join: ShapeSetting<JoinState> = {
         value: door === 'open' ? 'open' : !s.invites ? 'paused' : door,
         configured: configuredJoin,

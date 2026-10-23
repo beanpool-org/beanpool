@@ -22,7 +22,10 @@
  * ## What takes a change, and which locks refuse it
  *   join        'members' | 'admins' | 'paused': the door row and the `invites` override (design §3.1; un-pausing keeps
  *               the door as it was). Refused under the private preview, and where the open door is set (kind or the
- *               operator's rows: no door to choose, `profile`; shut by the ledger, `ledger_moved`).
+ *               operator's rows: no door to choose, `profile`; shut by the ledger, `ledger_moved`). Paused also refused
+ *               wherever the open door is set beside invites: invites off there read as the open door, still taking
+ *               everyone (`profile`), or shut by the ledger and so a pause only whoever runs the server could lift
+ *               (`ledger_moved`) (#2415 review r4360864333). Members ↔ admins there is still the owner's.
  *   wordsDoor   the 12-words door, only where the open door is set; refused where its own lock is (set on and kept shut
  *               with the open door: the preview, a moved ledger), as the shape reads it (#2415 review r4360594615). Set
  *               off behind a shut door, it may be set on: the words door still takes nobody, so no member is told.
@@ -46,7 +49,7 @@ import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './
 import { setDoor, doorSettingRefusal, type CommunityDoor } from './door.js';
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
-import { readShape, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
+import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
 import { directoryUnlistedByEnv, initDirectoryPublisher } from '../services/directory-publisher.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 
@@ -244,6 +247,12 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         if (join !== S.join.configured) {
             if (S.join.lock?.code === 'private_preview' || S.join.configured === 'open') {
                 refuse('join', S.join.lock ?? { code: 'profile', why: NOT_CHANGED_HERE.openDoor });
+            }
+            // The join this request leaves set must read as asked, by the shape's own rule: paused is invites off, which
+            // where the open door is set reads as that door (#2415 review r4360864333). With no preview (refused above), the
+            // node then runs it as set too, so nobody new joins by any door while paused, and un-pausing is the owner's.
+            if (configuredJoinOf({ openJoin: cfg.openJoin, invites: join !== 'paused' }, () => join as CommunityDoor) !== join) {
+                refuse('join', LOCKS_AFTER_A_CHANGE.pausedBesideOpenDoor(before));
             }
             planned.push({ setting: 'join', from: S.join.configured, to: join });
             if (join === 'paused') switches.push(['invites', false]);

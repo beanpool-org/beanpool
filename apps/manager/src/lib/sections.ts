@@ -7,10 +7,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * there). The ids here are the sections' own `setSubTab('…')` ids; sections.test.ts checks the two agree, so a new
  * sub-tab cannot be missing from the phone menu.
  */
-export type SettingsSection = 'home' | 'people' | 'economy' | 'bulletin' | 'appliance';
+export type SettingsSection = 'home' | 'shape' | 'people' | 'economy' | 'bulletin' | 'appliance';
 
 export const SECTION_SUB_TABS: Record<SettingsSection, { id: string; label: string }[]> = {
     home: [],
+    shape: [],
     people: [
         { id: 'directory', label: 'Members' },
         { id: 'invites', label: 'Invites & QR' },

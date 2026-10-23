@@ -42,6 +42,10 @@
  *     its line is refused as an admin's suspension refused it before the one pause (400, 'Account is disabled'), and so is
  *     asking for the conversation again. A paused member answers in the conversations they are in (§3.1); a visitor's row
  *     can only ever answer, so a pause that let it would take nothing from it.
+ *  6. Where the operator turns message requests on (engine/dm-requests.ts), a pause and a request agree. Pip, paused, is held
+ *     by her own requests as Quin, who isn't, is held by his (403 dm_request_pending), to Una and to Bly, who blocked her,
+ *     alike; she gets each again with her request pending, the one kept for her alone as Una's; and she finds Quin's request
+ *     waiting for her, accepts it, which is answering in a conversation she is in, and answers him.
  *
  * The re-key's interplay with a report's pause is test-rekey-cancel's (sections H to J); a standby's copy of a pause is
  * test-standby-board-standing's; what a paused member reads is test-suspended-and-visitor-reads'.
@@ -578,6 +582,47 @@ async function main() {
         `then neither answers: each line is refused as an admin's suspension refused it before the one pause, and none is stored (${refusal(veeAgain)} | ${refusal(wrenAgain)})`);
     const veeAsks = await post('/api/messages/conversation', { type: 'dm', participants: [vee.pubKeyHex, mia.pubKeyHex], createdBy: vee.pubKeyHex }, vee);
     assert(veeAsks.status === 400 && veeAsks.body?.error === 'Account is disabled', `nor does Vee get the conversation again (${refusal(veeAsks)})`);
+
+    // ── 6. Message requests ──────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n── 6. message requests ──');
+    const setSwitch = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    setSwitch.run(`${NODE_PROFILE_KEY}.dmRequests`, 'true');
+    try {
+        const pip = seedMember('PausedPip'), una = seedMember('AskedUna'), quin = seedMember('AskingQuin'), bly = seedMember('BlockingBly');
+        const blyBlocks = await post('/api/blocks', { targetPubkey: pip.pubKeyHex }, bly);
+        const writes = (by: Id, conversationId: string) =>
+            post('/api/messages/send', { conversationId, authorPubkey: by.pubKeyHex, ...lockedDm() }, by);
+        const requestState = (id: string) => (db.prepare('SELECT state FROM dm_requests WHERE conversation_id = ?').get(id) as { state: string } | undefined)?.state;
+        // Pip writes to Una, and to Bly, who has blocked her (kept for her alone); Quin writes to Pip. A request each.
+        const unaDm = String((await openDm(pip, una)).body?.conversation?.id ?? '');
+        const blyDm = String((await openDm(pip, bly)).body?.conversation?.id ?? '');
+        const quinDm = String((await openDm(quin, pip)).body?.conversation?.id ?? '');
+        const firstLines = [await writes(pip, unaDm), await writes(pip, blyDm), await writes(quin, quinDm)];
+        assert(blyBlocks.status === 200 && firstLines.every(a => a.status === 200) && keptFor(blyDm) === pip.pubKeyHex
+            && [unaDm, blyDm, quinDm].every(id => requestState(id) === 'pending'),
+            `setup: Pip's first lines to Una and to Bly (who blocked her: kept for her alone) and Quin's to Pip each wait as a request (${firstLines.map(a => a.status).join(' ')})`);
+
+        const pipPaused = await asAdmin(adaSession, `/api/local/admin/users/${pip.pubKeyHex}/suspend`, { reason: 'Threats made to another member at the market' });
+        assert(pipPaused.status === 200 && statusOf(pip) === 'disabled', `Ada pauses Pip (${pipPaused.status} ${statusOf(pip)})`);
+        const held = (a: Answer) => `${a.status} ${a.body?.code}`;
+        const quinMore = await writes(quin, quinDm), pipToUna = await writes(pip, unaDm), pipToBly = await writes(pip, blyDm);
+        assert(held(quinMore) === '403 dm_request_pending' && held(pipToUna) === held(quinMore) && held(pipToBly) === held(quinMore),
+            `Pip's second line, to Una or to Bly, waits on her request as Quin's, who isn't paused, waits on his (${held(pipToUna)} | ${held(pipToBly)} | ${held(quinMore)})`);
+        const requestShape = (a: Answer) => `${shape(a)} ${a.body?.conversation?.request?.state}`;
+        const unaAgain = await openDm(pip, una), blyAgain = await openDm(pip, bly);
+        assert(unaAgain.status === 200 && unaAgain.body?.conversation?.request?.state === 'pending' && requestShape(blyAgain) === requestShape(unaAgain)
+            && unaAgain.body?.conversation?.id === unaDm && blyAgain.body?.conversation?.id === blyDm,
+            `she gets each again with her request pending, the one kept for her alone as Una's (${requestShape(unaAgain)} | ${requestShape(blyAgain)})`);
+        const listed = await get(`/api/messages/conversations/${pip.pubKeyHex}`, pip);
+        const quinWaits = (listed.body?.requests?.conversations ?? []).some((c: any) => c.id === quinDm);
+        const accepted = await post('/api/messages/request', { conversationId: quinDm, decision: 'accept' }, pip);
+        const quinWritesOn = await writes(quin, quinDm), pipAnswers = await writes(pip, quinDm);
+        assert(quinWaits && accepted.status === 200 && accepted.body?.request?.state === 'accepted' && requestState(quinDm) === 'accepted',
+            `Quin's request waits in her list, and she accepts it (${listed.status} ${quinWaits}, ${accepted.status} ${accepted.body?.request?.state})`);
+        assert(quinWritesOn.status === 200 && pipAnswers.status === 200, `Quin writes on, and she answers him (${quinWritesOn.status}, ${pipAnswers.status})`);
+    } finally {
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.dmRequests`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

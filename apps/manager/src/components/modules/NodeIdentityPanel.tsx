@@ -63,7 +63,11 @@ export function NodeIdentityPanel({
     const lookupRef = useRef<AddressLookup | null>(null);
     const searchWrapperRef = useRef<HTMLDivElement>(null);
 
-    // Directory publishing flags
+    // Directory publishing flags. They come from the node config read, and only from an answer that carries them: a private
+    // preview answers anyone it doesn't give the whole config the service area alone, and the defaults below saved back
+    // switched "Share Location & Radius" on again. Until they load, or if they can't, the switches and the schedule are
+    // closed and Save leaves them all out, as it does the contacts.
+    const [directory, setDirectory] = useState<'loading' | 'loaded' | 'failed'>('loading');
     const [publishLocation, setPublishLocation] = useState(true);
     const [publishMembers, setPublishMembers] = useState(true);
     // Off unless the node says the owner turned each on: a contact is published only by an owner's choice.
@@ -141,14 +145,19 @@ export function NodeIdentityPanel({
                             if (!isNaN(parsedLng)) setLng(parsedLng);
                         }
                     }
-                    if (cfg.publishLocation !== undefined) setPublishLocation(Boolean(cfg.publishLocation));
-                    if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
-                    setPublishContactEmail(cfg.publishContactEmail === true);
-                    setPublishContactPhone(cfg.publishContactPhone === true);
-                    if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
-                    if (cfg.directoryPushIntervalHours !== undefined) {
-                        const parsedHours = Number(cfg.directoryPushIntervalHours);
-                        setDirectoryPushIntervalHours(!isNaN(parsedHours) ? parsedHours : 12);
+                    if (cfg.publishLocation !== undefined) {
+                        setPublishLocation(Boolean(cfg.publishLocation));
+                        if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
+                        setPublishContactEmail(cfg.publishContactEmail === true);
+                        setPublishContactPhone(cfg.publishContactPhone === true);
+                        if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
+                        if (cfg.directoryPushIntervalHours !== undefined) {
+                            const parsedHours = Number(cfg.directoryPushIntervalHours);
+                            setDirectoryPushIntervalHours(!isNaN(parsedHours) ? parsedHours : 12);
+                        }
+                        setDirectory('loaded');
+                    } else {
+                        setDirectory('failed');
                     }
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);
@@ -166,9 +175,12 @@ export function NodeIdentityPanel({
                             if (typeof knocks.open === 'number') setOpenKnocks(knocks.open);
                         }
                     }
+                } else if (mounted) {
+                    setDirectory('failed');
                 }
             } catch (err) {
                 console.warn('Failed to load initial node identity config:', err);
+                if (mounted) setDirectory((d) => (d === 'loaded' ? d : 'failed'));
             }
         };
 
@@ -434,12 +446,10 @@ export function NodeIdentityPanel({
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
-                    publishLocation,
-                    publishMembers,
-                    publishContactEmail,
-                    publishContactPhone,
-                    publishHealth,
-                    directoryPushIntervalHours,
+                    // Only settings the node gave: switches that never loaded would write the form's defaults over its own.
+                    ...(directory === 'loaded'
+                        ? { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, directoryPushIntervalHours }
+                        : {}),
                     serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
                         ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
                         : null,
@@ -697,6 +707,11 @@ export function NodeIdentityPanel({
                         people on the global community can find you and ask to join. The rest is up to you below; your contact email and phone
                         are not published unless you turn them on.
                     </p>
+                    {directory === 'failed' && (
+                        <p id="directory-not-loaded" role="status" className="text-[11px] text-amber-300 m-0 leading-normal">
+                            Couldn&apos;t load the directory settings from the node, so Save leaves them as they are. Reload to change them.
+                        </p>
+                    )}
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-nature-950 p-4 rounded-2xl border border-nature-800">
                         <div>
@@ -707,7 +722,8 @@ export function NodeIdentityPanel({
                                 id="directory-push-interval"
                                 value={directoryPushIntervalHours}
                                 onChange={(e) => setDirectoryPushIntervalHours(Number(e.target.value))}
-                                className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500"
+                                disabled={directory !== 'loaded'}
+                                className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             >
                                 <option value={0}>Never (Disabled)</option>
                                 <option value={1}>Every 1 hour</option>
@@ -754,7 +770,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishLocation}
                                     onChange={(e) => setPublishLocation(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>📍 Share Location &amp; Radius</span>
                             </label>
@@ -770,7 +787,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishMembers}
                                     onChange={(e) => setPublishMembers(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>👥 Share Member Count</span>
                             </label>
@@ -786,7 +804,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishContactEmail}
                                     onChange={(e) => setPublishContactEmail(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>📧 Share Email in Directory</span>
                             </label>
@@ -802,7 +821,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishContactPhone}
                                     onChange={(e) => setPublishContactPhone(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>📞 Share Phone in Directory</span>
                             </label>
@@ -818,7 +838,8 @@ export function NodeIdentityPanel({
                                     type="checkbox"
                                     checked={publishHealth}
                                     onChange={(e) => setPublishHealth(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    disabled={directory !== 'loaded'}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>🖥️ Share Node Health &amp; Version</span>
                             </label>

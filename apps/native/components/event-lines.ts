@@ -2,9 +2,10 @@
  * The phone's own sentences an event's page shows from utils/db.ts, in the member's language (words S3l).
  *
  * utils/db.ts signs the RSVP, the cancel, the let-in, the report, the reminder and the event itself with the member's
- * key, so it never reaches the words layer: what rsvpEvent, deletePost, letInToEvent and reportAbuse (_signedRequest),
- * setEventReminder, createPost and updateEvent throw as written is worded again here as word() keys and looked up by the
- * exact sentence where components/EventDetail.tsx, EventExtras.tsx and NewEventModal.tsx show it; _signedRequest's are
+ * key, so it never reaches the words layer: what rsvpEvent, deletePost, setEventReminder and setEventDateCancelled throw
+ * as written is worded again here as word() keys and looked up by the exact sentence where components/EventDetail.tsx,
+ * EventExtras.tsx, EventCard.tsx, EventNextDates.tsx and NewEventModal.tsx show it; the sentences db.ts throws for every
+ * signed send (no community set, no key; createPost's, updateEvent's, letInToEvent's and reportAbuse's) are
  * components/signed-request-lines.ts's, which this hands on to. db.ts is not touched. A node's own words (a refusal's
  * reason) are shown exactly as given (slice S4). utils/__tests__/events-words-render.test.ts holds each to the throw in
  * db.ts it stands for.
@@ -14,21 +15,16 @@ import { UNSIGNABLE_RSVP_MESSAGE } from '../utils/events';
 import { signedRequestWords } from './signed-request-lines';
 
 const FIXED: Readonly<Record<string, WordKey>> = {
-    // rsvpEvent: an id the phone won't sign for, no community set, no key, and a refusal without the node's words.
+    // rsvpEvent: an id the phone won't sign for, and a refusal without the node's words. Its "no community set" and "no
+    // key" (as setEventReminder's, setEventDateCancelled's, updateEvent's and createPost's) are signed-request-lines'.
     [UNSIGNABLE_RSVP_MESSAGE]: UNSIGNABLE_RSVP_MESSAGE,
-    'You are currently offline.': word('You are currently offline.'),
-    'No identity found.': word('No identity found.'),
     'Could not save your RSVP': word('Could not save your RSVP'),
-    // setEventReminder: the same two as rsvpEvent, and a refusal without the node's words.
+    // setEventReminder: a refusal without the node's words.
     'Could not save your reminder': word('Could not save your reminder'),
-    // createPost: no community set (no key is rsvpEvent's), a refusal without the node's words, and a send that failed
-    // without a reason. updateEvent throws rsvpEvent's "No identity found." and _signedRequest's.
-    'You are currently offline. Please connect to a BeanPool Node to broadcast your post.': word('You are currently offline. Please connect to a BeanPool Node to broadcast your post.'),
-    'Network request failed or server rejected the post.': word('Network request failed or server rejected the post.'),
-    'Network request failed. You must be connected to a node to post.': word('Network request failed. You must be connected to a node to post.'),
-    // deletePost: no community set, no key, and a refusal without the node's words (inside "Offline or …", below).
+    // setEventDateCancelled (a repeating event's "Cancel this date"): a refusal without the node's words.
+    'Could not change that date': word('Could not change that date'),
+    // deletePost: no community set, and a refusal without the node's words (inside "Offline or …", below).
     'Action requires internet connection.': word('Action requires internet connection.'),
-    'Not logged in. Identity required.': word('Not logged in. Identity required.'),
     'Failed to remove post on Node': word('Failed to remove post on Node'),
 };
 
@@ -38,6 +34,7 @@ export function eventLineWords(english: string): string {
     // deletePost wraps every failure of its send: the reason is db.ts's own sentence, the node's words, or the platform's.
     const unreachable = english.match(/^Offline or anchor node unreachable: ([\s\S]*)$/);
     if (unreachable) return t('Offline or anchor node unreachable: {reason}', { reason: eventLineWords(unreachable[1]) });
-    // _signedRequest (letInToEvent, reportAbuse, updateEvent): its own sentences, or what it doesn't know as given.
+    // db.ts's sentences for every signed send (createPost, updateEvent, letInToEvent, reportAbuse, …), or what it doesn't
+    // know as given.
     return signedRequestWords(english);
 }

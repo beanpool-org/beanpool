@@ -48,7 +48,7 @@ export function SampleHeader() {
     return (
         <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="sample-header">
             <ExampleChip />
-            <span className="min-w-0 text-sm font-bold text-nature-700 dark:text-nature-200">{LOCAL_COMMUNITY_STRIP.header}</span>
+            <span className="min-w-0 text-sm font-bold text-nature-700 dark:text-nature-200">{t(LOCAL_COMMUNITY_STRIP.header)}</span>
         </div>
     );
 }

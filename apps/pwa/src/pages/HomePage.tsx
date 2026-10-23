@@ -67,8 +67,8 @@ import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
 } from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
-import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleLabel } from '../lib/example-listings';
-import { NO_BEANS_TERMS_TEXT, PLACE_AFTER_JOIN, VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
+import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
+import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { CardMenu, HomeCard, HomeLine, HomeMore } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
@@ -76,7 +76,9 @@ import { OneWayBackCard } from '../components/OneWayBack';
 import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult } from '@beanpool/core';
+import {
+    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
+} from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
@@ -117,6 +119,24 @@ export const HOME_NOT_ON_NODE = HOME_WORDS.notOnNode;
 /** Said politely once a card is hidden: where it went, and how it comes back. */
 /** Said politely when Done on the last tip takes the Tips card away. */
 export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
+/**
+ * The lines lib/ (home-cards.ts, home-layout.ts) and core (the town search's) keep as word() keys, in the member's language
+ * where Home draws them.
+ */
+const LIB_LINES = {
+    skyNoPlace: SKY_NO_PLACE_LINE, fewerCards: FEWER_CARDS_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
+    typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN, startCard: START_CARD_WORDS,
+    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
+} as const;
+/** Core's FIND_TOWN_SEARCH_WORDS as the town search draws them, in the member's language (made where drawn). */
+const findTownWords = (): AddressSearchWords => ({
+    label: t(FIND_TOWN_SEARCH_WORDS.label),
+    placeholder: t(FIND_TOWN_SEARCH_WORDS.placeholder),
+    unavailable: t(FIND_TOWN_SEARCH_WORDS.unavailable),
+    noMatches: t(FIND_TOWN_SEARCH_WORDS.noMatches),
+    source: t(FIND_TOWN_SEARCH_WORDS.source),
+    pickLabel: FIND_TOWN_SEARCH_WORDS.pickLabel,
+});
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -742,7 +762,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         takenSearch.current = saveSearch;
         onSaveSearchTaken?.();
         setSaveNote(null);
-        if (answer.welcome || !answer.me || visitor) { noteSaveSearch(SAVE_SEARCH_NOT_NOW); return; }
+        if (answer.welcome || !answer.me || visitor) { noteSaveSearch(t(LIB_LINES.saveSearchNotNow)); return; }
         const state = saveSearchState(drawnBase(), saveSearch);
         if (state !== 'add') { noteSaveSearch(saveSearchLine(state, saveSearch.q)!); return; }
         pageRef.current?.scrollIntoView?.({ block: 'start' });
@@ -1080,7 +1100,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const step = nextTip(tipsRef.current, tipsList, localDay());
         if (!step.view) focusAround('tips');
         keepTips(step.record);
-        setLive(step.view ? step.view.tip.text : t(HOME_WORDS.tipsDone));
+        setLive(step.view ? t(step.view.tip.text) : t(HOME_WORDS.tipsDone));
     }
 
     // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
@@ -1134,7 +1154,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     function marketLine(item: HomeMarketItem, testId: string): ReactNode {
         const photo = resolveImageUrl(item.photoUrl);
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
-        const price = !beansOn ? (isVisitor ? NO_BEANS_TERMS_TEXT : null)
+        const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
             : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
         const km = distanceText(item.distanceKm);
         const kind = item.type === 'need' ? 'NEED' : 'OFFER';
@@ -1223,19 +1243,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 {pointProblem && <p role="alert" className="m-0 mt-1 text-xs text-nature-800 dark:text-nature-100">{pointProblem}</p>}
                                 {!townOpen && !townName && (
                                     <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town" className={TOWN_LINK}>
-                                        {TYPE_YOUR_TOWN}
+                                        {t(LIB_LINES.typeYourTown)}
                                     </button>
                                 )}
                             </div>
                         )}
                         {f.point !== null && !townName && !townOpen && (
                             <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town-instead" className={TOWN_LINK}>
-                                {NOT_HERE_TYPE_YOUR_TOWN}
+                                {t(LIB_LINES.notHereTypeYourTown)}
                             </button>
                         )}
                         {townOpen && (
                             <div className="mt-2">
-                                <AddressSearch words={FIND_TOWN_SEARCH_WORDS} onPick={pickTown} />
+                                <AddressSearch words={findTownWords()} onPick={pickTown} />
                                 <button type="button" onClick={() => setTownOpen(false)} data-testid="home-town-cancel" className={TOWN_LINK}
                                     aria-label={townName ? t('Cancel, and keep near {town}', { town: townName }) : t('Cancel the town search')}>
                                     {t('Cancel')}
@@ -1280,7 +1300,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} menu={undefined}>
-                        <p data-testid="home-start-words" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{START_CARD_WORDS}</p>
+                        <p data-testid="home-start-words" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{t(LIB_LINES.startCard)}</p>
                         <div className="flex flex-wrap items-center gap-2">
                             <button type="button" data-testid="home-start-look"
                                 onClick={() => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); }}
@@ -1303,7 +1323,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} title={tipsCaption(v)}>
-                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{v.tip.text}</p>
+                        <p data-testid="home-tip-text" className="m-0 mb-2 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{t(v.tip.text)}</p>
                         <div className="flex flex-wrap gap-2">
                             {/* The same element on every tip, so focus stays on it after a tap. */}
                             <button type="button" onClick={tipsNext} aria-label={tipsNextLabel(v)} data-testid="home-tips-next"
@@ -1317,9 +1337,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 </button>
                             )}
                         </div>
-                        <button type="button" onClick={() => tipsDontShow()} aria-label={TIPS_DONT_SHOW_LABEL} data-testid="home-tips-dont-show"
+                        <button type="button" onClick={() => tipsDontShow()} aria-label={t(LIB_LINES.tipsDontShowLabel)} data-testid="home-tips-dont-show"
                             className="w-full min-h-[44px] mt-1 px-2 bg-transparent border-0 rounded-lg text-sm font-bold text-nature-700 dark:text-nature-200 whitespace-normal break-words cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                            {TIPS_DONT_SHOW}
+                            {t(LIB_LINES.tipsDontShow)}
                         </button>
                     </HomeCard>
                 );
@@ -1375,7 +1395,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard key={id} {...common} title={ev.radiusKm ? t('{title} · within {km} km', { title, km: ev.radiusKm }) : title}>
                         {ev.items.map(item => {
                             // An online event has no place and no distance (DESIGN-event-times §4).
-                            const where = item.online ? t('Online') : item.place ?? (isVisitor ? PLACE_AFTER_JOIN : null);
+                            const where = item.online ? t('Online') : item.place ?? (isVisitor ? t(VISITOR_WORDS.placeAfterJoin) : null);
                             const rsvp = item.rsvp === 'going' ? t('Going') : item.rsvp === 'interested' ? t('Interested') : null;
                             const km = item.online ? null : distanceText(item.distanceKm);
                             const when = homeEventWhen(item);
@@ -1414,22 +1434,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         </button>
                     )}>
                         {items.map(item => marketLine(item, 'home-market-item'))}
-                        {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{VISITOR_LIST_NOTE}</p>}
+                        {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{t(VISITOR_WORDS.listNote)}</p>}
                         {examples && (
                             <div data-testid="home-examples" className="mt-2">
-                                <p className="m-0 mb-1 text-xs font-bold text-nature-700 dark:text-nature-200">{EXAMPLES_HEADING}</p>
+                                <p className="m-0 mb-1 text-xs font-bold text-nature-700 dark:text-nature-200">{t(EXAMPLE_WORDS.heading)}</p>
                                 {EXAMPLE_LISTINGS.slice(0, 2).map(ex => (
                                     <p key={ex.key} data-testid="home-example" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 flex items-start gap-2 min-w-0">
                                         {/* "Example" first for a screen reader (lib/example-listings.ts exampleLabel). */}
                                         <span className="sr-only">{exampleLabel(ex)}</span>
                                         <span aria-hidden="true" className="shrink-0">{ex.emoji}</span>
                                         <span aria-hidden="true" className="min-w-0 break-words">
-                                            <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white">{EXAMPLE_BADGE}</span>
-                                            {ex.title}
+                                            <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white">{t(EXAMPLE_WORDS.badge)}</span>
+                                            {t(ex.title)}
                                         </span>
                                     </p>
                                 ))}
-                                <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{EXAMPLES_NOTE}</p>
+                                <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{t(EXAMPLE_WORDS.note)}</p>
                             </div>
                         )}
                         <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
@@ -1538,7 +1558,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common} title={communityName(cm, profile)}>
                         <p className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">
-                            {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : `${communityLine(cm, profile)}.`}
+                            {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : t('{line}.', { line: communityLine(cm, profile) })}
                         </p>
                         {!isVisitor && (
                             <div className="flex flex-wrap justify-end gap-x-4">
@@ -1559,7 +1579,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={card.id} {...common}>
                         <p data-testid="home-search-words" className="m-0 mb-1 text-sm font-semibold text-nature-900 dark:text-white break-words">{first}</p>
-                        {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{SEARCH_OFFLINE_LINE}</p>}
+                        {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{t(LIB_LINES.searchOffline)}</p>}
                         {found && !found.items.length && <p data-testid="home-search-empty" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{searchEmptyLine(q, found.km)}</p>}
                         {found?.items.map(item => marketLine(item, 'home-search-item'))}
                         {found?.more && (
@@ -1601,7 +1621,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // A saved search's row is named by its words (cardRowName), so two searches read as two rows.
                 name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
                 label: cardLabelName(c, profile),
-                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? SKY_NO_PLACE_LINE : t('Nothing to show now'),
+                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? t(LIB_LINES.skyNoPlace) : t('Nothing to show now'),
                 hasSettings: !!homeCardType(c.type)?.readSettings,
             }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
@@ -1636,7 +1656,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     {renderCard(card, i)}
                     {i === 0 && fewerOpen && !isVisitor && (
                         <p data-testid="home-fewer" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                            <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
+                            <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.fewerCards)}</span>
                             <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
                                 className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
@@ -1645,7 +1665,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     )}
                     {i === 0 && hintOpen && !isVisitor && !startUp && (
                         <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                            <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
+                            <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.hint)}</span>
                             <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕

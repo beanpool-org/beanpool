@@ -12,6 +12,7 @@ import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
 import { amountRefusalWords, ANY_DECIMALS, formatNumber, inCapitalsOf, isAmbiguousAmount, parseAmount, t, word, type WordKey } from '@beanpool/core';
+import { signedRequestWords } from '../components/signed-request-lines';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
 // Need (a tender the treasury pays for, e.g. tending the flock). Mirrors propose-project.tsx.
@@ -144,7 +145,7 @@ export default function TreasuryPostScreen() {
                 [{ text: t('OK'), onPress: () => router.back() }]
             );
         } catch (e: any) {
-            Alert.alert(isNeed ? t('Could not post need') : t('Could not post offer'), e.message || t('Something went wrong.'));
+            Alert.alert(isNeed ? t('Could not post need') : t('Could not post offer'), e.message ? signedRequestWords(e.message) : t('Something went wrong.'));
         } finally {
             setSubmitting(false);
             submittingRef.current = false;

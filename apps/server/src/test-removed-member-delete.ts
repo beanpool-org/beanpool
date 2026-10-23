@@ -210,11 +210,19 @@ async function main(): Promise<void> {
 
     const alice = makeMember('AliceRD', 200);
     const bob = makeMember('BobRD');
-    /** A member with earned standing, as one who has traded has, so they may propose a Decision (one open at a time each). */
+    /**
+     * A member who has traded (with a partner of their own), so they may propose a Decision (one open at a time each). Both
+     * joined two months ago: a trade between two members who joined today is an insular cluster of newcomers, which the
+     * wash rule counts for nothing.
+     */
     let proposers = 0;
     const proposer = (): Id => {
         const m = makeMember(`ProposerRD${++proposers}`, 0);
-        db.prepare('UPDATE members SET earned_credit = 50 WHERE public_key = ?').run(m.pk);
+        const partner = makeMember(`PartnerRD${proposers}`, 0);
+        db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(new Date(Date.now() - 60 * 86400_000).toISOString(), m.pk, partner.pk);
+        const at = new Date().toISOString();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                    VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
     const proposeReinstate = (subject: string) => call('POST', '/api/commons/decisions', proposer(),

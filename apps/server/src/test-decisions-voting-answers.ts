@@ -208,6 +208,8 @@ async function run() {
     const noTrader = makeMember('NoTrader');
     completedTrade(trader, partner1, 10);
     completedTrade(partner2, trader, 6);
+    // The proposers' standing is a trade; the earned_credit badge makeMember gives everyone is none (badges unlock nothing).
+    completedTrade(proposerA, proposerB, 5);
 
     const poolA = createDecision({ authorPubkey: proposerA, title: 'Grant A', description: 'Seed money for the eggs', touches: 'pool', effect: 'grant_enterprise', subject: enterprise, params: { amount: 10 } });
     const poolB = createDecision({ authorPubkey: proposerB, title: 'Grant B', description: 'Feed for the winter', touches: 'pool', effect: 'grant_enterprise', subject: enterprise, params: { amount: 10 } });
@@ -217,7 +219,8 @@ async function run() {
         `a member with no completed trade is told plainly (got "${noTradeVote.error}")`);
     assert((decisionsEngine as any).NO_TRADE_POOL_VOTE_ERROR === noTradeVote.error, 'the message is the exported constant the apps mirror');
     const noTradeMemberVote = castDecisionVote(
-        createDecision({ authorPubkey: noTrader, title: 'Freeze someone', description: 'Member vote, not money', touches: 'member', effect: 'freeze_credit', subject: makeMember('FreezeTarget') }).id,
+        // Proposed by the owner: a member with no trade can't propose (a badge is no standing), but votes on what others do.
+        createDecision({ authorPubkey: owner, title: 'Freeze someone', description: 'Member vote, not money', touches: 'member', effect: 'freeze_credit', subject: makeMember('FreezeTarget') }).id,
         noTrader, true);
     assert(noTradeMemberVote.success, 'the same member still votes one-member-one-vote on member Decisions');
 
@@ -240,12 +243,13 @@ async function run() {
         'a no-trade member is told 0 credits and no trade, so the card can say so before they try');
     const listUnsigned = await callRouter(commons, 'GET', '/api/commons/decisions');
     assert(listUnsigned.body.myPoolVoting === null, 'an unsigned caller gets no voice credits');
-    // Who may propose, served so the apps gate on the node's rule: earned standing, or a node admin.
+    // Who may propose, served so the apps gate on the node's rule: a completed trade, or a node admin.
     const noStanding = makeMember('NoStanding', { earnedCredit: 0 });
     const bareAdmin = makeMember('BareAdmin', { earnedCredit: 0 });
     grantNodeRole(bareAdmin, 'admin', owner);
-    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: trader })).body.canPropose === true, 'a member with earned standing may propose');
-    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: noStanding })).body.canPropose === false, 'a member with no earned standing may not');
+    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: trader })).body.canPropose === true, 'a member with a completed trade may propose');
+    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: noStanding })).body.canPropose === false, 'a member with no completed trade may not');
+    assert(listForNoTrader.body.canPropose === false, 'nor may a member with a trust badge (earned_credit 100) and no trade: badges unlock nothing');
     assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: bareAdmin })).body.canPropose === true, 'a node admin with no trades may');
     assert(listUnsigned.body.canPropose === false, 'an unsigned caller may not');
 
@@ -303,6 +307,7 @@ async function run() {
     const jProposer = makeMember('JProposer');
     const oldHand = makeMember('OldHand');
     const jSubject = makeMember('JSubject');
+    completedTrade(jProposer, oldHand, 5); // both propose below: a trade is their standing
     const jDecision = createDecision({ authorPubkey: jProposer, title: 'Freeze JSubject', description: 'Late invitees test', touches: 'member', effect: 'freeze_credit', subject: jSubject });
     const newcomer = makeMember('Newcomer', { joinedAt: new Date(Date.now() + 1000).toISOString() });
     const lateVote = castDecisionVote(jDecision.id, newcomer, true);
@@ -352,6 +357,8 @@ async function run() {
     assert(getActiveMembersCount30d() === 12, 'back to 12 without it');
 
     const kSubject = makeMember('KSubject');
+    // The two proposers below trade for their standing. Both are already active, so the electorate stays 12.
+    completedTrade(signedOnly[1], signedOnly[2], 5);
     const kDecision = createDecision({ authorPubkey: signedOnly[1], title: 'Suspend KSubject', description: 'Turnout test', touches: 'member', effect: 'suspend_member', subject: kSubject });
     const kTally = tallyDecision(kDecision.id);
     assert(kTally.electorate === 12 && kTally.quorumRatio === 0.3 && kTally.quorumRequired === 4,
@@ -364,6 +371,7 @@ async function run() {
     const rTally = tallyDecision(removal.id);
     assert(rTally.quorumRatio === 0.25 && rTally.quorumRequired === 3, `removal stays at 25% (ceil(0.25 x 12) = 3; got ${rTally.quorumRequired})`);
     quietEveryone();
+    completedTrade(signedOnly[3], signedOnly[5], 5); // the proposer's standing; two active is still under the floor of 3
     const tiny = createDecision({ authorPubkey: signedOnly[3], title: 'Suspend again', description: 'Floor test', touches: 'member', effect: 'suspend_member', subject: kSubject });
     assert(tallyDecision(tiny.id).quorumRequired === 3, 'never fewer than 3');
     // A vote is itself signed activity.
@@ -381,6 +389,7 @@ async function run() {
     console.log('\n--- L. Emergency suspension ---');
     quietEveryone();
     const voters = Array.from({ length: 5 }, (_, i) => makeMember(`LVoter${i}`, { lastActiveAt: new Date().toISOString() }));
+    completedTrade(voters[0], voters[1], 5); // voters[0] proposes below: a trade is their standing (both already active)
     const troll = makeMember('Troll', { lastActiveAt: new Date().toISOString() });
     // Troll is an admin: each suspension that does not hold must give that role back exactly.
     grantNodeRole(troll, 'admin', owner);

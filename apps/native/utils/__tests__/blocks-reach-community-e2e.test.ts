@@ -254,6 +254,44 @@ describe('a member who is not yet a member there, against a real community node'
     }, START_MS);
 });
 
+describe('a member the community removes and a vote brings back, against a real community node (review 4354749552)', () => {
+    it('her list went with the removal: once the phone has heard it, the next sync after she is back puts every block back', async () => {
+        await control('limiters');
+        // Names no other test here uses: the fixture skips a member row whose name is taken (INSERT OR IGNORE), and the list
+        // form then skips the key.
+        const [ria, ned, ivy] = await Promise.all(['Ria', 'Ned', 'Ivy'].map((n) => draftIdentity(n)));
+        await control('members', { members: [ria, ned, ivy].map((m) => ({ key: m.publicKey, callsign: m.callsign })) });
+        const phone = await phoneWith(ria, [ned.publicKey]);
+        await phone.syncBlocks();
+        expect(await blockedAtNode(ria.publicKey)).toEqual([ned.publicKey]);
+
+        // A moderator removes her (adminPruneUser): her list goes with the account, and her key signs nothing here.
+        await control('prune', { key: ria.publicKey });
+        expect(await blockedAtNode(ria.publicKey)).toEqual([]);
+        // The phone's own check of its community (NodeStatusContext) reads the node's answer as 'closed', and says so.
+        const { fetchMembership } = await import('../membership-probe');
+        const { membershipAnswerOf } = await import('../membership-answer');
+        expect(await membershipAnswerOf(await fetchMembership(URL_BASE, ria))).toEqual({ kind: 'closed' });
+        await phone.communityKeepsNoBlocks(ria.publicKey, URL_BASE);
+        // A block she makes meanwhile is refused as a closed account's, and holds nothing back for a day.
+        const refused = await signedPost(URL_BASE, '/api/blocks', { targetPubkey: ivy.publicKey }, ria);
+        expect([refused.status, (await refused.json()).code]).toEqual([403, 'account_closed']);
+        sent.length = 0;
+        expect(await phone.blockUser(ivy.publicKey)).toBe(true);
+        await phone.blockSyncsEndedForTests();
+        expect(asSent()).toEqual(['POST /api/blocks 403']);
+
+        // A vote brings her back (decisions-engine.ts reinstate_member: the same row, active again); the next sync, the
+        // same day, puts both on the node's list.
+        await control('status', { key: ria.publicKey, status: 'active' });
+        await control('limiters');
+        sent.length = 0;
+        await phone.syncBlocks();
+        expect(asSent()).toEqual(['POST /api/blocks 200']);
+        expect(await blockedAtNode(ria.publicKey)).toEqual([ned.publicKey, ivy.publicKey].sort());
+    }, START_MS);
+});
+
 describe('a first sync with many keys the node has no row for, against a real community node', () => {
     it('takes at most 30 of the member\'s 120 requests a minute: none is answered 429, and her own next read is answered', async () => {
         await control('limiters');

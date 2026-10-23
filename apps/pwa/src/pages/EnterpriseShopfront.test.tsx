@@ -511,6 +511,38 @@ describe("the keepers' Manage tab", () => {
             expect(byId('manage-face-save')).not.toBeDisabled();
         });
 
+        it('a picture saved before its shop change got no answer shows as the node holds it, read again; a retry sends the shop alone', async () => {
+            const PICKED = 'data:image/jpeg;base64,/9j/AAAA';
+            const HELD = `/api/treasury/${ENT}/avatar?v=2`;
+            vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue(PICKED);
+            let shopTries = 0;
+            const opts: NodeOpts = {
+                write: (method, path, body) => {
+                    if (path.endsWith('/profile')) opts.detail = leadsView({ avatar: HELD });
+                    if (path.endsWith('/shop') && shopTries++ === 0) return 'down';
+                    return okWrites(method, path, body);
+                },
+            };
+            await open(opts);
+            const panel = await manage();
+            fireEvent.change(within(panel).getByTestId('manage-face-logo-input'), { target: { files: [new File(['x'], 'logo.jpg', { type: 'image/jpeg' })] } });
+            await waitFor(() => expect(byId('manage-face-logo-image')?.getAttribute('src')).toBe(PICKED));
+            fireEvent.change(byId('manage-face-how')!, { target: { value: 'Saturdays only.' } });
+            fireEvent.click(byId('manage-face-save')!);
+            await waitFor(() => expect(byId('manage-face-error')?.textContent).toBe("Your community couldn't be reached. Try again."));
+            await waitFor(() => expect(byId('manage-face-logo-image')?.getAttribute('src')).toBe(HELD));
+            expect(reads().filter((r) => r === `/api/treasury/${ENT}`)).toHaveLength(2);
+            expect(byId('manage-face-saved')).toBeNull();
+            expect((byId('manage-face-how') as HTMLTextAreaElement).value).toBe('Saturdays only.');
+            fireEvent.click(byId('manage-face-save')!);
+            await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
+            expect(writes()).toEqual([
+                { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } },
+                { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { howToDeal: 'Saturdays only.' } },
+                { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { howToDeal: 'Saturdays only.' } },
+            ]);
+        });
+
         it('About says its limit; a node admin who keeps none of it changes the face but not the shop', async () => {
             await open({ detail: membersView({ isLeadOrSoleKeeperOrAdmin: true }), keeperOf: [] });
             const panel = await manage();

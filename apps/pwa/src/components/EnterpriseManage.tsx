@@ -60,6 +60,7 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
     lead: boolean;
     /** A keeper, who may change its shop (a node admin who keeps none of it may not). */
     shopEditable: boolean;
+    /** Reads the enterprise again: after a Save, and after one whose profile went but whose shop change didn't. */
     onSaved: () => void;
 }) {
     const id = useId();
@@ -94,9 +95,11 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
         setSaving(true);
         setSaved(false);
         setError(null);
+        let profileSaved = false;
         try {
             if (Object.keys(changes.profile).length > 0) {
                 await changeEnterpriseFace(treasury, changes.profile);
+                profileSaved = true;
                 // Saved on the node: a retry after a refused shop change does not send these again.
                 setWas((w) => ({ ...w, name: lead ? form.name : w.name, purpose: lead ? form.purpose : w.purpose, about: form.about }));
                 setForm((f) => ({ ...f, avatar: undefined }));
@@ -109,6 +112,8 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
             onSaved();
         } catch (err) {
             setError(refusalWords(err));
+            // Its profile was saved before the shop change failed: read it again, so the picture and its page show what the node holds.
+            if (profileSaved) onSaved();
         } finally {
             setSaving(false);
         }

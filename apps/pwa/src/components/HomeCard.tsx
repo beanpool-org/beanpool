@@ -25,9 +25,14 @@ interface MenuProps {
     /** Settings…, on a type that has them. */
     onSettings?: () => void;
     onMove: (direction: 'up' | 'down') => void;
+    /**
+     * The cards stand side by side (a wide screen's grid): the moves say Move earlier · Move later, the same action in
+     * honest words, since "up" can be "left" there (DESIGN-home-wide-and-content-fable.md §1).
+     */
+    across?: boolean;
 }
 
-export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove }: MenuProps) {
+export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemove, onSettings, onMove, across }: MenuProps) {
     const said = label ?? title;
     const [open, setOpen] = useState(false);
     const button = useRef<HTMLButtonElement | null>(null);
@@ -90,8 +95,8 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
                     {/* The card goes with its "…": the page gives focus to the nearest card left (pages/HomePage.tsx). */}
                     {onSettings && <button type="button" className={item} data-testid="home-menu-settings" onClick={() => { close(false); onSettings(); }}>{t('Settings…')}</button>}
                     {onHide && !onRemove && <button type="button" className={item} onClick={() => { close(false); onHide(); }}>{t('Hide')}</button>}
-                    <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>{t('Move up')}</button>
-                    <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>{t('Move down')}</button>
+                    <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>{across ? t('Move earlier') : t('Move up')}</button>
+                    <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>{across ? t('Move later') : t('Move down')}</button>
                     {onRemove && <button type="button" className={item} data-testid="home-menu-remove" aria-label={t('Remove {card} from Home', { card: said })} onClick={() => { close(false); onRemove(); }}>{t('Remove')}</button>}
                 </div>
             )}

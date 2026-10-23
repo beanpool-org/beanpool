@@ -477,3 +477,28 @@ export function cardsToAsk(
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
     });
 }
+
+// ── The columns on a wide screen (DESIGN-home-wide-and-content-fable.md D1, slice W2) ─────────────────────────────
+
+/** A column is never narrower than the phone's floor, which every card's body is proven at (320 dp × 1.3)… */
+export const HOME_COLUMN_MIN = 320;
+/**
+ * …nor wider than 576 px (D1): the old one column's box (`max-w-xl`), not its cards, which were 544 px inside the box's
+ * 16 px gutters, as the App.tsx banners above Home still are. So one column on a page over 576 px (a 577–687 px window,
+ * or 833–943 px with the sidebar) is up to 32 px wider than before (review of #2411).
+ */
+export const HOME_COLUMN_MAX = 576;
+export const HOME_COLUMN_GAP = 16;
+
+/**
+ * How many columns the cards stand in on a page `width` px wide inside its gutters: as many as fit at 320 px or more,
+ * up to `most` (Auto is three), so two from 656 px and three from 992 px. The page's width, never the window's: the
+ * sidebar takes 256 px of it from 768 px. Not measured yet, or measured as nothing: one, as a phone draws it.
+ */
+export function columnsFor(width: number, most = 3): number {
+    if (!Number.isFinite(width)) return 1;
+    return Math.max(1, Math.min(most, Math.floor((width + HOME_COLUMN_GAP) / (HOME_COLUMN_MIN + HOME_COLUMN_GAP))));
+}
+
+/** The widest the grid of `cols` columns is drawn, gaps included: what the notes and the Join card above it line up with. */
+export const gridWidth = (cols: number) => cols * HOME_COLUMN_MAX + (cols - 1) * HOME_COLUMN_GAP;

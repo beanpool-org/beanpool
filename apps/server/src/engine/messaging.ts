@@ -32,7 +32,7 @@ import { unmutedRecipients } from './chat-mutes.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './members.js';
 import { hasBlocked } from './member-blocks.js';
 import {
-    withheldConversationOwnedBy, withheldConversationOfPair, openWithheldConversation, dropWithheldConversation,
+    withheldConversationOwnedBy, withheldConversationOf, withheldConversationOfPair, openWithheldConversation, dropWithheldConversation,
     withheldLine, ownWithheldLine, storeWithheldLine, editWithheldLine, setWithheldLineMetadata, tombstoneWithheldLine,
     withheldLineMessage, type WithheldConversation,
     overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
@@ -84,11 +84,16 @@ export class MessagingError extends Error {
  * (assertMayOpenConversation). A group's chat refuses them a line, an edit and a reaction under its write rule
  * (assertCanWriteInGroupChat) and taking their own line down (deleteOwnMessage), as before; an event's and an
  * enterprise's chat each refuse them under their own rule.
+ *
+ * A visitor's row paused (is_visitor: someone a member wrote to, who never joined) writes nothing, as an admin's suspension
+ * had it before it was a pause: a visitor can only ever answer in its direct conversations, so a pause that let it would
+ * take nothing from it (PR #2397 review).
  */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new MessagingError('Member not found');
+    if (member.status === 'disabled' && member.is_visitor) throw new MessagingError(word('Account is disabled'));
     if (member.status === 'pruned') throw new MessagingError(word('Account has been pruned'));
     // The old key of a member being re-keyed (a lost or stolen phone): its row is 'suspended', which the lines above
     // let write, so it would go on messaging people as them.
@@ -260,12 +265,19 @@ function findDirectConversationRow(a: string, b: string): any {
  * (an app asks before it writes). A visitor is refused a new one in the words a key with no row is refused in, so it
  * makes no row for anyone; a paused member is told why. Federation's relay opens one for a member of another community,
  * and the node one for a deal, by calling createConversation itself.
+ *
+ * A paused member is in one they opened with someone who had blocked them, kept for them alone (engine/withheld-lines.ts):
+ * their list shows it as any DM, and asked for again it answers as a real one does, with the same one, still withheld.
+ * Refused, it would tell them of the block (PR #2397 review). Only their own: one the other opened with them, kept for
+ * that person, is no conversation they have, and asking for it is asking for a new one.
  */
 export function assertMayOpenConversation(createdBy: string, participants: string[]): void {
     const visitor = isLiveVisitor(db, createdBy);
     const paused = !visitor && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(createdBy) as { status: string | null } | undefined)?.status === 'disabled';
     if (!visitor && !paused) return;
     if (findDirectConversationRow(participants[0], participants[1])) return;
+    const other = participants.find(p => p !== createdBy);
+    if (paused && other && withheldConversationOf(createdBy, other)) return;
     if (visitor) throw new MessagingError(VISITOR_SEND_REFUSAL);
     throw new MessagingError(word('Your account here is paused for now, so you can’t start a new conversation. You can still answer the ones you’re in.'), 403, 'paused');
 }

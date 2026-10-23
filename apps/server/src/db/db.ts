@@ -1090,8 +1090,11 @@ export function rebuildSystemLogsCheck(d: Database.Database): boolean {
 /**
  * Rebuilds member_tool_state when its CHECK on `body` is the 64 KB of before, not the 128 KB any tool may now name
  * (engine/tool-state.ts TOOL_STATE_CEILING_BYTES: the Tool shed's, Marty, 23 Oct 2026), keeping every row and its stamp;
- * true when it rebuilt. Idempotent. It has no index or trigger of its own; foreign keys are off on this database, so
- * nothing is checked or cascaded while the table is briefly missing. Each tool's own bound stays the engine's.
+ * true when it rebuilt. Idempotent. Its replication watermark (a plain table's: idx_member_tool_state_updated_at and the
+ * two triggers that stamp updated_at) is dropped with the old table and made again by schema.sql and stampPlainTables,
+ * so this must run before them in initSchema, as it does (test-tool-state-check-migration.ts checks the boot leaves all
+ * three and a write still stamped). Foreign keys are off on this database, so nothing is checked or cascaded while the
+ * table is briefly missing. Each tool's own bound stays the engine's.
  */
 export function rebuildToolStateBodyCheck(d: Database.Database): boolean {
     const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='member_tool_state'").get() as { sql?: string } | undefined;
@@ -1769,7 +1772,8 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate system_logs for the AGENT category:', err?.message || err);
     }
     // member_tool_state: its CHECK lets in 128 KB, the most a tool may name (a table from before has 64 KB, so the Tool
-    // shed's bigger copy would fail to write). Before schema.sql, as the logs above.
+    // shed's bigger copy would fail to write). Before schema.sql, as the logs above, and before stampPlainTables, which
+    // makes its watermark index and triggers again after the rebuild drops them.
     try {
         if (rebuildToolStateBodyCheck(db)) console.log('[DB] ✅ Migrated member_tool_state CHECK constraint to let in 128 KB copies');
     } catch (err: any) {

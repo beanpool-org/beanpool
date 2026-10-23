@@ -584,8 +584,19 @@ async function main(): Promise<void> {
     g = readShape();
     assert(g.settings.wordsDoor?.lock?.code === 'ledger_moved', "and reads the ledger's lock from then on");
     await refusedClean('who can join where the open door is set and shut (ledger_moved)', () => change({ join: 'members' }), 409, 'ledger_moved', lockWhy(g, 'join'));
+    g = readShape();
+    assert(g.settings.beans.configured === false && g.settings.beans.value === true && g.settings.beans.lock?.code === 'ledger_moved',
+        `the global kind's Beans set off, run all the same once the ledger has moved (${JSON.stringify({ configured: g.settings.beans.configured, value: g.settings.beans.value })})`);
+    mark = logMark(); nMark = noticeMark(); aMark = alerts.length;
     const beansOnGlobal = await change({ beans: true });
     assert(beansOnGlobal.status === 200, `Beans on, once they have moved anyway, is no lock's to refuse (${show(beansOnGlobal)})`);
+    // Beans ran before and run after: members are told nothing, as for the 12-words door behind a shut door (#2415 review,
+    // "for the maintainer"). What was set did change, so the owners' line and alert say so.
+    lines = linesSince(mark);
+    assert(beansOnGlobal.body?.told === 'nobody' && noticeMark() === nMark && np.getConfiguredSwitches().beans === true && np.getNodeFeatures().beans,
+        `so no member is told "Beans are on" of Beans already running (${show(beansOnGlobal)})`);
+    assert(lines.length === 1 && lines[0].setting === 'beans' && lines[0].old_value === 'off' && lines[0].new_value === 'on' && alerts.length === aMark + 1,
+        `and it is logged, and the owners alerted, as the change to what is set it is (${JSON.stringify(lines)})`);
     // The setup the boot warning tells an operator to use (node-profile.ts: "turn invites back on with nodeProfile.invites").
     setOverrideRow('invites', true);
     g = readShape();

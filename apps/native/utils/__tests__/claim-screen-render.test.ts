@@ -464,6 +464,8 @@ describe('the QR on a phone with no account yet (Dax, 23 Oct): a way on, not a d
     it('with an account, the claim done: the claim kept for it is taken off the phone', async () => {
         nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
         const host = await render();
+        // The screen up with the account took it off already (below): this is the claim's own.
+        storage().removeItem.mockClear();
         await act(async () => { button(host, 'Claim and become owner')!.click(); });
         await act(async () => {});
         expect(host.textContent).toContain('You own Beans Town');
@@ -477,6 +479,7 @@ describe('the QR on a phone with no account yet (Dax, 23 Oct): a way on, not a d
             vi.mocked(claimCommunity).mockResolvedValueOnce({ kind } as Awaited<ReturnType<typeof claimCommunity>>);
             nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
             const host = await render();
+            storage().removeItem.mockClear();
             await act(async () => { button(host, 'Claim and become owner')!.click(); });
             await act(async () => {});
             expect(storage().removeItem, kind).toHaveBeenCalledWith(KEPT);
@@ -486,8 +489,59 @@ describe('the QR on a phone with no account yet (Dax, 23 Oct): a way on, not a d
     it('Back leaves the claim: taken off the phone, and the screen goes back', async () => {
         nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
         const host = await render();
+        storage().removeItem.mockClear();
         await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
         expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
         expect(nav.router.back).toHaveBeenCalled();
+    });
+
+    it('Back before the account: taken off the phone too', async () => {
+        await withNoAccount(async () => {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            const host = await render();
+            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+            await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+            expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+            expect(nav.router.back).toHaveBeenCalled();
+        });
+    });
+
+    // PR #2412 review: only the header's arrow took the claim off. Left by the system back, a closed app or a notification,
+    // the guard's landing from welcome (every cold start, every community switch) came back to this screen for a day.
+    it('up with an account, the screen takes the kept claim off the phone at once: however it is left, it is not the landing again', async () => {
+        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+        const host = await render();
+        // Nothing tapped: no Back, no claim. The screen is simply up, as the guard's landing brought it.
+        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+        expect(nav.router.back).not.toHaveBeenCalled();
+        expect(nav.router.replace).not.toHaveBeenCalled();
+        expect(claimCommunity).not.toHaveBeenCalled();
+        // The claim is in the route now: the code is still filled in, and the claim still works from here.
+        expect(codeField(host)!.value).toBe(claimCodeDigits(CODE));
+        storage().removeItem.mockClear();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        expect(host.textContent).toContain('You own Beans Town');
+    });
+
+    it('a join half done keeps it: the guard sends the screen back to welcome, and the claim is wanted when the join ends', async () => {
+        const join = { step: 'seedBackup', inviteCode: '', anchorUrl: ORIGIN, callsign: 'marty' };
+        storage().getItem.mockImplementation(async (k: string) => (k === 'beanpool_pending_onboarding' ? JSON.stringify(join) : null));
+        try {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            await render();
+            expect(storage().getItem).toHaveBeenCalledWith('beanpool_pending_onboarding');
+            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+        } finally {
+            storage().getItem.mockImplementation(async () => null);
+        }
+    });
+
+    it('no account yet: the screen up keeps it, through any restart, for the account', async () => {
+        await withNoAccount(async () => {
+            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+            await render();
+            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+        });
     });
 });

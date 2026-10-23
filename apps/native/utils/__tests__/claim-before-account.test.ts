@@ -9,7 +9,9 @@
  *      (components/ClaimWaitingNote.tsx);
  *   3. once an account is made, whichever door made it and after any restart, the root guard's landing from welcome is the
  *      claim screen with the server, the code's id and the code (utils/member-landing.ts landOnClaim);
- *   4. the waiting claim goes after the claim, when the member leaves it, on a wipe, and once its day is out.
+ *   4. the waiting claim goes once the claim screen is up with the account (the claim is in its route from there, so
+ *      however the member leaves it, it is not the landing again: PR #2412 review), after the claim, when the member
+ *      leaves it, on a wipe, and once its day is out.
  * The screen's own taps are claim-screen-render.test.ts's; the chain here runs the real modules the root layout runs,
  * with AsyncStorage as a map.
  */
@@ -51,7 +53,8 @@ vi.mock('react-native', () => {
 });
 
 import {
-    PENDING_CLAIM_TTL_MS, clearPendingClaim, getPendingClaim, pendingClaimLanding, setPendingClaim, subscribePendingOnboarding,
+    PENDING_CLAIM_TTL_MS, clearPendingClaim, getPendingClaim, handOverPendingClaim, pendingClaimLanding, setPendingClaim,
+    setPendingOnboarding, subscribePendingOnboarding,
 } from '../onboarding-state';
 import { landOnClaim, memberRedirect } from '../member-landing';
 import { setupRedirect } from '../auth-return';
@@ -165,6 +168,31 @@ describe('the QR on a phone with no account, to the claim screen with the code o
         await clearPendingClaim();
         await layoutRefresh(T0);
         expect(memberRedirect(['welcome'], null, T0)).toBe('/(tabs)');
+    });
+
+    // PR #2412 review: left by the system back or a closed app, the claim stayed on the phone, and every cold start and every
+    // community switch (which bounces through welcome) landed on the claim screen again for a day.
+    it('the claim screen up with the account hands the claim over: a restart, or a switch through welcome, lands on the tabs', async () => {
+        await setPendingClaim({ node: NODE, codeId: ID, code: CODE }, T0);
+        await layoutRefresh(T0);
+        const pk = 'ab'.repeat(32);
+        const landing = memberRedirect(['welcome'], pk, T0)!;
+        expect(landing).toBe(`/claim-community?node=${encodeURIComponent(NODE)}&id=${ID}&code=${CODE}`);
+        // The claim screen mounts with the account (app/claim-community.tsx): the claim is in its route now.
+        await handOverPendingClaim();
+        expect(disk.has(KEY)).toBe(false);
+        // The member leaves it any way at all; the next cold start (the bare root) or a switch (welcome) is the tabs.
+        await layoutRefresh(T0 + 60_000);
+        expect(memberRedirect([], pk, T0 + 60_000)).toBe('/(tabs)');
+        expect(memberRedirect(['welcome'], pk, T0 + 60_000)).toBe('/(tabs)');
+    });
+
+    it('a join half done keeps the claim when the screen comes up: the guard sends it back to welcome, and the claim lands at the join\'s end', async () => {
+        await setPendingClaim({ node: NODE, codeId: ID, code: CODE }, T0);
+        await setPendingOnboarding({ step: 'seedBackup', inviteCode: '', anchorUrl: NODE, callsign: 'dax' });
+        expect(setupRedirect(['claim-community'], { hasIdentity: true, pendingOnboarding: true })).toBe('/welcome');
+        await handOverPendingClaim();
+        expect(await getPendingClaim(T0)).toEqual({ node: NODE, codeId: ID, code: CODE, savedAt: T0 });
     });
 
     it('a day on, the claim has run out: the tabs, and it is off the phone', async () => {

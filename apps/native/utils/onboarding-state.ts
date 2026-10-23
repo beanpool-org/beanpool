@@ -264,7 +264,8 @@ function savedJoinEnrolment(saved: KeeperEnrolmentResult | null | undefined): Ke
  * Its own key beside the wizard's record, not a field of it: the record means a join half done, which the guard holds on
  * welcome, and the wizard writes it whole and clears it at the end, just before the claim is wanted. Nothing in it is a key;
  * the code is the one-time claim code the server printed, kept no longer than {@link PENDING_CLAIM_TTL_MS} and taken off by
- * the claim screen once it is spent, refused or left (Back), by a wipe, and by the next read after it runs out. Never
+ * the claim screen once it is up with an account ({@link handOverPendingClaim}), spent, refused or left (Back), by a wipe,
+ * and by the next read after it runs out. Never
  * logged. Every field is checked again when read back, as the link's were (utils/claim-link.ts).
  */
 export interface PendingClaim {
@@ -326,6 +327,18 @@ export async function clearPendingClaim(): Promise<void> {
         await AsyncStorage.removeItem(CLAIM_KEY);
     } catch {}
     notify();
+}
+
+/**
+ * The claim screen is up with an account on the phone: the claim travels in that screen's route from here, so the one kept
+ * for the account is taken off the phone. Left by the system back, a closed app, a notification or a community switch,
+ * the screen is never the guard's landing again (PR #2412 review: it was, for a day, unless the member found the header's
+ * arrow). Kept while a join is half done: the guard sends the screen back to welcome then, and the claim is wanted once
+ * the join ends.
+ */
+export async function handOverPendingClaim(): Promise<void> {
+    if (await getPendingOnboarding()) return;
+    await clearPendingClaim();
 }
 
 /** Where the root guard lands for a waiting claim, and until when (utils/member-landing.ts `landOnClaim`); null for none. */

@@ -35,7 +35,7 @@ import {
     claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeAddresses, type ClaimStatus,
 } from '../utils/node-claim';
 import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan, parseClaimLink } from '../utils/claim-link';
-import { clearPendingClaim, setPendingClaim } from '../utils/onboarding-state';
+import { clearPendingClaim, handOverPendingClaim, setPendingClaim } from '../utils/onboarding-state';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 
 export { ErrorBoundary };
@@ -273,13 +273,16 @@ export default function ClaimCommunityScreen() {
         router.replace('/welcome');
     };
 
-    // A claim kept for this phone's account goes when the member leaves the screen, and when the server already has an
-    // owner. One claim waits at a time; the QR opens it again.
+    // A claim kept for this phone's account goes once the screen is up with the account: the claim is in this screen's
+    // route from here, and the guard's landing from welcome, which brought it, is the tabs again however the member leaves
+    // (the system back, the app closed: PR #2412 review). Before the account it goes on Back, and when the server already
+    // has an owner. One claim waits at a time; the QR opens it again.
     const leave = () => {
         void clearPendingClaim();
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)');
     };
+    useEffect(() => { if (identity) void handOverPendingClaim(); }, [identity]);
     useEffect(() => { if (identity && status?.kind === 'claimed') void clearPendingClaim(); }, [identity, status]);
 
     // ── Screens ─────────────────────────────────────────────────────────────────────────────────────────

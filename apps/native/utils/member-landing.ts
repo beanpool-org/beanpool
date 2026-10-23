@@ -29,9 +29,9 @@ let claim: { to: ClaimLanding; until: number } | null = null;
 /**
  * A claim waits for this phone's account (utils/onboarding-state.ts `PendingClaim`): until `until` (ms), every landing from
  * welcome goes to the claim screen instead of the tabs, for whichever account the phone makes. Not taken once, unlike
- * {@link landNextOn}: a restart part-way through still comes back to it, until the claim screen spends it or the member
- * leaves it there and it is taken off the phone. Kept in step with the phone by the root layout (null once it is gone);
- * never set by a screen.
+ * {@link landNextOn}: a restart part-way through still comes back to it, until the claim screen is up with the account and
+ * takes it off the phone (onboarding-state.ts `handOverPendingClaim`), the claim then travelling in that screen's route.
+ * Kept in step with the phone by the root layout (null once it is gone); never set by a screen.
  */
 export function landOnClaim(to: { route: ClaimLanding; until: number } | null): void {
     claim = to ? { to: to.route, until: to.until } : null;

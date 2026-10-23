@@ -22,7 +22,7 @@ Tap **Add a thing**. Give it a name. The rest is up to you: a photo, a category,
 
 The list shows your newest things first, each with where it is: **On your shelf**, **In your shop**, **Out on a loan**, or **With** the person you lent it to. **All**, **In your shop**, **Out** and **On your shelf** narrow the list.
 
-The Tool shed has room for some hundreds of things. It counts the room they take, not how many there are, so long notes and terms take more of it. Under **Add a thing** it says about how many more fit, going by the things you have. When it is full, it says so and keeps nothing new until you delete something or shorten some notes. A community server that hasn't been updated yet keeps half as much, and the Tool shed counts the room against that.
+The Tool shed has room for some hundreds of things. It counts the room they take, not how many there are, so long notes and terms take more of it. Under **Add a thing** it says about how many more fit, going by the things you have. When it is full, it says so and keeps nothing new until you delete something or shorten some notes. Deleting a thing gives back all the room it took. A community server that hasn't been updated yet keeps half as much, and while the copy on your server is on, the Tool shed counts the room against that. If you switch the copy on with more than that server keeps, nothing changes: it says about how many things to delete first. Or leave the copy off, and your things stay on your phone (in the web app, in this browser) with all their room.
 
 ## Lending it through BeanPool
 

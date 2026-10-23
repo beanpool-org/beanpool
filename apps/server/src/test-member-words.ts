@@ -448,6 +448,12 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     await family('creator channels, a link of another site (a sentence for each article)', 'That is not an Instagram link.',
         'POST', ann, '/api/member/channels', { platform: 'instagram', url: 'https://example.com/ann', category: 'other' }, 'message');
     await family('joining, a community that takes invites only', 'This community is invite-only.', 'POST', stranger, '/api/join', { callsign: 'Stranger' });
+    // Blocks, asking to join, invites and recovery (engine/member-blocks.ts, routes/knocks.ts, engine/invites.ts, recovery-release.ts).
+    await family('blocks, oneself', 'You can’t block yourself.', 'POST', ann, '/api/blocks', { targetPubkey: ann.pk });
+    const asker = newId('Asker');
+    await family('asking to join, a name too short', 'Please give a name of at least 2 characters.', 'POST', asker, '/api/join/knock', { callsign: 'A', message: 'Hello there' });
+    await family('invites, a code that is none', 'Invalid invite code', 'POST', asker, '/api/invite/redeem', { code: 'NOPE-NOPE', publicKey: asker.pk, callsign: 'Asker' });
+    await family('recovery, no account named', 'Which account are you recovering?', 'POST', asker, '/api/recovery/collect', {});
     await family('groups, a vote with nobody to vote with', 'Nobody else in this group can vote, so there is nobody to vote with.',
         'POST', ann, `/api/groups/${tools.id}/decisions`, { effect: 'close_group', title: 'Close it', description: 'We have finished with the library' });
 }
@@ -460,11 +466,15 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
 /**
  * A sentence that holds an app's match but never reaches the place that matches: what the match reads is named, and the
  * sentence comes from elsewhere. The offline check on the People, profile, shop and enterprise screens reads those
- * screens' own loads ('Network request failed'), never a join door's answer, which says "your network".
+ * screens' own actions (a chat started, a profile or a shop loaded: 'Network request failed'), never a join door's,
+ * a request to join's or a price report's limit, which say "your network" or "this network". The web's take-over check
+ * reads the take-over lock's own route, never a member's recovery collection, which says "no recovery".
  */
 const NEVER_WHERE_MATCHED: { sentence: RegExp; matcher: RegExp; why: string }[] = [
-    { sentence: /^(?:Lots of people|Too many new accounts) have joined from your network/, matcher: /off-grid\|network/,
-        why: "a join door's refusal: the offline check reads the People, profile, shop and enterprise screens' own loads" },
+    { sentence: /from (?:your|this) network/, matcher: /off-grid\|network/,
+        why: "a join's, a request to join's or a price report's limit: the offline checks read their screens' own actions" },
+    { sentence: /^(?:That account has no recovery fragments to collect|No recovery session for this device)\.$/, matcher: /no owner\|no recovery/,
+        why: "a member's recovery collection: the web's take-over check reads the take-over lock's route" },
 ];
 const neverWhereMatched = (text: string, matcher: string) => NEVER_WHERE_MATCHED.some(n => n.sentence.test(text) && n.matcher.test(matcher));
 

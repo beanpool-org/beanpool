@@ -4,7 +4,7 @@
 
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
-import { PRICING_CATEGORIES } from '@beanpool/core';
+import { PRICING_CATEGORIES, word } from '@beanpool/core';
 import { photoValueRefusal, routePhotoValueRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import {
     getPricingGuideItems,
@@ -112,10 +112,10 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         if ('refused' in report) {
             ctx.status = 429;
             ctx.body = report.refused === 'busy'
-                ? { error: 'This community is taking no more price reports from people who are not signed in today. Please try again tomorrow.', code: 'busy' }
+                ? { error: word('This community is taking no more price reports from people who are not signed in today. Please try again tomorrow.'), code: 'busy' }
                 : report.refused === 'member_rate_limited'
-                    ? { error: 'You have sent a lot of price reports today. Please try again tomorrow.', code: 'rate_limited' }
-                    : { error: 'Too many price reports from this network today. Please try again tomorrow, or sign in first.', code: 'rate_limited' };
+                    ? { error: word('You have sent a lot of price reports today. Please try again tomorrow.'), code: 'rate_limited' }
+                    : { error: word('Too many price reports from this network today. Please try again tomorrow, or sign in first.'), code: 'rate_limited' };
             return;
         }
         ctx.body = { success: true, reportId: report.id };

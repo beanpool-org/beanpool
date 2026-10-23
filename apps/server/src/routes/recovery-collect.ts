@@ -43,7 +43,7 @@ import Router from '@koa/router';
 
 import { db } from '../db/db.js';
 import { foldName } from '@beanpool/engine';
-import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice } from '@beanpool/core';
+import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice, word } from '@beanpool/core';
 import { getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
     openCollection,
@@ -141,7 +141,7 @@ function fail(ctx: any, e: unknown): void {
     // Handle unexpected errors with 500 status and JSON body instead of unhandled route exception
     const msg = e instanceof Error ? e.message : String(e);
     ctx.status = 500;
-    ctx.body = { error: msg || 'Recovery operation failed' };
+    ctx.body = { error: msg || word('Recovery operation failed') };
 }
 
 export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
@@ -169,7 +169,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // Deliberately identical for "no such session" and "not yours". Distinguishing them would
         // turn this into an oracle for whether a given collection id exists.
         ctx.status = 404;
-        ctx.body = { error: 'No recovery session for this device.' };
+        ctx.body = { error: word('No recovery session for this device.') };
     }
 
     /**
@@ -189,20 +189,20 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
-        if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
+        if (!callsign) { ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return; }
 
         // The account the device chose from the lookup, when it sends one (resolveCallsign): a string, or nothing.
         const sentKey = (ctx as any).requestBody?.candidatePublicKey;
         if (sentKey !== undefined && sentKey !== null && (typeof sentKey !== 'string' || !sentKey)) {
-            ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return;
+            ctx.status = 400; ctx.body = { error: word('Which account are you recovering?') }; return;
         }
         const { pubkey, ambiguous } = resolveCallsign(callsign, sentKey ?? undefined);
-        if (ambiguous) { ctx.status = 409; ctx.body = { error: 'That callsign is ambiguous on this node.' }; return; }
+        if (ambiguous) { ctx.status = 409; ctx.body = { error: word('That callsign is ambiguous on this node.') }; return; }
         if (!pubkey) {
             // Same shape a member with no split gets from openCollection, so this endpoint is no
             // sharper an oracle than the public keeper summary already is. A key the name does not hold gets it too.
             ctx.status = 400;
-            ctx.body = { error: 'That account has no recovery fragments to collect.' };
+            ctx.body = { error: word('That account has no recovery fragments to collect.') };
             return;
         }
 
@@ -386,7 +386,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/cancel', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;
         // A visitor's row has no account here being recovered, as a key with no row has none (getActingMember).
-        if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
+        if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: word('Sign in first.') }; return; }
         const id = (ctx as any).requestBody?.collectionId;
         if (id !== undefined && id !== null && (typeof id !== 'string' || !id)) {
             ctx.status = 400; ctx.body = { error: 'Which session?' }; return;
@@ -415,7 +415,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
      */
     router.post('/api/recovery/collect/mine', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;
-        if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
+        if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: word('Sign in first.') }; return; }
         try {
             pruneCollectionsFor(owner);
         } catch (e) {

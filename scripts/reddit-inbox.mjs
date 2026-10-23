@@ -36,6 +36,8 @@ export const NTFY_HOSTS = ['ntfy.sh'];
 // ntfy's message ids: 12 letters and digits. Anything else is never put in a request.
 const NTFY_ID = /^[A-Za-z0-9]{12}$/;
 const REDDIT_ID = /^t[13]_[a-z0-9]{1,16}$/;
+// The app's isoTime() (agent-item.ts): toISOString(), nothing else. Date.parse alone lets text through ("Jan 1 2026 (…)").
+const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 // The app's limits (apps/reddit-watcher/src/agent-item.ts), with room: an item past them is not one the app sent.
 const LIMITS = { title: 300, body: 2000, flair: 64, link: 600 };
 
@@ -138,7 +140,7 @@ export function toInboxItem(text) {
     if (m.kind !== 'post' && m.kind !== 'comment') return null;
     if (typeof m.id !== 'string' || !REDDIT_ID.test(m.id) || m.id.startsWith('t3_') !== (m.kind === 'post')) return null;
     if (!redditLink(m.permalink) || !isStr(m.title, LIMITS.title) || !isStr(m.body, LIMITS.body) || !isStr(m.flair, LIMITS.flair)) return null;
-    if (m.createdAt !== null && !(typeof m.createdAt === 'string' && m.createdAt.length <= 40 && Number.isFinite(Date.parse(m.createdAt)))) return null;
+    if (m.createdAt !== null && !(typeof m.createdAt === 'string' && ISO_TIME.test(m.createdAt) && Number.isFinite(Date.parse(m.createdAt)))) return null;
     const item = { v: 1, kind: m.kind, id: m.id, permalink: m.permalink, title: visible(m.title), body: visible(m.body), flair: visible(m.flair), createdAt: m.createdAt };
     if (m.kind === 'comment') {
         if (!redditLink(m.parentPermalink)) return null;

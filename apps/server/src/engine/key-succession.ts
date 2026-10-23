@@ -10,7 +10,7 @@
  * every `invalidated_keys` row as it is (key-move.ts), so a chain Ana₁ → Ana₂ → Ana₃ stays two rows.
  */
 import { db } from '../db/db.js';
-import { KEY_SUCCESSION_MAX, verifyKeySuccession, type FormerKey } from '@beanpool/core';
+import { KEY_SUCCESSION_MAX, verifyKeySuccession, type FormerKey, word } from '@beanpool/core';
 import { bumpMembersVersion } from './versions.js';
 import { accountsDeletedAmong } from './message-tombstone.js';
 
@@ -32,8 +32,8 @@ export function recordKeySuccession(signer: string, raw: unknown): KeySuccession
     }
     const row = db.prepare(`SELECT succession_sig FROM invalidated_keys WHERE public_key = ? AND reason = 'rekeyed' AND rekeyed_to = ?`)
         .get(oldPubkey, signer.toLowerCase()) as { succession_sig: string | null } | undefined;
-    if (!row) return { status: 404, body: { error: 'This key has no re-key to the key that signed this.' } };
-    if (row.succession_sig !== null) return { status: 409, body: { error: 'This re-key is already confirmed. A confirmation is never changed.' } };
+    if (!row) return { status: 404, body: { error: word('This key has no re-key to the key that signed this.') } };
+    if (row.succession_sig !== null) return { status: 409, body: { error: word('This re-key is already confirmed. A confirmation is never changed.') } };
     const statement: FormerKey = { pubkey: oldPubkey, at: b.at, sig: b.sig };
     if (!verifyKeySuccession(statement, signer.toLowerCase())) {
         return { status: 400, body: { error: 'The signature does not verify: it must be your current key\'s, over this old key and this date.' } };
@@ -41,7 +41,7 @@ export function recordKeySuccession(signer: string, raw: unknown): KeySuccession
     const now = new Date().toISOString();
     const changed = db.prepare(`UPDATE invalidated_keys SET succession_sig = ?, succession_at = ?, succession_stored_at = ?
                                 WHERE public_key = ? AND succession_sig IS NULL`).run(b.sig, b.at, now, oldPubkey).changes;
-    if (changed !== 1) return { status: 409, body: { error: 'This re-key is already confirmed. A confirmation is never changed.' } };
+    if (changed !== 1) return { status: 409, body: { error: word('This re-key is already confirmed. A confirmation is never changed.') } };
     // The rosters serve the chain (formerKeysOf): their snapshots are keyed on the members' version.
     bumpMembersVersion();
     return { status: 201, body: { success: true, oldPubkey, at: b.at } };

@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus, word } from '@beanpool/core';
+import { detectMentions, groupPictureUrlOf, isGroupEncryptedPayload, isLockedAwayLine, GROUP_NONCE_PREFIX, type GroupRole, type GroupMemberStatus, word, wordsFor } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -31,6 +31,9 @@ import type { MessagingCallbacks } from './messaging.js';
 import {
     assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 // Moved to core (group-crypto.ts): the sending app detects mentions and declares them (§9). Still exported from here.
 export { detectMentions };
@@ -61,7 +64,7 @@ export const GROUP_THREAD_DELETED_TEXT = 'This message was deleted';
 export const GROUP_CHAT_REPLY_NOT_FOUND = 'The message being replied to is not in this chat';
 export const GROUP_CHAT_REPLY_SYSTEM = 'A system line cannot be replied to';
 export const GROUP_CHAT_REPLY_ID_ERROR = 'replyToId must be a message id';
-export const GROUP_CHAT_SYSTEM_REACT_ERROR = 'A system line cannot be reacted to';
+export const GROUP_CHAT_SYSTEM_REACT_ERROR = word('A system line cannot be reacted to');
 
 /** System-line kinds. The first four are membership housekeeping and never count as unread (QUIET_SYSTEM_TYPES in @beanpool/engine). */
 export const GroupSystemType = {
@@ -405,7 +408,7 @@ function metadataObject(metadata: unknown): Record<string, unknown> {
 function assertSealedGroupLineForm(ciphertext: unknown, nonce: unknown): void {
     if (!isGroupEncryptedPayload({ ciphertext, nonce })) throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
     if (Buffer.byteLength(String(ciphertext), 'base64') > GROUP_LINE_MAX_BYTES) {
-        throw new Error(`Message is too long (maximum ${GROUP_THREAD_MESSAGE_MAX} characters)`);
+        throw new Error(tr('Message is too long (maximum {n} characters)', { n: GROUP_THREAD_MESSAGE_MAX }));
     }
 }
 
@@ -530,7 +533,7 @@ export function removeGroupThreadMessage(
     assertConvenorPowersActive(db, actorPubkey);
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
     // A line from before the convenor's membership is one they were never served: an id nobody has (groupLineHearers).
-    if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error('Message not found');
+    if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error(word('Message not found'));
     if (msgRow.type === 'system') throw new Error(word('A system line cannot be removed'));
     // Already down — a second removal is a no-op success, and must not rewrite who took it down first (an
     // author who deleted their own line stays the author on the record, not this convenor).

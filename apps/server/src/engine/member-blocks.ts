@@ -55,6 +55,10 @@
 import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './member-key.js';
 import type { SyncMemberBlock } from '@beanpool/engine';
+import { word, wordsFor } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 /** The most keys one member may block. Far past anyone's use, and it bounds the table and the list the app reads. */
 export const MEMBER_BLOCKS_MAX = 500;
@@ -79,8 +83,12 @@ export class BlockRefusal extends Error {
     }
 }
 
-export const BLOCK_SELF_ERROR = 'You can’t block yourself.';
-export const BLOCK_LIMIT_ERROR = `You can block up to ${MEMBER_BLOCKS_MAX} people. Unblock someone to block another.`;
+export const BLOCK_SELF_ERROR = word('You can’t block yourself.');
+// In a function, not at the top: the words layer's check keeps t() out of a module's top level.
+function blockLimitText(): string {
+    return tr('You can block up to {n} people. Unblock someone to block another.', { n: MEMBER_BLOCKS_MAX });
+}
+export const BLOCK_LIMIT_ERROR = blockLimitText();
 
 interface BlockRow { owner_pubkey: string; blocked_pubkey: string; created_at: string; updated_at: string }
 

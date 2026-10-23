@@ -137,7 +137,7 @@ import {
     VAULT_TICKET_CLOCK_SKEW_MS,
     VAULT_TICKET_TTL_MS,
     type DoorWorkDoor,
-    type VaultTicketRefusal,
+    type VaultTicketRefusal, word, wordsFor,
 } from '@beanpool/core';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { alreadyJoined, broadcast, getActingMember } from '../state-engine.js';
@@ -183,6 +183,9 @@ import { checkSsoKeeperShares, storeVerifiedSsoKeeperGeneration, KeeperDepositEr
 import { RecoveryShareError, type KeeperShareInput } from '../engine/recovery-shares.js';
 import { BadRequest, parseShares, ssoDepositBody } from './keepers.js';
 import type { RouteDeps } from './types.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 /** The same cap `/api/invite/redeem` puts on a joining name; the wizard-on-join renames with the full rules. */
 const MAX_JOIN_CALLSIGN = 20;
@@ -207,12 +210,12 @@ function wordsDoorOpen(): boolean {
 
 function inviteOnly(ctx: any): void {
     ctx.status = 404;
-    ctx.body = { error: 'This community is invite-only.', code: 'invite_only' };
+    ctx.body = { error: word('This community is invite-only.'), code: 'invite_only' };
 }
 
 function signInRequired(ctx: any): void {
     ctx.status = 403;
-    ctx.body = { error: 'This community needs a sign-in to join: Google, Apple or Facebook.', code: 'sign_in_required' };
+    ctx.body = { error: word('This community needs a sign-in to join: Google, Apple or Facebook.'), code: 'sign_in_required' };
 }
 
 /** The signer's key as the member table keeps it (lower-case hex), or null when it has no such spelling. */
@@ -237,7 +240,7 @@ function badRequest(ctx: any, error: string, code = 'bad_request'): void {
     ctx.body = { error, code };
 }
 
-const KEY_INVALIDATED = 'This key was replaced by a new one, so it can\'t join. Use the device or the 12 words that hold the new key.';
+const KEY_INVALIDATED = word('This key was replaced by a new one, so it can\'t join. Use the device or the 12 words that hold the new key.');
 
 /**
  * The door cannot check a sign-in against the accounts that already joined (services/open-join-key.ts): the key its
@@ -250,7 +253,7 @@ function doorKeyMissing(ctx: any, provider?: SsoProvider): void {
     if (provider) recordFunnelEvent('open_join_failed', 'door_key_missing');
     ctx.status = 503;
     ctx.body = {
-        error: 'This community can\'t check sign-ins right now, so it isn\'t taking new members this way. Nothing was saved. Please try again later.',
+        error: word('This community can\'t check sign-ins right now, so it isn\'t taking new members this way. Nothing was saved. Please try again later.'),
         code: 'door_key_missing',
     };
 }
@@ -291,11 +294,10 @@ function networkBusy(ctx: any, ceiling: DoorCeiling, count = true): void {
 
 const WORK_REFUSALS: Record<DoorWorkRefusal, string> = {
     // What an app from before the work shows (it never fetches any): the sign-in door at 30 joins an hour from its network.
-    work_required: 'Lots of people have joined from your network lately, so joining here now takes a moment of setting up on your phone first, '
-        + 'which this version of the app can\'t do. Please update the BeanPool app, or try again later.',
-    work_invalid: 'Setting up your account didn\'t work out. Please try again.',
-    work_expired: 'That took a while, so setting up your account has to start again. Please try again.',
-    work_spent: 'Setting up your account didn\'t work out. Please try again.',
+    work_required: word('Lots of people have joined from your network lately, so joining here now takes a moment of setting up on your phone first, which this version of the app can\'t do. Please update the BeanPool app, or try again later.'),
+    work_invalid: word('Setting up your account didn\'t work out. Please try again.'),
+    work_expired: word('That took a while, so setting up your account has to start again. Please try again.'),
+    work_spent: word('Setting up your account didn\'t work out. Please try again.'),
 };
 
 /** 400: the app fetches a new challenge and solves again (the header). Before the sign-in, so nothing is spent. */
@@ -322,21 +324,21 @@ function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider | null,
         case 'already_joined':
             ctx.status = 409;
             ctx.body = {
-                error: `This ${label} account already has a BeanPool identity here. Restore it with your 12 words or your sign-in instead.`,
+                error: tr('This {provider} account already has a BeanPool identity here. Restore it with your 12 words or your sign-in instead.', { provider: label }),
                 code: reason,
             };
             return;
         case 'removed':
             ctx.status = 403;
             ctx.body = {
-                error: `The BeanPool identity this ${label} account joined with was removed from this community, so it can't join again.`,
+                error: tr("The BeanPool identity this {provider} account joined with was removed from this community, so it can't join again.", { provider: label }),
                 code: reason,
             };
             return;
         case 'network_busy':
             // Every network_busy carries its ceiling (registerOpenJoin); this is never reached without one.
             ctx.status = 429;
-            ctx.body = { error: 'Too many new accounts have joined from your network. Please try again later.', code: reason };
+            ctx.body = { error: word('Too many new accounts have joined from your network. Please try again later.'), code: reason };
             return;
     }
 }
@@ -346,12 +348,12 @@ function refuse(ctx: any, reason: OpenJoinRefusal, provider: SsoProvider | null,
 type TicketRefusal = 'ticket_unsupported' | 'ticket_malformed' | 'ticket_signature' | 'ticket_expired' | 'ticket_key' | 'ticket_purpose' | 'ticket_used';
 
 const TICKET_REFUSALS: Record<TicketRefusal, string> = {
-    ticket_unsupported: 'This community doesn\'t take key vault tickets. Please sign in again.',
-    ticket_malformed: 'That is not a key vault ticket. Please sign in again.',
-    ticket_signature: 'That ticket is not signed by a key vault this community trusts. Please sign in again.',
-    ticket_expired: 'That ticket has expired. Please sign in again.',
-    ticket_key: 'That ticket was issued to another key. Please sign in again.',
-    ticket_purpose: 'That ticket was issued for something else. Please sign in again.',
+    ticket_unsupported: word('This community doesn\'t take key vault tickets. Please sign in again.'),
+    ticket_malformed: word('That is not a key vault ticket. Please sign in again.'),
+    ticket_signature: word('That ticket is not signed by a key vault this community trusts. Please sign in again.'),
+    ticket_expired: word('That ticket has expired. Please sign in again.'),
+    ticket_key: word('That ticket was issued to another key. Please sign in again.'),
+    ticket_purpose: word('That ticket was issued for something else. Please sign in again.'),
     ticket_used: 'That ticket was already used. Please sign in again.',
 };
 
@@ -455,7 +457,7 @@ async function storeRecovery(identity: SsoIdentity, actor: string, shares: Keepe
     } catch (e) {
         const known = e instanceof KeeperDepositError || e instanceof RecoveryShareError || e instanceof SsoVerificationError;
         if (!known) console.warn('[OpenJoin] recovery keeper not stored:', (e as Error)?.message || e);
-        return { enrolled: false, error: known ? (e as Error).message : 'The recovery keeper could not be stored.' };
+        return { enrolled: false, error: known ? (e as Error).message : word('The recovery keeper could not be stored.') };
     }
 }
 
@@ -491,9 +493,9 @@ async function verifyDoorSignIn(
 }
 
 const LINK_REFUSALS: Record<Exclude<OpenJoinLinkRefusal, 'already_joined' | 'removed'>, { status: number; error: string }> = {
-    not_a_member: { status: 403, error: 'Only an active member of this community can add a sign-in here.' },
-    not_words_member: { status: 409, error: 'This account wasn\'t made with 12 words here, so there is no sign-in to add to it.' },
-    already_linked: { status: 409, error: 'This account already has a sign-in.' },
+    not_a_member: { status: 403, error: word('Only an active member of this community can add a sign-in here.') },
+    not_words_member: { status: 409, error: word('This account wasn\'t made with 12 words here, so there is no sign-in to add to it.') },
+    already_linked: { status: 409, error: word('This account already has a sign-in.') },
 };
 
 export function createOpenJoinRoutes(_deps: RouteDeps): Router {
@@ -567,7 +569,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
             }
         }
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
-        if (callsign.length < 2) return badRequest(ctx, 'Please choose a name of at least 2 characters.');
+        if (callsign.length < 2) return badRequest(ctx, word('Please choose a name of at least 2 characters.'));
 
         recordFunnelEvent('open_join_attempt', WORDS_PROVIDER);
         // Refused before the work is checked, so these never spend it. registerOpenJoin checks them again with its writes.
@@ -618,7 +620,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         if (!credential.idToken) return badRequest(ctx, "'idToken' is required.");
         if (!nonce) return badRequest(ctx, "'nonce' is required.");
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
-        if (callsign.length < 2) return badRequest(ctx, 'Please choose a name of at least 2 characters.');
+        if (callsign.length < 2) return badRequest(ctx, word('Please choose a name of at least 2 characters.'));
 
         const recoveryShares = readRecoveryShares(ctx, body, provider, actor);
         if (recoveryShares === false) return;

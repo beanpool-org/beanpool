@@ -6975,7 +6975,8 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
-    let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
+    // The language this phone writes in, as on a signed POST: a refused read comes back in it too (not signed, not stored).
+    let headers: Record<string, string> = { 'Accept': 'application/json', ...languageHeader(), ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
     let signed = false;
     if (identity?.privateKey && identity?.publicKey) {

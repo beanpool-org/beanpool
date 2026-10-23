@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates } from '@beanpool/core';
+import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -2794,14 +2794,14 @@ export function isOperatorSwitchedOff(memberPubkey: string): boolean {
     return !!row && row.has_binding === 1 && row.can_operate !== 1;
 }
 
-export const INACTIVE_MEMBER_CREATE_ERROR = 'Only active community members can create an enterprise or a project';
+export const INACTIVE_MEMBER_CREATE_ERROR = word('Only active community members can create an enterprise or a project');
 
 /**
  * A goal a fresh members table holds (its CHECK: `goal_amount IS NULL OR goal_amount >= 0`): none, or a finite number of
  * Beans, 0 or more. Asked by every writer of a goal, because a node whose table got the column from an ALTER has no such
  * CHECK, and a goal below 0 there is one its standby's table refuses (bringMembersToSchemaRules).
  */
-export const GOAL_AMOUNT_ERROR = 'The goal must be a number of Beans, 0 or more';
+export const GOAL_AMOUNT_ERROR = word('The goal must be a number of Beans, 0 or more');
 export function isAcceptableGoal(goal: number | null): boolean {
     return goal === null || (Number.isFinite(goal) && goal >= 0);
 }
@@ -2830,10 +2830,10 @@ export function raiseCreatorOperatorSwitch(creatorPubkey: string, newEnterpriseP
     `).run(creatorPubkey, creatorPubkey, newEnterprisePubkey);
 }
 
-export const PROJECT_ID_TAKEN_ERROR = 'A new project needs an id nothing else has';
+export const PROJECT_ID_TAKEN_ERROR = word('A new project needs an id nothing else has');
 
 /** A pledge to a project that has reached its goal: refused before anything moves (pledgeToProject). */
-export const PROJECT_FUNDED_NO_PLEDGES_ERROR = 'This project has already reached its goal, so it is not taking more pledges. Your Beans have not moved.';
+export const PROJECT_FUNDED_NO_PLEDGES_ERROR = word('This project has already reached its goal, so it is not taking more pledges. Your Beans have not moved.');
 
 /**
  * Is `id` free for a new crowdfund project? A project's id is its enterprise's key, its account's and its escrow's
@@ -3051,7 +3051,7 @@ export function updateCrowdfundProject(
 }
 
 /** What a member's money door says to an amount that is not whole cents (a pledge, a send, a payment to the Commons). */
-export const WHOLE_CENTS_ERROR = 'The amount is a number of Beans above 0, to the cent.';
+export const WHOLE_CENTS_ERROR = word('The amount is a number of Beans above 0, to the cent.');
 /** At least a cent, in whole cents (@beanpool/core ledger.ts): the apps check the same before they send. */
 export { isWholeCents };
 

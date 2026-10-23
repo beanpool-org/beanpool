@@ -18,6 +18,7 @@
 import type { Context } from 'koa';
 import { isNodeMember, readsAsMember } from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { word } from '@beanpool/core';
 
 export type ViewerTier = 'member' | 'guest';
 
@@ -36,7 +37,7 @@ export const VIEW_HEADER = 'X-BeanPool-View';
 
 function refuseMembersOnly(ctx: Context): false {
     ctx.status = 403;
-    ctx.body = { error: 'This is for members of this community', code: 'members_only' };
+    ctx.body = { error: word('This is for members of this community'), code: 'members_only' };
     return false;
 }
 

@@ -17,6 +17,10 @@ import crypto from 'node:crypto';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
+import { word, wordsFor } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 export const DEBT_RECORD_KEPT_MS = 3 * 365 * 24 * 60 * 60 * 1000;
 
@@ -91,7 +95,7 @@ export function assertPayableDebt(debtId: unknown, beans: number): { id: string;
     const row = debtRow(debtId);
     requireOpen(row);
     const left = round2(row.amount - row.repaid);
-    if (beans > left) throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
+    if (beans > left) throw new DebtError(409, 'more_than_left', tr('Only {left} Beans are left on that debt. Pay {left} Beans to settle it.', { left }));
     return { id: row.id, left };
 }
 
@@ -110,7 +114,7 @@ export function countDebtPayment(debtId: string, txId: string, payer: string, am
         const row = debtRecord(debtId);
         if (row && row.status !== 'open') throw new DebtError(409, 'not_open', `That debt is ${row.status} already.`);
         const left = row ? round2(row.amount - row.repaid) : 0;
-        throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
+        throw new DebtError(409, 'more_than_left', tr('Only {left} Beans are left on that debt. Pay {left} Beans to settle it.', { left }));
     }
     db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?, hardship_held = 0
                 WHERE id = ? AND status = 'open' AND repaid >= amount`).run(settledBy, nowIso(), txId, debtId);
@@ -205,7 +209,7 @@ function setWorkOffFloor(actor: string, debtId: string, member: string): void {
 function debtRow(id: unknown): DebtRecord {
     if (typeof id !== 'string' || !/^[0-9a-f]{32}$/.test(id)) throw new DebtError(400, 'bad_debt_id', 'A debt record id is 32 hexadecimal characters.');
     const row = db.prepare('SELECT * FROM names_debts WHERE id = ?').get(id) as DebtRecord | undefined;
-    if (!row) throw new DebtError(404, 'no_debt', 'There is no such debt record.');
+    if (!row) throw new DebtError(404, 'no_debt', word('There is no such debt record.'));
     return row;
 }
 
@@ -237,13 +241,13 @@ export function settleByPayment(actor: string, id: unknown, body: { transactionI
     const note = cleanNote(body.note);
     const txId = typeof body.transactionId === 'string' ? body.transactionId : '';
     const tx = txId ? db.prepare('SELECT id, from_pubkey, to_pubkey, amount, memo FROM transactions WHERE id = ?').get(txId) as { id: string; from_pubkey: string; to_pubkey: string; amount: number; memo: string | null } | undefined : undefined;
-    if (!tx || tx.to_pubkey !== 'COMMONS_POOL' || tx.memo !== PAID_TO_COMMONS_MEMO) throw new DebtError(400, 'not_a_payment', 'Name a payment to the Commons that a member made.');
+    if (!tx || tx.to_pubkey !== 'COMMONS_POOL' || tx.memo !== PAID_TO_COMMONS_MEMO) throw new DebtError(400, 'not_a_payment', word('Name a payment to the Commons that a member made.'));
     const payer = getMember(db, tx.from_pubkey);
     if (!payer || payer.isTreasury || isVisitorKey(db, tx.from_pubkey) || tx.from_pubkey === 'SYSTEM') {
-        throw new DebtError(400, 'not_a_payment', 'Name a payment to the Commons that a member made.');
+        throw new DebtError(400, 'not_a_payment', word('Name a payment to the Commons that a member made.'));
     }
     if (db.prepare('SELECT 1 FROM names_debt_payments WHERE transaction_id = ?').get(tx.id) || db.prepare('SELECT 1 FROM names_debts WHERE settle_ref = ?').get(tx.id)) {
-        throw new DebtError(409, 'payment_counted', 'That payment counted toward a debt already. A payment made for a debt pays it off as it is paid.');
+        throw new DebtError(409, 'payment_counted', word('That payment counted toward a debt already. A payment made for a debt pays it off as it is paid.'));
     }
     const left = round2(row.amount - row.repaid);
     db.transaction(() => {

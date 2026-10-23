@@ -10,7 +10,7 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerForPushNotifications, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { registerForPushNotifications, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
@@ -26,7 +26,7 @@ import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { guestRedirect, memberRedirect } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
-import { DrawnInLanguage, LanguageProvider, useWords } from '../components/LanguageProvider';
+import { DrawnInLanguage, LanguageProvider, useWords, whenLanguagePicked } from '../components/LanguageProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -73,6 +73,8 @@ LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'ha
 // Every request to the anchor also names this build (X-BeanPool-App), so the community
 // can count who runs what before it raises its floor (utils/force-update.ts).
 installNodeRequestSigning({ appVersionHeader: appVersionHeaderValue(appConfig.expo.version, Platform.OS) });
+// A member's pick of a language tells the community at once, for its pushes (services/push-notifications.ts).
+whenLanguagePicked(registerPushInPickedLanguage);
 
 // Left to right in every language until the RTL audit (translation design §2.5 rule 3): an Arabic, Urdu or Persian
 // phone sees a straight app, not a half-mirrored one. plugins/withAppLanguages.js also turns Android's supportsRtl off,

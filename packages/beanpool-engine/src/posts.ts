@@ -14,11 +14,14 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf, lendBackAroundOf, tierForCredit } from '@beanpool/core';
+import { avatarUrlOf, lendBackAroundOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
 import { readRepeatRule, readRepeatSkips, restorableBefore, upcoming, type EventRepeatRule } from './event-series.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 type Db = Database.Database;
 
@@ -609,10 +612,10 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
 export function validatePostPhotos(photos: string[] | undefined): void {
     if (photos === undefined) return;
     if (!Array.isArray(photos)) throw new Error('photos must be an array');
-    if (photos.length > MAX_POST_PHOTOS) throw new Error(`A post can have at most ${MAX_POST_PHOTOS} photos. Take one off to add another.`);
+    if (photos.length > MAX_POST_PHOTOS) throw new Error(tr('A post can have at most {n} photos. Take one off to add another.', { n: MAX_POST_PHOTOS }));
     for (const p of photos) {
         if (typeof p !== 'string' || !/^data:image\/(jpeg|jpg|png|webp);base64,/.test(p)) {
-            throw new Error('Each photo must be a base64 data URL (JPEG, PNG, or WebP)');
+            throw new Error(word('Each photo must be a base64 data URL (JPEG, PNG, or WebP)'));
         }
         if (p.length > MAX_PHOTO_BASE64_CHARS) {
             throw new Error(word('Photo too large — resize to 800px JPEG before uploading'));

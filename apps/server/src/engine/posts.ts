@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind, word } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -46,8 +46,12 @@ import {
     publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
     type MarketplacePost,
-    type EventRsvpStatus
+    type EventRsvpStatus,
+    unauthorized,
 } from '@beanpool/engine';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { listingParties?: string[] }) => void;
 
@@ -116,7 +120,7 @@ function storedPhotoColumns(postId: string, photos: string[], authorPublicKey?: 
     return columns;
 }
 
-export const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
+export const POST_PHOTO_FORMAT_ERROR = word('Each photo must be a JPEG, PNG or WebP image');
 export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
 export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -128,7 +132,7 @@ const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings befo
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member || member.is_visitor) throw new Error('Member not found');
+    if (!member || member.is_visitor) throw new Error(word('Member not found'));
     if (member.status === 'disabled') throw new Error(word('Account is disabled'));
     if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
@@ -291,7 +295,7 @@ function cleanPlaceName(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('Place name must be text');
     const v = raw.trim();
-    if (v.length > EVENT_PLACE_NAME_MAX) throw new Error(`Place name must be ${EVENT_PLACE_NAME_MAX} characters or fewer`);
+    if (v.length > EVENT_PLACE_NAME_MAX) throw new Error(tr('Place name must be {n} characters or fewer', { n: EVENT_PLACE_NAME_MAX }));
     return v || null;
 }
 
@@ -304,7 +308,7 @@ function cleanPrivateNote(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('The note for people going must be text');
     const v = raw.trim();
-    if (v.length > EVENT_PRIVATE_NOTE_MAX) throw new Error(`The note for people going must be ${EVENT_PRIVATE_NOTE_MAX} characters or fewer`);
+    if (v.length > EVENT_PRIVATE_NOTE_MAX) throw new Error(tr('The note for people going must be {n} characters or fewer', { n: EVENT_PRIVATE_NOTE_MAX }));
     return v || null;
 }
 
@@ -345,12 +349,12 @@ function cleanEventLink(raw: unknown): string | null {
     if (typeof raw !== 'string') throw new Error('The link to join must be text');
     const v = raw.trim();
     if (!v) return null;
-    if (v.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
+    if (v.length > EVENT_LINK_MAX) throw new Error(tr('The link to join must be {n} characters or fewer', { n: EVENT_LINK_MAX }));
     let url: URL | null = null;
     try { url = new URL(v); } catch { url = null; }
     if (!url || !/^https?:$/.test(url.protocol) || !/^https?:\/\//i.test(v)) throw new Error(word('The link to join must start with https:// or http://'));
     if (url.username || url.password) throw new Error(word('The link to join must not hold a user name or password'));
-    if (url.href.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
+    if (url.href.length > EVENT_LINK_MAX) throw new Error(tr('The link to join must be {n} characters or fewer', { n: EVENT_LINK_MAX }));
     return url.href;
 }
 
@@ -549,13 +553,13 @@ export function createPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'"
         ).get(options.targetGroupId, authorPublicKey);
         if (!grp || hidden) {
-            throw new Error('Group not found');
+            throw new Error(word('Group not found'));
         }
         const isMem = db.prepare(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(options.targetGroupId, authorPublicKey);
         if (!isMem) {
-            throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
+            throw new Error(unauthorized(word('Must be an active convenor or member to post to a group')));
         }
         // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
         if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
@@ -571,13 +575,13 @@ export function createPost(
             // and photos in that person's feed: refused in the words a target who isn't here gets. No app addresses a
             // listing to one member; only a request made by hand meets this.
             if (!targetMem || targetMem.status === 'pruned' || hasBlocked(options.targetPubkey, authorPublicKey)) {
-                throw new Error('Target member not found or pruned');
+                throw new Error(word('Target member not found or pruned'));
             }
         }
         if (options?.assignedTo) {
             const assignedMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.assignedTo) as any;
             if (!assignedMem || assignedMem.status === 'pruned' || hasBlocked(options.assignedTo, authorPublicKey)) {
-                throw new Error('Assigned member not found or pruned');
+                throw new Error(word('Assigned member not found or pruned'));
             }
         }
     }
@@ -749,7 +753,7 @@ export function createPost(
                 : db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
                               AND author_pubkey = ? AND (audience_scope IS NULL OR audience_scope != 'group')`).get(createdAt, authorPublicKey) as any;
             if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
-                throw new Error(`Limit reached: ${EVENT_UPCOMING_CAP} upcoming events at a time`);
+                throw new Error(tr('Limit reached: {n} upcoming events at a time', { n: EVENT_UPCOMING_CAP }));
             }
         }
 
@@ -970,7 +974,7 @@ export function announceClosedGroupPosts(broadcast: BroadcastFn, cancelled: Arra
     for (const { row, dealSides } of cancelled) announcePostCancelled(broadcast, row, dealSides, push, 'SYSTEM');
 }
 
-export const PRICE_FROZEN_ERROR = 'This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.';
+export const PRICE_FROZEN_ERROR = word('This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.');
 
 /**
  * A listing's price holds while any deal on it is open: asked for and waiting ('requested'), or with the Beans held
@@ -1526,7 +1530,7 @@ export function rsvpEvent(
     // its cancellation or its end can say it exists.
     if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)
         || postOutOfSight(row, memberPublicKey)) {
-        throw new Error('Event not found');
+        throw new Error(word('Event not found'));
     }
     // "Not going" takes a member's own name off the host's list whatever the event's state: a cancelled event keeps its
     // guest list until the scrub, 30 days after the date it was cancelled from, which can be a year away (the photos/events
@@ -1544,7 +1548,7 @@ export function rsvpEvent(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(row.target_group_id, memberPublicKey);
         if (!isMem && row.author_pubkey !== memberPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to RSVP to this event');
+            throw new Error(unauthorized(word('Must be an active convenor or member of the group to RSVP to this event')));
         }
     }
 
@@ -1747,9 +1751,9 @@ export function letInEvent(
     try {
         row = loadEventForThread(postId);
     } catch {
-        throw new Error('Event not found');
+        throw new Error(word('Event not found'));
     }
-    if (eventUnknownTo(row, actorPubkey)) throw new Error('Event not found');
+    if (eventUnknownTo(row, actorPubkey)) throw new Error(word('Event not found'));
     if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
     if (!isEventHost(db, row, actorPubkey)) throw new Error(LET_IN_ONLY_HOST);
     assertNodeMember(actorPubkey);
@@ -1841,7 +1845,7 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
     const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
     // A group's or a direct poll this caller can't see is an id nobody has (engine/post-sight.ts), not "only the author".
     if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, authorPublicKey)) {
-        throw new Error('Poll not found');
+        throw new Error(word('Poll not found'));
     }
     if (post.authorPublicKey !== authorPublicKey) {
         throw new Error(word('Only the author can close a poll'));
@@ -1888,7 +1892,7 @@ export function votePoll(
     // before its being closed can say it exists. An observer sees a group's poll, and is refused the vote below.
     if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)
         || marketplacePostOutOfSight(post, voterPublicKey)) {
-        throw new Error('Poll not found');
+        throw new Error(word('Poll not found'));
     }
     if (post.status !== 'active') {
         throw new Error(word('This poll is closed'));
@@ -1901,12 +1905,12 @@ export function votePoll(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(post.targetGroupId, voterPublicKey);
         if (!isMem && post.authorPublicKey !== voterPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to vote in this poll');
+            throw new Error(unauthorized(word('Must be an active convenor or member of the group to vote in this poll')));
         }
     } else if (post.audienceScope === 'direct') {
         const isTarget = post.targetPubkey === voterPublicKey || post.assignedTo === voterPublicKey || post.authorPublicKey === voterPublicKey;
         if (!isTarget) {
-            throw new Error('UNAUTHORIZED: This direct poll is not addressed to you');
+            throw new Error(unauthorized(word('This direct poll is not addressed to you')));
         }
     }
     const nowIso = new Date().toISOString();

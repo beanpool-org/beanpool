@@ -15,7 +15,7 @@ import {
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry, type DmRequestEntry,
 } from '../lib/api';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
-import { MessageRequestsList, RequestActions, closedPhotoWords } from '../components/MessageRequests';
+import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
@@ -233,6 +233,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // The message requests waiting for this member (lib/dm-requests.ts), as the node lists them apart from their chats;
     // null where the community has requests off (its list has no `requests`).
     const [requests, setRequests] = useState<{ count: number; conversations: DmRequestEntry[] } | null>(null);
+    // Their cards' lines as read, kept here so a chat opened from a card and Back reads none of them again.
+    const requestPreviews = useRequestPreviews();
     // A listing the viewer has a conversation about is not applied from the live feed: this list shows its title
     // and status, and only the refresh re-reads them, so the change rings the doorbell (lib/live-posts).
     // Set in the commit, not in a later effect, so a push landing in between is tested against this list.
@@ -2873,6 +2875,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     entries={requests!.conversations}
                     count={requestCount}
                     identity={identity}
+                    store={requestPreviews}
                     avatar={renderAvatar}
                     joinedWordsOf={joinedWordsOf}
                     onOpen={(entry) => { setActiveConv(entry); loadMembers(); }}

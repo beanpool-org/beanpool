@@ -7,7 +7,7 @@
  * A card reads the request's own lines (lib/dm-requests.ts requestPreviewLines): the words opened with the reader's key, a
  * photo closed and never fetched. Every control is at least 44 px and the buttons wrap under each other at 320 px.
  */
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type MutableRefObject, type ReactNode, type SetStateAction } from 'react';
 import { t, tn } from '@beanpool/core';
 import { decideMessageRequest, getConversationMessages, ignoreAllMessageRequests, type DmRequest, type DmRequestEntry } from '../lib/api';
 import { blockUser } from '../lib/blocklist';
@@ -211,10 +211,28 @@ function RequestCard({ entry, identity, preview, avatar, joinedWords, onOpen, on
     );
 }
 
+/**
+ * The cards' lines as read, by request (its id and time), and which have been asked for: held by the Messages page, which
+ * stays while a chat is open, so going into one and Back reads none of them again (PR #2404 review 4356503723).
+ */
+export interface RequestPreviews {
+    previews: Record<string, Preview>;
+    setPreviews: Dispatch<SetStateAction<Record<string, Preview>>>;
+    asked: MutableRefObject<Set<string>>;
+}
+
+export function useRequestPreviews(): RequestPreviews {
+    const [previews, setPreviews] = useState<Record<string, Preview>>({});
+    const asked = useRef<Set<string>>(new Set());
+    return { previews, setPreviews, asked };
+}
+
 interface ListProps {
     entries: DmRequestEntry[];
     count: number;
     identity: BeanPoolIdentity;
+    /** The cards' lines, kept by the page (useRequestPreviews). */
+    store: RequestPreviews;
     avatar: (avatarUrl: string | null | undefined, name: string, size: number) => ReactNode;
     /** When the sender joined, in words, where this page holds their card. */
     joinedWordsOf: (pubkey: string) => string | null;
@@ -228,20 +246,19 @@ interface ListProps {
 
 /**
  * The Requests list: how many people want to message you, a card for each (newest first, 50 shown), "and {n} more", and
- * Ignore all when more than five wait. Each card's lines are read once per request (by its id and time), three at a time.
+ * Ignore all when more than five wait. Each card's lines are read once per request (by its id and time) while the page is
+ * open, three at a time.
  */
-export function MessageRequestsList({ entries, count, identity, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport }: ListProps) {
+export function MessageRequestsList({ entries, count, identity, store, avatar, joinedWordsOf, onOpen, onOpenProfile, onAccepted, onChanged, onReport }: ListProps) {
     const shown = entries.slice(0, REQUEST_CARDS_SHOWN);
-    const [previews, setPreviews] = useState<Record<string, Preview>>({});
-    const asked = useRef<Set<string>>(new Set());
-    const alive = useRef(true);
-    useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+    const { previews, setPreviews, asked } = store;
     const keyOf = (e: DmRequestEntry) => `${e.id}@${e.request.at}`;
     const [ignoringAll, setIgnoringAll] = useState(false);
     const [allFailure, setAllFailure] = useState<string | null>(null);
 
-    // A preview is kept by its request's id and time, so one that lands after the list has changed still lands on its own
-    // card (or on none): nothing asked is ever dropped, so no card waits on a read that won't come.
+    // A preview is kept by its request's id and time, so one that lands after the list has changed, or after the member has
+    // gone into a chat, still lands on its own card (or on none): nothing asked is ever dropped, so no card waits on a read
+    // that won't come.
     useEffect(() => {
         const wanted = shown.filter((e) => !asked.current.has(keyOf(e)));
         if (wanted.length === 0) return;
@@ -259,7 +276,7 @@ export function MessageRequestsList({ entries, count, identity, avatar, joinedWo
                 preview = 'failed';
                 asked.current.delete(keyOf(e));
             }
-            if (alive.current) setPreviews((p) => ({ ...p, [keyOf(e)]: preview }));
+            setPreviews((p) => ({ ...p, [keyOf(e)]: preview }));
             return next();
         };
         void Promise.all([next(), next(), next()]);

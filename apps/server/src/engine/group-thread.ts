@@ -533,7 +533,7 @@ export function removeGroupThreadMessage(
     assertConvenorPowersActive(db, actorPubkey);
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
     // A line from before the convenor's membership is one they were never served: an id nobody has (groupLineHearers).
-    if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error('Message not found');
+    if (!msgRow || !groupLineForReader(msgRow.metadata, fromEpochOf(groupId, actorPubkey))) throw new Error(word('Message not found'));
     if (msgRow.type === 'system') throw new Error(word('A system line cannot be removed'));
     // Already down — a second removal is a no-op success, and must not rewrite who took it down first (an
     // author who deleted their own line stays the author on the record, not this convenor).

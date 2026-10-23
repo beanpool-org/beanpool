@@ -1436,7 +1436,7 @@ router.post('/api/profile/update', async (ctx) => {
     }
     if (!profile) {
         ctx.status = 404;
-        ctx.body = { error: 'Member not found' };
+        ctx.body = { error: word('Member not found') };
         return;
     }
     if (isFirstAvatar) recordFunnelEvent('avatar_published');
@@ -1559,7 +1559,7 @@ router.get('/api/profile/:publicKey', async (ctx) => {
     const profile = getProfile(publicKey, requester);
     if (!profile) {
         ctx.status = 404;
-        ctx.body = { error: 'Member not found' };
+        ctx.body = { error: word('Member not found') };
         return;
     }
     ctx.body = profile;
@@ -1608,7 +1608,7 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
     const member = getMember(publicKey);
     if (!member) {
         ctx.status = 404;
-        ctx.body = { error: 'Member not found' };
+        ctx.body = { error: word('Member not found') };
         return;
     }
     const trust = getMemberTrustProfile(publicKey);
@@ -1657,7 +1657,7 @@ router.post('/api/trust/profile', async (ctx) => {
     const profile = getTrustProfileForViewer(viewer, targetPubkey);
     if (!profile) {
         ctx.status = 404;
-        ctx.body = { error: 'Member not found' };
+        ctx.body = { error: word('Member not found') };
         return;
     }
     ctx.body = profile;

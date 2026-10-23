@@ -104,7 +104,7 @@ const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings befo
  */
 function assertMemberActive(publicKey: string): void {
     assertAccountOpen(publicKey);
-    if (!isSyntheticAccount(publicKey) && isVisitorKey(db, publicKey)) throw new Error('Member not found');
+    if (!isSyntheticAccount(publicKey) && isVisitorKey(db, publicKey)) throw new Error(word('Member not found'));
 }
 
 /**
@@ -114,7 +114,7 @@ function assertMemberActive(publicKey: string): void {
 function assertAccountOpen(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member) throw new Error('Member not found');
+    if (!member) throw new Error(word('Member not found'));
     if (member.status === 'disabled') throw new Error(word('Account is disabled'));
     if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
@@ -199,6 +199,13 @@ export const LOAN_OUT_ERROR = word("It's out on loan right now. Ask again when i
 /** The refusal to a one-step accept of a lendable Offer, from any app or the API: it is asked for, never taken. */
 export const LEND_ASK_FIRST_ERROR = word('Ask to borrow it: the lender says yes first.');
 export const LEND_ASK_FIRST_CODE = 'lend_ask_first';
+/**
+ * The codes beside a trade step's refusal that means it moved on since the app showed it: the post was taken or changed
+ * (acceptPost), the deal was closed or is not this member's (cancelling it). The apps say so in their own words and
+ * refresh (apps/native/utils/changed-elsewhere.ts), so the sentence beside the code is free to be translated.
+ */
+export const POST_GONE_CODE = 'post_gone';
+export const TRANSACTION_GONE_CODE = 'transaction_gone';
 /** A loan's length (its deal's quantity, @beanpool/core loanDays) below a day. */
 export const LOAN_TOO_SHORT_ERROR = word('A loan is for at least 1 day.');
 /** A loan longer than its lender's longest (posts.lend_max_days). */
@@ -328,11 +335,11 @@ export function requestPost(
     // and "This direct post is not addressed to you" that it was someone's direct post.
     if (!post || postOutOfSight(post, requesterPublicKey)
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
-        throw new Error('Post not found');
+        throw new Error(word('Post not found'));
     }
     // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
     if (post.lendable === 1 && post.status === 'pending') throw loanOut();
-    if (post.status !== 'active') throw new Error('Post is not active');
+    if (post.status !== 'active') throw new Error(word('Post is not active'));
     assertAccountOpen(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
     if (authorMember?.is_treasury) {
@@ -741,7 +748,7 @@ export function acceptPost(
         // A lendable Offer that is out says so, to anyone who may see it (as requestPost).
         const out = post ? null : db.prepare("SELECT * FROM posts WHERE id = ? AND lendable = 1 AND status = 'pending' AND active = 1").get(postId) as any;
         if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
-        throw new Error('Post not found or not active');
+        throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
     // A lendable Offer is asked for: the lender says yes first (requestPost, then approvePostRequest). Refused here, to anyone
     // who may see it, before anything is held, whoever they are: a member the lender has blocked is told the same words, and

@@ -493,7 +493,7 @@ export function voteGroupConvenor(
     assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;
-    if (!prop) throw new Error('Convenor proposal not found');
+    if (!prop) throw new Error(word('Convenor proposal not found'));
     tickGroupSuccession(cb, Date.now(), prop.group_id);
     const nowIso = new Date().toISOString();
     const cur = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;

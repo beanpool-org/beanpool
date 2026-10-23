@@ -531,7 +531,7 @@ export function removeEventThreadMessage(
 
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?')
         .get(messageId, postId) as any;
-    if (!msgRow) throw new Error('Message not found');
+    if (!msgRow) throw new Error(word('Message not found'));
     // The host's own "opened this chat to everyone going" stays: it is what tells everyone the earlier lines are open.
     if (msgRow.type === 'system') throw new Error(word('A system line cannot be removed'));
 

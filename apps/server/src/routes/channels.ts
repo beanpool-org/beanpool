@@ -279,7 +279,7 @@ export function createChannelRoutes(_deps: RouteDeps): Router {
             const removed = deleteChannel(actor, ctx.params.id);
             if (!removed) {
                 ctx.status = 404;
-                ctx.body = { error: 'not_found', message: 'Channel not found.' };
+                ctx.body = { error: 'not_found', message: word('Channel not found.') };
                 return;
             }
             ctx.body = { success: true };

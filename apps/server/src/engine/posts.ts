@@ -132,7 +132,7 @@ const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings befo
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member || member.is_visitor) throw new Error('Member not found');
+    if (!member || member.is_visitor) throw new Error(word('Member not found'));
     if (member.status === 'disabled') throw new Error(word('Account is disabled'));
     if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
@@ -553,7 +553,7 @@ export function createPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'"
         ).get(options.targetGroupId, authorPublicKey);
         if (!grp || hidden) {
-            throw new Error('Group not found');
+            throw new Error(word('Group not found'));
         }
         const isMem = db.prepare(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
@@ -575,13 +575,13 @@ export function createPost(
             // and photos in that person's feed: refused in the words a target who isn't here gets. No app addresses a
             // listing to one member; only a request made by hand meets this.
             if (!targetMem || targetMem.status === 'pruned' || hasBlocked(options.targetPubkey, authorPublicKey)) {
-                throw new Error('Target member not found or pruned');
+                throw new Error(word('Target member not found or pruned'));
             }
         }
         if (options?.assignedTo) {
             const assignedMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.assignedTo) as any;
             if (!assignedMem || assignedMem.status === 'pruned' || hasBlocked(options.assignedTo, authorPublicKey)) {
-                throw new Error('Assigned member not found or pruned');
+                throw new Error(word('Assigned member not found or pruned'));
             }
         }
     }
@@ -1530,7 +1530,7 @@ export function rsvpEvent(
     // its cancellation or its end can say it exists.
     if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)
         || postOutOfSight(row, memberPublicKey)) {
-        throw new Error('Event not found');
+        throw new Error(word('Event not found'));
     }
     // "Not going" takes a member's own name off the host's list whatever the event's state: a cancelled event keeps its
     // guest list until the scrub, 30 days after the date it was cancelled from, which can be a year away (the photos/events
@@ -1751,9 +1751,9 @@ export function letInEvent(
     try {
         row = loadEventForThread(postId);
     } catch {
-        throw new Error('Event not found');
+        throw new Error(word('Event not found'));
     }
-    if (eventUnknownTo(row, actorPubkey)) throw new Error('Event not found');
+    if (eventUnknownTo(row, actorPubkey)) throw new Error(word('Event not found'));
     if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
     if (!isEventHost(db, row, actorPubkey)) throw new Error(LET_IN_ONLY_HOST);
     assertNodeMember(actorPubkey);
@@ -1845,7 +1845,7 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
     const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
     // A group's or a direct poll this caller can't see is an id nobody has (engine/post-sight.ts), not "only the author".
     if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, authorPublicKey)) {
-        throw new Error('Poll not found');
+        throw new Error(word('Poll not found'));
     }
     if (post.authorPublicKey !== authorPublicKey) {
         throw new Error(word('Only the author can close a poll'));
@@ -1892,7 +1892,7 @@ export function votePoll(
     // before its being closed can say it exists. An observer sees a group's poll, and is refused the vote below.
     if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)
         || marketplacePostOutOfSight(post, voterPublicKey)) {
-        throw new Error('Poll not found');
+        throw new Error(word('Poll not found'));
     }
     if (post.status !== 'active') {
         throw new Error(word('This poll is closed'));

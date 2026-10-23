@@ -1937,7 +1937,7 @@ export function assertMemberActive(publicKey: string): void {
     // (pruned by an operator, say) and refuse the member whose key it is.
     const statusOf = db.prepare("SELECT status FROM members WHERE public_key = ?");
     const member = (statusOf.get(publicKey) ?? statusOf.get(cleanKey)) as any;
-    if (!member) throw new Error('Member not found');
+    if (!member) throw new Error(word('Member not found'));
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error(word('Account is suspended or disabled'));
     if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
@@ -4086,7 +4086,7 @@ export function pledgeEnterpriseBacking(
 
         const km = db.prepare("SELECT status, can_operate, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
         if (!km || km.status === 'disabled' || km.status === 'pruned') {
-            throw new Error('Your account is not active, so you cannot back this enterprise.');
+            throw new Error(word('Your account is not active, so you cannot back this enterprise.'));
         }
         if (km.credit_frozen === 1) {
             throw new Error(word('Your credit is frozen, so you cannot back this enterprise.'));
@@ -4250,7 +4250,7 @@ export function requestToJoinEnterprise(
     // A visitor's row is refused as a key with no row is.
     const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
     if (!km || km.is_visitor || km.status !== 'active') {
-        throw new Error('Your account is not active, so you cannot join as a keeper');
+        throw new Error(word('Your account is not active, so you cannot join as a keeper'));
     }
     if (km.credit_frozen === 1) {
         throw new Error(word('Your credit is frozen, so you cannot join as a keeper'));
@@ -4429,7 +4429,7 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     // A visitor's row, as when it asks (requestToJoinEnterprise): a request it made before visitors were refused one lands on nobody.
     const km = db.prepare("SELECT status, credit_frozen, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
     if (!km || km.is_visitor || km.status !== 'active') {
-        throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
+        throw new KeeperChangeRefused(word('Applicant account is not active, so they cannot be approved as a keeper'));
     }
     // A lead's approval must never reverse an admin suspension (PR #838 B3).
     if (isOperatorSwitchedOff(memberPubkey)) {
@@ -4499,7 +4499,7 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
 } {
     assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
-    if (!req) throw new Error('Keeper request not found');
+    if (!req) throw new Error(word('Keeper request not found'));
     if (req.status !== 'pending') throw new Error(word('Request is no longer pending'));
 
     if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
@@ -4550,7 +4550,7 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
 export function declineKeeperRequest(requestId: string, actorPubkey: string): { ok: true } {
     assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
-    if (!req) throw new Error('Keeper request not found');
+    if (!req) throw new Error(word('Keeper request not found'));
     if (req.status !== 'pending') throw new Error(word('Request is no longer pending'));
 
     if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
@@ -4782,7 +4782,7 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
 export function objectToKeeperChange(changeId: string, actorPubkey: string): { ok: true; change: KeeperChangeInfo } {
     assertPlainTablesWritable();
     const c = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
-    if (!c) throw new Error('Keeper change not found');
+    if (!c) throw new Error(word('Keeper change not found'));
     applyDueKeeperChanges(c.enterprise_pubkey);
     const cur = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
     if (cur.status !== 'pending') throw new Error(word('The objection window for this change has closed'));
@@ -5354,7 +5354,7 @@ export function voteLeadSuccession(
     assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
-    if (!prop) throw new Error('Succession proposal not found');
+    if (!prop) throw new Error(word('Succession proposal not found'));
     expireSuccessionProposals(prop.enterprise_pubkey);
     const cur = db.prepare("SELECT status, closed_reason FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
     if (cur.status !== 'active') {
@@ -5447,11 +5447,11 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
     if (voucherPubkey === targetPubkey) throw new Error(word('You cannot vouch for yourself'));
     // A visitor's row is no voucher, as a key with no row is none (getActingMember).
-    if (!getActingMember(voucherPubkey)) throw new Error('Voucher not found');
+    if (!getActingMember(voucherPubkey)) throw new Error(word('Voucher not found'));
     // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
     assertNodeMember(voucherPubkey);
     const target = getMember(targetPubkey);
-    if (!target) throw new Error('Member not found');
+    if (!target) throw new Error(word('Member not found'));
     // An enterprise or a project is kept by its keepers, not vouched for (DESIGN-shops-round3 §0 row 11): its credit line
     // is its keepers' pledges, so a vouch's floor does nothing for it, and the profile it opened showed one as trust. A
     // vouch an enterprise already has is left as it is.
@@ -5475,7 +5475,7 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
  */
 export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
     const target = getMember(targetPubkey);
-    if (!target) throw new Error('Member not found');
+    if (!target) throw new Error(word('Member not found'));
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
@@ -8596,7 +8596,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
     const member = getMember(publicKey);
     if (!member) {
-        throw new Error('Member not found');
+        throw new Error(word('Member not found'));
     }
     if (isDeletedByOwner(publicKey)) {
         return { ok: true, message: 'Account is already pruned' };
@@ -9942,7 +9942,7 @@ export function assertNotOnHoliday(publicKey: string): void {
  * set when blocked so the client can name the count.
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
-    if (!getActingMember(publicKey)) throw new Error('Member not found');
+    if (!getActingMember(publicKey)) throw new Error(word('Member not found'));
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
         const err: any = new Error(trn(open, 'You have {n} active trade in progress. Complete or cancel it before switching on holiday mode.',

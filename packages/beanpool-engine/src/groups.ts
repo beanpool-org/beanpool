@@ -203,7 +203,7 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     // A visitor's row (members.is_visitor) starts no group, as a key with no row starts none.
     const member = db.prepare("SELECT public_key, status, is_visitor FROM members WHERE public_key = ?").get(params.createdBy) as any;
     if (!member || member.is_visitor || member.status === 'pruned') {
-        throw new Error('Creator member not found or pruned');
+        throw new Error(word('Creator member not found or pruned'));
     }
     // A suspended account starts no group: its creator would be the lead convenor of a group listed to every member,
     // and no route deletes a group. Same refusal as joining one.
@@ -680,7 +680,7 @@ export const LEAD_SILENCE_VOTE =
  */
 export function handOverGroupLead(db: Db, groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {
     const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(groupId) as any;
-    if (!group) throw new Error('Group not found');
+    if (!group) throw new Error(word('Group not found'));
     if (!isGroupLead(db, groupId, leadPubkey)) {
         throw new Error(unauthorized(word('Only the lead convenor can hand the lead over')));
     }
@@ -786,11 +786,11 @@ export function membershipWriteAt(db: Db, groupId: string, memberPubkey: string)
 
 export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupMember {
     const group = db.prepare("SELECT id, join_policy FROM groups WHERE id = ?").get(groupId) as any;
-    if (!group) throw new Error('Group not found');
+    if (!group) throw new Error(word('Group not found'));
 
     // A visitor's row (members.is_visitor) joins no group, as a key with no row joins none: a group's chat would reach it.
     const member = db.prepare("SELECT public_key, status, is_visitor FROM members WHERE public_key = ?").get(memberPubkey) as any;
-    if (!member || member.is_visitor || member.status === 'pruned') throw new Error('Member not found or pruned');
+    if (!member || member.is_visitor || member.status === 'pruned') throw new Error(word('Member not found or pruned'));
 
     const existing = db.prepare("SELECT * FROM group_members WHERE group_id = ? AND member_pubkey = ?").get(groupId, memberPubkey) as any;
     // A suspended member joins nothing new while it lasts: not an open group, not a request, not an invitation (which can
@@ -996,7 +996,7 @@ export function updateGroupPolicy(db: Db, groupId: string, convenorPubkey: strin
     db.prepare("UPDATE groups SET join_policy = ?, updated_at = ? WHERE id = ?").run(joinPolicy, now, groupId);
 
     const updated = getGroup(db, groupId, convenorPubkey);
-    if (!updated) throw new Error('Group not found');
+    if (!updated) throw new Error(word('Group not found'));
     return updated;
 }
 
@@ -1059,7 +1059,7 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     })();
 
     const updated = getGroup(db, groupId, convenorPubkey);
-    if (!updated) throw new Error('Group not found');
+    if (!updated) throw new Error(word('Group not found'));
     return updated;
 }
 
@@ -1077,7 +1077,7 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
 
     const target = getGroupMember(db, groupId, targetPubkey);
     if (!target) {
-        throw new Error('Membership request not found');
+        throw new Error(word('Membership request not found'));
     }
     if (target.status === 'active') {
         return target;
@@ -1104,7 +1104,7 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
     }
 
     const member = db.prepare("SELECT public_key, status FROM members WHERE public_key = ?").get(targetPubkey) as any;
-    if (!member || member.status === 'pruned') throw new Error('Invited member not found or pruned');
+    if (!member || member.status === 'pruned') throw new Error(word('Invited member not found or pruned'));
 
     const existing = getGroupMember(db, groupId, targetPubkey);
     const now = membershipWriteAt(db, groupId, targetPubkey);

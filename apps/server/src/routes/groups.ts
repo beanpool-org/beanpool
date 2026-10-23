@@ -255,7 +255,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const group = getGroup(ctx.params.id, viewerPubkey);
         if (!group) {
             ctx.status = 404;
-            ctx.body = { error: 'Group not found' };
+            ctx.body = { error: word('Group not found') };
             return;
         }
         // Closed by its members' vote: the group stays to read, as "Your groups" shows it (closedAt, readOnly).
@@ -789,7 +789,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const prop = db.prepare('SELECT group_id FROM group_convenor_proposals WHERE id = ?').get(ctx.params.proposalId) as any;
         if (!prop || prop.group_id !== ctx.params.id) {
             ctx.status = 404;
-            ctx.body = { error: 'Convenor proposal not found' };
+            ctx.body = { error: word('Convenor proposal not found') };
             return;
         }
         try {

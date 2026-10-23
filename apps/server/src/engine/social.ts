@@ -21,7 +21,7 @@ import {
 /** The actor has a member's row here. A visitor's row is refused in the same words as a key with no row. */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
-    if (!getMember(db, publicKey) || isVisitorKey(db, publicKey)) throw new Error('Member not found');
+    if (!getMember(db, publicKey) || isVisitorKey(db, publicKey)) throw new Error(word('Member not found'));
 }
 
 /**

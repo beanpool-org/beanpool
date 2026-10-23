@@ -627,8 +627,8 @@ export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; er
 export function checkProposalStanding(authorPubkey: string): { ok: boolean; error?: string } {
     // A visitor's row proposes nothing, as a key with no row proposes nothing (getActingMember).
     const member = getActingMember(authorPubkey);
-    if (!member) return { ok: false, error: 'Member not found' };
-    if (member.status !== 'active') return { ok: false, error: 'Member is not active' };
+    if (!member) return { ok: false, error: word('Member not found') };
+    if (member.status !== 'active') return { ok: false, error: word('Member is not active') };
     const frozenRow = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(authorPubkey) as any;
     if (frozenRow?.credit_frozen === 1) return { ok: false, error: word('Member credit is frozen') };
     if (member.isTreasury) return { ok: false, error: word('Enterprises cannot propose decisions') };
@@ -653,8 +653,8 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
 export function checkVoterEligibility(voterPubkey: string, decision?: { opensAt: string } | null): { ok: boolean; error?: string } {
     // A visitor's row votes on nothing, as a key with no row votes on nothing (getActingMember).
     const member = getActingMember(voterPubkey);
-    if (!member) return { ok: false, error: 'Member not found' };
-    if (member.status !== 'active') return { ok: false, error: 'Voter account is not active' };
+    if (!member) return { ok: false, error: word('Member not found') };
+    if (member.status !== 'active') return { ok: false, error: word('Voter account is not active') };
     const row = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen, joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;
     if (row?.credit_frozen === 1) return { ok: false, error: word('Voter credit is frozen') };
     if (member.isTreasury) return { ok: false, error: word('Enterprise accounts cannot vote') };
@@ -976,7 +976,7 @@ export function castDecisionVote(
     // A node with formal Decisions off takes no vote, on any Decision, open or not (routes answer 404 feature_off).
     if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
-    if (!decision || (scope && decision.scopeKind !== scope)) return { success: false, creditsUsed: 0, error: 'Decision not found' };
+    if (!decision || (scope && decision.scopeKind !== scope)) return { success: false, creditsUsed: 0, error: word('Decision not found') };
     if (madeWithoutVote(decision)) {
         return {
             success: false,
@@ -2608,7 +2608,7 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
     if (!SCOPED_EFFECTS.has(opts.effect)) throw new Error(`Unknown decision effect '${opts.effect}'`);
     assertEffectAllowedHere(opts.effect);
     if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error(word('The enterprise is winding up, so it takes no new votes.'));
-    if (ent.status !== 'active') throw new Error('This enterprise is not active, so it takes no new votes.');
+    if (ent.status !== 'active') throw new Error(word('This enterprise is not active, so it takes no new votes.'));
     if (roll.length < 2) throw new Error(ROLL_OF_ONE);
 
     const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';

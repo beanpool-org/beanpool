@@ -63,13 +63,13 @@ function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, n
     return true;
 }
 
-const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
+const CONVERSATION_NOT_FOUND = { status: 404, error: word('Conversation not found') };
 
 /** Going to this event chat's event, and waiting for the host to let them in (engine/event-thread.ts waitingForHost). */
 function eventWaitingFor(postId: string, actor: string | undefined): boolean {
     try { return waitingForHost(loadEventForThread(postId), actor); } catch { return false; }
 }
-const SEND_NOT_FOUND = { status: 400, error: 'Failed to send — conversation not found or not a participant' };
+const SEND_NOT_FOUND = { status: 400, error: word('Failed to send — conversation not found or not a participant') };
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -447,7 +447,7 @@ router.post('/api/messages/mark-read', async (ctx) => {
             return;
         }
         ctx.status = 404;
-        ctx.body = { error: 'Conversation not found' };
+        ctx.body = { error: word('Conversation not found') };
         return;
     }
     // A group chat's read cursor lives on the member's participant row, which follows the group. A keeper's lives
@@ -524,7 +524,7 @@ router.post('/api/messages/mute', async (ctx) => {
             return;
         }
         ctx.status = 404;
-        ctx.body = { error: 'Conversation not found' };
+        ctx.body = { error: word('Conversation not found') };
         return;
     }
     if (conv.type === GROUP_THREAD_TYPE && refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
@@ -569,7 +569,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
             return;
         }
         ctx.status = 404;
-        ctx.body = { error: 'Conversation not found' };
+        ctx.body = { error: word('Conversation not found') };
         return;
     }
     // A group's chat is its current active members, re-checked against the group rather than the participants
@@ -685,7 +685,7 @@ router.post('/api/messages/react', async (ctx) => {
         const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {
             ctx.status = 404;
-            ctx.body = { error: 'Message not found' };
+            ctx.body = { error: word('Message not found') };
             return;
         }
         ctx.body = { success: true, metadata: result.metadata };

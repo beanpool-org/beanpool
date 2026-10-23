@@ -894,7 +894,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (!channel) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'Channel not found.' };
+            ctx.body = { error: 'not_found', message: word('Channel not found.') };
             return;
         }
 
@@ -948,7 +948,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (!item || item.deleted_at !== null) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'Item not found.' };
+            ctx.body = { error: 'not_found', message: word('Item not found.') };
             return;
         }
 
@@ -1075,7 +1075,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const channel = stmtGetChannelById.get(channelId) as any;
         if (!channel) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'Channel not found.' };
+            ctx.body = { error: 'not_found', message: word('Channel not found.') };
             return;
         }
 

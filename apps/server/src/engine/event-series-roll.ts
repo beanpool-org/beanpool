@@ -334,7 +334,7 @@ export function setSeriesDateSkipped(
     nowMs = Date.now(),
 ): { post: MarketplacePost; skips: string[] } {
     const row = db.prepare(`SELECT ${SERIES_COLUMNS}, type, hidden_by_reports_at FROM posts WHERE id = ?`).get(postId) as (SeriesRow & { type: string; hidden_by_reports_at: string | null }) | undefined;
-    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && !isEventHost(db, row, actorPubkey))) throw new Error('Event not found');
+    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && !isEventHost(db, row, actorPubkey))) throw new Error(word('Event not found'));
     if (!isEventHost(db, row, actorPubkey)) throw new Error(SKIP_HOST_ONLY);
     if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error(word('This event has been cancelled'));
     const rule = readRepeatRule(row.event_repeat);

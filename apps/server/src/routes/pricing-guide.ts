@@ -102,7 +102,7 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         const existingItem = getPricingGuideItem(itemId);
         if (!existingItem) {
             ctx.status = 404;
-            ctx.body = { error: 'Pricing guide item not found' };
+            ctx.body = { error: word('Pricing guide item not found') };
             return;
         }
 

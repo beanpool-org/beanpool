@@ -150,7 +150,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return null;
         }
         return actor;
@@ -177,7 +177,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return null;
         }
         return actor;
@@ -1427,7 +1427,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
 
@@ -1480,7 +1480,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
         const { pledgedBacking, amount, backing } = (ctx as any).requestBody || {};
@@ -1508,7 +1508,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
         if (!isLeadOrSoleKeeperOrAdmin(treasury, actor)) {
@@ -1542,7 +1542,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
         try {
@@ -1570,7 +1570,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
         try {
@@ -1612,7 +1612,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
         const { candidatePubkey } = (ctx as any).requestBody || {};
@@ -1648,7 +1648,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
         const { choice } = (ctx as any).requestBody || {};
@@ -1688,7 +1688,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return null;
         }
         return actor;
@@ -1713,7 +1713,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = keeperActionGuard(ctx);
         if (!actor) return;
         const change = getKeeperChanges(ctx.params.treasury).find(c => c.id === ctx.params.changeId);
-        if (!change) { ctx.status = 404; ctx.body = { error: 'Keeper change not found' }; return; }
+        if (!change) { ctx.status = 404; ctx.body = { error: word('Keeper change not found') }; return; }
         try {
             const res = objectToKeeperChange(change.id, actor);
             // The objecting keeper reads the closed change as the other keepers do: its pledge's named part only.
@@ -1757,7 +1757,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         if (threadHidden(treasury)) {
             ctx.status = 404;
-            ctx.body = { error: 'Enterprise not found' };
+            ctx.body = { error: word('Enterprise not found') };
             return;
         }
         // Same clamping as every other paged route (clampLimit / clampOffset), capped at this thread's page of 100.
@@ -1789,7 +1789,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         if (threadHidden(treasury)) {
             ctx.status = 404;
-            ctx.body = { error: 'Enterprise not found' };
+            ctx.body = { error: word('Enterprise not found') };
             return;
         }
         const actor = ctx.state?.actor as string | undefined;
@@ -1807,7 +1807,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actorStatus = getActingMember(actor) ? statusOf(actor) : undefined;
         if (!actorStatus || blocked(actorStatus)) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot post in this thread.' };
+            ctx.body = { error: word('Your account is not active, so you cannot post in this thread.') };
             return;
         }
         const mRow = db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(actor) as any;
@@ -1874,7 +1874,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) {
             ctx.status = 404;
-            ctx.body = { error: 'Enterprise not found' };
+            ctx.body = { error: word('Enterprise not found') };
             return;
         }
         const actor = ctx.state?.actor as string | undefined;
@@ -1893,7 +1893,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            ctx.body = { error: word('Your account is not active, so you cannot act for this enterprise.') };
             return;
         }
 

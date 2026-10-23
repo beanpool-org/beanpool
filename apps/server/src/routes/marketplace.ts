@@ -36,7 +36,7 @@ import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
-import { LEND_ASK_FIRST_CODE } from '../engine/escrow.js';
+import { LEND_ASK_FIRST_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
@@ -84,7 +84,7 @@ export function createMarketplaceRoutes(deps: RouteDeps): Router {
         ctx.status = 403;
         ctx.body = { error: isTreasury(targetPubkey)
             ? word('You are not an authorized keeper of this enterprise')
-            : 'Not authorized to act on behalf of this identity'
+            : word('Not authorized to act on behalf of this identity')
         };
         return false;
     }
@@ -788,7 +788,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
         if (!postRow) {
             ctx.status = 404;
-            ctx.body = { error: 'Post not found' };
+            ctx.body = { error: word('Post not found') };
             return;
         }
 
@@ -811,14 +811,14 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         // entitled above whether or not they can see it.
         if (!entitled && postOutOfSight(postRow, actor)) {
             ctx.status = 404;
-            ctx.body = { error: 'Post not found' };
+            ctx.body = { error: word('Post not found') };
             return;
         }
         if (!entitled) {
             ctx.status = 403;
             ctx.body = { error: isTreasury(postRow.author_pubkey)
                 ? word('You are not an authorized keeper of this enterprise')
-                : 'Not authorized to act on behalf of this identity'
+                : word('Not authorized to act on behalf of this identity')
             };
             return;
         }
@@ -866,7 +866,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor, timeOut);
         if (!post) {
             ctx.status = 404;
-            ctx.body = { error: 'Post not found or not owned by you' };
+            ctx.body = { error: word('Post not found or not owned by you') };
             return;
         }
         ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
@@ -964,7 +964,7 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
         const post = closePoll(id, actor);
         if (!post) {
             ctx.status = 404;
-            ctx.body = { error: 'Poll not found or unauthorized' };
+            ctx.body = { error: word('Poll not found or unauthorized') };
             return;
         }
         ctx.body = { success: true, post };
@@ -997,7 +997,7 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
         const post = closePoll(targetId, actor);
         if (!post) {
             ctx.status = 404;
-            ctx.body = { error: 'Poll not found or unauthorized' };
+            ctx.body = { error: word('Poll not found or unauthorized') };
             return;
         }
         ctx.body = { success: true, post };
@@ -1218,6 +1218,12 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             ctx.body = { error: err.message, code: LEND_ASK_FIRST_CODE };
             return;
         }
+        // A post taken or changed since the app showed it: the 400 it always was, with its code (engine/escrow.ts).
+        if (err?.code === POST_GONE_CODE) {
+            ctx.status = 400;
+            ctx.body = { error: err.message, code: POST_GONE_CODE };
+            return;
+        }
         // #102: the escrow engine refuses a visitor's draw — surface it as 503 + code, not a 400.
         respondSettlementAware(ctx, err, 'Failed to accept post');
     }
@@ -1233,7 +1239,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const tx = requestPost(postId, buyerPublicKey, dealQuantityFromBody(hours));
-        if (!tx) throw new Error('Cannot request — post not found or unauthorized');
+        if (!tx) throw new Error(word('Cannot request — post not found or unauthorized'));
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to request post');
@@ -1253,7 +1259,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor });
         if (!tx) {
             ctx.status = 400;
-            ctx.body = { error: 'Cannot approve — request not found or unauthorized' };
+            ctx.body = { error: word('Cannot approve — request not found or unauthorized') };
             return;
         }
         ctx.body = { success: true, transaction: tx };
@@ -1275,7 +1281,7 @@ router.post('/api/marketplace/transactions/reject', async (ctx) => {
         const tx = rejectPostRequest(transactionId, authorPublicKey);
         if (!tx) {
             ctx.status = 400;
-            ctx.body = { error: 'Cannot reject — request not found or unauthorized' };
+            ctx.body = { error: word('Cannot reject — request not found or unauthorized') };
             return;
         }
         ctx.body = { success: true, transaction: tx };
@@ -1297,7 +1303,7 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
         const tx = cancelPostRequest(transactionId, buyerPublicKey);
         if (!tx) {
             ctx.status = 400;
-            ctx.body = { error: 'Cannot cancel — request not found or unauthorized' };
+            ctx.body = { error: word('Cannot cancel — request not found or unauthorized') };
             return;
         }
         ctx.body = { success: true, transaction: tx };
@@ -1322,7 +1328,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         const tx = completePostTransaction(transactionId, confirmerPublicKey, parsedFinalHours, { authSigner: actor });
         if (!tx) {
             ctx.status = 400;
-            ctx.body = { error: 'Cannot complete — transaction not found or not authorized' };
+            ctx.body = { error: word('Cannot complete — transaction not found or not authorized') };
             return;
         }
         syncPulseMarketplaceGate();
@@ -1350,7 +1356,7 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
         const tx = cancelPostTransaction(transactionId, cancellerPublicKey);
         if (!tx) {
             ctx.status = 400;
-            ctx.body = { error: 'Cannot cancel — transaction not found or not authorized' };
+            ctx.body = { error: word('Cannot cancel — transaction not found or not authorized'), code: TRANSACTION_GONE_CODE };
             return;
         }
         syncPulseMarketplaceGate();
@@ -1377,7 +1383,7 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         }
         // Return 400 status on failed mutation instead of HTTP 200 with { success: false }
         ctx.status = 400;
-        ctx.body = { success: false, error: 'Post not found, not active, or not owned by author' };
+        ctx.body = { success: false, error: word('Post not found, not active, or not owned by author') };
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, word('Failed to pause post')) };
@@ -1404,7 +1410,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         }
         // Return 400 status on failed mutation instead of HTTP 200 with { success: false }
         ctx.status = 400;
-        ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
+        ctx.body = { success: false, error: word('Post not found, not paused, or not owned by author') };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         // One of a shop's Offers while the shop is closed for now: 409 shop_paused (engine/shops.ts).
@@ -1435,7 +1441,7 @@ router.get('/api/marketplace/transactions', async (ctx) => {
     if (!isSelf && !isAuthorizedKeeper) {
         ctx.status = 403;
         ctx.body = { error: isTreasury(publicKey)
-            ? 'You are not authorized to view transactions for this enterprise'
+            ? word('You are not authorized to view transactions for this enterprise')
             : word('You may only view your own marketplace transactions')
         };
         return;

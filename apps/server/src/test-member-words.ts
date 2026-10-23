@@ -460,6 +460,17 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     await family('asking to join, a name too short', 'Please give a name of at least 2 characters.', 'POST', asker, '/api/join/knock', { callsign: 'A', message: 'Hello there' });
     await family('invites, a code that is none', 'Invalid invite code', 'POST', asker, '/api/invite/redeem', { code: 'NOPE-NOPE', publicKey: asker.pk, callsign: 'Asker' });
     await family('recovery, no account named', 'Which account are you recovering?', 'POST', asker, '/api/recovery/collect', {});
+    // A trade step that moved on elsewhere: the sentence in French, the code the phone reads it by (transaction_gone,
+    // post_gone: apps/native/utils/changed-elsewhere.ts) and the 400 as they were.
+    const gone = (r: Res, code: string) => r.status === 400 && r.body?.code === code;
+    const cancelEn = await call('POST', ann, '/api/marketplace/transactions/cancel', { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
+    const acceptEn = await call('POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    assert(gone(cancelEn, 'transaction_gone') && gone(acceptEn, 'post_gone'),
+        `a deal that can't be cancelled and a post that can't be taken say so by code (${cancelEn.status} ${cancelEn.text} / ${acceptEn.status} ${acceptEn.text})`);
+    await family('a deal that moved on', 'Cannot cancel — transaction not found or not authorized', 'POST', ann, '/api/marketplace/transactions/cancel',
+        { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
+    await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+
     // Shops and a push's notice (routes/shops.ts, routes/notices.ts).
     await family('shops, one that is not here', 'There is no such shop here.', 'GET', ann, '/api/shops/no-such-shop');
     await family('a push notice that is gone', 'This server has no such notice for you. Notices are kept for 7 days.', 'GET', ann, '/api/notices/push/no-such-notice');
@@ -499,7 +510,8 @@ const neverWhereMatched = (text: string, matcher: string) => NEVER_WHERE_MATCHED
 
 const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i, where: 'apps/native/app/(tabs)/people.tsx, public-profile.tsx (offline)' },
-    { phrase: /not found|not authorized|not active/i, where: 'apps/native/app/post/[id].tsx (a deal changed elsewhere)' },
+    // apps/native/app/post/[id].tsx reads a deal that changed elsewhere by its code (transaction_gone, post_gone), and an
+    // older node's English only when the answer has none (utils/changed-elsewhere.ts): "not found" is free to translate.
     { phrase: /already been used|already used|already a member|already been redeemed/i, where: 'apps/native/app/welcome.tsx, utils/invite-next.ts, apps/pwa WelcomePage.tsx (invites)' },
     { phrase: /set a profile photo/i, where: 'apps/native/utils/db.ts (the profile heal)' },
     { phrase: /relationship not found/i, where: 'apps/native/utils/db.ts' },
@@ -601,7 +613,7 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     // in it written as a word, as the member would read it).
     const matchers = appMatchers(root, words);
     const known = (m: AppMatcher) => NEVER_A_NODES_WORDS.some(n => n.file === m.file && n.looksFor === m.looksFor);
-    const listed = ['set a profile photo', 'nonce already used', '^Quorum not met', 'already a member', 'not found'];
+    const listed = ['set a profile photo', 'nonce already used', '^Quorum not met', 'already a member', 'Epoch record refused'];
     assert(listed.every(l => matchers.some(m => m.looksFor === l)) && matchers.length >= 40,
         `the apps' matches are found where they are written (${matchers.length}, the hand-kept list's among them)`);
     const filled = (s: string) => s.replace(/\{[A-Za-z0-9_]+\}/g, 'Ann');

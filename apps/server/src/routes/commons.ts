@@ -153,7 +153,7 @@ router.post('/api/commons/projects/delete', async (ctx) => {
     const projectExists = getProjects().some(p => p.id === projectId);
     if (!projectExists) {
         ctx.status = 404;
-        ctx.body = { error: 'Project not found' };
+        ctx.body = { error: word('Project not found') };
         return;
     }
 
@@ -216,7 +216,7 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     // An enterprise's keepers' vote is read in that enterprise (routes/enterprise-decisions.ts), by its keepers only.
     if (!decision || decision.scopeKind !== 'community') {
         ctx.status = 404;
-        ctx.body = { error: 'Decision not found' };
+        ctx.body = { error: word('Decision not found') };
         return;
     }
     const tally = tallyDecision(decision.id);
@@ -324,7 +324,7 @@ router.get('/api/crowdfund/projects/:id', async (ctx) => {
     const project = getCrowdfundProject(ctx.params.id);
     if (!project) {
         ctx.status = 404;
-        ctx.body = { error: 'Project not found' };
+        ctx.body = { error: word('Project not found') };
         return;
     }
     ctx.body = { project };

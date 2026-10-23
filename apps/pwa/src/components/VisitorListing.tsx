@@ -9,22 +9,23 @@ import { useEffect, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
-import { PLACE_AFTER_JOIN, visitorDistanceText, visitorPriceText } from '../lib/visitor-lobby';
+import { VISITOR_WORDS, visitorDistanceText, visitorKmText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
 import { listPhotoUrl, t } from '@beanpool/core';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
 function typeLabel(post: MarketplacePost): string {
-    return post.type === 'offer' ? 'Offer' : post.type === 'need' ? 'Need' : post.type === 'event' ? 'Event' : 'Poll';
+    return post.type === 'offer' ? t('Offer', undefined, 'listing type') : post.type === 'need' ? t('Need', undefined, 'listing type')
+        : post.type === 'event' ? t('Event', undefined, 'listing type') : t('Poll', undefined, 'listing type');
 }
 
 /** The detail sheet's one button: who is behind the listing is what joining shows. */
 export function joinToSeeLabel(post: MarketplacePost): string {
     switch (post.type) {
-        case 'need': return "Join to see who's asking";
-        case 'event': return "Join to see who's hosting";
-        case 'poll': return 'Join to vote';
-        default: return "Join to see who's offering";
+        case 'need': return t("Join to see who's asking");
+        case 'event': return t("Join to see who's hosting");
+        case 'poll': return t('Join to vote');
+        default: return t("Join to see who's offering");
     }
 }
 
@@ -44,7 +45,7 @@ interface CardProps {
  */
 export function visitorCardName(post: MarketplacePost, beans: boolean, distanceKm: number | null): string {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
-    const parts = [post.title.trim(), typeLabel(post), visitorPriceText(post, beans), cat ? cat.label : post.category];
+    const parts = [post.title.trim(), typeLabel(post), visitorPriceText(post, beans), cat ? t(cat.label) : post.category];
     if (distanceKm != null) parts.push(visitorDistanceText(distanceKm));
     return parts.filter(Boolean).map((p) => (/[.!?]$/.test(p) ? p : `${p}.`)).join(' ');
 }
@@ -75,7 +76,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-xs font-black uppercase tracking-wide" style={{ color: `var(--post-type-${post.type}, ${typeColor})` }}>{typeLabel(post)}</span>
                     <span data-testid="visitor-card-category" className="text-xs font-bold px-2 py-0.5 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-200 break-words">
-                        {cat ? `${cat.emoji} ${cat.label}` : post.category}
+                        {cat ? <><span>{cat.emoji}</span> <span>{t(cat.label)}</span></> : post.category}
                     </span>
                     {distanceKm != null && (
                         <span data-testid="visitor-card-distance" className="text-xs font-semibold text-nature-600 dark:text-nature-300 whitespace-nowrap">
@@ -127,7 +128,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                         <span className="text-xs font-black uppercase tracking-wider" style={{ color: typeColor }}>{typeLabel(post)}</span>
                         {post.type !== 'event' && (
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/70 dark:bg-nature-900 text-nature-700 dark:text-nature-200">
-                                {cat ? `${cat.emoji} ${cat.label}` : post.category}
+                                {cat ? <><span>{cat.emoji}</span> <span>{t(cat.label)}</span></> : post.category}
                             </span>
                         )}
                     </div>
@@ -154,7 +155,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                                 <p data-testid="visitor-detail-place" className="m-0 mt-1 text-sm font-semibold text-nature-600 dark:text-nature-300">
                                     {post.eventOnline
                                         ? <><span aria-hidden="true">🌐 </span>{t('Online')}</>
-                                        : <><span aria-hidden="true">📍 </span>{PLACE_AFTER_JOIN}</>}
+                                        : <><span aria-hidden="true">📍 </span>{t(VISITOR_WORDS.placeAfterJoin)}</>}
                                 </p>
                             </div>
                         )}
@@ -165,14 +166,14 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
 
                         {post.type !== 'event' && (
                             <p data-testid="visitor-detail-terms" className="m-0 mb-2 text-sm">
-                                <span className="font-bold uppercase tracking-wide text-xs text-nature-500 dark:text-nature-400">{beans ? 'Price' : 'In return'}: </span>
+                                <span className="font-bold uppercase tracking-wide text-xs text-nature-500 dark:text-nature-400">{beans ? t('Price:') : t('In return:')}</span>{' '}
                                 <span className="font-bold text-nature-900 dark:text-white">{visitorPriceText(post, beans)}</span>
                             </p>
                         )}
 
                         {distanceKm != null && (
                             <p data-testid="visitor-detail-distance" className="m-0 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                                {t('About {distance} away · area only', { distance: visitorDistanceText(distanceKm).replace(/^about /, '') })}
+                                {t('About {distance} away · area only', { distance: visitorKmText(distanceKm) })}
                             </p>
                         )}
                     </div>

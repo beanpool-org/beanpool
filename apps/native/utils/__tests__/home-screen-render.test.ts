@@ -3424,6 +3424,9 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
             cards: {
                 ...base.cards,
                 deals: {
+                    open: 1,
+                    waiting: 1,
+                    waitingOnMe: null,
                     items: [
                         { postId: 'p1', txId: 't1', title: 'Sourdough', with: null, waitsOnMe: true, at: iso(now - 10 * 60_000) },
                     ],
@@ -3474,6 +3477,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 ...base.cards,
                 decide: {
                     open: 0,
+                    soonestClosesAt: null,
                     polls: 1,
                     pollsMore: false,
                     items: [],

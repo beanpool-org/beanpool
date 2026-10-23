@@ -404,13 +404,48 @@ for (const dark of [false, true]) {
             expect(byLabel('Propose Zoe as leader')).not.toBeNull();
         });
 
+        // The node answers someone who keeps none of it, on no vote's roll, a 404 for its votes (decisions-engine.ts
+        // getScopedDecisions): the console asks, and draws no Decisions block.
         it('someone who keeps none of it opening the console reads why, and nothing is offered or written', async () => {
-            net.answer = community({ getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] } });
+            net.answer = community({ getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] }, getEnterpriseDecisions: null });
             await render('console');
             expect(byId('manage-not-keeper')?.textContent).toBe('Only its keepers manage this enterprise.');
             for (const a of ACTIONS.filter((x) => x.view === 'lead')) expect(found(a), a.what).toBeNull();
             expect(byId('manage-face')).toBeNull();
+            expect(net.calls).toContain('db.getEnterpriseDecisions');
+            expect(byLabel('Decisions')).toBeNull();
+            expect(host.textContent).not.toContain('DECISIONS');
             expect(writes()).toEqual([]);
+        });
+
+        // One the lead removed while a vote was open stays on its roll (state-engine.ts: only stepping down drops them), and
+        // Needs you and the vote's push land here: the console that turns them from managing it still holds their ballot
+        // (PR #2405 review 4356209582).
+        it('a keeper removed while a vote is open reads why they no longer manage it, and still votes there', async () => {
+            let voted: boolean | null = null;
+            const node = community({
+                getTreasuryDetail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: MIA, callsign: 'Mia', role: 'keeper' }] }),
+                getBalance: { balance: 10, keeperOf: [] },
+            });
+            // What the node answers one on a vote's roll who keeps it no more: that vote, and no Propose.
+            net.answer = (name, args) => {
+                if (name === 'getEnterpriseDecisions') {
+                    return Promise.resolve({ decisions: [{ ...DECISIONS.decisions[0], myVote: voted === null ? null : { support: voted, updatedAt: iso(now) } }], canPropose: false, rollSize: 2 });
+                }
+                if (name === 'voteEnterpriseDecision') { voted = args[2] as boolean; return Promise.resolve({ success: true }); }
+                return node(name, args);
+            };
+            await render('console');
+            expect(byId('manage-not-keeper')?.textContent).toBe('Only its keepers manage this enterprise.');
+            for (const a of ACTIONS.filter((x) => x.view === 'lead')) expect(found(a), a.what).toBeNull();
+            expect(byId('manage-face')).toBeNull();
+            expect(byLabel('Decisions')).not.toBeNull();
+            expect(host.textContent).toContain('Pay Mia for the oven door');
+            expect(byLabel('Vote No on Pay Mia for the oven door')).not.toBeNull();
+            await click(byLabel('Vote Yes on Pay Mia for the oven door'), 'Yes');
+            expect(net.args).toContainEqual(['voteEnterpriseDecision', [ENT, 'd1', true]]);
+            expect(host.textContent).toContain('You voted Yes.');
+            expect(byLabel('Vote Yes on Pay Mia for the oven door')).toBeNull();
         });
 
         // Its shop's routes and the feature route take its keepers only; its profile route takes a node admin too (PR #2405

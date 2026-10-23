@@ -339,10 +339,10 @@ async function rulesOnLocal(): Promise<void> {
     const cfId = cf.body?.project?.id;
     const cfEdit = (description: string) => call(base, 'POST', '/api/crowdfund/projects/update', P, { id: cfId, creatorPubkey: P.pk, title: 'A new roof', description, goalAmount: 500 });
     const cfEditOver = await cfEdit('s'.repeat(2_001));
-    // Stored where a crowdfund's create puts it (db.ts createCrowdfundProject): its enterprise's purpose and bio, and its projects row.
+    // Stored where a crowdfund's create puts it (db.ts createCrowdfundProject): its enterprise's purpose, and its projects row.
     const storedPurpose = `Stored before the limit ${'v'.repeat(3_000)}`;
     db.prepare('UPDATE projects SET description = ? WHERE id = ?').run(storedPurpose, cfId);
-    db.prepare('UPDATE members SET purpose = ?, bio = ? WHERE public_key = ?').run(storedPurpose, storedPurpose, cfId);
+    db.prepare('UPDATE members SET purpose = ? WHERE public_key = ?').run(storedPurpose, cfId);
     const cfSentBack = await cfEdit(storedPurpose);
     assert(cfEditOver.status === 400 && cfSentBack.status === 200,
         `a crowdfund edit to 2,001 characters: 400; its own description from before the limit sent back: 200 (${cfEditOver.status}, ${cfSentBack.status} ${short(cfSentBack.body?.error)})`);

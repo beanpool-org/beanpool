@@ -602,7 +602,8 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
     onAdd?: () => void;
     onEdit?: () => void;
 }) {
-    const hasNarrowSlice = card && (card.joined7d !== undefined || card.commonsPot !== undefined || card.eventsSoon !== undefined || (profile === 'global' && card.listings !== undefined));
+    const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
+    const hasNarrowSlice = !isFirstMember && card && (card.joined7d !== undefined || card.commonsPot !== undefined || card.eventsSoon !== undefined || (profile === 'global' && card.listings !== undefined));
     if (hasNarrowSlice) {
         const membersStr = tn(card.members, '{n} member', '{n} members', { n: formatCount(card.members) });
         const joinedStr = typeof card.joined7d === 'number'
@@ -616,9 +617,14 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
         const potStr = typeof card.commonsPot === 'number'
             ? t('Commons pot {amount}', { amount: beansAmount(card.commonsPot) })
             : null;
-        const row2Text = tradesStr && potStr
-            ? t('{trades} · {pot}', { trades: tradesStr, pot: potStr })
-            : (tradesStr || potStr || null);
+        const communitiesStr = typeof card.communities === 'number'
+            ? communitiesListed(card.communities)
+            : null;
+        const row2Text = profile === 'global'
+            ? communitiesStr
+            : (tradesStr && potStr
+                ? t('{trades} · {pot}', { trades: tradesStr, pot: potStr })
+                : (tradesStr || potStr || null));
 
         const listingsStr = typeof card.listings === 'number'
             ? tn(card.listings, '{n} listing', '{n} listings', { n: formatCount(card.listings) })

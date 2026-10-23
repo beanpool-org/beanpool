@@ -495,6 +495,7 @@ export const SUITES = [
     'test-decisions-off',
     'test-invites-off',
     'test-door-setting',
+    'test-community-shape-read',
     'test-names-list',
     'test-invite-bound-name',
     'test-names-copy',

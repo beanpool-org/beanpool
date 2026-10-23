@@ -25,7 +25,7 @@
  *      of his own act after her block (a role's line or reaction) is in none of her lists, her unread count or her badge,
  *      and reads as she left it (an open with no line still asks nothing); she may Ignore it and he reads nothing new; it
  *      shows once she lifts the block, or by her own act (her Accept, her asking for the chat) or a trade's, and a removal
- *      ignores it
+ *      ignores it; a trade that shows an acceptance hidden from either of them rings the one it was hidden from
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
@@ -681,10 +681,20 @@ async function globalRun(): Promise<void> {
     const sidPost = crypto.randomUUID();
     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'general', 'Eggs', 'A dozen', 5, ?, ?, 1, 'active')`).run(sidPost, ann.pk, iso(Date.now()));
+    const sidSock = await socket(sid);
+    await sleep(50);
+    const annHeardSid = annSock.events.length;
     const sidTrade = attempt(() => ensureTransactionConversation(sidPost, sid.pk, ann.pk));
+    await sleep(200);
     const annTrade = await listOf(ann);
     assert(sidTrade === sidConv && inChats(annTrade, sidConv) && entryOf(annTrade, sidConv)?.request?.state === 'accepted',
         `a trade between Ann and Sid opening shows his to her, accepted (${entryOf(annTrade, sidConv)?.request?.state})`);
+    // A trade is the node's act, not his: Ann's open app hears it, as what she reads now changed (PR #2410 review
+    // 4356205998). Sid, whose own line accepted it, reads nothing new and hears nothing.
+    assert(updated(annSock, sidConv, annHeardSid).length === 1 && updated(annSock, sidConv, annHeardSid)[0]?.request?.state === 'accepted'
+        && updated(sidSock, sidConv).length === 0,
+        `Ann's socket hears the trade show it, accepted, and Sid's hears nothing (${updated(annSock, sidConv, annHeardSid).map(e => e.request?.state)}; ${updated(sidSock, sidConv).length})`);
+    sidSock.ws.close();
     // Rex is removed: one hidden from Ann is ignored, as one nobody accepted is, so it never becomes a chat of hers.
     attempt(() => adminPruneUser(rex.pk, 'owner:password'));
     const annRexGone = await listOf(ann);
@@ -786,6 +796,30 @@ async function globalRun(): Promise<void> {
     assert(unZak.status === 200 && zakReadAfter.body?.conversation?.request?.state === 'accepted'
         && entryOf(zakListAfter, zakConv)?.request?.state === 'accepted' && z2.status === 200,
         `once Zak lifts the block, Ann's acceptance shows to him, and his next line goes through (${show(z2)})`);
+    // A trade between the two shows it too, and the opener's open app hears it, the composer back (PR #2410 review
+    // 4356205998): Ada writes, blocks Ann, and Ann replies; then a trade between them opens. Ann reads nothing new and hears
+    // nothing.
+    const ada = member('Ada');
+    const adaConv: string = (await open(ada, ann)).body?.conversation?.id;
+    await send(adaConv, ada);
+    const blockAda = await call('POST', ada, '/api/blocks', { targetPubkey: ann.pk });
+    const adaReply = await send(adaConv, ann);
+    const adaBefore = entryOf(await listOf(ada), adaConv)?.request?.state;
+    const adaPost = crypto.randomUUID();
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+                VALUES (?, 'offer', 'general', 'Jam', 'Two jars', 5, ?, ?, 1, 'active')`).run(adaPost, ann.pk, iso(Date.now()));
+    const adaSock = await socket(ada);
+    await sleep(50);
+    const annHeardAda = annSock.events.length;
+    const adaTrade = attempt(() => ensureTransactionConversation(adaPost, ada.pk, ann.pk));
+    await sleep(200);
+    const adaAfter = entryOf(await listOf(ada), adaConv)?.request?.state;
+    assert(blockAda.status === 200 && adaReply.status === 200 && adaBefore === 'pending' && adaTrade === adaConv && adaAfter === 'accepted',
+        `blocking Ann, Ada reads Ann's reply as waiting; a trade between them shows it to Ada (${adaBefore} → ${adaAfter})`);
+    assert(updated(adaSock, adaConv).length === 1 && updated(adaSock, adaConv)[0]?.request?.state === 'accepted'
+        && updated(annSock, adaConv, annHeardAda).length === 0,
+        `Ada's socket hears the trade show it, accepted, and Ann's hears nothing (${updated(adaSock, adaConv).map(e => e.request?.state)}; ${updated(annSock, adaConv, annHeardAda).length})`);
+    adaSock.ws.close();
 
     // ── 7. read receipts ────────────────────────────────────────────────────────────────────────
     console.log('── 7. no read receipt either way until accepted ──');

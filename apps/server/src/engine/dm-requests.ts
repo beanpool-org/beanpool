@@ -238,7 +238,9 @@ function acceptable(row: RequestRow | undefined, actor?: string): row is Request
  * never reaches the person who blocked them (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392
  * review 4354581168). `actor`, whose act it is, always hears their own. One accepted already is accepted again only where
  * it reads as not made to one of the two (acceptable): by that one's own act, or a trade's. Each of them has accepted it
- * then, so it shows to both (accepted_by null), and only the actor hears: the other reads nothing new.
+ * then, so it shows to both (accepted_by null), and only the actor hears: the other reads nothing new. A trade has no
+ * actor: the one it was hidden from hears, as what they read is now accepted, though they block the other. The trade is
+ * the node's act, not the blocked member's (PR #2410 review 4356205998).
  *
  * A conversation still kept for its opener alone when the write commits (engine/withheld-lines.ts; a block lifted since,
  * then the person adding them, or a role letting them through) is no chat the person it was for has: only the opener
@@ -248,6 +250,7 @@ function acceptable(row: RequestRow | undefined, actor?: string): row is Request
 function accept(row: RequestRow, now: number, actor?: string): void {
     const again = row.state === 'accepted';
     if (again && !acceptable(row, actor)) return;
+    const shownTo = again && !actor ? [row.from_pubkey, row.to_pubkey].filter(who => acceptanceHiddenFrom(row, who)) : [];
     assertPlainTablesWritable();
     const changed = db.prepare(`UPDATE dm_requests SET state = 'accepted', decided_at = ?, accepted_by = ?,
                                        state_before = CASE WHEN state = 'accepted' THEN state_before ELSE state END
@@ -255,7 +258,7 @@ function accept(row: RequestRow, now: number, actor?: string): void {
         .run(iso(now), again ? null : actor ?? null, row.conversation_id, again ? 1 : 0).changes;
     if (changed === 0) return;
     const request: RequestView = { state: 'accepted', from: row.from_pubkey, at: row.requested_at };
-    const hears = again ? (actor ? [actor] : []) : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
+    const hears = again ? (actor ? [actor] : shownTo) : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
         .filter(([who, other]) => who === actor || !hasBlocked(who, other)).map(([who]) => who);
     if (hears.length === 0) return;
     afterTransactionCommit(() => {

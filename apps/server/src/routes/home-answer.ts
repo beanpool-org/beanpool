@@ -556,7 +556,10 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             const [first] = deals;
             items.push({
                 kind: 'deal', count: deals.length, accent: true,
-                label: deals.length === 1 ? `A deal is waiting for you: ${clip(first.postTitle, TITLE_CHARS)}` : `${deals.length} deals waiting for you`,
+                // A deal whose listing row is gone has no title (review of #2416): the line without one, never a throw that drops the card.
+                label: deals.length === 1
+                    ? (first.postTitle ? `A deal is waiting for you: ${clip(first.postTitle, TITLE_CHARS)}` : 'A deal is waiting for you')
+                    : `${deals.length} deals waiting for you`,
                 target: deals.length === 1 && first.postId ? { to: 'deal', postId: first.postId, txId: first.id } : { to: 'my-deals' },
             });
         }

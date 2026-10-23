@@ -863,6 +863,24 @@ async function main(): Promise<void> {
         assert(JSON.stringify(bobs?.items?.map((d: any) => [d.txId, d.with, d.waitsOnMe])) === JSON.stringify([['tx-home-carol', 'HomeCarol', true], ['tx-home-alice', 'HomeAlice', false]]),
             `Bob's two: the one waiting on him first, then the one waiting on Alice, each naming its other party (${JSON.stringify(bobs?.items)})`);
 
+        // A deal whose listing row is gone (deciding review of #2416): Needs you still comes, its line with no bare colon.
+        {
+            const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(alicesOffer.id) as Record<string, unknown>;
+            const fk = db.pragma('foreign_keys', { simple: true });
+            db.pragma('foreign_keys = OFF');
+            db.prepare('DELETE FROM posts WHERE id = ?').run(alicesOffer.id);
+            try {
+                const gone = (await get('/api/home?cards=needs,deals', alice)).body?.cards ?? {};
+                const line = gone.needs?.items?.find((i: any) => i.kind === 'deal');
+                assert(line?.label === 'A deal is waiting for you' && line.target?.txId === 'tx-home-alice' && gone.deals?.items?.[0]?.title === '',
+                    `needs: a deal whose listing is gone keeps the card, "A deal is waiting for you" with no title (${JSON.stringify(gone.needs)})`);
+            } finally {
+                const cols = Object.keys(row);
+                db.prepare(`INSERT INTO posts (${cols.join(', ')}) VALUES (${cols.map(c => '@' + c).join(', ')})`).run(row);
+                db.pragma(`foreign_keys = ${fk ? 'ON' : 'OFF'}`);
+            }
+        }
+
         // The enterprise: its balance (open, #1286), keepers, this month's figures and its latest line, for its keeper.
         const e = c.enterprise;
         const entBalance = se.getBalance(w3.ent.publicKey).balance;

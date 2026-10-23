@@ -413,7 +413,7 @@ interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
  * the same status, the same code and every other field, only the sentence in French. The suite's French is every marked
  * sentence after FR_SIGN, so a family whose sentence was never marked fails here.
  */
-async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
+async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> {
     console.log("\n--- 6. Each family's refusals in the member's language ---");
     useCatalogsForTests('fr', { server: await everyMarkInFrench(), core: FR_CORE });
     const family = async (name: string, english: string, method: 'GET' | 'POST', who: Id | null, route: string, body?: unknown,
@@ -486,6 +486,15 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     await family('a deal that moved on', 'Cannot cancel — transaction not found or not authorized', 'POST', ann, '/api/marketplace/transactions/cancel',
         { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
     await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    // Asking for one (a Need, a loan) that is gone or no longer active: the same code, from requestPost and its route.
+    const shears = se.createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
+    db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(shears.id);
+    const askGone = await call('POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    const askPaused = await call('POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });
+    assert(gone(askGone, 'post_gone') && gone(askPaused, 'post_gone'),
+        `a post that can't be asked for, gone or no longer active, says so by code (${askGone.status} ${askGone.text} / ${askPaused.status} ${askPaused.text})`);
+    await family('a post asked for that is gone', 'Post not found', 'POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
+    await family('a post asked for that is no longer active', 'Post is not active', 'POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });
 
     // A spent invite: its code beside it (invite_used), its sentence English while the apps still match it.
     const { generateInvite } = await import('./engine/invites.js');

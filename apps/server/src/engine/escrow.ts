@@ -201,7 +201,7 @@ export const LEND_ASK_FIRST_ERROR = word('Ask to borrow it: the lender says yes 
 export const LEND_ASK_FIRST_CODE = 'lend_ask_first';
 /**
  * The codes beside a trade step's refusal that means it moved on since the app showed it: the post was taken or changed
- * (acceptPost), the deal was closed or is not this member's (cancelling it). The apps say so in their own words and
+ * (acceptPost, requestPost), the deal was closed or is not this member's (cancelling it). The apps say so in their own words and
  * refresh (apps/native/utils/changed-elsewhere.ts), so the sentence beside the code is free to be translated.
  */
 export const POST_GONE_CODE = 'post_gone';
@@ -335,11 +335,11 @@ export function requestPost(
     // and "This direct post is not addressed to you" that it was someone's direct post.
     if (!post || postOutOfSight(post, requesterPublicKey)
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
-        throw new Error(word('Post not found'));
+        throw Object.assign(new Error(word('Post not found')), { code: POST_GONE_CODE });
     }
     // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
     if (post.lendable === 1 && post.status === 'pending') throw loanOut();
-    if (post.status !== 'active') throw new Error(word('Post is not active'));
+    if (post.status !== 'active') throw Object.assign(new Error(word('Post is not active')), { code: POST_GONE_CODE });
     assertAccountOpen(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
     if (authorMember?.is_treasury) {

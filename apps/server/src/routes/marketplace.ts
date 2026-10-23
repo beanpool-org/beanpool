@@ -1239,9 +1239,15 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const tx = requestPost(postId, buyerPublicKey, dealQuantityFromBody(hours));
-        if (!tx) throw new Error(word('Cannot request — post not found or unauthorized'));
+        if (!tx) throw Object.assign(new Error(word('Cannot request — post not found or unauthorized')), { code: POST_GONE_CODE });
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
+        // As accept: a post gone or changed since the app showed it, the 400 it always was, with its code.
+        if (err?.code === POST_GONE_CODE) {
+            ctx.status = 400;
+            ctx.body = { error: err.message, code: POST_GONE_CODE };
+            return;
+        }
         respondSettlementAware(ctx, err, 'Failed to request post');
     }
 });

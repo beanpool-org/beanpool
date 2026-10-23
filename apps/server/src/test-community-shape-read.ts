@@ -11,7 +11,7 @@
  *      and the read writes nothing.
  *   2. Every profile switch has a place in the shape, and every lock code appears, each with a sentence.
  *   3. The log: community_settings_log and the known floor's community lines, newest first, at most 50; `version` is the
- *      newest community_settings_log id.
+ *      newest community_settings_log id; the copy a standby is sent carries every line, and a standby's importer takes them.
  *   4. Over HTTPS, through the real middleware: an owner, an admin, a read token and an admin token read it; a moderator,
  *      a backups token, a member and nobody can't; the answer is readShape's and is never cached; and in five states the
  *      real routes (a member's invite, a stranger's request to join, a visitor's Market) do what the shape says.
@@ -97,6 +97,7 @@ async function main(): Promise<void> {
     const { ENABLE_PEER_CONNECTORS } = await import('./connector-manager.js');
     const { setNodeRole } = await import('./config/node-role.js');
     const { keepMainServerCommunitySettings, KEPT_COMMUNITY_SETTINGS_KEY } = await import('./config/community-settings.js');
+    const { importPlainTables } = await import('./engine/plain-tables.js');
     const shape = await import('./config/community-shape.js');
     const { readShape, SHAPE_LOCK_CODES, SHAPE_SWITCH_PLACES } = shape;
 
@@ -471,6 +472,16 @@ async function main(): Promise<void> {
         `then the community_settings_log line, with its note, role and the actor's callsign (${JSON.stringify(second)})`);
     assert(!logged.log.some((l) => l.setting.startsWith('exception') || l.setting.startsWith('health')), 'no member\'s exception and no health line is in it');
     assert(logged.log.every((l, i) => i === 0 || l.at <= logged.log[i - 1].at), 'every line is no newer than the one above it');
+    // A standby holds the log: the main server's copy carries every line, and a server without them takes them, ids and
+    // stamps as the main server wrote them (the importer a standby runs, engine/plain-tables.ts).
+    const lines = () => db.prepare('SELECT * FROM community_settings_log ORDER BY id').all();
+    const written = lines();
+    const payload = await se.exportSyncState('community-shape-suite') as { plainTables?: Record<string, unknown[]> };
+    const sent = payload.plainTables?.community_settings_log ?? [];
+    assert(sent.length === 56 && isDeepStrictEqual(sent, written), `the copy a standby is sent carries every line as written (${sent.length})`);
+    db.prepare('DELETE FROM community_settings_log').run();
+    const imported = importPlainTables(payload.plainTables, true);
+    assert(imported.changes >= 56 && isDeepStrictEqual(lines(), written), `a server without them takes every line from the copy, ids and stamps kept (${imported.changes} changes)`);
 
     // ── 4. Over HTTPS ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. who reads it, over HTTPS ──');

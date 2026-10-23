@@ -14,14 +14,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
-    THINGS, THINGS_DOC_BYTES, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, shedRoom, shedThings, thingCategory, toolDocBytes,
-    type Thing, type ThingsDoc,
+    THINGS, THINGS_DOC_BYTES, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, removeThing, shedRoom, shedThings, shedToDelete, thingCategory,
+    toolDocBytes, type Thing, type ThingsDoc,
 } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
 import { TOOL_APPS } from '../../index';
 import { ToolDocNotKept, ToolDocTooBig } from '../../builder';
 import { openToolCopy, pageNode } from '../../node-copy';
-import { readToolPhoto, readToolRecord, readToolSettings, resetToolStoreForTest, writeToolRecord } from '../../store';
+import { patchToolSettings, readToolPhoto, readToolRecord, readToolSettings, resetToolStoreForTest, writeToolRecord } from '../../store';
 import { keep as keepThings } from '../parts';
 import { memoryIndexedDB, MemoryIDBKeyRange } from '../../../lib/memory-indexeddb';
 import { resetAccountEpochForTest } from '../../../lib/account-epoch';
@@ -620,7 +620,7 @@ describe('Edit', () => {
         await click('thing-delete');
         await click('thing-delete-yes');
         expect(byTestId('thing-refused')).toBeNull();
-        expect((await kept()).things[0]).toMatchObject({ id: 'b-0', gone: true });
+        expect(await keptThing('b-0')).toBeUndefined();
         expect(shedThings(await kept())).toHaveLength(over.length - 1);
         cleanup();
 
@@ -640,6 +640,61 @@ describe('Edit', () => {
         expect(byTestId('edit-problem')?.textContent).toBe(FULL_LINE);
         expect(shedThings(await kept())).toHaveLength(over.length - 1);
         expect(server.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
+    });
+
+    it("with the copy off, an older server's 64 KB holds nothing: a save past it is kept, and the room is the shed's own 128 KB", async () => {
+        // Heard while the copy was on; then the member switched it off.
+        await patchToolSettings(OWNER, 'things', { nodeCopy: false, nodeMax: 65_536 });
+        const full = filledTo(TOOL_LIMITS.docBytes);
+        await keep(shed(...full));
+        await open('main');
+        await waitFor(() => expect(byTestId('things-room')?.textContent).toBe(roomLine(shed(...full), THINGS_DOC_BYTES)));
+        expect(byTestId('things-room')?.textContent).not.toBe(FULL_LINE);
+        cleanup();
+
+        await open('edit');
+        await fillAtCaps();
+        await click('edit-save');
+        expect(byTestId('edit-problem')).toBeNull();
+        expect(shedThings(await kept())).toHaveLength(full.length + 1);
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        // Off: nothing asked of the server, and nothing sent.
+        expect(server.requests.filter((r) => r.includes('/api/tools/'))).toEqual([]);
+        expect(server.puts).toEqual([]);
+    });
+
+    it("switching the copy on with more than an older server keeps says so, and how many things to delete; never \"couldn't reach\"", async () => {
+        await patchToolSettings(OWNER, 'things', { nodeCopy: false });
+        const over: Thing[] = [];
+        while (toolDocBytes(shed(...over)) <= TOOL_LIMITS.docBytes + 6_000) over.push(atCaps(over.length));
+        await keep(shed(...over));
+        server.max = 65_536;
+        await open('main');
+        await click('tool-menu');
+        await click('tool-menu-settings');
+        await click('tool-node-copy');
+        const n = shedToDelete(shed(...over), 65_536);
+        expect(n).toBeGreaterThan(1);
+        await waitFor(() => expect(byTestId('tool-node-copy-too-big')?.textContent).toBe(`Your Tool shed holds more than your community's server keeps for now, so nothing changed. Delete about ${n} things, then switch the copy on again. Or leave it off, and your things stay on this device only.`));
+        expect(byTestId('tool-node-copy-too-big')?.getAttribute('role')).toBe('status');
+        expect(byTestId('tool-node-copy-failed')).toBeNull();
+        expect((await readToolSettings(OWNER, 'things')).nodeCopy).toBe(false);
+        expect(server.puts).toEqual([]);
+        cleanup();
+
+        // That many deleted, the switch is taken, and what is sent fits the server.
+        let d = await kept();
+        for (const t of over.slice(0, n)) d = removeThing(d, t.id, NOW);
+        await keep(d);
+        await open('main');
+        await click('tool-menu');
+        await click('tool-menu-settings');
+        await click('tool-node-copy');
+        await waitFor(async () => expect((await readToolSettings(OWNER, 'things')).nodeCopy).toBe(true));
+        expect(byTestId('tool-node-copy-too-big')).toBeNull();
+        expect(byTestId('tool-node-copy-failed')).toBeNull();
+        expect(server.puts).toHaveLength(1);
+        expect(toolDocBytes(server.puts[0])).toBeLessThanOrEqual(65_536);
     });
 
     it("a refusal on Save is announced as it shows, from a polite region there before Save; never read out twice", async () => {
@@ -893,7 +948,8 @@ describe('A thing', () => {
         expect(server.paused).toEqual(['post-1']);
         expect(await readToolPhoto(OWNER, 'things', ref!)).toBeNull();
         expect(shedThings(await kept())).toEqual([]);
-        expect((await kept()).things[0]).toMatchObject({ id: 't-1', gone: true });
+        // Taken out of the list, nothing of it kept (no tombstone: the sync reads the document whole, never one).
+        expect((await kept()).things).toEqual([]);
         expect(byTestId('things-main')).not.toBeNull();
     });
 
@@ -938,7 +994,7 @@ describe('A thing', () => {
         await click('thing-delete');
         await click('thing-delete-yes');
         expect(byTestId('thing-refused')).toBeNull();
-        expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+        expect((await kept()).things.map((t) => (t as Thing).id)).toEqual(['t-1']);
         expect(byTestId('things-main')).not.toBeNull();
         expect(server.paused).toEqual([]);
         // The paused one's pause is still asked, as its owner's: one a shop closed for now paused would otherwise come back
@@ -1025,7 +1081,8 @@ describe('A thing', () => {
         await click('thing-delete-yes');
         expect(byTestId('thing-refused')).toBeNull();
         await waitFor(() => expect(byTestId('things-main')).not.toBeNull());
-        expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+        expect(await keptThing('t-2')).toBeUndefined();
+        expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1', lentTo: { name: 'Sam' } });
 
         expect(server.asks).toEqual(['pause post-1', 'pause post-2']);
         expect([...server.shopHeld]).toEqual(['post-3']);

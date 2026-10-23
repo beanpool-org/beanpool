@@ -194,12 +194,12 @@ describe("the most the server keeps of a tool's document (its answers' `max`)", 
         expect(JSON.stringify(node.doc(ME, 'kit')).length).toBe(70_000);
     });
 
-    it('a browser that holds more than an older server keeps sends none of it: switching on there fails, and nothing is written over', async () => {
+    it('a browser that holds more than an older server keeps sends none of it: switching on there is too big, never "failed", and nothing is written over', async () => {
         use(A);
         await patchToolSettings(ME, 'kit', { nodeCopy: false });
         expect(await keepToolDoc(ME, 'kit', JSON.stringify(sized(70_000)), iso(t0))).toBe(true);
         node.log.length = 0;
-        expect(await switchToolCopy(bigCopy(A), true)).toBe('failed');
+        expect(await switchToolCopy(bigCopy(A), true)).toBe('too-big');
         expect(node.log.map((r) => r.method)).toEqual(['GET']);
         expect(await setting(A)).toBe(false);
         expect((await readToolSettings(ME, 'kit')).nodeMax).toBe(65536);

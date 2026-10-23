@@ -2,7 +2,9 @@
  * member_tool_state's CHECK on a node made before a tool could name more than 64 KB (the Tool shed's 128 KB, Marty,
  * 23 Oct 2026): schema.sql's CREATE TABLE IF NOT EXISTS never changes an existing table, so db.ts rebuilds it. A
  * state.db with the table as slice S2 made it, booted: the old rows kept, stamp for stamp, a 128 KB shed accepted and a
- * byte past the ceiling still refused by the table itself; the rebuild run again changes nothing.
+ * byte past the ceiling still refused by the table itself; the rebuild run again changes nothing. And the table's
+ * replication watermark (a plain table's index and its two triggers, which the rebuild drops with the table) is there
+ * again after the boot, so a write is still stamped and still reaches the standbys.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-tool-state-check-migration.ts
  */
@@ -28,6 +30,19 @@ const OLD_TABLE = `CREATE TABLE member_tool_state (
     PRIMARY KEY (public_key, tool)
 );`;
 
+/** The watermark a boot gives every plain table (db.ts stampPlainTables, engine/replication-manifest.ts plainTableTriggers). */
+const WATERMARK = {
+    index: 'idx_member_tool_state_updated_at',
+    insert: 'member_tool_state_set_updated_at_on_insert',
+    touch: 'member_tool_state_touch_updated_at',
+};
+const OLD_WATERMARK = `
+    CREATE INDEX ${WATERMARK.index} ON member_tool_state(updated_at);
+    CREATE TRIGGER ${WATERMARK.insert} AFTER INSERT ON member_tool_state FOR EACH ROW WHEN NEW.updated_at IS NULL
+    BEGIN UPDATE member_tool_state SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid; END;
+    CREATE TRIGGER ${WATERMARK.touch} AFTER UPDATE ON member_tool_state FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at
+    BEGIN UPDATE member_tool_state SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid; END;`;
+
 const ANN = 'aa'.repeat(32);
 const body = (bytes: number) => JSON.stringify({ v: 1, p: 'a'.repeat(bytes - 14) });
 
@@ -39,6 +54,7 @@ async function main(): Promise<void> {
     // As on every node (db.ts): foreign keys are off, so the rows need no members table here.
     old.pragma('foreign_keys = OFF');
     old.exec(OLD_TABLE);
+    old.exec(OLD_WATERMARK);
     old.prepare('INSERT INTO member_tool_state (public_key, tool, body, updated_at) VALUES (?, ?, ?, ?)')
         .run(ANN, 'things', body(65_536), '2026-10-20T01:00:00.000Z');
     old.prepare('INSERT INTO member_tool_state (public_key, tool, body, updated_at) VALUES (?, ?, ?, ?)')
@@ -46,6 +62,11 @@ async function main(): Promise<void> {
     let oldRefused = false;
     try { old.prepare('INSERT INTO member_tool_state (public_key, tool, body) VALUES (?, ?, ?)').run(ANN, 'big', body(65_537)); } catch { oldRefused = true; }
     check(oldRefused, '0. setup: the old table refuses a byte past 64 KB');
+    const watermarkOf = (d: { prepare(sql: string): { all(...p: unknown[]): unknown[] } }) =>
+        (d.prepare("SELECT name FROM sqlite_master WHERE tbl_name = 'member_tool_state' AND type IN ('index', 'trigger') AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as Array<{ name: string }>)
+            .map((r) => r.name);
+    const WATERMARK_NAMES = Object.values(WATERMARK).sort();
+    check(JSON.stringify(watermarkOf(old)) === JSON.stringify(WATERMARK_NAMES), '0. setup: the old table has its watermark index and both triggers, as a boot made them');
     old.close();
 
     const { db, initSchema, rebuildToolStateBodyCheck } = await import('./db/db.js');
@@ -61,6 +82,11 @@ async function main(): Promise<void> {
     let took = true;
     try { db.prepare('UPDATE member_tool_state SET body = ? WHERE public_key = ? AND tool = ?').run(body(131_072), ANN, 'things'); } catch { took = false; }
     check(took, '3. a 128 KB shed is taken by the table');
+    check(JSON.stringify(watermarkOf(db)) === JSON.stringify(WATERMARK_NAMES),
+        '3a. after boot the rebuilt table has its watermark index and both triggers again (stampPlainTables, after the rebuild)');
+    const stamped = (db.prepare(`SELECT updated_at FROM member_tool_state WHERE tool = 'things'`).get() as { updated_at: string }).updated_at;
+    check(stamped !== '2026-10-20T01:00:00.000Z' && Date.parse(stamped) > Date.parse('2026-10-20T01:00:00.000Z'),
+        '3b. a write of the body alone is stamped (the touch trigger), so the next delta carries it to the standbys');
     let refused = false;
     try { db.prepare('UPDATE member_tool_state SET body = ? WHERE public_key = ? AND tool = ?').run(body(131_073), ANN, 'things'); } catch { refused = true; }
     check(refused && (db.prepare(`SELECT length(CAST(body AS BLOB)) AS n FROM member_tool_state WHERE tool = 'things'`).get() as { n: number }).n === 131_072,

@@ -91,16 +91,22 @@ describe("the most the node keeps of a tool's document: its answers' `max`", () 
     it("never a PUT past the node's max: an older node's 64 KB keeps a 70 KB shed on the device, and nothing is sent", async () => {
         const { d, device } = holding(70_000);
         const old = keeping(65_536);
-        expect(await syncToolCopy(KIT, device, old.node)).toBe('later');
+        // Said as what it is, too big for this node, never as no answer: the node answered.
+        expect(await syncToolCopy(KIT, device, old.node)).toBe('too-big');
         expect(old.sent).toEqual(['GET']);
         expect(d.heard).toEqual([65_536]);
         expect(d.sent).toBe(0);
-        // The member's switch-on there fails, and the setting is not written.
+        // The member's switch-on there is too big, not "failed" (that is the offline line), and the setting is not written.
         const off = holding(70_000, false);
         const again = keeping(65_536);
-        expect(await turnToolCopyOn(KIT, off.device, again.node)).toBe('failed');
+        expect(await turnToolCopyOn(KIT, off.device, again.node)).toBe('too-big');
         expect(again.sent).toEqual(['GET']);
         expect(off.d.setting).toBe(false);
+        // No answer at all is still "failed", whatever the device holds.
+        const away = holding(70_000, false);
+        const down: ToolCopyNode = { get: async () => null, put: async () => null, delete: async () => null };
+        expect(await turnToolCopyOn(KIT, away.device, down)).toBe('failed');
+        expect(away.d.setting).toBe(false);
         // A node that keeps 128 KB of it takes the same document.
         const { device: same } = holding(70_000);
         const now = keeping(131_072);

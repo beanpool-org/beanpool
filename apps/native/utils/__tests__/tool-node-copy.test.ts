@@ -77,7 +77,7 @@ vi.mock('../db', () => ({
 
 import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, word, type ToolManifest } from '@beanpool/core';
 import { TOOL_DOCS_TABLE } from '../../tools/schema';
-import { readToolCopy, readToolDoc, readToolSettings, writeToolDoc, writeToolSettings, type ToolSettings } from '../../tools/store';
+import { readToolCopy, readToolDoc, readToolSettings, toolDocMaxHere, writeToolDoc, writeToolSettings, type ToolSettings } from '../../tools/store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
 import { announceAccountOnPhone } from '../account-on-phone';
 
@@ -265,16 +265,33 @@ describe("the most the server keeps of a tool's document (its answers' `max`)", 
         expect(JSON.stringify(node.doc(ME, 'kit')).length).toBe(70_000);
     });
 
-    it("a phone that holds more than an older server keeps sends none of it: switching on there fails, and nothing is written over", async () => {
+    it("a phone that holds more than an older server keeps sends none of it: switching on there is too big, never \"failed\", and nothing is written over", async () => {
         use(A);
         await writeToolSettings(ME, 'kit', { nodeCopy: false }, URL_A);
         await writeToolDoc(ME, BIG, sized(70_000), t0);
         node.log.length = 0;
-        expect(await switchToolCopy(bigCopy(A), true)).toBe('failed');
+        expect(await switchToolCopy(bigCopy(A), true)).toBe('too-big');
         expect(node.log.map((r) => r.method)).toEqual(['GET']);
         expect(await setting(A)).toBe(false);
         expect((await readToolSettings(ME, 'kit', URL_A)).nodeMax).toBe(65536);
         expect(JSON.stringify(await held(A)).length).toBe(70_000);
+    });
+
+    it("with the copy off, the server's bound holds nothing: the phone's store takes up to the tool's own, and on again caps it once more", async () => {
+        use(A);
+        // Heard from an older server while the copy was on; then the member switched it off.
+        await writeToolSettings(ME, 'kit', { nodeCopy: false, nodeMax: 65_536 }, URL_A);
+        expect(toolDocMaxHere(BIG, await readToolSettings(ME, 'kit', URL_A))).toBe(131_072);
+        await writeToolDoc(ME, BIG, sized(1_000), t0);
+        await writeToolDoc(ME, BIG, sized(70_000), t0 + 1);
+        expect(JSON.stringify(await held(A)).length).toBe(70_000);
+        await expect(writeToolDoc(ME, BIG, sized(131_073), t0 + 2)).rejects.toMatchObject({ name: 'ToolDocTooBigError', max: 131_072 });
+        // On (or never set, which is on): the server's bound is the store's again.
+        await writeToolSettings(ME, 'kit', { nodeMax: 65_536 }, URL_A);
+        expect(toolDocMaxHere(BIG, await readToolSettings(ME, 'kit', URL_A))).toBe(65_536);
+        await writeToolDoc(ME, BIG, sized(1_000), t0 + 3);
+        await expect(writeToolDoc(ME, BIG, sized(70_000), t0 + 4)).rejects.toMatchObject({ name: 'ToolDocTooBigError', max: 65_536 });
+        expect(toolDocMaxHere(BIG, { nodeCopy: true, nodeMax: 65_536 })).toBe(65_536);
     });
 });
 

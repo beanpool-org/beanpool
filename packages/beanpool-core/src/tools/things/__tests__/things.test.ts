@@ -147,28 +147,27 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         expect(thingsCounts(read).things).toBe(115);
     });
 
-    it('gone things keep their places among live ones, and neither pushes the other out', () => {
+    it("an earlier build's gone things (#2373's tombstones) are dropped on read: nothing reads one; the live ones keep their places", () => {
         const at = '2026-10-01T00:00:00.000Z';
         const gone = Array.from({ length: 110 }, (_, i) => ({ id: `g-${i}`, name: `Gone ${i}`, gone: true, createdAt: at, updatedAt: at }));
         const live = Array.from({ length: 10 }, (_, i) => ({ id: `l-${i}`, name: `Live ${i}`, createdAt: at, updatedAt: at }));
-        const read = readThingsDoc({ v: 1, things: [...gone, ...live] });
-        expect(read.things.length).toBe(120);
-        expect(ownThings(read).filter(isLiveThing).map((t) => t.id)).toEqual(live.map((t) => t.id));
+        const read = readThingsDoc({ v: 1, things: [...gone.slice(0, 55), ...live, ...gone.slice(55)] });
+        expect(read.things.length).toBe(10);
+        expect(ownThings(read).map((t) => t.id)).toEqual(live.map((t) => t.id));
         expect(thingsCounts(read)).toEqual({ things: 10, listed: 0, out: 0, shelf: 10 });
         expect(readThingsDoc(read)).toEqual(read);
+        // A gone that isn't true is no tombstone: the thing is kept, and live.
+        expect(ownThings(readThingsDoc({ v: 1, things: [{ ...live[0], gone: false }] })).map((t) => [t.id, isLiveThing(t)])).toEqual([['l-0', true]]);
     });
 
-    it('a 101st live thing and the gone things around it are all kept, each in its place', () => {
+    it('a 101st live thing is kept, each in its place, and the gone things around them are not', () => {
         const at = '2026-10-01T00:00:00.000Z';
         const thing = (id: string, gone = false) => ({ id, name: id, ...(gone ? { gone: true } : {}), createdAt: at, updatedAt: at });
-        const raw = [
-            thing('g-a', true),
-            ...Array.from({ length: 105 }, (_, i) => thing(`l-${i}`)),
-            thing('g-b', true),
-        ];
+        const live = Array.from({ length: 105 }, (_, i) => thing(`l-${i}`));
+        const raw = [thing('g-a', true), ...live.slice(0, 50), thing('g-m', true), ...live.slice(50), thing('g-b', true)];
         const read = readThingsDoc({ v: 1, things: raw });
         const ids = ownThings(read).map((t) => t.id);
-        expect(ids).toEqual(raw.map((t) => t.id));
+        expect(ids).toEqual(live.map((t) => t.id));
         expect(ids).toContain('l-100');
         expect(thingsCounts(read).things).toBe(105);
         expect(readThingsDoc(read)).toEqual(read);

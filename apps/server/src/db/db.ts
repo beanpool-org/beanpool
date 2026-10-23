@@ -2243,7 +2243,7 @@ export function initSchema() {
         console.error('[DB] ⚠️ Could not remove retired voting data:', err);
     }
     // A scope on a Decision (community or one enterprise), and one open Decision per member author per scope; the node's
-    // own "Keep this suspension?" votes (author SYSTEM) are exempt.
+    // own votes (author SYSTEM: a pause's vote on removing the member, a "Keep this suspension?" from before) are exempt.
     try {
         if (addDecisionScope(db, schemaSql) === 'rebuilt') console.log('[DB] ✅ Migrated decisions to carry a scope');
     } catch (err: any) {

@@ -1573,10 +1573,11 @@ CREATE TABLE IF NOT EXISTS owner_lock_opens (
     signed_payload TEXT NOT NULL
 );
 
--- 22b. A node role held aside during an admin's emergency suspension (answer L).
--- Suspending removes the member's node role; if the "Keep this suspension?" vote does not keep it
--- (fails, misses quorum, is halted, or an admin lifts the suspension) the exact row comes back.
--- If the community keeps the suspension the row is dropped. A passed remove_member Decision holds the role
+-- 22b. A node role held aside during an admin's emergency suspension (answer L), the pause.
+-- Suspending removes the member's node role; if the vote it opens (on removing them since removal by vote S2, or a
+-- "Keep this suspension?" from before) does not pass (fails, misses quorum, is halted, can't be carried out, or an admin
+-- lifts the suspension) the exact row comes back. If an old "Keep this suspension?" passes, the row is dropped; if the
+-- vote on removing them passes, the row stays under it through the grace window. A passed remove_member Decision holds the role
 -- the same way through its 7-day grace window: halted or cancelled by reinstatement, it comes back; pruned,
 -- it is dropped. Giving back an owner or admin role needs an owner actor. Never served by any route.
 CREATE TABLE IF NOT EXISTS suspended_node_roles (

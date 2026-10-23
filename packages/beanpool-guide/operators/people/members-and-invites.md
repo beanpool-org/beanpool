@@ -98,7 +98,7 @@ Open **People & Safety**, then **Members**, and open a person.
 
 Owners and admins can:
 
-- **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on keeping the suspension, and if the vote does not pass it lifts by itself. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.
+- **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on removing them: if the vote does not pass, the suspension lifts when it closes, and if it passes, they are removed after 7 days' grace. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.
 - **Lift suspension**: ends a suspension early and closes its vote.
 - **Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level doesn't change, on their profile and their listings alike: it counts what they have done, not their credit line.
 - **Promote** and **Demote**: whether they can vouch for others.

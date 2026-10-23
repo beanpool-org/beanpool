@@ -2011,10 +2011,10 @@
             }
         }
 
-        // Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" community vote.
-        // If the vote does not pass, the suspension lifts by itself. The reason is shown to members.
+        // Emergency suspension: takes effect at once and opens the community's 7-day vote on removing the member (removal
+        // by vote S2). If the vote does not pass, the suspension lifts by itself. The reason is shown to members.
         async function suspendMember(pubkey) {
-            const reason = prompt('Suspend now. Members vote over 7 days on whether to keep it; if they do not, it lifts by itself.\n\nReason (members will see this, at least 10 characters):');
+            const reason = prompt('Suspend now. Members vote over 7 days on removing them; if the vote does not pass, the suspension lifts by itself.\n\nReason (members will see this, at least 10 characters):');
             if (reason === null) return;
             if (reason.trim().length < 10) { alert('Please give a reason of at least 10 characters.'); return; }
             try {
@@ -2025,7 +2025,7 @@
                 });
                 const body = await res.json().catch(() => ({}));
                 if (res.ok) {
-                    alert('Suspended. A 7-day community vote on keeping it is now open.');
+                    alert('Suspended. A 7-day community vote on removing them is now open.');
                     loadAdminData();
                 } else {
                     alert('Suspend failed: ' + (body.error || res.status));

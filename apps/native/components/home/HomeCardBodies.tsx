@@ -379,13 +379,18 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
                     const closes = closesInWords(item.closesAt, now);
                     const vote = item.voted ? t('You voted') : t('Not yet');
                     const sub = `${closes} · ${vote}`;
+                    const subA11y = t('{closes}, {vote}', { closes, vote });
+                    const a11y = t('{title} {sub} Opens Decide.', {
+                        title: sentence(item.title),
+                        sub: sentence(subA11y),
+                    });
                     return (
                         <HomeRow
                             key={item.id}
                             colors={colors}
                             text={item.title}
                             sub={sub}
-                            a11y={t('{title}. {sub}. Opens Decide.', { title: item.title, sub })}
+                            a11y={a11y}
                             onPress={() => router.push(DECIDE_HREF)}
                             testID={`home-decide-${item.id}`}
                         />
@@ -396,8 +401,8 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
                         colors={colors}
                         text={t('Poll: {title}', { title: card.poll.title })}
                         sub={closesInWords(card.poll.closesAt, now)}
-                        a11y={t('Poll: {title}. {closes}. Opens the poll.', {
-                            title: card.poll.title,
+                        a11y={t('Poll: {title} {closes} Opens the poll.', {
+                            title: sentence(card.poll.title),
                             closes: sentence(closesInWords(card.poll.closesAt, now)),
                         })}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: card.poll!.id } })}

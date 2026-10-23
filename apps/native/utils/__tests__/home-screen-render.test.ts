@@ -3286,6 +3286,8 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(card.textContent).toContain('Not yet');
         expect(card.textContent).toContain('Poll: Market on Sundays?');
         expect(document.querySelector('[data-testid="home-decide-all"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-decide-d1"]')!.getAttribute('aria-label')).toBe('Compost bay. closes in 8 hours, Not yet. Opens Decide.');
+        expect(document.querySelector('[data-testid="home-decide-poll"]')!.getAttribute('aria-label')).toBe('Poll: Market on Sundays? closes tomorrow. Opens the poll.');
 
         // Tapping decision opens Commons -> Decide
         Object.values(nav.router).forEach(f => f.mockClear());
@@ -3492,6 +3494,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         const pollRow = document.querySelector('[data-testid="home-decide-poll"]')!;
         expect(pollRow.getAttribute('aria-label')).not.toContain('Closes closes');
         expect(pollRow.getAttribute('aria-label')).toContain('closes tomorrow');
+        expect(pollRow.getAttribute('aria-label')).toBe('Poll: Sunday market? closes tomorrow. Opens the poll.');
     });
 
     it('beans card: frozen member sees spending paused warning even when month is present', async () => {

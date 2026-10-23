@@ -109,7 +109,8 @@ describe('the preview sources', () => {
         const people = read('app/(tabs)/people.tsx');
         // Its words say 12 words only where the door offers them (invite-entries.ts bringSomeoneHereText: finding 7).
         expect(people).toContain('{bringSomeoneHereText(nodeProfile?.features)}');
-        expect(people).toMatch(/\{invitesPreview && <LocalCommunityMark variant="line" feature="invites" text=\{LOCAL_COMMUNITY_LINES\.invites\} \/>\}/);
+        // Through t() as the other lines are (this one was left raw by S3b: English in every language).
+        expect(people).toMatch(/\{invitesPreview && <LocalCommunityMark variant="line" feature="invites" text=\{t\(LOCAL_COMMUNITY_LINES\.invites\)\} \/>\}/);
         // The profile's line in the member's language since words S3l: the same line, through t().
         expect(read('app/public-profile.tsx')).toMatch(/\{!showsBeans && beansPreview && \(\s*<View style=\{\{ marginHorizontal: 16 \}\}>\s*<LocalCommunityMark variant="line" feature="beans" text=\{t\(LOCAL_COMMUNITY_LINES\.profile\)\} \/>/);
     });

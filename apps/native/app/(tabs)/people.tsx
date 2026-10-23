@@ -1144,7 +1144,7 @@ export default function PeopleScreen() {
                                 <>
                                     <Text style={styles.sectionHeader}>{t('📤 Bring someone here')}</Text>
                                     <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>
-                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
+                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={t(LOCAL_COMMUNITY_LINES.invites)} />}
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel={t("Share this community's link")}

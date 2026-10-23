@@ -610,7 +610,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {/* Where Beans live in a local community: the line in the trust card's slot, on every profile */}
                 {beansMarked && (
                     <div className="mx-4 mt-4" data-testid="profile-local-line">
-                        <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.profile}
+                        <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.profile)}
                             onNearYou={onNavigateTab ? () => onNavigateTab('home') : undefined}
                             onGuide={onNavigateTab ? (slug) => onNavigateTab('guide', slug) : undefined} />
                     </div>

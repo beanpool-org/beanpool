@@ -27,6 +27,7 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: () => ctx, useStyles: (make: (t: unknown) => unknown) => make(ctx) };
 });
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('expo-router', () => ({ router: { push() {}, replace() {}, back() {} } }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {}, getAllKeys: async () => [], multiRemove: async () => {} },
 }));
@@ -54,6 +55,10 @@ import { FORGED_NOTICE_LINE, warnAboutNotice } from '../push-notice-check';
 import { notificationChannels } from '../notification-channels';
 import { authenticateUser } from '../LocalAuth';
 import { requireDeviceUnlock } from '../node-admin';
+import { NoWordsNotice } from '../../components/NoWordsNotice';
+import { ExampleHeader } from '../../components/showcase/LocalCommunityMark';
+import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../no-words-copy';
+import { beansLines } from '../home-cards';
 import { bypassing } from './key-words-harness';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -205,6 +210,39 @@ describe('Settings: a delete the community refused with only a status, and a sig
         expect(settingsLineWords('Could not disconnect google: {"error":"not_found"}')).toBe('Não foi possível desligar google: {"error":"not_found"}');
         setLanguage('xx');
         expect(settingsLineWords('Server returned 503')).toBe(pseudoLocalise('Server returned {status}').replace('{status}', '503'));
+    });
+});
+
+describe('a phone with no 12 words: the notice on Settings and the not-recognised screen', () => {
+    it('both kinds in the pseudo-locale, and in English exactly as utils/no-words-copy.ts writes them', () => {
+        for (const kind of ['way-back', 'before-wipe'] as const) {
+            setLanguage('en');
+            draw(createElement(NoWordsNotice, { kind }));
+            const english = host.textContent ?? '';
+            expect(english, kind).toBe(kind === 'way-back' ? `🔑 ${NO_WORDS_WAY_BACK}` : `⚠️ ${noWordsBeforeWipe()}`);
+            act(() => root.unmount());
+            root = createRoot(host);
+            setLanguage('xx');
+            draw(createElement(NoWordsNotice, { kind }));
+            expect(bypassing(host), kind).toEqual([]);
+            act(() => root.unmount());
+            root = createRoot(host);
+        }
+        setLanguage('xx');
+        draw(createElement(NoWordsNotice, { kind: 'before-wipe', name: 'Riverbend' }));
+        expect(bypassing(host, ['Riverbend'])).toEqual([]);
+    });
+});
+
+describe('the global showcase\'s example header, and Your Beans\' tier', () => {
+    it('"Example Valley · an example member" through t(); the tier the node names by its English id, as its word', () => {
+        setLanguage('xx');
+        draw(createElement(ExampleHeader));
+        expect(bypassing(host)).toEqual([]);
+        setLanguage('pt', [{ 'Resident\u0004trust tier': 'Residente' }]);
+        expect(beansLines({ balance: 12, room: 200, tier: 'Resident', activated: true, frozen: false }).sub).toBe('Residente');
+        // A tier a newer node names that this build doesn't know: as it came.
+        expect(beansLines({ balance: 12, room: 200, tier: 'Sage', activated: true, frozen: false }).sub).toBe('Sage');
     });
 });
 

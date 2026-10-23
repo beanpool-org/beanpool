@@ -10,7 +10,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors as defaultColors, type AppColors } from '../constants/colors';
-import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
+import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
+import { noWordsBeforeWipeWords, welcomeLineWords } from './welcome/welcome-lines';
 
 export function NoWordsNotice({
     kind,
@@ -30,7 +31,8 @@ export function NoWordsNotice({
     return (
         <View style={[styles.box, { backgroundColor: tone.bg, borderColor: tone.border }]}>
             <Text style={[styles.line, { color: warn ? tone.fg : colors.text.body }, warn && styles.bold]}>
-                {warn ? `⚠️ ${noWordsBeforeWipe(name)}` : `🔑 ${NO_WORDS_WAY_BACK}`}
+                {/* utils/no-words-copy.ts's sentences, in the member's language (components/welcome/welcome-lines.ts). */}
+                {warn ? `⚠️ ${noWordsBeforeWipeWords(name)}` : `🔑 ${welcomeLineWords(NO_WORDS_WAY_BACK)}`}
             </Text>
             {action && (
                 <Pressable

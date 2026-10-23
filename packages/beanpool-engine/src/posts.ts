@@ -8,7 +8,8 @@ import {
     foldApostrophes,
     parseReachPeers,
     type PostReach,
-    type AudienceScope
+    type AudienceScope,
+    word
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
@@ -614,7 +615,7 @@ export function validatePostPhotos(photos: string[] | undefined): void {
             throw new Error('Each photo must be a base64 data URL (JPEG, PNG, or WebP)');
         }
         if (p.length > MAX_PHOTO_BASE64_CHARS) {
-            throw new Error('Photo too large — resize to 800px JPEG before uploading');
+            throw new Error(word('Photo too large — resize to 800px JPEG before uploading'));
         }
     }
 }

@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind, word } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -129,9 +129,9 @@ function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member || member.is_visitor) throw new Error('Member not found');
-    if (member.status === 'disabled') throw new Error('Account is disabled');
-    if (member.status === 'pruned') throw new Error('Account has been pruned');
-    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    if (member.status === 'disabled') throw new Error(word('Account is disabled'));
+    if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
 }
 
 function assertProfileComplete(publicKey: string): void {
@@ -146,7 +146,7 @@ function assertProfileComplete(publicKey: string): void {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
-        throw new Error('Please set a display name before using the marketplace.');
+        throw new Error(word('Please set a display name before using the marketplace.'));
     }
 }
 
@@ -162,9 +162,9 @@ function assertNotOnHoliday(publicKey: string): void {
 function assertEnterpriseCanPost(publicKey: string): void {
     const member = db.prepare("SELECT is_treasury, paused, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (member?.is_treasury) {
-        if (member.paused === 1) throw new Error('Enterprise is paused — cannot post offers or needs while paused');
-        if (member.status === 'winding_up') throw new Error('Enterprise is winding up — no new listings allowed');
-        if (member.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (member.paused === 1) throw new Error(word('Enterprise is paused — cannot post offers or needs while paused'));
+        if (member.status === 'winding_up') throw new Error(word('Enterprise is winding up — no new listings allowed'));
+        if (member.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
 }
 
@@ -310,7 +310,7 @@ function cleanPrivateNote(raw: unknown): string | null {
 
 function assertEventPin(lat: unknown, lng: unknown): void {
     if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-        throw new Error('An event needs a place on the map');
+        throw new Error(word('An event needs a place on the map'));
     }
 }
 
@@ -320,7 +320,7 @@ function resolveEventEnd(startIso: string, rawEnd: unknown): string {
         return new Date(Date.parse(startIso) + EVENT_DEFAULT_DURATION_MS).toISOString();
     }
     const endIso = parseEventTime(rawEnd, 'End time');
-    if (Date.parse(endIso) <= Date.parse(startIso)) throw new Error('An event must end after it starts');
+    if (Date.parse(endIso) <= Date.parse(startIso)) throw new Error(word('An event must end after it starts'));
     return endIso;
 }
 
@@ -348,8 +348,8 @@ function cleanEventLink(raw: unknown): string | null {
     if (v.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
     let url: URL | null = null;
     try { url = new URL(v); } catch { url = null; }
-    if (!url || !/^https?:$/.test(url.protocol) || !/^https?:\/\//i.test(v)) throw new Error('The link to join must start with https:// or http://');
-    if (url.username || url.password) throw new Error('The link to join must not hold a user name or password');
+    if (!url || !/^https?:$/.test(url.protocol) || !/^https?:\/\//i.test(v)) throw new Error(word('The link to join must start with https:// or http://'));
+    if (url.username || url.password) throw new Error(word('The link to join must not hold a user name or password'));
     if (url.href.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
     return url.href;
 }
@@ -535,7 +535,7 @@ export function createPost(
     }
     // Events are for this community or one of its groups (§1). A direct event has no meaning.
     if (type === 'event' && audienceScope === 'direct') {
-        throw new Error('An event is for this community or a group');
+        throw new Error(word('An event is for this community or a group'));
     }
 
     if (audienceScope === 'group') {
@@ -606,10 +606,10 @@ export function createPost(
     if (type === 'poll') {
         const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(authorPublicKey) as any;
         if (!memberRow || memberRow.status !== 'active') {
-            throw new Error('Only active members can create polls');
+            throw new Error(word('Only active members can create polls'));
         }
         if (memberRow.credit_frozen) {
-            throw new Error('Credit-frozen members cannot create polls');
+            throw new Error(word('Credit-frozen members cannot create polls'));
         }
 
         // Sweep expired polls before rate limit check
@@ -618,13 +618,13 @@ export function createPost(
 
         const rawOpts = options?.pollOptions;
         if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
-            throw new Error('Polls must have between 2 and 4 options');
+            throw new Error(word('Polls must have between 2 and 4 options'));
         }
         const seenIds = new Set<string>();
         cleanPollOptions = (rawOpts as any[]).map((opt: any, idx: number) => {
             const text = typeof opt === 'string' ? opt.trim() : (typeof opt?.text === 'string' ? opt.text.trim() : '');
             if (!text || text.length > 80) {
-                throw new Error('Poll options must be between 1 and 80 characters');
+                throw new Error(word('Poll options must be between 1 and 80 characters'));
             }
             const rawId = (typeof opt === 'object' && opt?.id) ? String(opt.id).trim() : `opt_${idx + 1}`;
             const optId = /^[a-zA-Z0-9_-]{1,32}$/.test(rawId) ? rawId : `opt_${idx + 1}`;
@@ -637,7 +637,7 @@ export function createPost(
 
         const durationDays = options?.durationDays ? Number(options.durationDays) : 7;
         if (![3, 7, 14].includes(durationDays)) {
-            throw new Error('Poll duration must be 3, 7, or 14 days');
+            throw new Error(word('Poll duration must be 3, 7, or 14 days'));
         }
         pollClosesAt = new Date(now + durationDays * 24 * 60 * 60 * 1000).toISOString();
 
@@ -675,7 +675,7 @@ export function createPost(
         } else {
             eventStartAt = parseEventTime(options?.eventStartAt, 'Start time');
         }
-        if (Date.parse(eventStartAt) <= Date.now()) throw new Error('An event must start in the future');
+        if (Date.parse(eventStartAt) <= Date.now()) throw new Error(word('An event must start in the future'));
         if (clockSent(options?.eventEndLocal)) {
             const resolved = instantOfClock(options!.eventEndLocal, eventTz, 'End time');
             eventEndAt = resolved.instant;
@@ -683,7 +683,7 @@ export function createPost(
         } else {
             eventEndAt = resolveEventEnd(eventStartAt, options?.eventEndAt);
         }
-        if (Date.parse(eventEndAt) <= Date.parse(eventStartAt)) throw new Error('An event must end after it starts');
+        if (Date.parse(eventEndAt) <= Date.parse(eventStartAt)) throw new Error(word('An event must end after it starts'));
         noteTimeAdjusted(options?.out, startAdjusted, endAdjusted);
         eventStartLocal = instantToLocal(eventStartAt, eventTz);
         eventEndLocal = instantToLocal(eventEndAt, eventTz);
@@ -729,12 +729,12 @@ export function createPost(
         if (type === 'poll') {
             const authorOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(authorPublicKey) as any;
             if (authorOpen && authorOpen.c >= 1) {
-                throw new Error('Rate limit: You can only have 1 active poll at a time');
+                throw new Error(word('Rate limit: You can only have 1 active poll at a time'));
             }
 
             const nodeOpen = db.prepare("SELECT COUNT(*) as c FROM posts WHERE type = 'poll' AND status = 'active'").get() as any;
             if (nodeOpen && nodeOpen.c >= 5) {
-                throw new Error('Rate limit: Node limit of 5 active polls reached');
+                throw new Error(word('Rate limit: Node limit of 5 active polls reached'));
             }
         }
 
@@ -878,7 +878,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 
     const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
     const dealSides = openDealSides(id);
-    if (pendingTx && pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
+    if (pendingTx && pendingTx.c > 0) throw new Error(word('This post has a deal in escrow — complete or cancel the deal before deleting it'));
 
     let removed = false;
     db.transaction(() => {
@@ -1095,10 +1095,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         // branch already needs an active keeper. Suspended and disabled hosts pass, as before.
         assertNodeMember(authorPublicKey);
         if (eventRow.event_state === 'cancelled' || eventRow.status === 'cancelled' || !eventRow.active) {
-            throw new Error('Cannot edit a cancelled event');
+            throw new Error(word('Cannot edit a cancelled event'));
         }
         if (eventRow.event_end_at && Date.parse(eventRow.event_end_at) <= Date.now()) {
-            throw new Error('Cannot edit an event that has ended');
+            throw new Error(word('Cannot edit an event that has ended'));
         }
     }
     const existingPost = getPosts(db, { id, includeAllScopes: true })[0] ?? null;
@@ -1123,20 +1123,20 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     if (existingPost.type === 'poll') {
         if (existingPost.status !== 'active') {
-            throw new Error('Cannot edit a closed poll');
+            throw new Error(word('Cannot edit a closed poll'));
         }
         const voteCountRow = db.prepare("SELECT COUNT(*) as c FROM poll_votes WHERE post_id = ?").get(id) as any;
         const hasVotes = (voteCountRow?.c || 0) > 0;
         if (hasVotes) {
             if (updates.title !== undefined && updates.title !== existingPost.title) {
-                throw new Error('Cannot edit poll question once votes have been cast');
+                throw new Error(word('Cannot edit poll question once votes have been cast'));
             }
             if (updates.pollOptions !== undefined) {
-                throw new Error('Cannot edit poll options once votes have been cast');
+                throw new Error(word('Cannot edit poll options once votes have been cast'));
             }
             // Whether it is an open vote is what every voter was told when they voted: never changed after the first.
             if (updates.pollOpenVote !== undefined && (updates.pollOpenVote === true) !== !!existingPost.pollOpenVote) {
-                throw new Error('Cannot change whether a poll is an open vote once votes have been cast');
+                throw new Error(word('Cannot change whether a poll is an open vote once votes have been cast'));
             }
         }
         // Enforce poll isolation during updates
@@ -1219,7 +1219,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             startAdjusted = adjustmentOf(existingPost.eventStartLocal, resolved);
         }
         if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
-            throw new Error('An event must start in the future');
+            throw new Error(word('An event must start in the future'));
         }
         let nextEnd: string;
         if (clockSent(raw.eventEndLocal)) {
@@ -1236,7 +1236,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         } else {
             nextEnd = resolveEventEnd(nextStart, raw.eventEndAt);
         }
-        if (Date.parse(nextEnd) <= Date.parse(nextStart)) throw new Error('An event must end after it starts');
+        if (Date.parse(nextEnd) <= Date.parse(nextStart)) throw new Error(word('An event must end after it starts'));
 
         let placeChanged = pinMoved || nextOnline !== prevOnline;
         if (nextOnline) {
@@ -1377,13 +1377,13 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (existingPost.type === 'poll' && updates.pollOptions !== undefined) {
         const rawOpts = updates.pollOptions;
         if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
-            throw new Error('Polls must have between 2 and 4 options');
+            throw new Error(word('Polls must have between 2 and 4 options'));
         }
         const seenIds = new Set<string>();
         const cleanPollOptions = (rawOpts as any[]).map((opt: any, idx: number) => {
             const text = typeof opt === 'string' ? opt.trim() : (typeof opt?.text === 'string' ? opt.text.trim() : '');
             if (!text || text.length > 80) {
-                throw new Error('Poll options must be between 1 and 80 characters');
+                throw new Error(word('Poll options must be between 1 and 80 characters'));
             }
             const rawId = (typeof opt === 'object' && opt?.id) ? String(opt.id).trim() : `opt_${idx + 1}`;
             const optId = /^[a-zA-Z0-9_-]{1,32}$/.test(rawId) ? rawId : `opt_${idx + 1}`;
@@ -1516,7 +1516,7 @@ export function rsvpEvent(
     assertMemberActive(memberPublicKey);
     const memberRow = db.prepare("SELECT status FROM members WHERE public_key = ?").get(memberPublicKey) as any;
     if (!memberRow || memberRow.status !== 'active') {
-        throw new Error('Only active members can RSVP to events');
+        throw new Error(word('Only active members can RSVP to events'));
     }
     rollIfDue(broadcast, postId);
 
@@ -1533,11 +1533,11 @@ export function rsvpEvent(
     // audit check, 2026-10-17). Only Going or Interested needs an open event.
     const withdrawing = status === null;
     if (!withdrawing && (!row.active || row.status !== 'active' || row.event_state === 'cancelled')) {
-        throw new Error('This event has been cancelled');
+        throw new Error(word('This event has been cancelled'));
     }
     const nowIso = new Date().toISOString();
     if (!withdrawing && row.event_end_at && row.event_end_at <= nowIso) {
-        throw new Error('This event has ended');
+        throw new Error(word('This event has ended'));
     }
     if (row.audience_scope === 'group') {
         const isMem = row.target_group_id && db.prepare(
@@ -1554,7 +1554,7 @@ export function rsvpEvent(
             const spki = Buffer.concat([spkiHeader, Buffer.from(memberPublicKey, 'hex')]);
             const publicKeyObject = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
             const valid = crypto.verify(undefined, Buffer.from(`${postId}:${status ?? 'none'}`), publicKeyObject, Buffer.from(signature, 'base64'));
-            if (!valid) throw new Error('Invalid cryptographic signature for RSVP');
+            if (!valid) throw new Error(word('Invalid cryptographic signature for RSVP'));
         } catch (err: any) {
             if (err.message === 'Invalid cryptographic signature for RSVP') throw err;
             throw new Error('Invalid RSVP signature format');
@@ -1569,7 +1569,7 @@ export function rsvpEvent(
                 "UPDATE posts SET updated_at = ? WHERE id = ? AND active = 1 AND status = 'active' AND COALESCE(event_state, '') != 'cancelled' AND event_end_at > ?"
             ).run(nowIso, postId, nowIso);
         if (res.changes === 0) {
-            throw new Error('This event is no longer open');
+            throw new Error(word('This event is no longer open'));
         }
         // RSVP writes and their tombstones must be strictly ordered in time, or a replica cannot tell
         // "not going, then going again" from "going, then not going" when both land in one millisecond.
@@ -1753,9 +1753,9 @@ export function letInEvent(
     if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
     if (!isEventHost(db, row, actorPubkey)) throw new Error(LET_IN_ONLY_HOST);
     assertNodeMember(actorPubkey);
-    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error('This event has been cancelled');
+    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') throw new Error(word('This event has been cancelled'));
     const nowIso = new Date().toISOString();
-    if (row.event_end_at && row.event_end_at <= nowIso) throw new Error('This event has ended');
+    if (row.event_end_at && row.event_end_at <= nowIso) throw new Error(word('This event has ended'));
     if (row.event_host_lets_in !== 1) throw new Error(LET_IN_NOT_ASKED);
 
     // A let-in goes only to someone who can see the event, and never to a visitor, as eventWaitingCount counts them (the
@@ -1844,7 +1844,7 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
         throw new Error('Poll not found');
     }
     if (post.authorPublicKey !== authorPublicKey) {
-        throw new Error('Only the author can close a poll');
+        throw new Error(word('Only the author can close a poll'));
     }
     if (post.status === 'completed') {
         return forActor(post, authorPublicKey);
@@ -1876,10 +1876,10 @@ export function votePoll(
     assertMemberActive(voterPublicKey);
     const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(voterPublicKey) as any;
     if (!memberRow || memberRow.status !== 'active') {
-        throw new Error('Only active members can vote in polls');
+        throw new Error(word('Only active members can vote in polls'));
     }
     if (memberRow.credit_frozen) {
-        throw new Error('Credit-frozen members cannot vote in polls');
+        throw new Error(word('Credit-frozen members cannot vote in polls'));
     }
 
     const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
@@ -1891,7 +1891,7 @@ export function votePoll(
         throw new Error('Poll not found');
     }
     if (post.status !== 'active') {
-        throw new Error('This poll is closed');
+        throw new Error(word('This poll is closed'));
     }
     if (post.audienceScope === 'group') {
         if (!post.targetGroupId) {
@@ -1913,13 +1913,13 @@ export function votePoll(
     if (post.pollClosesAt && post.pollClosesAt <= nowIso) {
         db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(nowIso, postId);
         bumpPostsVersion();
-        throw new Error('This poll is closed');
+        throw new Error(word('This poll is closed'));
     }
 
     const options = post.pollOptions || [];
     const validOption = options.some(opt => opt.id === optionId);
     if (!validOption) {
-        throw new Error('Invalid poll option');
+        throw new Error(word('Invalid poll option'));
     }
 
     if (signature) {
@@ -1935,7 +1935,7 @@ export function votePoll(
             const valid = crypto.verify(undefined, Buffer.from(`${postId}:${optionId}`), publicKeyObject, sigBuf)
                 || crypto.verify(undefined, Buffer.from(JSON.stringify({ postId, optionId })), publicKeyObject, sigBuf);
             if (!valid) {
-                throw new Error('Invalid cryptographic signature for vote');
+                throw new Error(word('Invalid cryptographic signature for vote'));
             }
         } catch (err: any) {
             if (err.message === 'Invalid cryptographic signature for vote') {
@@ -1951,7 +1951,7 @@ export function votePoll(
             "UPDATE posts SET updated_at = ? WHERE id = ? AND status = 'active' AND (poll_closes_at IS NULL OR poll_closes_at > ?)"
         ).run(nowIso, postId, nowIso);
         if (res.changes === 0) {
-            throw new Error('This poll is closed');
+            throw new Error(word('This poll is closed'));
         }
 
         // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).

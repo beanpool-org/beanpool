@@ -1156,6 +1156,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
     // A push registration's stamp from the phone (state-engine.ts registerPushToken); NULL on rows from before it.
     try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN registered_at INTEGER`).run(); } catch { }
+    // The language a phone's pushes are written in (state-engine.ts registerPushToken); NULL, English, on rows from before:
+    // each phone names it again at its next start.
+    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN lang TEXT`).run(); } catch { }
     // Push tokens locked at rest (services/push-token-seal.ts): the tables from before, each token in the clear, go aside
     // for the boot to lock (a main server) or drop (a standby), and schema.sql makes the new ones.
     try {

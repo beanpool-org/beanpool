@@ -2092,8 +2092,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // A claim is a key, a callsign, a code id, a host, a proof and a signature: under 1 KiB. No limiter runs before it
     // (isClaimRoute), so it reads no more than this.
     [/^\/api\/local\/claim$/, 4 * 1024],
-    // A tool's copy is at most 64 KB as stored (engine/tool-state.ts TOOL_STATE_MAX_BYTES), which the route refuses in a
-    // sentence; the room past it is for a body's escapes, so only a body far over it is refused here, unread.
+    // A tool's copy is at most 128 KB as stored (engine/tool-state.ts toolStateMaxBytes: the Tool shed's; 64 KB for any
+    // other), which the route refuses in a sentence; the room past it is for a body's escapes, so only a body far over it
+    // is refused here, unread.
     [/^\/api\/(?:treasury\/[^/]+\/)?tools\/[^/]+\/?$/, 256 * 1024],
 ];
 

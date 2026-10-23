@@ -443,6 +443,7 @@ export const SUITES = [
     'test-member-blocks',
     'test-member-blocks-standby',
     'test-tool-store',
+    'test-tool-state-check-migration',
     'test-shops',
     'test-blocks-on-messaging',
     'test-messaging-idor',

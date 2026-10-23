@@ -2757,8 +2757,9 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
     public_key TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     -- The tool's id: 1 to 24 of a-z, 0-9 and '-' (engine/tool-state.ts TOOL_ID).
     tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
-    -- The document as JSON text, at most 64 KB as UTF-8 (TOOL_STATE_MAX_BYTES).
-    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 65536),
+    -- The document as JSON text, at most 128 KB as UTF-8, the most any tool may name (TOOL_STATE_CEILING_BYTES); each
+    -- tool's own bound is the engine's (toolStateMaxBytes). db.ts rebuilds a table made with the 64 KB CHECK of before.
+    body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
     -- The replication watermark (a plain table), and the copy's time the apps reconcile by: engine/tool-state.ts stamps it.
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, tool)

@@ -214,7 +214,8 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
     const asked = changes as Record<string, unknown>;
     for (const key of Object.keys(asked)) {
         if ((SETTINGS_IN_ORDER as readonly string[]).includes(key)) continue;
-        if (key in NOT_CHANGED_HERE) bad(key, NOT_CHANGED_HERE[key], 'not_changeable');
+        // Its own keys only: `in` reads Object.prototype too, so `constructor` would answer a function's source (#2415 review r4360595004).
+        if (Object.prototype.hasOwnProperty.call(NOT_CHANGED_HERE, key)) bad(key, NOT_CHANGED_HERE[key], 'not_changeable');
         bad(key, `${key} is not a setting of how this community works.`);
     }
     const note = noteOf(rawNote);

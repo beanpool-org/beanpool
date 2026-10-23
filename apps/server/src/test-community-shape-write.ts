@@ -379,6 +379,10 @@ async function main(): Promise<void> {
     await refusedClean('changes that are no object', () => post({ changes: [{ knocks: false }] }), 400, 'no_changes');
     await refusedClean('an empty change', () => change({}), 400, 'no_changes');
     await refusedClean('a setting that is none', () => change({ fees: true }), 400, 'bad_setting');
+    // Named like what every object has: still no setting, in the same words, never a function's source.
+    for (const key of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+        await refusedClean(`${key}: no setting`, () => change({ [key]: true }), 400, 'bad_setting', `${key} is not a setting of how this community works.`);
+    }
     for (const key of ['openDoor', 'preview', 'visitors', 'connections']) {
         await refusedClean(`${key}: the server's, not changed here`, () => change({ [key]: false }), 400, 'not_changeable');
     }

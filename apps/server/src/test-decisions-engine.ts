@@ -25,9 +25,20 @@
  * 10. Reinstatement cancels pending grace removal
  * 11. Executor idempotency and transaction rollback safety
  * 12. Removed effects (set_rule, set_levy, poll, tier/elder by vote) cannot be proposed
+ * 13. Removal by vote S2 (scratch/fable-design/DESIGN-removal-by-vote-fable.md §3.2, §3.3, §5 point 2, §7): an admin's
+ *     pause opens the community's vote on removing the member ("Remove X?", the node's, rule 2), decided as a removal.
+ *     Yes starts today's grace window, then the removal; No, a tie, a missed quorum or no votes at all lift the pause on
+ *     the tick that closes the vote, the role held aside back; so does a vote that can't be carried out (votes switched
+ *     off, an owner or admin, §3.8) or whose grace window can't start. Halting it or lifting the pause by hand lifts it.
+ *     The subject never votes on, nor counts in, a vote to remove them; paused, they keep their vote, and their place
+ *     in the electorate, on every other Decision, so pausing someone moves no vote. A member a vote suspended, one held
+ *     by a removal's grace window, and one an older node suspended under a "Keep …'s suspension?" vote do not vote, and
+ *     that old vote still ends under the old rule. Nothing in it moves Beans; the pot-unknown path still holds a pause
+ *     vote's removal and reopens its brake. A member's proposal can't carry the node's marks of a pause vote.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-decisions-engine.ts
+ *   SOFT_ASSERT=1 keeps going past a failed check (to list every rule an older server does not meet). CI never sets it.
  */
 
 import {
@@ -51,13 +62,21 @@ import {
     getCommonsBalance,
     grantNodeRole,
     adminSetUserStatus,
+    adminEmergencySuspend,
+    adminLiftSuspension,
+    publicDecision,
 } from './state-engine.js';
+import * as decisionsEngine from './decisions-engine.js';
+import { NODE_PROFILE_KEY } from './config/node-profile.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { setCommonsBalance } from '@beanpool/core';
 
 let testsRun = 0;
 let testsPassed = 0;
+// SOFT_ASSERT=1 keeps going past a failed check, so the suite can be run against an older server to list every rule it
+// does not meet. CI never sets it.
+const SOFT = process.env.SOFT_ASSERT === '1';
 function testAssert(cond: any, msg: string): void {
     testsRun++;
     if (cond) {
@@ -65,7 +84,7 @@ function testAssert(cond: any, msg: string): void {
         console.log(`✓ ${msg}`);
     } else {
         console.error(`✗ ${msg}`);
-        throw new Error(`Assertion failed: ${msg}`);
+        if (!SOFT) throw new Error(`Assertion failed: ${msg}`);
     }
 }
 
@@ -1007,6 +1026,317 @@ async function runDecisionsSuite() {
     testAssert(getDecision(decQ2.id)!.status === 'execution_blocked', 'Second underfunded grant blocked when queue is at capacity (§3.7)');
     testAssert(getDecision(decQ2.id)!.executionError?.includes('Funding queue full'), 'Blocked reason cites 1-grant queue limit');
 
+    // ── 13. Removal by vote S2: a pause opens the community's vote on removing the member ──
+    // scratch/fable-design/DESIGN-removal-by-vote-fable.md §3.2 (how a pause ends), §3.3 (a paused member keeps their vote),
+    // §5 point 2 (the subject is not in their own electorate), §7 (an old "Keep …'s suspension?" vote ends as before).
+    console.log('\n--- 13. Removal by vote S2: the pause vote ---');
+    const DAY = 24 * 60 * 60 * 1000;
+    const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status;
+    const frozenOf = (pk: string) => (db.prepare('SELECT COALESCE(credit_frozen, 0) AS f FROM members WHERE public_key = ?').get(pk) as any)?.f;
+    const roleRow = (pk: string) => db.prepare('SELECT role, granted_at, granted_by, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?').get(pk) as any;
+    // The role row given back, bar the session epoch, which moves on by one (admin sessions from before stay dead).
+    const sameRole = (before: any, after: any) => !!before && !!after && before.role === after.role && before.granted_at === after.granted_at
+        && before.granted_by === after.granted_by && after.session_epoch === before.session_epoch + 1;
+    const heldAside = (decisionId: string) => db.prepare('SELECT member_pubkey, role FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as any;
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    const markActive = (pk: string) => db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date().toISOString(), pk);
+    // Every block below measures its own electorate: nobody from the sections above counts as active any more.
+    db.prepare('UPDATE members SET last_active_at = NULL').run();
+    db.prepare('DELETE FROM marketplace_transactions').run();
+    db.prepare('DELETE FROM posts').run();
+    db.prepare('DELETE FROM decision_votes').run();
+    // A member who joined 30 days ago; active in the last 30 days only when asked, so each electorate below stays small
+    // (the six voters, and whoever a check needs counted).
+    const fresh = (callsign: string, active = false): string => {
+        const pk = `s2_${callsign.toLowerCase()}_${Date.now()}`;
+        seedTestMember(pk, callsign);
+        if (active) markActive(pk);
+        return pk;
+    };
+    const retire = (...pks: string[]) => { for (const pk of pks) db.prepare('UPDATE members SET last_active_at = NULL WHERE public_key = ?').run(pk); };
+    // Whether this member, active in the last 30 days, counts in this Decision's electorate: it drops by one without them.
+    const countsIn = (decisionId: string, pk: string): boolean => {
+        markActive(pk);
+        const withThem = tallyDecision(decisionId).electorate;
+        retire(pk);
+        const without = tallyDecision(decisionId).electorate;
+        markActive(pk);
+        return withThem === without + 1;
+    };
+    const voters = ['Vera', 'Wade', 'Xena', 'Yuri', 'Zoe', 'Abel'].map(c => fresh(c, true));
+    const pause = (pk: string, reason = 'Threats made to another member at the market') => {
+        const r = adminEmergencySuspend(pk, admin, reason);
+        if (!r.success || !r.decision) throw new Error(`could not pause ${pk}: ${r.error}`);
+        return getDecision(r.decision.id)!;
+    };
+    const vote = (id: string, yes: number, no: number) => {
+        voters.slice(0, yes).forEach(v => castDecisionVote(id, v, true));
+        voters.slice(yes, yes + no).forEach(v => castDecisionVote(id, v, false));
+    };
+    const closeAndTick = (id: string) => { closeForTick(id); tickDecisions(); return getDecision(id)!; };
+    const isOff = (r: { success: boolean }) => !r.success;
+    // Admins with standing propose the other Decisions below (one open Decision each).
+    const authorFor = (callsign: string) => { const pk = fresh(callsign); grantNodeRole(pk, 'admin', admin); return pk; };
+    const authorA = authorFor('AuthorAda'), authorB = authorFor('AuthorBo'), authorC = authorFor('AuthorCy'), authorD = authorFor('AuthorDee');
+
+    // 13a. The pause opens "Remove X?", the node's own removal vote.
+    const pia = fresh('PausedPia', true);
+    grantNodeRole(pia, 'moderator', admin);
+    const countBeforePause = getActiveMembersCount30d();
+    const accountsBeforePause = accountsNow();
+    const piaVote = pause(pia);
+    const countAfterPause = getActiveMembersCount30d();
+    testAssert(piaVote.effect === 'remove_member' && piaVote.touches === 'member' && piaVote.franchise === '1m1v'
+        && piaVote.authorPubkey === 'SYSTEM' && piaVote.status === 'open' && piaVote.subject === pia,
+        `An admin's pause opens the community's vote on removing the member, by the node itself (${piaVote.effect}, ${piaVote.authorPubkey}, ${piaVote.status})`);
+    testAssert(piaVote.title === 'Remove PausedPia?', `It asks "Remove PausedPia?" (${JSON.stringify(piaVote.title)})`);
+    testAssert(piaVote.params?.rule === 2 && piaVote.params?.pausedBy === admin && piaVote.params?.reason === 'Threats made to another member at the market'
+        && piaVote.params?.memberName === 'PausedPia', `Its params carry rule 2, who paused, the name and the reason (${JSON.stringify(piaVote.params)})`);
+    testAssert(String(piaVote.description).startsWith(`An admin paused PausedPia on ${piaVote.opensAt.slice(0, 10)}.`)
+        && String(piaVote.description).endsWith('Reason given: Threats made to another member at the market'),
+        `Its description says who paused whom when, and the reason (${JSON.stringify(piaVote.description)})`);
+    testAssert(Date.parse(piaVote.closesAt) - Date.parse(piaVote.opensAt) === 7 * DAY, 'It runs 7 days');
+    testAssert(typeof piaVote.params?.balance === 'number' && typeof piaVote.params?.debt === 'number' && typeof piaVote.params?.commonsPool === 'number',
+        `It records the member's balance, debt and the pot, as every removal vote does (${JSON.stringify(piaVote.params)})`);
+    testAssert(!db.prepare("SELECT 1 FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(pia), 'No "Keep the suspension?" vote opens');
+    testAssert(statusOf(pia) === 'disabled' && !roleRow(pia) && heldAside(piaVote.id)?.role === 'moderator',
+        `Pia is paused, her moderator role held aside under the vote (${statusOf(pia)}, ${heldAside(piaVote.id)?.role})`);
+    testAssert(accountsNow() === accountsBeforePause, 'The pause moves no Beans');
+    const piaTally = tallyDecision(piaVote.id);
+    testAssert(piaTally.thresholdRequired === 0.66 && piaTally.quorumRatio === 0.25, `It is decided as a removal: 66% of votes cast, 25% turnout (got ${piaTally.thresholdRequired}, ${piaTally.quorumRatio})`);
+    const shown = publicDecision(piaVote);
+    testAssert(shown.params && !('pausedBy' in shown.params) && shown.params.reason === 'Threats made to another member at the market',
+        `Members read the reason, never which admin paused (${JSON.stringify(shown.params)})`);
+    let systemOnly = '';
+    try {
+        createDecision({ authorPubkey: authorD, title: 'Keep?', description: 'A member trying the old system effect', touches: 'member', effect: 'keep_suspension', subject: pia });
+    } catch (e: any) { systemOnly = e?.message || String(e); }
+    testAssert(/opened by the node/.test(systemOnly), 'Nobody proposes the old "Keep the suspension?" effect');
+
+    // 13b. The voter rule (§3.3): the subject never votes on their own removal; paused, they keep every other vote.
+    const ownVote = castDecisionVote(piaVote.id, pia, false);
+    testAssert(isOff(ownVote) && /remov/i.test(ownVote.error ?? '') && /you/i.test(ownVote.error ?? ''), `Pia can't vote on her own removal (${JSON.stringify(ownVote)})`);
+    testAssert(!db.prepare('SELECT 1 FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?').get(piaVote.id, pia), 'and nothing is written');
+    const quinn = fresh('QuinnQ');
+    const other = createDecision({ authorPubkey: authorA, title: 'Freeze Quinn', description: 'Another Decision while Pia is paused', touches: 'member', effect: 'freeze_credit', subject: quinn });
+    const piaOnOther = castDecisionVote(other.id, pia, true);
+    testAssert(piaOnOther.success, `Paused, Pia keeps her vote on every other Decision (${JSON.stringify(piaOnOther)})`);
+    testAssert(checkVoterEligibility(pia, other).ok && !checkVoterEligibility(pia, piaVote).ok, 'checkVoterEligibility agrees: yes on the other Decision, no on her own removal');
+    testAssert(countAfterPause === countBeforePause, `Pausing her moved no electorate: she still counts among those who could vote (${countBeforePause} before, ${countAfterPause} after)`);
+    {
+        const otherE = tallyDecision(other.id).electorate, ownE = tallyDecision(piaVote.id).electorate;
+        testAssert(otherE === ownE + 1, `She is in every electorate but her own removal's (other ${otherE}, her own ${ownE})`);
+    }
+    // A removal a member proposes: its subject, active, is not in its electorate and does not vote on it either.
+    const xavi = fresh('XaviActive', true);
+    const removeXavi = createDecision({ authorPubkey: authorB, title: 'Remove Xavi', description: 'A removal a member proposes', touches: 'member', effect: 'remove_member', subject: xavi });
+    const xaviOwn = castDecisionVote(removeXavi.id, xavi, false);
+    testAssert(isOff(xaviOwn) && !db.prepare('SELECT 1 FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?').get(removeXavi.id, xavi),
+        `Nor does anyone vote on a removal of them a member proposed (${JSON.stringify(xaviOwn)})`);
+    testAssert(tallyDecision(removeXavi.id).electorate === tallyDecision(other.id).electorate - 1, 'and they are not in its electorate');
+    testAssert(castDecisionVote(other.id, xavi, true).success, 'though they vote on every other Decision');
+    // A member's proposal can't carry the node's marks of a pause vote.
+    const forged = createDecision({
+        authorPubkey: authorC, title: 'Remove Fay', description: 'A member writes the node’s marks', touches: 'member', effect: 'remove_member', subject: fresh('FayForged'),
+        params: { rule: 2, pausedBy: admin, pausedAt: new Date().toISOString(), reason: 'Looks like a pause' },
+    });
+    testAssert(!!forged.params && !('rule' in forged.params) && !('pausedBy' in forged.params) && !('pausedAt' in forged.params),
+        `A member's removal proposal can't carry a pause vote's marks (${JSON.stringify(forged.params)})`);
+    adminHaltDecision(forged.id, admin, 'Out of the way of the blocks below');
+    testAssert(countsIn(other.id, quinn), 'setup: an active member counts in the other Decision\'s electorate (the checks below have teeth)');
+    retire(quinn);
+
+    // Who does not vote: a member a vote suspended, one in a removal's grace window, one an older node suspended.
+    const hal = fresh('HeldHal');
+    const halVote = pause(hal);
+    testAssert(countsIn(other.id, hal), 'Hal, paused, counts in the other Decision\'s electorate');
+    const suspendHal = createDecision({ authorPubkey: authorC, title: 'Suspend Hal', description: 'The community suspends Hal while paused', touches: 'member', effect: 'suspend_member', subject: hal });
+    vote(suspendHal.id, 4, 0);
+    testAssert(closeAndTick(suspendHal.id).status === 'executed' && statusOf(hal) === 'disabled', 'setup: the community suspends Hal, paused, by a vote of its own');
+    testAssert(!checkVoterEligibility(hal, other).ok, 'A member a vote suspended does not vote: the community has spoken');
+    testAssert(!countsIn(other.id, hal), 'and is in no electorate');
+    vote(halVote.id, 0, 4);
+    const halEnd = closeAndTick(halVote.id);
+    testAssert(halEnd.status === 'failed' && statusOf(hal) === 'disabled',
+        `No on Hal's pause vote leaves the community's own suspension in place (${halEnd.status}, ${statusOf(hal)}: ${halEnd.executionReason})`);
+    retire(hal);
+
+    // An older node's pause: a "Keep …'s suspension?" vote, its role held aside under it.
+    const legacyPause = (callsign: string): { pk: string; id: string; role: any } => {
+        const pk = fresh(callsign);
+        grantNodeRole(pk, 'moderator', admin);
+        const role = roleRow(pk);
+        const id = `legacy-keep-${callsign}-${Date.now()}`;
+        const now = new Date();
+        db.transaction(() => {
+            db.prepare(`INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+                        SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?`).run(id, pk);
+            db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(pk);
+            db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(pk);
+            db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, opens_at, closes_at, created_at, updated_at)
+                        VALUES (?, 'SYSTEM', ?, 'An admin suspended them. Keep the suspension?', 'member', 'keep_suspension', ?, ?, '1m1v', 'open', ?, ?, ?, ?)`)
+                .run(id, `Keep ${callsign}'s suspension?`, pk, JSON.stringify({ memberName: callsign, suspendedAt: now.toISOString(), suspendedBy: admin, reason: 'Paused before the pause vote' }),
+                    now.toISOString(), new Date(now.getTime() + 7 * DAY).toISOString(), now.toISOString(), now.toISOString());
+        })();
+        return { pk, id, role };
+    };
+    const olga = legacyPause('OldRuleOlga');
+    testAssert(!checkVoterEligibility(olga.pk, other).ok, 'A member an older node suspended keeps the old rule: no vote while suspended (day zero for pause votes)');
+    testAssert(!countsIn(other.id, olga.pk), 'and is in no electorate');
+    vote(olga.id, 1, 3);
+    const olgaEnd = closeAndTick(olga.id);
+    testAssert(olgaEnd.status === 'failed' && statusOf(olga.pk) === 'active' && sameRole(olga.role, roleRow(olga.pk)),
+        `That old vote ends under the old rule: not kept, the suspension lifts and the role comes back (${olgaEnd.status}, ${statusOf(olga.pk)})`);
+    retire(olga.pk);
+    const kept = legacyPause('OldRuleKip');
+    vote(kept.id, 4, 0);
+    const keptEnd = closeAndTick(kept.id);
+    testAssert(keptEnd.status === 'executed' && statusOf(kept.pk) === 'disabled' && !roleRow(kept.pk) && !heldAside(kept.id),
+        `and kept, it stays kept, the role gone, as before (${keptEnd.status}, ${statusOf(kept.pk)})`);
+    const halted = legacyPause('OldRuleHank');
+    testAssert(adminHaltDecision(halted.id, admin, 'Halting an old suspension vote by hand').success && statusOf(halted.pk) === 'active' && sameRole(halted.role, roleRow(halted.pk)),
+        'Halting an old vote still lifts its suspension, the role back');
+    const liftedOld = legacyPause('OldRuleLiv');
+    testAssert(adminLiftSuspension(liftedOld.pk, admin).success && getDecision(liftedOld.id)!.status === 'admin_halted' && sameRole(liftedOld.role, roleRow(liftedOld.pk)),
+        'Lifting an old suspension by hand still closes its vote, the role back');
+
+    // 13c. How a pause vote ends, on the tick that closes it.
+    const ending = (callsign: string, yes: number, no: number) => {
+        const pk = fresh(callsign);
+        grantNodeRole(pk, 'moderator', admin);
+        const role = roleRow(pk);
+        const d = pause(pk);
+        vote(d.id, yes, no);
+        const before = accountsNow();
+        const end = closeAndTick(d.id);
+        return { pk, role, d, end, movedNoBeans: accountsNow() === before };
+    };
+    const no = ending('NellNo', 1, 3);
+    testAssert(no.end.status === 'failed' && statusOf(no.pk) === 'active' && frozenOf(no.pk) === 0,
+        `No (1 yes, 3 no): the pause lifts on the tick that closes the vote (${no.end.status}, ${statusOf(no.pk)}: ${no.end.executionReason})`);
+    testAssert(sameRole(no.role, roleRow(no.pk)) && !heldAside(no.d.id), 'and her moderator role comes back exactly');
+    testAssert(/pause has been lifted/i.test(no.end.executionReason ?? ''), `the record says the pause was lifted (${no.end.executionReason})`);
+    const tie = ending('TedTie', 2, 2);
+    testAssert(tie.end.status === 'failed' && statusOf(tie.pk) === 'active' && sameRole(tie.role, roleRow(tie.pk)),
+        `A tie (2 yes, 2 no) lifts it too (${tie.end.status}, ${statusOf(tie.pk)})`);
+    const thin = ending('QuoQuorum', 1, 0);
+    testAssert(thin.end.status === 'unresolved' && statusOf(thin.pk) === 'active' && sameRole(thin.role, roleRow(thin.pk)) && /Quorum not met/.test(thin.end.executionReason ?? ''),
+        `A missed quorum (1 vote of the 3 needed) lifts it: the same as No (${thin.end.status}, ${thin.end.executionReason})`);
+    const none = ending('NoaNobody', 0, 0);
+    testAssert(none.end.status === 'unresolved' && statusOf(none.pk) === 'active' && sameRole(none.role, roleRow(none.pk)),
+        `Nobody voting at all lifts it (${none.end.status})`);
+    testAssert(no.movedNoBeans && tie.movedNoBeans && thin.movedNoBeans && none.movedNoBeans, 'None of those endings moves Beans');
+    const yes = ending('YanYes', 3, 0);
+    const yesEnd = yes.end;
+    testAssert(yesEnd.status === 'execution_pending_grace' && statusOf(yes.pk) === 'disabled' && frozenOf(yes.pk) === 1,
+        `Yes (3 of 3): the grace window starts, the member stays paused, their credit frozen (${yesEnd.status}, ${statusOf(yes.pk)}, frozen ${frozenOf(yes.pk)})`);
+    testAssert(heldAside(yes.d.id)?.role === 'moderator' && !roleRow(yes.pk), 'the role stays held aside under the same vote, for a halt in the grace window to give back');
+    testAssert(Math.abs(Date.parse(yesEnd.gracePeriodEndsAt ?? '') - (Date.now() + 7 * DAY)) < 60_000, `the grace window is 7 days (${yesEnd.gracePeriodEndsAt})`);
+    testAssert(yes.movedNoBeans, 'and nothing moves Beans until the removal completes');
+    testAssert(!checkVoterEligibility(yes.pk, other).ok && !countsIn(other.id, yes.pk),
+        'In the grace window the community has spoken: Yan votes on nothing and is in no electorate');
+    retire(yes.pk);
+
+    // A vote can't remove an owner or admin (§3.8): an admin's pause vote that says Yes is not carried out, and the pause
+    // still ends with its vote.
+    const abe = fresh('AdminAbe');
+    grantNodeRole(abe, 'admin', admin);
+    const abeRole = roleRow(abe);
+    const abeVote = pause(abe);
+    testAssert(abeVote.params?.serverRole === 'admin', `An admin's pause vote says they hold the admin role, which no vote removes (${JSON.stringify(abeVote.params)})`);
+    vote(abeVote.id, 4, 0);
+    const abeEnd = closeAndTick(abeVote.id);
+    testAssert(abeEnd.status === 'execution_blocked' && statusOf(abe) === 'active' && sameRole(abeRole, roleRow(abe)),
+        `Its Yes is not carried out, and the pause lifts with the vote, his admin role back (${abeEnd.status}, ${statusOf(abe)}: ${abeEnd.executionReason})`);
+    // Votes switched off before it closes: no vote removes anyone there, and the pause still ends.
+    const vic = fresh('VotesOffVic');
+    const vicVote = pause(vic);
+    vote(vicVote.id, 4, 0);
+    const votesOff = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    votesOff.run(`${NODE_PROFILE_KEY}.decisions`, 'false');
+    let vicEnd: any;
+    try { vicEnd = closeAndTick(vicVote.id); } finally { db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`); }
+    testAssert(vicEnd?.status === 'unresolved' && statusOf(vic) === 'active' && /Community votes are switched off/.test(vicEnd?.executionReason ?? ''),
+        `Votes switched off before it closed: nothing it decided is carried out, and the pause lifts (${vicEnd?.status}: ${vicEnd?.executionReason})`);
+    // The grace window can't start (a write fails): the pause still ends with its vote.
+    const gil = fresh('GraceGil');
+    const gilVote = pause(gil);
+    vote(gilVote.id, 4, 0);
+    db.exec(`CREATE TRIGGER zz_block_freeze_gil BEFORE UPDATE OF credit_frozen ON members
+             WHEN NEW.public_key = '${gil}' BEGIN SELECT RAISE(ABORT, 'freeze blocked by test'); END;`);
+    let gilEnd: any;
+    try { gilEnd = closeAndTick(gilVote.id); } finally { db.exec('DROP TRIGGER zz_block_freeze_gil'); }
+    testAssert(gilEnd?.status === 'execution_blocked' && statusOf(gil) === 'active' && frozenOf(gil) === 0,
+        `A grace window that can't start leaves no pause behind (${gilEnd?.status}, ${statusOf(gil)}: ${gilEnd?.executionError})`);
+
+    // 13d. Halting the vote, or lifting the pause by hand, lifts it.
+    const holly = fresh('HaltedHolly');
+    grantNodeRole(holly, 'moderator', admin);
+    const hollyRole = roleRow(holly);
+    const hollyVote = pause(holly);
+    const hollyHalt = adminHaltDecision(hollyVote.id, admin, 'Paused the wrong member by mistake');
+    testAssert(hollyHalt.success && getDecision(hollyVote.id)!.status === 'admin_halted' && statusOf(holly) === 'active' && sameRole(hollyRole, roleRow(holly)),
+        `Halting a pause vote lifts the pause, the role back (${JSON.stringify(hollyHalt)}, ${statusOf(holly)})`);
+    const lou = fresh('LiftedLou');
+    grantNodeRole(lou, 'moderator', admin);
+    const louRole = roleRow(lou);
+    const louVote = pause(lou);
+    const louLift = adminLiftSuspension(lou, admin);
+    const louAfter = getDecision(louVote.id)!;
+    testAssert(louLift.success && louAfter.status === 'admin_halted' && statusOf(lou) === 'active' && sameRole(louRole, roleRow(lou)),
+        `Lifting the pause by hand closes its vote, the role back (${JSON.stringify(louLift)}, ${louAfter.status})`);
+    testAssert(/lifted the pause/i.test(louAfter.adminHaltReason ?? ''), `and the record says the pause was lifted (${louAfter.adminHaltReason})`);
+    // A paused admin's role comes back only by an owner.
+    const alma = fresh('AdminAlma');
+    grantNodeRole(alma, 'admin', admin);
+    const almaRole = roleRow(alma);
+    const almaVote = pause(alma);
+    testAssert(decisionsEngine.adminActionNeedsOwner('lift', alma) && decisionsEngine.adminActionNeedsOwner('halt', almaVote.id),
+        'Lifting a paused admin, or halting their pause vote, is an owner\'s act');
+    const plainHalt = adminHaltDecision(almaVote.id, authorA, 'A plain admin halting an admin’s pause');
+    const plainLift = adminLiftSuspension(alma, authorA);
+    testAssert(plainHalt.status === 403 && plainLift.status === 403 && getDecision(almaVote.id)!.status === 'open' && statusOf(alma) === 'disabled',
+        `A plain admin can do neither (${JSON.stringify(plainHalt)}, ${JSON.stringify(plainLift)})`);
+    testAssert(adminLiftSuspension(alma, admin).success && statusOf(alma) === 'active' && sameRole(almaRole, roleRow(alma)), 'An owner lifts it, the admin role back');
+
+    // Pia's own vote, out of the way of the time travel below: No lifts her.
+    vote(piaVote.id, 0, 3);
+    testAssert(closeAndTick(piaVote.id).status === 'failed' && statusOf(pia) === 'active', 'Pia\'s vote says No: she is back');
+    for (const d of [other, removeXavi]) adminHaltDecision(d.id, admin, 'Closed before the time travel below');
+
+    // 13e. The removal completes on the tick 7 days on; with the pot unknown it waits, and its brake reopens after the mend.
+    const pat = fresh('PotPat');
+    const patVote = pause(pat);
+    vote(patVote.id, 3, 0);
+    setCommonsBalance(NaN);
+    let patGrace: any;
+    try {
+        patGrace = closeAndTick(patVote.id);
+        testAssert(patGrace.status === 'execution_pending_grace' && statusOf(pat) === 'disabled',
+            `With the pot unknown, a pause vote that passes still starts its grace window: it moves no Beans (${patGrace.status})`);
+        const graceEnds = Date.parse(patGrace.gracePeriodEndsAt ?? '');
+        const at = Number.isFinite(graceEnds) ? graceEnds : Date.now() + 8 * DAY;
+        tickDecisions(at + 60_000);
+        const waiting = getDecision(patVote.id)!;
+        testAssert(waiting.status === 'execution_pending_grace' && waiting.executionReason === decisionsEngine.WAITING_FOR_POT && statusOf(pat) === 'disabled',
+            `Its grace window ends with the pot unknown: the removal waits, Pat still paused (${waiting.status}: ${waiting.executionReason})`);
+        testAssert(statusOf(yes.pk) === 'disabled' && getDecision(yes.d.id)!.status === 'execution_pending_grace', 'and so does Yan\'s, whose window ended too');
+        setCommonsBalance(1000);
+        tickDecisions(at + 120_000);
+        const reopened = getDecision(patVote.id)!;
+        const reopenedEnds = Date.parse(reopened.gracePeriodEndsAt ?? '');
+        testAssert(reopened.status === 'execution_pending_grace' && reopened.executionReason === decisionsEngine.REOPENED_GRACE
+            && Math.abs(reopenedEnds - (at + 120_000 + 24 * 3600_000)) < 1000,
+            `The pot mended, the brake reopens for 24 hours before the removal (${reopened.status}, ${reopened.gracePeriodEndsAt})`);
+        tickDecisions(at + 120_000 + 25 * 3600_000);
+        testAssert(getDecision(patVote.id)!.status === 'executed' && statusOf(pat) === 'pruned', 'Then the removal completes');
+        testAssert(getDecision(yes.d.id)!.status === 'executed' && statusOf(yes.pk) === 'pruned' && !heldAside(yes.d.id),
+            'Yan\'s too: removed on the tick, the held role gone with them');
+    } finally {
+        setCommonsBalance(1000);
+    }
+
+    if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} of ${testsRun} Decisions Engine checks failed`);
     console.log(`\n🎉 All ${testsPassed}/${testsRun} Decisions Engine tests PASSED!`);
 }
 

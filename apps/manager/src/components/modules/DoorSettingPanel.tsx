@@ -21,6 +21,11 @@ import { passwordField } from '../../lib/node-client';
  * theirs to change, and the node refuses an admin anyway. A role, never a tier. The page "How this community works"
  * replaces this panel (slice S4).
  *
+ * While no new members are being taken (`join` is `paused`: the `invites` switch off), the door still reads members or
+ * admins, and `join` set to either takes new members again (#2415 review r4360287590). So whether it is paused is read
+ * from the shape (GET /api/local/admin/community-shape): a paused community says so, marks no door as the one in use and
+ * says before the save that saving takes new members again. A node that won't say is offered no save: never on a guess.
+ *
  * Operator manual text for this screen: packages/beanpool-guide/operators/people/members-and-invites.md.
  */
 
@@ -47,6 +52,13 @@ export const DOOR_PRESETS: ReadonlyArray<{ door: CommunityDoor; name: string; pl
     },
 ];
 
+/** Saving a door while new members are paused: what it starts again, in plain words, before it is saved. */
+export function unpauseConsequence(to: CommunityDoor): string {
+    return to === 'admins'
+        ? 'New members will be taken again: only owners and admins can make invites and answer requests to join.'
+        : 'New members will be taken again: every member can make invites and answer requests to join.';
+}
+
 /** What a switch does to what is already out there, in plain words, before it is saved. */
 export function doorChangeConsequence(from: CommunityDoor, to: CommunityDoor): string {
     if (to === 'admins' && from === 'members') {
@@ -59,7 +71,10 @@ type Status = { kind: 'saved' | 'error'; text: string };
 
 export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Door | null>(null);
-    const [choice, setChoice] = useState<CommunityDoor | null>(null);
+    // The owner's pick; until they pick, the door in use (none while paused: nobody comes in by it).
+    const [picked, setPicked] = useState<CommunityDoor | null>(null);
+    // Whether no new members are being taken: null = not read yet, 'unread' = the node would not say.
+    const [paused, setPaused] = useState<boolean | 'unread' | null>(null);
     const [saving, setSaving] = useState(false);
     // null = not known (not loaded, or the node would not say): never warn on a guess.
     const [nobodyCanAct, setNobodyCanAct] = useState<boolean | null>(null);
@@ -74,7 +89,8 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
     useEffect(() => {
         let mounted = true;
         setSaved(null);
-        setChoice(null);
+        setPicked(null);
+        setPaused(null);
         setStatus(null);
         setNobodyCanAct(null);
         (async () => {
@@ -90,15 +106,30 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
             const door = readDoor((cfg as { door?: unknown }).door);
             if (!mounted || !door) return;
             setSaved(door);
-            setChoice(door === 'open' ? null : door);
+        })();
+        (async () => {
+            let join: unknown;
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-shape'), {
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                });
+                if (res.ok) join = ((await res.json()) as { settings?: { join?: { configured?: unknown } } })?.settings?.join?.configured;
+            } catch { /* read as 'unread' below */ }
+            if (!mounted) return;
+            setPaused(join === 'paused' ? true : join === 'members' || join === 'admins' || join === 'open' ? false : 'unread');
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
 
     if (!saved) return null;
 
+    const choice: CommunityDoor | null = picked ?? (saved === 'open' || paused === true ? null : saved);
+    // Saving takes new members again while paused, the door it had included; unread, nothing is saved.
+    const canSave = !!choice && saved !== 'open' && typeof paused === 'boolean' && (paused || choice !== saved);
+
     const save = async () => {
-        if (!choice || blocked || saved === 'open' || choice === saved) return;
+        if (!choice || blocked || !canSave) return;
+        const wasPaused = paused === true;
         setSaving(true);
         setStatus(null);
         try {
@@ -110,7 +141,14 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
             const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown };
             if (res.ok) {
                 setSaved(choice);
-                setStatus({ kind: 'saved', text: choice === 'admins' ? 'Saved. Only admins invite now, and every member is told.' : 'Saved. Any member invites now, and every member is told.' });
+                setPicked(null);
+                setPaused(false);
+                setStatus({
+                    kind: 'saved',
+                    text: wasPaused
+                        ? (choice === 'admins' ? 'Saved. New members are taken again: only admins invite, and every member is told.' : 'Saved. New members are taken again: any member invites, and every member is told.')
+                        : (choice === 'admins' ? 'Saved. Only admins invite now, and every member is told.' : 'Saved. Any member invites now, and every member is told.'),
+                });
             } else {
                 setStatus({
                     kind: 'error',
@@ -142,6 +180,12 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                 </p>
             ) : (
                 <>
+                    {paused === true && (
+                        <p id={`${ids}-paused`} data-testid="door-paused" className="text-sm text-amber-200 m-0 leading-relaxed break-words">
+                            <strong className="text-white">Paused:</strong> no new members are being taken for now, so nobody invites and nobody can ask to join.
+                            {' '}Saving a choice here takes new members again, and every member is told.
+                        </p>
+                    )}
                     <fieldset className="space-y-3 m-0 p-0 border-0 min-w-0">
                         <legend className="sr-only">Who may invite</legend>
                         {DOOR_PRESETS.map((p) => {
@@ -163,13 +207,13 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                                         checked={selected}
                                         {...gatedProps(blocked, ownerOnlyId)}
                                         onClick={guardGated(blocked)}
-                                        onChange={guardGated(blocked, () => { setChoice(p.door); setStatus(null); })}
+                                        onChange={guardGated(blocked, () => { setPicked(p.door); setStatus(null); })}
                                         className={`mt-1 accent-terra-500 shrink-0 ${blocked ? GATED_LOOK : ''}`}
                                     />
                                     <span className="min-w-0">
                                         <span className="block text-sm font-bold text-white break-words">
                                             {p.name}: {p.plain}
-                                            {saved === p.door && <span className="ml-2 text-[11px] font-bold text-nature-400">(now)</span>}
+                                            {saved === p.door && <span className="ml-2 text-[11px] font-bold text-nature-400">{paused === true ? '(before the pause)' : '(now)'}</span>}
                                         </span>
                                         <span className="block text-xs text-nature-300 mt-0.5 leading-relaxed break-words">{p.detail}</span>
                                         {p.door === 'admins' && nobodyCanAct === true && (
@@ -183,9 +227,20 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                         })}
                     </fieldset>
 
+                    {choice && paused === true && (
+                        <p id={`${ids}-unpause`} className="text-xs text-amber-200 m-0 leading-relaxed break-words">
+                            {unpauseConsequence(choice)}
+                        </p>
+                    )}
                     {choice && choice !== saved && (
                         <p id={`${ids}-consequence`} className="text-xs text-amber-200 m-0 leading-relaxed break-words">
                             {doorChangeConsequence(saved as CommunityDoor, choice)}
+                        </p>
+                    )}
+
+                    {!blocked && paused === 'unread' && (
+                        <p id={`${ids}-unread`} className="text-xs text-nature-400 m-0 leading-relaxed break-words">
+                            Couldn&apos;t check whether new members are being taken here, and saving would take them again if they aren&apos;t, so this can&apos;t be saved yet. Reload to try again.
                         </p>
                     )}
 
@@ -200,7 +255,7 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                             type="button"
                             {...gatedProps(blocked, ownerOnlyId)}
                             onClick={guardGated(blocked, () => { void save(); })}
-                            disabled={!blocked && (saving || !choice || choice === saved)}
+                            disabled={!blocked && (saving || !canSave)}
                             aria-busy={saving}
                             className={`min-h-[48px] px-5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-bold transition-all disabled:opacity-50 ${blocked ? GATED_LOOK : ''}`}
                         >

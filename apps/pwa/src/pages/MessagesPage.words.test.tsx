@@ -4,9 +4,8 @@
  * (utils/chat-line-words.ts) included, and the times and dates are core's. What members wrote is shown as written:
  * names, messages, a group's and a listing's title.
  *
- * Left in English, and pinned here so nothing else joins them: a group chat's notice, written by lib/group-chat-lines.ts
- * on the group chat's key path (the phone translates it by its English in utils/chat-line-words.ts; the web has no such
- * table yet).
+ * A group chat's notice and the other sentences the group chat's and the DMs' key code writes (lib/group-chat-lines.ts and
+ * its neighbours) are translated by their English in lib/chat-line-words.ts, as the phone's utils/chat-line-words.ts does.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -218,16 +217,17 @@ describe('Talk on the web in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: OTHERS, said })).toEqual([]);
     });
 
-    it("a group's chat: its header, search with no match, a picture refused; only the group chat's notice is left English", async () => {
+    it("a group's chat: its header, its notice (lib/chat-line-words.ts), search with no match, a picture refused", async () => {
         await showIn('xx');
         const composer = await openChat(GROUP_ID);
         await screen.findByText('Seeds are in');
         await waitFor(() => expect(screen.getByTestId('group-line-author').textContent).toBe('Bob'));
         expect(screen.getByText(xx('{n} members').replace('{n}', '3'))).toBeInTheDocument();
         const notice = groupChatNotice({ nodeSaysLocked: false, seenLocked: false, chatError: null });
+        expect(screen.getByTestId('group-chat-notice')).toHaveTextContent(xx(notice));
         // The header's round face with no picture: the first letter of the group's name.
         const others = [...OTHERS, 'G'];
-        expect(bypassing(document.body, { others })).toEqual([`text: ${JSON.stringify(notice)}`]);
+        expect(bypassing(document.body, { others })).toEqual([]);
 
         fireEvent.click(screen.getByRole('button', { name: xx('Search this chat') }));
         fireEvent.change(screen.getByPlaceholderText(xx('Search this chat')), { target: { value: 'zzz' } });
@@ -236,7 +236,7 @@ describe('Talk on the web in the pseudo-locale', () => {
         fireEvent.paste(composer, { clipboardData: clipboardWith(picture()) });
         expect(await screen.findByTestId('chat-image-notice')).toHaveTextContent(xx('Photos can only be sent in direct messages'));
         expect(screen.getByRole('button', { name: xx('Close search') })).toBeInTheDocument();
-        expect(bypassing(document.body, { others })).toEqual([`text: ${JSON.stringify(notice)}`]);
+        expect(bypassing(document.body, { others })).toEqual([]);
     });
 
     it('New DM: the directory, then people asked for by name (a short search, none found, friends unread)', async () => {

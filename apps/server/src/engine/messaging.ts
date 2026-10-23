@@ -85,9 +85,9 @@ export class MessagingError extends Error {
  * (assertCanWriteInGroupChat) and taking their own line down (deleteOwnMessage), as before; an event's and an
  * enterprise's chat each refuse them under their own rule.
  *
- * A visitor's row paused (is_visitor: someone a member wrote to, who never joined) writes nothing, as an admin's suspension
- * had it before it was a pause: a visitor can only ever answer in its direct conversations, so a pause that let it would
- * take nothing from it (PR #2397 review).
+ * A visitor's row paused (is_visitor: someone a member wrote to, who never joined) writes, edits and deletes no line and
+ * asks for no conversation, as an admin's suspension had it before it was a pause: a visitor can only ever answer in its
+ * direct conversations, so a pause that let it would take nothing from it (PR #2397 review).
  */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;

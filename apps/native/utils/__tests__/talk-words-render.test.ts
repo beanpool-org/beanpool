@@ -512,6 +512,15 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(bypassing()).toEqual([]);
     });
 
+    it("the New message picker, a refusal without the node's words: the phone's own sentence, in the member's language", async () => {
+        net.answer = community({ createConversationApi: new Error('Failed to create conversation thread.') });
+        await renderIn('xx', createElement(NewMessageScreen));
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
+        expect(net.calls).toContain('db.createConversationApi');
+        expect(alerts.said).toEqual([pseudoLocalise('Error'), pseudoLocalise('Failed to create conversation thread.')]);
+        expect(bypassing()).toEqual([]);
+    });
+
     it('in English nothing is bracketed, and the words are as they were', async () => {
         await renderIn('en');
         expect(bracketed()).toBe(0);

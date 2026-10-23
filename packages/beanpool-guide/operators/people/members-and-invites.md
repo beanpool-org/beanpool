@@ -60,7 +60,7 @@ A community with Beans can't open its door to anyone with a sign-in: strangers w
 
 ## Invites from Settings
 
-Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.
+Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge gives that badge's trust, so a deeper credit line, and nothing more: badges gate nothing. It is no standing to propose a Decision; only a completed trade is.
 
 - Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button, whoever may invite. A moderator cannot.
 - If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: "This community doesn’t use invites".

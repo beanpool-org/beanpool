@@ -27,7 +27,7 @@ Two things set how far below zero you can go. Your trust from trading sets the m
 
 ## My badge says Steward. Why can I spend so little?
 
-Your badge shows your trust. What you can spend right now also depends on how many live Offers you have. Badges never unlock anything on their own.
+Your badge shows your trust. What you can spend right now also depends on how many live Offers you have. Badges never unlock anything.
 
 ## Can I change my vote?
 

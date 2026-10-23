@@ -21,7 +21,7 @@ import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/Sho
 import { LOCAL_COMMUNITY_LINES, formatDate, t, tn } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
-    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
+    adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
 } from '../lib/node-invites';
 
 /** A refusal as the page shows it: lib/node-invites.ts's own fallback in the member's language, the node's words as they came. */
@@ -29,6 +29,7 @@ function refusalWords(said: string): string {
     if (said === INVITE_WORDS.offFallback) return t(INVITE_WORDS.offFallback);
     if (said === INVITE_WORDS.adminsOnlyFallback) return t(INVITE_WORDS.adminsOnlyFallback);
     if (said === INVITE_WORDS.offlineAdminsOnly) return t(INVITE_WORDS.offlineAdminsOnly);
+    if (said === INVITE_WORDS.pausedFallback) return t(INVITE_WORDS.pausedFallback);
     return said;
 }
 
@@ -207,6 +208,13 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 const adminsWords = adminsOnlyRefusal(e);
                 if (adminsWords) {
                     setAdminsRefused(adminsWords);
+                    return;
+                }
+                // This member's account is paused: the node's words, and no offline ticket, which it would refuse at the
+                // join until the pause ends.
+                const pausedWords = pausedRefusal(e);
+                if (pausedWords) {
+                    setNotice(pausedWords);
                     return;
                 }
                 /* node unreachable — offline fallback below */

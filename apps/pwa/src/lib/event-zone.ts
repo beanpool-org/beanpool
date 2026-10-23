@@ -151,7 +151,7 @@ export function eventAdjustedWords(adjusted: EventTimeAdjusted | null | undefine
 export function eventLinkProblem(link: string): string | null {
     const v = link.trim();
     if (!v) return null;
-    if (!/^https?:\/\/\S+$/i.test(v)) return 'The link to join must start with https:// or http://';
-    if (v.length > 500) return 'The link to join can be at most 500 characters';
+    if (!/^https?:\/\/\S+$/i.test(v)) return t('The link to join must start with https:// or http://');
+    if (v.length > 500) return t('The link to join can be at most {n} characters', { n: 500 });
     return null;
 }

@@ -16,6 +16,7 @@ import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 
 /** A vouch's three levels, and the credit floor each hands out. The names are word() keys, shown through t(). */
@@ -624,7 +625,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         <div className="flex items-center gap-3">
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
-                                <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name || 'Member'}</h4>
+                                <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name ? tierWords(balanceInfo.tier.name) : t('Member')}</h4>
                                 <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</p>
                             </div>
                         </div>

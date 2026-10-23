@@ -62,6 +62,7 @@ import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/m
 import { dropToolStateOf } from './engine/tool-state.js';
 import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
+import { setRequestBroadcast, heldFromUnread, expireOldRequests, tickRequestPushFolds, dropRequestsOf } from './engine/dm-requests.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
@@ -703,6 +704,8 @@ export function initStateEngine(): void {
     // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
     // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
     installPollVoteOriginsAtBoot();
+    // A message request accepted rings both people's sockets, an ignore the ignorer's own (engine/dm-requests.ts).
+    setRequestBroadcast(broadcast);
     // The known floor's confirmation dial is on by default, and never where Beans are off (the global profile): the engine
     // asks this when it reads the dial (engine known-floor.ts confirmationDialOn).
     engine.configureKnownFloorBeans(() => getProfileSwitches().beans);
@@ -1044,6 +1047,8 @@ function armMainServerTimers(): void {
     }), 60 * 1000);
     setInterval(onMainServer(() => {
         try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+        // Message requests that waited 30 days are over (engine/dm-requests.ts).
+        try { expireOldRequests(); } catch (e) { console.warn('[Messaging] Request expiry failed:', e); }
     }), 60 * 60 * 1000);
 
     // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
@@ -1068,6 +1073,8 @@ function armMainServerTimers(): void {
         // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
         try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
         try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
+        // A message request push folded in the last hour goes as one, naming nobody, once the hour is over (engine/dm-requests.ts).
+        try { tickRequestPushFolds(dispatchPushNotification); } catch (e) { console.warn('[Push] Request push fold failed:', e); }
     }), 60 * 1000);
 }
 
@@ -7001,7 +7008,10 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
 export function getListedUnreadCounts(pubkey: string): Record<string, number> {
     const counts = getUnreadCounts(pubkey);
     const typeOf = db.prepare('SELECT type FROM conversations WHERE id = ?');
+    // A message request for them they haven't accepted is listed apart, with its own count (engine/dm-requests.ts).
+    const held = heldFromUnread(pubkey);
     for (const id of Object.keys(counts)) {
+        if (held.has(id)) { delete counts[id]; continue; }
         const conv = typeOf.get(id) as { type: string } | undefined;
         if (conv && chatHiddenFrom({ id, type: conv.type }, pubkey)) delete counts[id];
     }
@@ -8546,6 +8556,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropShopOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
+        // The message requests they made, and the ones waiting for them, with a tombstone each; one of theirs nobody accepted,
+        // in a real conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
+        dropRequestsOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
@@ -8727,6 +8740,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropShopOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
+        // And their message requests, made or waiting for them, a tombstone each; one of theirs nobody accepted, in a real
+        // conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
+        dropRequestsOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
         dropWithheldNotesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }

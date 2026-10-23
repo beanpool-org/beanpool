@@ -800,7 +800,7 @@ export default function PublicProfileScreen() {
             }
         } catch (e: any) {
             const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-            Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
+            Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
         } finally {
             setIsMessaging(false);
         }
@@ -818,7 +818,7 @@ export default function PublicProfileScreen() {
                 setIsFriend(true);
             }
         } catch (e: any) {
-            Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+            Alert.alert(t('Not added'), e?.message ? signedRequestWords(e.message) : t('Your community did not add them.'));
         } finally {
             setTogglingFriend(false);
         }

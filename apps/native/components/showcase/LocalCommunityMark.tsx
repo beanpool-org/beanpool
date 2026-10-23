@@ -193,7 +193,7 @@ export function LocalCommunityMark(props: MarkProps) {
 }
 
 /** The Example chip and the "Example Valley · an example member" header over a preview. */
-export function ExampleHeader({ text = 'Example Valley · an example member' }: { text?: string }) {
+export function ExampleHeader({ text = t(LOCAL_COMMUNITY_STRIP.header) }: { text?: string }) {
     const { colors } = useTheme();
     const tone = markTone(colors);
     const s = markStyles(colors);

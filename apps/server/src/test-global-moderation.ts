@@ -647,8 +647,15 @@ async function main(): Promise<void> {
     const yanOpens = await open(yan, dee);
     const replyToOpen = await line(dee, yanOpens.body?.conversation?.id);
     assert(yanOpens.status === 200 && replyToOpen.status === 200, `and to someone who only opened one with them, writing nothing (${replyToOpen.status} ${replyToOpen.body?.error ?? ''})`);
+    // On the global profile a first message to someone new is a message request (engine/dm-requests.ts, DESIGN-message-a-
+    // friend-fable.md §4): a second line waits for them to accept it, refused as that and not as probation. Once accepted,
+    // probation lets it through: they were reached already.
+    const waiting = await line(dee, convs[0]);
+    assert(waiting.status === 403 && waiting.body?.code === 'dm_request_pending',
+        `another message to someone already written to waits for them to accept the first, not for probation (${waiting.status} ${waiting.body?.code})`);
+    await call('POST', targets[0], '/api/messages/request', { conversationId: convs[0], decision: 'accept' });
     const known = await line(dee, convs[0]);
-    assert(known.status === 200, 'so is another message to someone already written to');
+    assert(known.status === 200, 'so is another message to someone already written to, once they accept it');
     const deeMe = await me(dee);
     assert(deeMe?.probation?.limits?.new_dm_recipients?.used === 10 && deeMe?.probation?.limits?.new_dm_recipients?.limit === 10,
         `/api/community/me: 10 of 10 new people (got ${JSON.stringify(deeMe?.probation?.limits?.new_dm_recipients)})`);

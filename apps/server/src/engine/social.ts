@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { hasBlocked } from './member-blocks.js';
 import { assertMayAddFriendToday } from './writer-bounds.js';
 import { addedYouSince } from './friends-added-you.js';
+import { acceptOnFriendAdd } from './dm-requests.js';
 import {
     getMember,
     isNodeMember,
@@ -85,6 +86,7 @@ export const FRIEND_BLOCKED_ERROR = 'You have blocked them. Unblock them first t
  * tell the blocked member of the block, which a block never does (engine/member-blocks.ts). The person who blocked them
  * is never told either: engine/friends-added-you.ts leaves out an adder they blocked.
  * Adding someone already added is no new add: it answers as before and counts nothing.
+ * Either way, a message request from them waiting for the owner is accepted (engine/dm-requests.ts acceptOnFriendAdd).
  */
 export function addFriend(ownerPubkey: string, friendPubkey: string): FriendEntry | null {
     if (!getMember(db, ownerPubkey) || isVisitorKey(db, ownerPubkey) || !getMember(db, friendPubkey) || ownerPubkey === friendPubkey) return null;
@@ -97,6 +99,8 @@ export function addFriend(ownerPubkey: string, friendPubkey: string): FriendEntr
         addedYouSince();
         db.prepare("INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)").run(ownerPubkey, friendPubkey, new Date().toISOString());
     }
+    // A message request from them waiting for the owner is accepted: adding someone is choosing them (engine/dm-requests.ts).
+    acceptOnFriendAdd(ownerPubkey, friendPubkey);
     return getFriends(db, ownerPubkey).find(f => f.publicKey === friendPubkey) || null;
 }
 

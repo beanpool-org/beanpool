@@ -24,6 +24,7 @@ import { reportedAlertBody } from '../utils/reportReasons';
 import { blockUser, isUserBlocked } from '../utils/blocklist';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
+import { signedRequestWords } from '../components/signed-request-lines';
 import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/showcase/sample-screens';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../components/showcase/LocalCommunityMark';
 import { useReaderFeatures } from '../utils/use-reader-features';
@@ -306,7 +307,7 @@ export default function TreasuryDetailScreen() {
                 Alert.alert(t('Could not post'), (res as any)?.error || t('Failed to post message'));
             }
         } catch (e: any) {
-            Alert.alert(t('Error'), e.message || t('Could not post message'));
+            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Could not post message'));
         } finally {
             setThreadPosting(false);
         }
@@ -335,7 +336,7 @@ export default function TreasuryDetailScreen() {
             setLedgerShown(LEDGER_PAGE);
         } catch (e: any) {
             if (request !== ledgerRequest.current) return;
-            setLedgerError(e?.message || t('Could not load the ledger'));
+            setLedgerError(e?.message ? signedRequestWords(e.message) : t('Could not load the ledger'));
         } finally {
             if (request === ledgerRequest.current) setLedgerLoading(false);
         }
@@ -419,8 +420,9 @@ export default function TreasuryDetailScreen() {
             const conv = await createConversationApi('dm', [myPubkey, leadKeeper.publicKey], myPubkey);
             router.push(`/chat/${conv.id}`);
         } catch (e: any) {
-            const offline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : e.message);
+            const said: string = e?.message ?? '';
+            const offline = !said || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(said);
+            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : signedRequestWords(said));
         } finally {
             setMessagingLead(false);
         }
@@ -448,7 +450,7 @@ export default function TreasuryDetailScreen() {
                 : t('Your request to join as a keeper with {amount} 🫘 backing has been submitted for review.', { amount: amt }));
             load();
         } catch (e: any) {
-            Alert.alert(t('Request Failed'), e.message || (project ? t('Could not submit collaborator request.') : t('Could not submit keeper request.')));
+            Alert.alert(t('Request Failed'), e.message ? signedRequestWords(e.message) : (project ? t('Could not submit collaborator request.') : t('Could not submit keeper request.')));
         } finally {
             setSubmittingJoin(false);
         }
@@ -481,7 +483,7 @@ export default function TreasuryDetailScreen() {
             setPledgeMemo('');
             load();
         } catch (e: any) {
-            Alert.alert(t('Pledge Failed'), e.message || t('Could not complete pledge.'));
+            Alert.alert(t('Pledge Failed'), e.message ? signedRequestWords(e.message) : t('Could not complete pledge.'));
         } finally {
             setPledging(false);
         }
@@ -1168,7 +1170,7 @@ export default function TreasuryDetailScreen() {
                                                 // The thanks, and why the member's words were left out when they were (case 14).
                                                 Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason));
                                             } catch (e: any) {
-                                                Alert.alert(t('Error'), e.message || t('Could not submit report.'));
+                                                Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Could not submit report.'));
                                                 throw e; // the box keeps the choice and the words
                                             }
                                         }}

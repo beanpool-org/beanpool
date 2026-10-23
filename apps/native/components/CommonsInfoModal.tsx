@@ -420,7 +420,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
                     <View style={styles.processContainer}>
                         <Text style={styles.processLabel}>{t('PROCESS')}</Text>
                         {/* One step a line, each whole in the member's language. */}
-                        <Text style={styles.processText}>{t('1. Members with a completed trade or earned standing, and node admins, can open a binding Decision')}</Text>
+                        <Text style={styles.processText}>{t('1. Members who have completed a trade, and node admins, can open a binding Decision')}</Text>
                         <Text style={styles.processText}>{t('2. Voting opens at once and runs for 7 days; members who joined before it opened can vote')}</Text>
                         <Text style={styles.processText}>{t('3. Ballots are secret — everyone sees the totals and their own vote')}</Text>
                         <Text style={styles.processText}>{t('4. Votes on community money cost voice credits; other Decisions are one member, one vote')}</Text>

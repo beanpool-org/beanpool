@@ -53,15 +53,12 @@ export function configureKnownFloorBeans(beans: (() => boolean) | null): void {
  * member's. Never on a node without Beans (the global profile), whatever its row says.
  */
 export function confirmationDialOn(db: Db): boolean {
-    if (configValue(db, CONFIRMATION_DIAL_KEY) === 'off') return false;
-    return beansOn === null || beansOn();
+    return confirmationDialFrom(configValue(db, CONFIRMATION_DIAL_KEY));
 }
 
 /** The cap the owner has saved: the stored value within [CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX], else the default. */
 export function savedCreditCap(db: Db): number {
-    const v = wholeBeans(configValue(db, CREDIT_CAP_KEY));
-    if (v === null || v < CREDIT_CAP_DEFAULT || v > CREDIT_CAP_MAX) return CREDIT_CAP_DEFAULT;
-    return v;
+    return savedCreditCapFrom(configValue(db, CREDIT_CAP_KEY));
 }
 
 /**
@@ -74,8 +71,33 @@ export function creditCap(db: Db): number {
 
 /** The community's known floor, never above its saved cap. */
 export function knownFloor(db: Db): number {
-    const v = wholeBeans(configValue(db, KNOWN_FLOOR_KEY));
-    return Math.min(savedCreditCap(db), v === null ? KNOWN_FLOOR_DEFAULT : v);
+    return knownFloorFrom(configValue(db, KNOWN_FLOOR_KEY), savedCreditCap(db));
+}
+
+// The same three, from the rows' raw values (null: no row): for a copy of them that is not this node's own rows, a
+// standby's kept record of its main server's (apps/server config/community-shape.ts), read by the rules above.
+
+/** Whether the owner left the dial on (no 'off' row), Beans or not. */
+export function confirmationDialSetFrom(raw: string | null): boolean {
+    return raw !== 'off';
+}
+
+/** The dial from its row: on unless switched off, and never on a node without Beans. */
+export function confirmationDialFrom(raw: string | null): boolean {
+    return confirmationDialSetFrom(raw) && (beansOn === null || beansOn());
+}
+
+/** The saved cap from its row: within [CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX], else the default. */
+export function savedCreditCapFrom(raw: string | null): number {
+    const v = wholeBeans(raw);
+    if (v === null || v < CREDIT_CAP_DEFAULT || v > CREDIT_CAP_MAX) return CREDIT_CAP_DEFAULT;
+    return v;
+}
+
+/** The known floor from its row, never above `savedCap` (savedCreditCapFrom). */
+export function knownFloorFrom(raw: string | null, savedCap: number): number {
+    const v = wholeBeans(raw);
+    return Math.min(savedCap, v === null ? KNOWN_FLOOR_DEFAULT : v);
 }
 
 export function isConfirmed(db: Db, pubkey: string): boolean {

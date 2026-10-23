@@ -51,6 +51,17 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "This message's key isn't on this phone, so it can't be edited here.": word("This message's key isn't on this phone, so it can't be edited here."),
     'This message is no longer in this chat.': word('This message is no longer in this chat.'),
     'Failed to edit message.': word('Failed to edit message.'),
+    // utils/db.ts: why a line wasn't sent or changed, and why a chat didn't open (the chat screen's alerts and its notice).
+    'You are off-grid. Please connect to a BeanPool Node to send messages.': word('You are off-grid. Please connect to a BeanPool Node to send messages.'),
+    'You are off-grid. Please connect to a BeanPool Node to edit messages.': word('You are off-grid. Please connect to a BeanPool Node to edit messages.'),
+    'You are off-grid. Please connect to a BeanPool Node.': word('You are off-grid. Please connect to a BeanPool Node.'),
+    'Failed to deliver message.': word('Failed to deliver message.'),
+    'Failed to send image.': word('Failed to send image.'),
+    'Photos can only be sent in direct messages.': word('Photos can only be sent in direct messages.'),
+    'Could not open this group chat.': word('Could not open this group chat.'),
+    'Could not open this enterprise chat.': word('Could not open this enterprise chat.'),
+    'Could not open this event chat.': word('Could not open this event chat.'),
+    'This phone has switched community since this chat was opened.': word('This phone has switched community since this chat was opened.'),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),
     // utils/group-line-display.ts: a sealed line that names nobody, or names someone no longer in the group.
     'Unverified': word('Unverified', 'chat line'),
@@ -108,6 +119,8 @@ const FILLED: ReadonlyArray<[RegExp, (m: RegExpExecArray) => string]> = [
     [/^Sent from an earlier key of (.+)'s, replaced (.+)\.$/s, (m) => t("Sent from an earlier key of {name}'s, replaced {date}.", { name: m[1], date: m[2] })],
     // utils/group-chat-lines.ts and group-chat-keys.ts: a refusal the node sent no words for.
     [/^The node answered (\d+)\.$/, (m) => t('The node answered {status}.', { status: m[1] })],
+    // utils/db.ts signedRequestWithMethod: the same, from a signed request.
+    [/^Request failed: (\d+)$/, (m) => t('Request failed: {status}', { status: m[1] })],
 ];
 
 /** A whole line this table knows, in the member's language, or null. */

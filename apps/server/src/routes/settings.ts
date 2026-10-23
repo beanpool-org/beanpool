@@ -32,6 +32,7 @@ import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../con
 import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
 import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
+import { readShape } from '../config/community-shape.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
@@ -231,6 +232,7 @@ router.get('/', async (ctx) => {
 //   - serviceRadius: the web app's map and marketplace, the phone's map (unsigned), the manager, static/settings.js
 //   - the directory switches, push interval and last push: the manager's Node Identity screen and static/settings.js
 //   - acceptKnocks and door (withKnockSetting, below): the manager's Node Identity screen and People & Safety → Invites
+//   - dmRequests (withKnockSetting, below): the manager's Node Identity screen
 // The operator's public address is read from the admin route /api/local/admin/public-address/status.
 // The service area's centre is the manager's one map pin, which is also the node's place, and an operator may have set it
 // at home: config/community-place.ts says who gets it (public-routes audit NEW-1: it was served to ~1 m). An owner or admin
@@ -257,8 +259,12 @@ function publicNodeConfig(config: NodeConfig, shown: PlaceShown) {
 // /api/community/info; how many requests are waiting is the operator's only (/api/local/admin/knocks).
 // `door`: who may invite here (config/door.ts): `members`, `admins`, or `open` where the profile opens the door and takes
 // no invites. Public, as `features.door` in /api/community/info is.
-function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean; door: ReturnType<typeof getDoor> } {
-    return { ...config, acceptKnocks: getConfiguredSwitches().knocks, door: getDoor() };
+// `dmRequests`: whether a stranger's first message waits as a request until it is accepted (engine/dm-requests.ts): the
+// `dmRequests` profile switch as configured, on for the global community and off for a local one unless the operator turns
+// it on. Public, as `features.dmRequests` is.
+function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean; door: ReturnType<typeof getDoor>; dmRequests: boolean } {
+    const switches = getConfiguredSwitches();
+    return { ...config, acceptKnocks: switches.knocks, door: getDoor(), dmRequests: switches.dmRequests };
 }
 
 /**
@@ -318,6 +324,16 @@ router.post('/api/local/admin/known-floor', async (ctx) => {
     try {
         ctx.body = setKnownFloorSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
     } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+// How this community works (config/community-shape.ts; the design's §6.1, slice S1): every structural setting as it is set
+// and as the node runs it, with each lock in the server's words. Every owner and admin reads it, and a read token; a
+// moderator's session never gets this far (checkAdminAuth). Reads only: nothing here changes a setting.
+router.get('/api/local/admin/community-shape', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can read how it works.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = readShape();
 });
 
 // The Community health panel in Settings (engine/community-health.ts): every owner and admin reads the totals, the two
@@ -389,11 +405,17 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         return;
     }
     // `publishContacts`, the old single switch for both contacts, is not read: a page that still sends it turns nothing on.
-    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door } = (ctx as any).requestBody || {};
+    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door, dmRequests } = (ctx as any).requestBody || {};
     // Only when sent, and only true or false: a Settings page from before G6 doesn't send it, and must not turn it back on.
     if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'acceptKnocks must be true or false' };
+        return;
+    }
+    // Message requests (engine/dm-requests.ts), the same way: a Settings page from before them doesn't send it.
+    if (dmRequests !== undefined && typeof dmRequests !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: 'dmRequests must be true or false' };
         return;
     }
     // Who may invite (config/door.ts): only when sent, only by an owner (the node password is an owner's), and only a door
@@ -423,8 +445,9 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
         return;
     }
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door });
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door, dmRequests });
     if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
+    if (typeof dmRequests === 'boolean') setSwitchOverride('dmRequests', dmRequests);
     if (door !== undefined && door !== getDoor()) {
         setDoor(door as CommunityDoor);
         // Who changed who may bring people in, for the owners: a member key under a key session, the password otherwise.

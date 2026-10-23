@@ -162,21 +162,24 @@ async function runDecisionsSuite() {
     const frozenCheck = checkCanProposeDecision(frozenMember);
     testAssert(!frozenCheck.ok && frozenCheck.error?.includes('frozen'), 'Frozen member cannot propose decisions');
 
+    // The refusal is in a member's words: what to do (complete a trade), never a field name (earnedCredit).
+    const NO_TRADE_REFUSAL = 'You can propose a Decision once you have completed a trade';
     const zeroCheck = checkCanProposeDecision(zeroStandingMember);
-    testAssert(!zeroCheck.ok && zeroCheck.error?.includes('earnedCredit > 0'), 'Member with zero earned credit cannot propose decisions');
+    testAssert(!zeroCheck.ok && zeroCheck.error === NO_TRADE_REFUSAL, `Member with zero earned credit cannot propose decisions (got ${JSON.stringify(zeroCheck)})`);
+    testAssert(!/earnedCredit|earned_credit|standing/.test(zeroCheck.error ?? ''), `The refusal names no field and no "standing" (got "${zeroCheck.error}")`);
 
     // Badges unlock nothing (Marty, 23 Oct): a trust badge an admin gave (members.earned_credit, adminSetTier's Steward
     // here) is no standing to propose; only a trading record is. Its words are the no-standing refusal's.
     const badgeOnly = 'member_badge_only_' + Date.now();
     seedTestMember(badgeOnly, 'BadgeOnly', { earnedCredit: 600 });
     const badgeCheck = checkCanProposeDecision(badgeOnly);
-    testAssert(!badgeCheck.ok && badgeCheck.error?.includes('earnedCredit > 0'),
+    testAssert(!badgeCheck.ok && badgeCheck.error === NO_TRADE_REFUSAL,
         `A member with a trust badge and no trading record cannot propose (got ${JSON.stringify(badgeCheck)})`);
     let badgeRefusal = '';
     try {
         createDecision({ authorPubkey: badgeOnly, title: 'Badge-only proposal', description: 'A badge is no standing', touches: 'member', effect: 'freeze_credit', subject: m2 });
     } catch (e: any) { badgeRefusal = e.message; }
-    testAssert(badgeRefusal.includes('earnedCredit > 0'), `createDecision refuses the badge-only member in the same words (got "${badgeRefusal}")`);
+    testAssert(badgeRefusal.includes(NO_TRADE_REFUSAL), `createDecision refuses the badge-only member in the same words (got "${badgeRefusal}")`);
 
     // A trading record, with no badge, still proposes. Its pool vote weight is its trade value, and a badge adds none.
     const traderOnly = 'member_trader_only_' + Date.now();

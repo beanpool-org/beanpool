@@ -247,7 +247,7 @@ async function main() {
     const badgeOnly = await call('POST', '/api/commons/decisions', {
         title: 'Freeze Dave', description: 'Freeze Dave for a while', touches: 'member', effect: 'freeze_credit', subject: dave.pubKeyHex,
     }, carol);
-    assert(badgeOnly.status === 400 && /earned trade standing/.test(badgeOnly.body?.error ?? ''),
+    assert(badgeOnly.status === 400 && badgeOnly.body?.error === 'You can propose a Decision once you have completed a trade',
         `a member with a trust badge and no trade can't propose one (${badgeOnly.status} ${JSON.stringify(badgeOnly.body)})`);
     se.grantNodeRole(carol.pubKeyHex, 'admin', 'owner:password');
     const grant = await call('POST', '/api/commons/decisions', {

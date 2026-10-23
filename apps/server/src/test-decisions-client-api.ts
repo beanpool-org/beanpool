@@ -224,7 +224,7 @@ async function runSuite() {
         },
     });
     assert(resDave.status === 400, 'Propose by member with earnedCredit=0 fails with 400');
-    assert(resDave.body.error.includes('earned trade standing'), 'Error cites lack of trade standing');
+    assert(resDave.body.error === 'You can propose a Decision once you have completed a trade', `Error says to complete a trade, in plain words (got "${resDave.body.error}")`);
 
     // 1b. Gating: Frozen member cannot propose
     const resEve = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {

@@ -59,6 +59,8 @@ The software is free. A community runs on a spare computer that stays on at home
 
 On that machine, paste this one block. It fetches the compose file, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
 
+**Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
+
 ```bash
 git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
 docker network create beanpool-shared
@@ -70,9 +72,9 @@ docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/
 docker compose exec beanpool-node beanpool claim
 ```
 
-The last line, `beanpool claim`, gives the community an address, then shows a one-time claim code and a QR code. Scan the QR code with your phone, or open BeanPool → **Find a community**, type the server's address in the search box and tap **Claim ‹name›**. That phone becomes the community's owner.
+The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose. Scan the QR code with your phone, or open BeanPool → **Find a community**, type the server's address in the search box and tap **Claim ‹name›**. That phone becomes the community's owner.
 
-Phones reach a community on the internet only over https, so choose an address for the last line:
+Phones reach a community on the internet only over https. The choices for the last line:
 
 - **A rented server** with a public IP address and ports 80 and 443 open: `beanpool claim --ip 203.0.113.7`. The server gets its own certificate for that address.
 - **A computer at home**, or no open ports: `beanpool claim --name yourtown`. It asks for `yourtown.beanpool.org`, through a tunnel the server runs itself. This is the only choice that uses a BeanPool service.
@@ -86,7 +88,7 @@ Then open your address followed by `/settings`. The setup wizard names your comm
 
 **More:** the operator manual's [first-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest. An AI assistant can do the install for you while you keep the claim, your 12 words and your keys: see [Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md).
 
-The server listens on 443 (https) and 80 (http, which redirects to https). It also publishes 8443 and 8080. Ports 4001 and 4002 are for links between communities and are opt-in: open them only if a linked community needs to dial your server.
+The server listens on 443 (https) and 80 (plain http). Port 80 is where Let's Encrypt checks a server's IP address or domain before it issues a certificate, so keep it open on a rented server, and it serves plain http to a home network. The server also publishes 8443 and 8080. Ports 4001 and 4002 are for links between communities and are opt-in: open them only if a linked community needs to dial your server.
 
 ---
 
@@ -109,7 +111,7 @@ cd packages/beanpool-core && pnpm run build && cd ../..
 cd packages/beanpool-engine && pnpm run build && cd ../..
 cd packages/beanpool-signin && pnpm run build && cd ../..
 cd apps/pwa && pnpm run build && cd ../..       # the web app, into apps/server/public/
-cd apps/manager && pnpm run build && cd ../..   # Settings, into apps/server/public/manager/
+cd apps/manager && pnpm run build && cd ../..   # Settings, into apps/server/public/settings/
 cd apps/server && pnpm dev                      # the server, with hot reload
 ```
 

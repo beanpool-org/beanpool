@@ -135,16 +135,21 @@ export function DealsBody({ card, colors }: { card: NonNullable<HomeCards['deals
 
 export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['enterprise']>; colors: AppColors }) {
     const line = enterpriseLine(card);
+    // Its requests are approved in its keepers' console (S7), never on its page: with any waiting, the line opens Manage.
+    // The card is only ever a keeper's (home-answer keeperOf).
+    const manage = card.requests > 0;
     return (
         <HomeRow
             colors={colors}
             text={card.name}
             sub={line}
             strong
-            a11y={card.lifecycle === 'bounded'
-                ? t('{name}: {line} Opens the project.', { name: card.name, line: sentence(line) })
-                : t('{name}: {line} Opens the enterprise.', { name: card.name, line: sentence(line) })}
-            onPress={() => router.push({ pathname: '/treasury-detail', params: { publicKey: card.id, name: card.name } })}
+            a11y={manage
+                ? t('{name}: {line} Opens Manage.', { name: card.name, line: sentence(line) }, "Manage: an enterprise's keepers' console")
+                : card.lifecycle === 'bounded'
+                    ? t('{name}: {line} Opens the project.', { name: card.name, line: sentence(line) })
+                    : t('{name}: {line} Opens the enterprise.', { name: card.name, line: sentence(line) })}
+            onPress={() => router.push({ pathname: manage ? '/treasury-manage' : '/treasury-detail', params: { publicKey: card.id, name: card.name } })}
             testID="home-enterprise-line"
         />
     );

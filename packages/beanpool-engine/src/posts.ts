@@ -256,6 +256,13 @@ export interface PostFilter {
     query?: string;
     authorPubkey?: string;
     viewerPubkey?: string;
+    /**
+     * A keeper's read of the enterprise that is `authorPubkey`, as it would read its own (readsAsAuthor: its paused
+     * listings too, and while it is paused for the season or winding up): the list route's `keeper=1`, which the keepers'
+     * Manage console sends. Honoured only for a `viewerPubkey` who keeps it; anyone else reads as without it. Unset, a
+     * keeper reads the enterprise's listings as every member does, as its public page does (PR #2405 review 4355985890).
+     */
+    asKeeper?: boolean;
     sync?: boolean;
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
@@ -882,6 +889,19 @@ function enterprisesKeptBy(db: Db, member: string): Set<string> {
 }
 
 /**
+ * Whether `viewer` may read `author`'s listings as their author does (a list read with `authorPubkey`: the paused ones
+ * too, and an enterprise's while it is paused for the season or winding up): the author, or a keeper of the enterprise
+ * that is it (enterprisesKeptBy). A keeper's Manage console features and un-features its paused Offers (apps/native
+ * app/treasury-manage.tsx), and a paused one keeps its place on the shelf (engine/shops.ts SHELF_SQL), so the console
+ * has to read them; it asks for that view (PostFilter.asKeeper), and every other keeper's read is a member's. `kept` is
+ * the reader's enterprises when the caller holds them already.
+ */
+export function readsAsAuthor(db: Db, viewer: string | undefined, author: string | undefined, kept?: () => Set<string>): boolean {
+    if (!viewer || !author) return false;
+    return viewer === author || (kept ? kept() : enterprisesKeptBy(db, viewer)).has(author);
+}
+
+/**
  * A keeper was bound to this enterprise or unbound from it. Every writer of treasury_operators that binds or unbinds
  * calls this after its write, in the same transaction (never a standby's import, which holds its main server's stamps
  * as they are, nor a boot migration). Nothing on the listings or the enterprise's standing moves, but while the
@@ -1219,7 +1239,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
-    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
+    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, asKeeper: null, sync: null, beansOnly: null,
     lendable: null, shopId: null, inShop: null, nearestPerShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
@@ -1770,8 +1790,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     const params: any[] = [];
 
     const byId = !!filter?.id || !!filter?.ids;
+    const viewer = filter?.viewerPubkey;
+    // The enterprises the reader keeps (enterprisesKeptBy), read once and only if a read needs them: one author's listings
+    // read by a keeper of it in the keeper's view, or a sync read.
+    let keeps: Set<string> | undefined;
+    const viewerKeeps = () => keeps ??= viewer ? enterprisesKeptBy(db, viewer) : new Set<string>();
     if (!byId && !filter?.updatedAfter && !filter?.sync) {
-        const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
+        // The author's own read, or a keeper's asked for as the enterprise's (asKeeper); a keeper's plain read is a member's.
+        const selfView = (!!filter?.authorPubkey && filter.authorPubkey === viewer)
+            || (!!filter?.asKeeper && readsAsAuthor(db, viewer, filter?.authorPubkey, viewerKeeps));
         if (!filter?.includeInactive) {
             where += selfView
                 ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
@@ -1822,11 +1849,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
-    const viewer = filter?.viewerPubkey;
     const viewerIsVisitor = isVisitorKey(db, viewer);
-    // The enterprises the reader keeps (enterprisesKeptBy), read once and only if a sync read needs them.
-    let keeps: Set<string> | undefined;
-    const viewerKeeps = () => keeps ??= viewer ? enterprisesKeptBy(db, viewer) : new Set<string>();
     // What a delta read sends this reader again whatever changed (offBoardPostsToResend).
     let resend = new Set<string>();
     if (filter?.includeAllScopes) {

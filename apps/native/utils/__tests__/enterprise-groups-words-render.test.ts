@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The enterprise page and groups in the member's language (words slice S3, sweep B7): app/treasury-detail.tsx (an
- * enterprise's or a project's page, with its Decisions block, report box, confirmations, pickers and alerts),
+ * enterprise's or a project's page, with its report box and alerts) and app/treasury-manage.tsx (its keepers' console
+ * since slice S7, with its Decisions block, confirmations, pickers and alerts),
  * app/treasury-post.tsx (posting its Offer or Need, with the category picker), components/GroupDetailModal.tsx (a
  * group's info sheet, with its votes and the quiet-lead vote) and app/group-post.tsx, each rendered for real inside the
  * real LanguageProvider. React Native's host components are plain tags carrying their accessibility props,
@@ -101,6 +102,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
+// The console's logo picker (S7), the profile photo's own sheet: drawn only once opened, never here.
+vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {}, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1, WHEN_UNLOCKED: 2, AFTER_FIRST_UNLOCK: 3 }));
@@ -145,6 +148,7 @@ import { pseudoLocalise, setLanguage, type ScopedDecisionCard, type ScopedDecisi
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import TreasuryDetailScreen from '../../app/treasury-detail';
+import TreasuryManageScreen from '../../app/treasury-manage';
 import TreasuryPostScreen from '../../app/treasury-post';
 import GroupPostScreen from '../../app/group-post';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
@@ -271,6 +275,8 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
+/** The keepers' console (S7): every keeper action the page had is there now. */
+const consoleScreen = () => createElement(TreasuryManageScreen);
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: unknown = createElement(TreasuryDetailScreen)) {
     await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: lang }, screen as any) as any); });
@@ -329,25 +335,36 @@ function bypassing(): string[] {
 const bracketed = () => Array.from(host.querySelectorAll('span')).filter((s) => /^\[.*\]$/su.test(s.textContent ?? '')).length;
 
 describe('the enterprise page in the pseudo-locale: every word on it came through t() (words S3h)', () => {
-    it('its lead keeper: the banner-free page, goal and pledge box, requests and changes, keepers, the balance in deficit, wage claims, Decisions, operator controls with bids and deals, the season controls, Income & Spend, listings, activity and the discussion', async () => {
+    it('its lead keeper: the banner-free page, goal and pledge box, keepers, the balance in deficit, wage claims, Income & Spend, listings, activity and the discussion; its console: requests and changes, its face and Featured, operator controls with bids and deals, Decisions, the season controls and the discussion\'s removals', async () => {
         await renderIn('xx');
         await openMoney();
         expect(host.textContent).toContain(BAKERY);
         expect(host.textContent).toContain(PURPOSE);
         expect(host.textContent).toContain('see you at the stall');
-        expect(host.textContent).toContain('Pay Mia for the oven door');
-        // What the helpers write reads in the member's language too: a keeper change, the removed stand-in, the ledger.
-        expect(host.textContent).toContain(xx('Adding {name} as a keeper, backing {n} beans').replace('{name}', 'Zoe').replace('{n}', '10'));
+        // What the helpers write reads in the member's language too: the removed stand-in, the ledger.
         expect(host.textContent).toContain(xx('removed by a keeper'));
         expect(host.textContent).toContain(xx('Show {shown} more ({n} older)').replace('{shown}', '3').replace('{n}', '3'));
         // Who keeps it: the shopfront's heading (S5), where the chips said KEEPERS (3).
         expect(host.querySelector('[data-testid="shopfront-keepers"]')?.textContent).toContain(xx('Kept by'));
-        expect(bracketed()).toBeGreaterThan(60);
-        expect(bypassing()).toEqual([]);
+        expect(host.querySelector('[data-testid="enterprise-manage"]')?.textContent).toBe(xx('Manage'));
+        const onPage = bracketed();
+        expect(bypassing(), 'the page').toEqual([]);
+
+        await again('xx', consoleScreen());
+        expect(host.textContent).toContain(BAKERY);
+        expect(host.textContent).toContain('see you at the stall');
+        expect(host.textContent).toContain('Pay Mia for the oven door');
+        // A keeper change in the member's language, and the removed stand-in in the console's discussion.
+        expect(host.textContent).toContain(xx('Adding {name} as a keeper, backing {n} beans').replace('{name}', 'Zoe').replace('{n}', '10'));
+        expect(host.textContent).toContain(xx('removed by a keeper'));
+        expect(host.querySelector('[data-testid="manage-face"]')?.textContent).toContain(xx('Its shopfront'));
+        expect(host.querySelector('[data-testid="manage-featured"]')).not.toBeNull();
+        expect(onPage + bracketed()).toBeGreaterThan(60);
+        expect(bypassing(), 'the console').toEqual([]);
     });
 
-    it('the season controls: each confirmation, the deficit that blocks a wind-up, and the alerts the page raises', async () => {
-        await renderIn('xx');
+    it('the season controls: each confirmation, the deficit that blocks a wind-up, and the alerts the console raises', async () => {
+        await renderIn('xx', consoleScreen());
         await click(byLabel(xx('Pause for Season')), 'Pause for Season');
         expect(host.textContent).toContain(xx('Confirm Pause for Season'));
         expect(bypassing(), 'pause').toEqual([]);
@@ -367,20 +384,21 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(bypassing(), 'alerts').toEqual([]);
     });
 
-    it('releasing an hourly deal opens the hours box; the report box', async () => {
-        await renderIn('xx');
+    it('releasing an hourly deal opens the hours box (the console); the report box (the page)', async () => {
+        await renderIn('xx', consoleScreen());
         await click(buttonWith(xx('Release Payment ({amount} 🫘)').replace('{amount}', '30')), 'Release Payment');
         expect(host.textContent).toContain(xx('Confirm Hours Worked'));
         expect(bypassing(), 'hours').toEqual([]);
         await click(buttonWith(xx('Cancel')), 'Cancel');
+        await again('xx');
         await click(byLabel(xx('Report Enterprise')), 'Report Enterprise');
         expect(host.textContent).toContain(xx('WHY ARE YOU REPORTING IT?'));
         expect(host.textContent).toContain(xx('Child safety'));
         expect(bypassing(), 'report').toEqual([]);
     });
 
-    it('the Decisions block\'s propose form', async () => {
-        await renderIn('xx');
+    it('the Decisions block\'s propose form, in the console', async () => {
+        await renderIn('xx', consoleScreen());
         await click(buttonWith(xx('Propose a vote')), 'Propose a vote');
         expect(host.querySelector('[data-testid="propose-scoped-sheet"]')).not.toBeNull();
         expect(host.textContent).toContain(xx('How many Beans?'));
@@ -398,14 +416,14 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
             leadInactivity: quiet, ...over,
         });
         net.answer = community({ getTreasuryDetail: project({ succession: { proposals: [proposal] } }) });
-        await renderIn('xx');
+        await renderIn('xx', consoleScreen());
         expect(host.textContent).toContain(xx('LEADER INACTIVE ({n} DAYS)').replace('{n}', '34'));
         expect(host.textContent).toContain(xx('Succession Proposal: Elect {name} as leader').replace('{name}', SUCCESSION_CANDIDATE));
         expect(byLabel(xx('Yes, make {name} leader').replace('{name}', SUCCESSION_CANDIDATE))).not.toBeNull();
         expect(bypassing(), 'the vote').toEqual([]);
 
         net.answer = community({ getTreasuryDetail: project({ succession: { proposals: [] } }) });
-        await again('xx');
+        await again('xx', consoleScreen());
         await click(byLabel(xx('Propose Active Collaborator as Leader')), 'Propose Active Collaborator as Leader');
         expect(host.textContent).toContain(xx('Select an active collaborator to move the leader role to:'));
         expect(host.textContent).toContain(xx('{name} (yourself)').replace('{name}', 'Ana'));
@@ -455,6 +473,10 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         await renderIn('xx');
         expect(host.textContent).toContain(xx("Couldn't load this group. Check your connection."));
         expect(bypassing(), 'no page').toEqual([]);
+        await again('xx', consoleScreen());
+        expect(host.textContent).toContain(xx("Couldn't load this group. Check your connection."));
+        expect(host.textContent).toContain(xx('Try again'));
+        expect(bypassing(), 'no console').toEqual([]);
 
         net.answer = community({ getTreasuryDetail: leadsView({ posts: [], flow: [], balance: 5 }), getEnterpriseThread: { conversation: null, messages: [], readOnly: false }, getEnterpriseLedger: { ...LEDGER, entries: [] } });
         await again('xx');
@@ -469,13 +491,17 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         await renderIn('en');
         await openMoney();
         expect(bracketed()).toBe(0);
-        expect(host.textContent).toContain('PENDING KEEPER REQUESTS (2)');
-        expect(host.textContent).toContain('Adding Zoe as a keeper, backing 10 beans');
         expect(host.textContent).toContain('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit (-12.5 🫘).');
         expect(host.textContent).toContain('Show 3 more (3 older)');
+        expect(host.textContent).toContain('120 🫘 raised');
+        expect(host.textContent).toContain('removed by a keeper');
+
+        await again('en', consoleScreen());
+        expect(bracketed()).toBe(0);
+        expect(host.textContent).toContain('PENDING KEEPER REQUESTS (2)');
+        expect(host.textContent).toContain('Adding Zoe as a keeper, backing 10 beans');
         expect(host.textContent).toContain('Bid by Ivo · 30 🫘');
         expect(host.textContent).toContain('Worker: Member · 30 🫘 in escrow');
-        expect(host.textContent).toContain('120 🫘 raised');
         expect(host.textContent).toContain('Votes among this enterprise\'s keepers. More than half must vote.');
         expect(byLabel('Vote Yes on Pay Mia for the oven door')).not.toBeNull();
         expect(host.textContent).toContain('removed by a keeper');
@@ -663,7 +689,7 @@ const spanWith = (text: string) => Array.from(host.querySelectorAll('span')).fin
 
 describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseudo-locale', () => {
     it('the operator buttons: two lines at most, the longest word across its half, shrinking', async () => {
-        await renderIn('xx');
+        await renderIn('xx', consoleScreen());
         // 16 dp page gutters, the panel's 14 dp padding, a 10 dp gap; each half less its 16 dp icon and 6 dp gap.
         const half = (FLOOR - 32 - 28 - 10) / 2 - 22;
         for (const words of ['Post Offer', 'Post Need']) {
@@ -676,9 +702,8 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
         }
     });
 
-    it('the request buttons, the period tabs and the P&L labels: one line each, shrinking to fit their share', async () => {
-        await renderIn('xx');
-        await openMoney();
+    it('the request buttons (the console), the period tabs and the P&L labels (the page): one line each, shrinking to fit their share', async () => {
+        await renderIn('xx', consoleScreen());
         // The requests card's 16 dp padding and the row's 12 dp, an 8 dp gap; each button's 8 dp padding.
         const button = (FLOOR - 32 - 32 - 24 - 8) / 2 - 16;
         for (const words of ['Approve', 'Decline']) {
@@ -686,6 +711,8 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
             expect(label.getAttribute('data-lines')).toBe('1');
             expect(widthOf(label.textContent!, 13 * SCALE) * Number(label.getAttribute('data-min-scale')), words).toBeLessThanOrEqual(button);
         }
+        await again('xx');
+        await openMoney();
         // The strip's four tabs (All time is 1.6 of a share) inside the card's 14 dp padding and the strip's 3 dp; 2 dp each side.
         const unit = (FLOOR - 32 - 28 - 6) / 4.6;
         for (const [words, share] of [['All time', 1.6], ['30d', 1], ['90d', 1], ['1y', 1]] as const) {
@@ -702,8 +729,8 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
         }
     });
 
-    it('the bid row wraps its two buttons; the deal and cancel buttons\' words wrap inside them', async () => {
-        await renderIn('xx');
+    it('the bid row wraps its two buttons; the deal and cancel buttons\' words wrap inside them (the console)', async () => {
+        await renderIn('xx', consoleScreen());
         const approve = buttonWith(xx('Approve Bid ({amount} 🫘)').replace('{amount}', '30'))!;
         expect(approve.parentElement!.getAttribute('data-wrap')).toBe('wrap');
         for (const words of ['Fulfill Deal · Awaiting Customer Release', 'Cancel Initiative & Refund Escrow']) {
@@ -751,10 +778,10 @@ describe('the enterprise page follows a language picked in Settings', () => {
     const inFr = (en: string) => fr[en] ?? en;
     const MENU = { menuBtn: {}, menuIconWrap: {}, menuIcon: {}, menuText: {}, menuSub: {}, menuChevron: {} };
 
-    it('a pick redraws it in the new language: the operator buttons, a keeper\'s row and the back button\'s spoken name', async () => {
+    it('a pick redraws it in the new language: the operator buttons (its console), a keeper\'s row (its page) and the back button\'s spoken name', async () => {
         await act(async () => {
             root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'] },
-                createElement(DrawnInLanguage, null, createElement(LanguageRow as any, { styles: MENU }), createElement(TreasuryDetailScreen))) as any);
+                createElement(DrawnInLanguage, null, createElement(LanguageRow as any, { styles: MENU }), createElement(TreasuryDetailScreen), consoleScreen())) as any);
         });
         await settle();
         expect(host.textContent).toContain('Post Offer');
@@ -793,7 +820,7 @@ describe('the enterprise page follows a language picked in Settings', () => {
         const paid: unknown[][] = [];
         const answers = community({ treasuryComplete: { ok: true } });
         net.answer = (name, args) => { if (name === 'treasuryComplete') paid.push(args); return answers(name, args); };
-        await renderIn('fr');
+        await renderIn('fr', consoleScreen());
         await click(buttonWith(inFr('Release Payment ({amount} 🫘)').replace('{amount}', '30')), 'Release Payment');
         const hours = host.querySelector('[data-modal] input') as HTMLInputElement | null;
         // The translator's words around the number, and the number in the language's way (formatNumber, #2202).

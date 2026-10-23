@@ -4,8 +4,8 @@
  * On the worldwide/global node (enterprises off, showcase on), rendering an enterprise or project
  * displays the REAL treasury detail screen fed from sample community data (Example Valley Bakery
  * and Compost Bay).
- * Every control (Join as keeper, Pledge, Pause for season, Start wind-up, Post Offer/Need, To Commons)
- * is a marker action opening the LocalCommunitySheet.
+ * Every control (Join as keeper, Pledge, and Manage in the header: its keepers' console since slice S7, where Pause for
+ * season, Start wind-up, Post Offer/Need and To Commons are) is a marker or opens the LocalCommunitySheet.
  * Reads nothing of the member's own data and calls no node APIs.
  * Deep linking to a non-sample enterprise explains why ("Enterprises live in a local community.")
  * instead of "Couldn't load this group. Check your connection."
@@ -196,7 +196,9 @@ describe('treasury-detail on global node (preview mode)', () => {
         searchParams.current = { publicKey: BAKERY.id };
         await render(createElement(TreasuryDetailScreen));
 
-        expect(markers().map(label)).toEqual(['Join as keeper', 'Post Offer', 'Post Need', 'To Commons', 'Pause for season', 'Start wind-up']);
+        // The keepers' controls are behind Manage, its keepers' console (S7): on the page, only what every member does.
+        expect(markers().map(label)).toEqual(['Join as keeper']);
+        for (const words of ['Post Offer', 'Post Need', 'To Commons', 'Pause for season', 'Start wind-up']) expect(text()).not.toContain(words);
         for (const i of markers().keys()) {
             await press(markers()[i]);
             expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
@@ -204,6 +206,13 @@ describe('treasury-detail on global node (preview mode)', () => {
             await press(host.querySelector('[data-modal] [aria-label="Close"]') as HTMLElement);
             expect(host.querySelector('[data-testid="local-community-sheet"]')).toBeNull();
         }
+        // Manage, as its keepers see it, says why the console lives in a local community; it opens no console.
+        const manage = host.querySelector('[data-testid="enterprise-manage"]') as HTMLElement;
+        expect(manage?.textContent).toBe('Manage');
+        await press(manage);
+        expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
+        expect(text()).toContain('Why this lives in a local community');
+        await press(host.querySelector('[data-modal] [aria-label="Close"]') as HTMLElement);
         // A listing tap goes nowhere.
         const listing = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes(BAKERY.listings[0].title)) as HTMLElement;
         await press(listing);
@@ -270,13 +279,14 @@ describe("the control: a local community's treasury detail reads as before", () 
     const BASE_KEEPER = ['db.getTreasuryDetail', 'db.getEnterpriseThread', 'db.getEnterpriseLedger', 'db.getBalance'];
     const BASE_UNANSWERED = ['db.getTreasuryDetail', 'db.getEnterpriseThread', 'db.getEnterpriseLedger'];
 
-    it('a keeper on their own enterprise: the same calls, the keeper controls, no strip and no marker', async () => {
+    it('a keeper on their own enterprise: the same calls, Manage (its keepers\' console, S7), no strip and no marker', async () => {
         rememberProfile('local', LOCAL);
         net.answer = (name) => (name in answers ? Promise.resolve(answers[name]) : undefined);
         searchParams.current = { publicKey: 'local-ent-1', name: 'Garden Bakery' };
         await render(createElement(TreasuryDetailScreen));
         expect([...net.calls].sort()).toEqual([...BASE_KEEPER].sort());
-        expect(text()).toContain('OPERATOR CONTROLS');
+        expect(host.querySelector('[data-testid="enterprise-manage"]')?.textContent).toBe('Manage');
+        expect(text()).not.toContain('OPERATOR CONTROLS');
         expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
         expect(markers()).toEqual([]);
     });

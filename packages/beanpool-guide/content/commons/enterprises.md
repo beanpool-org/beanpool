@@ -9,7 +9,7 @@ related: keepers, commons-fund, proposing-a-decision, rules, beans-and-the-globa
 
 Projects and enterprises are the groups that hold Beans. Each has its own beans, its own Offers and Needs, and its own credit line.
 
-On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Pause**, say why enterprises live in a local community, and change nothing. See "Beans and the global community".
+On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Manage**, say why enterprises live in a local community, and change nothing. See "Beans and the global community".
 
 - A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, the pledges go into the project's account and it takes no more. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.
 - An **enterprise** keeps going and trades: a tool library, the egg flock, a market stall. Its **keepers** run it together and stand behind it. One of them is the **lead keeper**.
@@ -49,28 +49,24 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 
 ## If you keep it
 
-If you keep an enterprise, or help run a project, everything you do for it is in one place. In the web app, its page has two tabs, **Page** and **Manage**: **Page** is what members see, and **Manage** holds the rest. A community admin sees **Manage** too, for the requests to join. On the phone it is all still on the page.
+If you keep an enterprise, or help run a project, everything only its keepers do is under **Manage**: at the top of its page on the phone, and in the web app its page has two tabs, **Page** and **Manage**. So its page shows what every member sees. A community admin sees **Manage** too. **Manage** shows only what you can do:
 
-In **Manage** (on the phone, on the page):
+- requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See "Keepers".
+- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its kind or **How we deal**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.
+- **Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.
+- **Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.
+- **Decisions:** its keepers' votes.
+- Removing a keeper, and stepping down.
+- **Season & lifecycle controls:** pausing and closing it (below).
+- **Discussion:** remove a message that breaks your community's rules. It then shows as removed.
 
-- requests to join, and keeper changes waiting for an objection;
-- **Operator controls**: **Post Offer** and **Post Need** post in its name; **To Commons** sends some of its surplus to the Commons; bids on its Needs and its deals, to approve and pay;
-- in the web app, **Set map pin** puts it on the map;
-- its keepers' votes, choosing a new lead when the lead has gone quiet, removing a keeper and stepping down;
-- in the web app, removing a message from its **Discussion**.
-
-Only in the web app's **Manage**, for now:
-
-- **Its shopfront: what members see**: any keeper can change its picture, **About**, the kind of shop and **How we deal**. Only the lead keeper (the leader of a project) can change its name and what it is for; the others see them, and why. **Save** sends only what you changed, and if the community says no, it says why.
-- **Featured**: tick up to six of its Offers in its shop to show first on its page. An Offer that isn't in its shop yet can't be featured: **Put them in its shop** puts them there. If it has no shop yet, **Open its shop** opens one.
-
-Pausing and closing it are with the operator controls in the web app. On the phone they are in a card of their own below them, **Season & lifecycle controls**, which shows only the buttons you can use:
+**Season & lifecycle controls** shows only the buttons you can use:
 
 - **Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.
 - **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
 - **Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See "Rules and how decisions work".
 
-Before a project reaches its goal, its leader can also cancel it, and every pledge goes back.
+Before a project reaches its goal, its leader can also cancel it (on the phone, under **Manage**), and every pledge goes back.
 
 ## Starting one
 
@@ -85,4 +81,4 @@ It starts straight away, and you are its leader (a project) or its lead keeper (
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 
-Its keepers can change its picture, About, kind of shop and how they deal in the web app's **Manage**; its lead keeper can change its name and purpose there too. The phone app can't change them yet.
+Its keepers change its picture and its words under **Manage**, in either app (see "If you keep it").

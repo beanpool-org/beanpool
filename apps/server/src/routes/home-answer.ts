@@ -727,7 +727,10 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     const last = book.entries[book.entries.length - 1];
     return {
         ...card, balance: book.enterprise.balance,
-        month: { trades: book.summary.transactionCount, in: book.summary.totalIncome, out: book.summary.totalSpend },
+        // In as the ledger credited it, net of a payment's fee, as the Beans card and the latest line say it: the book's
+        // net change plus what went out. Its totalIncome is gross, so one 100-Bean payment would read "+100 in" beside
+        // "Latest: +98.5" and a balance that rose by 98.5 (review of #2416).
+        month: { trades: book.summary.transactionCount, in: round2(book.summary.netChange + book.summary.totalSpend), out: book.summary.totalSpend },
         latest: last ? enterpriseLineOf(last) : null,
     };
 }

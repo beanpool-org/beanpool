@@ -901,6 +901,26 @@ async function main(): Promise<void> {
             && miaBeans?.balance === se.getBalance(w3.mia.pk).balance,
             `beans: Mia's month, 2 trades, 4.25 in, 1.75 out, last month's 0.65 left out (${JSON.stringify(miaBeans)})`);
 
+        // A payment that carries the 1.5% fee (review of #2416): "in" on both cards is what the payee was credited, net of
+        // the fee, as the latest line and the balance say it, never the amount paid. `pay` takes no fee, so these don't use it.
+        const r2 = (n: number) => Math.round(n * 100) / 100;
+        const [entBefore, miaBefore] = [se.getBalance(w3.ent.publicKey).balance, se.getBalance(w3.mia.pk).balance];
+        const feePaid = [
+            !!se.transfer(bob.pk, w3.ent.publicKey, 10, 'HomeSentinel with a fee', 'escrow'),
+            !!se.transfer(w3.ned.pk, w3.mia.pk, 10, 'HomeSentinel with a fee', 'escrow'),
+        ];
+        const entRose = r2(se.getBalance(w3.ent.publicKey).balance - entBefore);
+        const miaRose = r2(se.getBalance(w3.mia.pk).balance - miaBefore);
+        assert(feePaid.every(Boolean) && entRose === 9.85 && miaRose === 9.85,
+            `setup: Bob pays the bakery and Ned pays Mia 10 Beans each, the fee taken (${feePaid.join(',')}; credited ${entRose} and ${miaRose})`);
+        const fe = (await get('/api/home?cards=enterprise', alice)).body?.cards?.enterprise;
+        assert(fe?.month?.trades === e.month.trades + 1 && fe.month.in === r2(e.month.in + entRose) && fe.month.out === e.month.out
+            && fe.latest?.amount === entRose && fe.balance === se.getBalance(w3.ent.publicKey).balance,
+            `enterprise: the payment with a fee adds what the bakery was credited, ${entRose}, to this month's in, as its latest line and balance say (${JSON.stringify(fe?.month)} ${JSON.stringify(fe?.latest)}, balance ${fe?.balance})`);
+        const miaFee = (await get('/api/home?cards=beans', w3.mia)).body?.cards?.beans?.month;
+        assert(miaFee?.trades === miaOwn.trades + 1 && miaFee.in === r2(miaOwn.in + miaRose) && miaFee.out === miaOwn.out && miaFee.fees === miaOwn.fees,
+            `beans: Mia's month adds what she was credited, ${miaRose}, not the 10 Ned paid (${JSON.stringify(miaFee)})`);
+
         // Community: the figures. Listings to anyone answered; the rest to a member who reads as one.
         const info = se.getPublicCommunityInfo();
         const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
@@ -1066,7 +1086,8 @@ async function main(): Promise<void> {
             const controlMany = await control();
             console.log(`  the Beans card (the payer's own month): median ${bobFew.toFixed(1)} ms with ${bobFewLines} lines in his history, ${bobMany.toFixed(1)} ms with ${bobManyLines};`
                 + ` the control (cards=community, no ledger read): ${controlFew.toFixed(1)} ms before the writes, ${controlMany.toFixed(1)} ms after`);
-            assert(paid === 1000 && book?.month?.trades === 1001, `setup: a thousand more lines on the bakery's book this month (${paid}, month ${JSON.stringify(book?.month)})`);
+            // 1002: this month's two lines from 5d (Bob's 3, and his 10 with the fee), then the thousand.
+            assert(paid === 1000 && book?.month?.trades === 1002, `setup: a thousand more lines on the bakery's book this month (${paid}, month ${JSON.stringify(book?.month)})`);
         }
 
         // Against today's landing (§5.4): the Market's first page and the header's "needs you" reads, which the phone

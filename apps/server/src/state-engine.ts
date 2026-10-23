@@ -8555,8 +8555,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropShopOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
-        // The message requests they made, and the ones waiting for them, with a tombstone each; one of theirs still waiting
-        // in a real conversation is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
+        // The message requests they made, and the ones waiting for them, with a tombstone each; one of theirs nobody accepted,
+        // in a real conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
         dropRequestsOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
@@ -8739,8 +8739,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropShopOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
-        // And their message requests, made or waiting for them, a tombstone each; one of theirs still waiting in a real
-        // conversation is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
+        // And their message requests, made or waiting for them, a tombstone each; one of theirs nobody accepted, in a real
+        // conversation, is ignored instead, so it never becomes an ordinary chat (engine/dm-requests.ts).
         dropRequestsOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
         dropWithheldNotesOf(publicKey);

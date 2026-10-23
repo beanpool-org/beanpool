@@ -482,6 +482,35 @@ describe("the keepers' Manage tab", () => {
             expect((byId('manage-face-about') as HTMLTextAreaElement).value).toBe('New words.');
         });
 
+        it("what is typed in it stays while another Manage action runs and the enterprise is read again", async () => {
+            const opts: NodeOpts = {
+                write: (method, path, body) => {
+                    if (path !== `/api/enterprise/${ENT}/keepers/requests/r1/approve`) return okWrites(method, path, body);
+                    opts.detail = leadsView({ keeperRequests: [] });
+                    return { status: 200, body: { success: true, backing: 15, applied: false, change: null } };
+                },
+            };
+            // The node takes a moment to answer the read again, as a real one does: the page has a frame to draw meanwhile.
+            const base = fetchMock.getMockImplementation()!;
+            let detailReads = 0;
+            fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+                const again = new URL(String(url), 'http://node').pathname === `/api/treasury/${ENT}` && (init?.method ?? 'GET') === 'GET' && detailReads++ > 0;
+                return again ? new Promise((r) => setTimeout(r, 30)).then(() => base(url, init)) : base(url, init);
+            });
+            await open(opts);
+            const panel = await manage();
+            fireEvent.change(within(panel).getByTestId('manage-face-about'), { target: { value: 'We bake on Saturdays and Wednesdays.' } });
+            fireEvent.change(within(panel).getByTestId('manage-face-how'), { target: { value: 'Saturdays only.' } });
+            fireEvent.click(within(panel).getByRole('button', { name: 'Approve Ivo as a keeper' }));
+            await screen.findByText('Approved. They become a keeper in 3 days, unless another keeper objects first.');
+            // Read again: the request it answered has gone.
+            await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve Ivo as a keeper' })).toBeNull());
+            expect(reads().filter((r) => r === `/api/treasury/${ENT}`)).toHaveLength(2);
+            expect((byId('manage-face-about') as HTMLTextAreaElement).value).toBe('We bake on Saturdays and Wednesdays.');
+            expect((byId('manage-face-how') as HTMLTextAreaElement).value).toBe('Saturdays only.');
+            expect(byId('manage-face-save')).not.toBeDisabled();
+        });
+
         it('About says its limit; a node admin who keeps none of it changes the face but not the shop', async () => {
             await open({ detail: membersView({ isLeadOrSoleKeeperOrAdmin: true }), keeperOf: [] });
             const panel = await manage();

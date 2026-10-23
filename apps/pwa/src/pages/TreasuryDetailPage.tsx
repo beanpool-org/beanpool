@@ -250,7 +250,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         ? t('Approved collaborator request with {amount} 🫘 backing.', { amount })
                         : t('Approved keeper request with {amount} 🫘 backing.', { amount }))
             });
-            await load();
+            await load(true);
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
@@ -271,7 +271,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 type: 'success',
                 message: project ? t('Declined collaborator request.') : t('Declined keeper request.')
             });
-            await load();
+            await load(true);
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
@@ -309,7 +309,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 });
             }
             setSelectedSuccessionCandidate('');
-            await load();
+            await load(true);
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
@@ -327,7 +327,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await objectToKeeperChange(pubkey, changeId);
             setActionFeedback({ type: 'success', message: t('Objection recorded. The change is cancelled.') });
-            await load();
+            await load(true);
         } catch (err: any) {
             setActionFeedback({ type: 'error', message: err.message || t('Could not object.') });
         } finally {
@@ -343,7 +343,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await removeEnterpriseKeeper(pubkey, k.publicKey);
             setActionFeedback({ type: 'success', message: removeKeeperConfirmText(k, kw) });
-            await load();
+            await load(true);
         } catch (err: any) {
             setActionFeedback({ type: 'error', message: err.message || (project ? t('Could not remove the collaborator.') : t('Could not remove the keeper.')) });
         } finally {
@@ -361,7 +361,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await stepDownAsKeeper(pubkey);
             setActionFeedback({ type: 'success', message: project ? t('You have stepped down as a collaborator.') : t('You have stepped down as a keeper.') });
-            await load();
+            await load(true);
         } catch (err: any) {
             // The server says plainly what must happen first (e.g. the debt your pledge covers).
             setActionFeedback({ type: 'error', message: err.message || t('Could not step down.') });
@@ -399,7 +399,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     message: t('Succession vote registered ({count} yes of {needed} needed).', { count, needed: req })
                 });
             }
-            await load();
+            await load(true);
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
@@ -464,7 +464,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         return { text: tn(days, '{n} days left', '{n} days left'), expired: false };
     };
 
-    /** Reads it again; `quiet` keeps the page drawn meanwhile (a Manage form keeps what it said, "Saved."). */
+    /**
+     * Reads it again; `quiet` keeps the page drawn meanwhile (a Manage form keeps what it said, "Saved."). Every Manage
+     * action reads it again quietly: "Loading…" in its place would unmount the face, and a keeper's unsaved words with it.
+     */
     const load = useCallback(async (quiet = false) => {
         if (isEffectivePreview) {
             setLoading(true);
@@ -619,7 +622,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 type: 'success',
                 message: project ? t('Project paused for the season. Credit held at snapshot.') : t('Enterprise paused for the season. Credit held at snapshot.'),
             });
-            await load();
+            await load(true);
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e?.message || (project ? t('Failed to pause the project') : t('Failed to pause the enterprise')) });
@@ -638,7 +641,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 type: 'success',
                 message: project ? t('Project resumed! Active listings are now buyable again.') : t('Enterprise resumed! Active listings are now buyable again.'),
             });
-            await load();
+            await load(true);
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e?.message || (project ? t('Failed to resume the project') : t('Failed to resume the enterprise')) });
@@ -654,7 +657,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await initiateWindUp(pubkey);
             setConfirmingWindUp(false);
             setActionFeedback({ type: 'success', message: t('Wind-up initiated. 7-day grace period has begun.') });
-            await load();
+            await load(true);
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e?.message || t('Failed to initiate wind-up') });
@@ -673,7 +676,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 type: 'success',
                 message: project ? t('Wind-up cancelled. Project restored to active status.') : t('Wind-up cancelled. Enterprise restored to active status.'),
             });
-            await load();
+            await load(true);
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e?.message || t('Failed to cancel wind-up') });
@@ -695,7 +698,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     ? t('Wind-up finalised. Swept {amount} 🫘 to Commons and released collaborators.', { amount })
                     : t('Wind-up finalised. Swept {amount} 🫘 to Commons and released keepers.', { amount }),
             });
-            await load();
+            await load(true);
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e?.message || t('Failed to finalise wind-up') });
@@ -745,7 +748,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await treasurySweep(pubkey, amt);
             setSweepAmount('');
             setActionFeedback({ type: 'success', message: t('Successfully swept {amount} 🫘 to the shared Commons pool.', { amount: formatNumber(amt) }) });
-            await load();
+            await load(true);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || t('Failed to sweep surplus to the Commons.') });
         } finally {
@@ -759,7 +762,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await treasuryApprove(pubkey, txId);
             setActionFeedback({ type: 'success', message: t('Bid approved! Escrow funds locked in trust.') });
-            await load();
+            await load(true);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || t('Failed to approve bid.') });
         } finally {
@@ -775,7 +778,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await treasuryReject(pubkey, txId);
             setActionFeedback({ type: 'success', message: t('Bid declined.') });
-            await load();
+            await load(true);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || t('Failed to decline bid.') });
         } finally {
@@ -813,7 +816,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await treasuryComplete(pubkey, txId, finalHours);
             setActionFeedback({ type: 'success', message: t('Payment released! Worker has been paid.') });
-            await load();
+            await load(true);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || t('Failed to release payment.') });
         } finally {
@@ -890,7 +893,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     ? (offer ? t('Offer posted on behalf of the project.') : t('Need posted on behalf of the project.'))
                     : (offer ? t('Offer posted on behalf of the enterprise.') : t('Need posted on behalf of the enterprise.'))
             });
-            await load();
+            await load(true);
         } catch (e: any) {
             setPostError(e.message || (postModalMode === 'offer' ? t('Failed to post offer.') : t('Failed to post need.')));
         } finally {

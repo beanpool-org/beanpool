@@ -12,7 +12,8 @@
  * in with 12 words and has added no sign-in. Nothing is drawn while it has not answered, for an older node that does
  * not say, or offline. Home's answer says it too (its `safety` card, passed as `known`), so there the card not yet put
  * away is drawn with the answer, and its cell is there from the first paint; a return after ✕ waits for the node's
- * counts. Home is told whether the card is drawn (`onDrawn`).
+ * counts. A ✕ before they have come (still asking, or the request failed) is written at once and settled by the counts
+ * when the node next answers, on this visit or a later one; Home is told whether the card is drawn (`onDrawn`).
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`).
@@ -79,10 +80,12 @@ interface Schedule {
     weekReturnShown: boolean;
     /** They looked at their 12 words from the card: it is done on the landing screen. */
     checked: boolean;
+    /** When it was first put away, if the node's counts weren't known then: they settle it when they come (null once settled). */
+    awayBeforeCounts: number | null;
 }
 
 const scheduleKey = (publicKey: string) => `beanpool_one_way_back_${publicKey}`;
-const NEW_SCHEDULE: Schedule = { dismissed: false, keptPostsAtDismissal: 0, postReturnShown: false, weekReturnShown: false, checked: false };
+const NEW_SCHEDULE: Schedule = { dismissed: false, keptPostsAtDismissal: 0, postReturnShown: false, weekReturnShown: false, checked: false, awayBeforeCounts: null };
 
 export function readSchedule(publicKey: string): Schedule {
     try {
@@ -94,6 +97,7 @@ export function readSchedule(publicKey: string): Schedule {
                 postReturnShown: v.postReturnShown === true,
                 weekReturnShown: v.weekReturnShown === true,
                 checked: v.checked === true,
+                awayBeforeCounts: typeof v.awayBeforeCounts === 'number' && Number.isFinite(v.awayBeforeCounts) ? v.awayBeforeCounts : null,
             };
         }
     } catch { /* private window, or not ours */ }
@@ -119,6 +123,8 @@ function weekReturnDue(s: Schedule, standing: Standing, now: number): boolean {
 export function landingDue(s: Schedule, standing: Standing | null, now: number = Date.now()): boolean {
     if (s.checked) return false;
     if (!s.dismissed) return true;
+    // Put away before the counts came: nothing was due at that moment, and they settle it (settleAway) when they come.
+    if (s.awayBeforeCounts !== null) return false;
     // A return goes by the node's counts: none until it has answered.
     return !!standing && (postReturnDue(s, standing) || weekReturnDue(s, standing, now));
 }
@@ -134,6 +140,23 @@ export function putAway(s: Schedule, standing: Standing, now: number = Date.now(
         postReturnShown: s.postReturnShown || postDue,
         weekReturnShown: s.weekReturnShown || weekDue,
     };
+}
+
+/**
+ * ✕ before the node's counts were known: put away now, with no count yet (the card is only drawn then when it was never
+ * put away, so this is always the first time).
+ */
+export function putAwayBeforeCounts(s: Schedule, now: number = Date.now()): Schedule {
+    return { ...s, dismissed: true, awayBeforeCounts: now };
+}
+
+/**
+ * The counts that came after such a ✕: the posts up now are the ones it was put away with, and a week that was over at
+ * the ✕ counts as shown, as {@link putAway} would have had it. Anything else is left as it is.
+ */
+export function settleAway(s: Schedule, standing: Standing): Schedule {
+    if (s.awayBeforeCounts === null) return s;
+    return putAway({ ...s, dismissed: false, awayBeforeCounts: null }, standing, s.awayBeforeCounts);
 }
 
 // ---------- adding a sign-in ----------
@@ -288,21 +311,17 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     const resultRef = useRef<HTMLParagraphElement | null>(null);
     useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
-    // ✕ before the node has answered: put away now, and kept once its counts are known (the posts up at that moment).
-    const [away, setAway] = useState(false);
-
-    const shown = !away && (standing?.words ?? known) && (placement === 'settings' || landingDue(schedule, standing));
+    const shown = (standing?.words ?? known) && (placement === 'settings' || landingDue(schedule, standing));
 
     function update(next: Schedule) {
         setSchedule(next);
         writeSchedule(identity.publicKey, next);
     }
 
+    // A ✕ before the node's counts were known, on this visit or an earlier one: settled once they are.
     useEffect(() => {
-        if (!away || !standing) return;
-        setAway(false);
-        update(putAway(schedule, standing));
-    }, [away, standing]);
+        if (standing && schedule.awayBeforeCounts !== null) update(settleAway(schedule, standing));
+    }, [standing, schedule]);
 
     useLayoutEffect(() => { onDrawn?.(shown); }, [shown]);
     useLayoutEffect(() => () => { onDrawn?.(false); }, []);
@@ -326,7 +345,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                         </h2>
                         {placement === 'landing' && (
                             <button type="button" aria-label={t('Hide this for now')}
-                                onClick={() => { if (standing) update(putAway(schedule, standing)); else setAway(true); }}
+                                onClick={() => update(standing ? putAway(schedule, standing) : putAwayBeforeCounts(schedule))}
                                 className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>

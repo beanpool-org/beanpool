@@ -218,6 +218,58 @@ describe("on Home, the node's word is already in the answer (`known`)", () => {
         await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
         expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
     });
+
+    // A ✕ while the card's own request has failed was kept for this visit only: nothing was written, so it came back on
+    // the next one (PR #2411 review).
+    it('its own request fails, then ✕: put away for good, and settled by the counts when the node next answers', async () => {
+        const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        vi.mocked(api.getCommunityMe).mockRejectedValue(new Error('offline'));
+        landing();
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+        await settle();
+        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        expect(schedule()).toMatchObject({ dismissed: true });
+        // Home again, the node still out of reach: it stays away.
+        cleanup();
+        landing();
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(2));
+        await settle();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        // The node answers on a later visit: the posts up then don't bring it back, nor a week that was over at the ✕.
+        cleanup();
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 2, true));
+        landing();
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(3));
+        await settle();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        expect(schedule()).toMatchObject({ dismissed: true, keptPostsAtDismissal: 2, postReturnShown: false });
+        // The next post that stays up does.
+        cleanup();
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 3, true));
+        landing();
+        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+    });
+
+    it('✕ with no answer, in the first week: the week ending before the node next answers still brings it back, once', async () => {
+        vi.mocked(api.getCommunityMe).mockRejectedValue(new Error('offline'));
+        landing();
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        // ✕ two days ago, offline.
+        const twoDaysAgo = Date.now() - 2 * DAY;
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(twoDaysAgo);
+        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
+        clock.mockRestore();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        // The node first answers now, its week over since yesterday: not over at the ✕, so that return is still due.
+        cleanup();
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 0, true));
+        landing();
+        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
+        expect(schedule()).toMatchObject({ dismissed: true, weekReturnShown: true, postReturnShown: false });
+    });
 });
 
 describe('adding a sign-in from the card', () => {

@@ -1322,6 +1322,8 @@ describe('NodeIdentityPanel Component', () => {
             });
             await waitFor(() => expect(screen.getByText(/couldn.t load the directory settings/i)).toBeInTheDocument());
             for (const id of CONTROLS) expect(document.getElementById(id)).toBeDisabled();
+            // Message requests: a switch only for a read that gave it, so none here.
+            expect(document.getElementById('dm-requests')).toBeNull();
 
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
@@ -1329,6 +1331,7 @@ describe('NodeIdentityPanel Component', () => {
             const body = nodeConfigBody();
             expect(body).toBeDefined();
             for (const name of SETTINGS) expect(name in body).toBe(false);
+            expect('dmRequests' in body).toBe(false);
         });
 
         it('the area alone still saves the pin it gave, exact', async () => {
@@ -1410,6 +1413,7 @@ describe('NodeIdentityPanel Component', () => {
                 json: () => Promise.resolve({
                     serviceRadius: AREA, publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
                     publishHealth: false, directoryPushIntervalHours: 0, lastDirectoryPush: null, acceptKnocks: true, door: 'admins',
+                    dmRequests: false,
                 }),
             }));
             await act(async () => {
@@ -1426,7 +1430,7 @@ describe('NodeIdentityPanel Component', () => {
             });
             expect(nodeConfigBody()).toMatchObject({
                 publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
-                publishHealth: false, directoryPushIntervalHours: 0, serviceRadius: AREA,
+                publishHealth: false, directoryPushIntervalHours: 0, serviceRadius: AREA, dmRequests: false,
             });
         });
     });

@@ -59,7 +59,7 @@ export default function ShopPageScreen() {
         setRead(r);
         if (r.state !== 'shop') return;
         // The owner's picture as the phone already holds it: no read of its own.
-        getMemberProfile(r.shop.ownerPublicKey).then((m: any) => setLogo(typeof m?.avatar_url === 'string' ? m.avatar_url : null)).catch(() => {});
+        getMemberProfile(r.shop.ownerPublicKey).then((m: { avatar_url?: unknown } | null) => setLogo(typeof m?.avatar_url === 'string' ? m.avatar_url : null)).catch(() => {});
         setListings(await readShopListingsForReader(r.shop.id));
     }, [id]);
     useFocusEffect(useCallback(() => { void load(); }, [load]));
@@ -78,9 +78,10 @@ export default function ShopPageScreen() {
             }
             const conv = await createConversationApi('dm', [identity.publicKey, shop.ownerPublicKey], identity.publicKey);
             router.push(`/chat/${conv.id}`);
-        } catch (e: any) {
-            const offline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : e.message);
+        } catch (e) {
+            const said = e instanceof Error ? e.message : '';
+            const offline = !said || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(said);
+            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : said);
         } finally {
             setMessaging(false);
         }

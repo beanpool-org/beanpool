@@ -9,7 +9,7 @@
  *    - POST /api/commons/decisions (propose decision)
  *    - POST /api/commons/decisions/:id/vote (vote)
  * 2. Propose Constraints:
- *    - Standing gate: earnedCredit > 0 required.
+ *    - Standing gate: a completed trade required.
  *    - Author limit: max 1 open decision per author.
  *    - No bond: zero beans debited on proposal.
  *    - Franchise mapping: member -> 1m1v, pool -> quadratic_trade.
@@ -211,19 +211,19 @@ async function runSuite() {
     });
     assert(resNoAuth.status === 401, 'Propose without actor fails with 401');
     assert(resNoAuth.body.error.includes('Authentication required'), 'Error cites auth required');
-    // 1a. Gating: earnedCredit > 0 required
+    // 1a. Gating: a completed trade required
     const resDave = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: daveZeroStanding,
         body: {
             authorPubkey: daveZeroStanding,
             title: 'Dave decision',
-            description: 'Should fail due to zero earnedCredit',
+            description: 'Should fail: no completed trade',
             touches: 'member',
             effect: 'grant_voucher',
             subject: charlie,
         },
     });
-    assert(resDave.status === 400, 'Propose by member with earnedCredit=0 fails with 400');
+    assert(resDave.status === 400, 'Propose by a member with no completed trade fails with 400');
     assert(resDave.body.error === 'You can propose a Decision once you have completed a trade', `Error says to complete a trade, in plain words (got "${resDave.body.error}")`);
 
     // 1b. Gating: Frozen member cannot propose

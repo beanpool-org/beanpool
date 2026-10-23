@@ -6,7 +6,7 @@
  * 1. Franchises & Eligibility:
  *    - 1m1v for member decisions; quadratic on trade standing for pool decisions
  *    - Enterprises and frozen members cannot propose or vote
- *    - Author standing gate (earnedCredit > 0) and max 1 open decision per author
+ *    - Author standing gate (a completed trade, or a node admin) and max 1 open decision per author
  *    - Quadratic voice credits cost = voteCount²
  * 2. Quorum Rules:
  *    - 30% of active members in 30 days, floor K_min = 3 (25% for removal)
@@ -165,7 +165,7 @@ async function runDecisionsSuite() {
     // The refusal is in a member's words: what to do (complete a trade), never a field name (earnedCredit).
     const NO_TRADE_REFUSAL = 'You can propose a Decision once you have completed a trade';
     const zeroCheck = checkCanProposeDecision(zeroStandingMember);
-    testAssert(!zeroCheck.ok && zeroCheck.error === NO_TRADE_REFUSAL, `Member with zero earned credit cannot propose decisions (got ${JSON.stringify(zeroCheck)})`);
+    testAssert(!zeroCheck.ok && zeroCheck.error === NO_TRADE_REFUSAL, `A member with no completed trade cannot propose decisions (got ${JSON.stringify(zeroCheck)})`);
     testAssert(!/earnedCredit|earned_credit|standing/.test(zeroCheck.error ?? ''), `The refusal names no field and no "standing" (got "${zeroCheck.error}")`);
 
     // Badges unlock nothing (Marty, 23 Oct): a trust badge an admin gave (members.earned_credit, adminSetTier's Steward

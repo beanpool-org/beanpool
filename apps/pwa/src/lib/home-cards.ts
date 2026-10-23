@@ -426,8 +426,21 @@ function closesIn(closesAt: string, now: number): string {
     return t('closes {date}', { date: formatDate(at, 'day-month') });
 }
 
-/** "12 Beans", "1 Bean", "12.5 Beans": the member's balance in words. */
-const beansAmount = (n: number) => tn(n, '{n} Bean', '{n} Beans', { n: Number.isInteger(n) ? formatCount(n) : formatNumber(n) });
+/**
+ * A balance's figure: thousands grouped in English as toLocaleString('en') always grouped them, cents and all ("1,234.5",
+ * "-0.5"); every other language's digits alone, with its decimal separator (core formatCount and formatNumber).
+ */
+function beansFigure(n: number): string {
+    if (Number.isInteger(n)) return formatCount(n);
+    const abs = Math.abs(n);
+    const whole = Math.trunc(abs);
+    // formatNumber writes the whole part as it writes `whole` alone: what follows it is the separator and the cents.
+    const cents = formatNumber(abs).slice(formatNumber(whole).length);
+    return `${n < 0 ? '-' : ''}${formatCount(whole)}${cents}`;
+}
+
+/** "12 Beans", "1 Bean", "12.5 Beans", "1,234.5 Beans": the member's balance in words. */
+const beansAmount = (n: number) => tn(n, '{n} Bean', '{n} Beans', { n: beansFigure(n) });
 
 /** "12 Beans · room to spend 200 · Resident"; a new member's "0 Beans · nothing to repay". Their own balance only (§3.1). */
 export function beansLines(b: NonNullable<HomeCards['beans']>): { line: string; note: string | null } {

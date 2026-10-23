@@ -31,11 +31,22 @@
  *     gate, and `welcome: true` for a reader with no account here (no `me`).
  *   - `community`: anyone who is answered at all. Its counts are community totals, public by rule.
  *
- * ## Money (H0b)
+ * ## Money (H0b, W3)
  *
- * `beans` is the signer's own balance and nothing else (getBalance(signer)), only where the `beans` switch is on; `deals`
- * and the needs line for a deal are the signer's own marketplace trades, only where `escrow` is on. Neither is read for
- * anyone the signer names.
+ * `beans` is the signer's own balance and their own month on the ledger and nothing else (getBalance(signer),
+ * getTransactions(signer)), only where the `beans` switch is on; `deals` and the needs line for a deal are the signer's
+ * own marketplace trades, only where `escrow` is on, each row naming its other party (a party of the deal reads it).
+ * `enterprise` is drawn only for its keeper (keeperOf), and its book (getEnterpriseLedger: the balance, which is open,
+ * #1286, this month's figures and the latest line, whose other party a keeper reads by name, routes/treasury.ts
+ * ledgerForReader) only where Beans are on. None is read for anyone the signer names.
+ *
+ * ## The cards' slices (W3)
+ *
+ * scratch/global-node/DESIGN-home-wide-and-content-fable.md §2: each card carries one slice, the same facts at every
+ * width (the apps draw rows or tiles): up to three deals, Decide rows ("You voted" is the signer's own ballot) and the
+ * first open poll's question, each group's last line as the your-chats read gives it to the group's own members (a
+ * locked line's bytes only while they are short, LOCKED_LINE_CHARS, `🔒 Message` always), four Pulse items with when
+ * each was published, and the community's figures. Nothing new reaches the visitors' subset but the listings count.
  *
  * ## Cost
  *
@@ -46,19 +57,22 @@
  * ## Size
  *
  * Every text a member, a feed or a peer sets is cut or left out (`clip`, `bounded`), the category and the Pulse link
- * included, so the answer stays a few kilobytes whatever anyone typed (§5.2 "under 6 KB gzipped").
+ * included, so the answer stays a few kilobytes whatever anyone typed: the default Home under 4 KB gzipped, every card
+ * under 8 KB gzipped and 24 KB raw (DESIGN-home-wide-and-content-fable.md §2 "Budget").
  */
 import {
     PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
     HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
     type TourRecord,
 } from '@beanpool/core';
-import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
+import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
     getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
-    listYourChats, keeperOf, isVisitorKey, readsAsMember, passesReadGate, getPublicCommunityInfo,
+    listYourChats, keeperOf, isVisitorKey, readsAsMember, passesReadGate, getPublicCommunityInfo, getTransactions,
+    getEnterpriseLedger, treasuryKeepers, type EnterpriseLedgerEntry,
 } from '../state-engine.js';
+import { type YourChatLastMessage } from '../engine/your-groups.js';
 import { featuresFor } from '../config/features-for.js';
 import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
 import { type Door } from '../config/door.js';
@@ -119,7 +133,22 @@ const VISITOR_MARKET_ITEMS = 3;
 const EVENT_ITEMS = 3;
 const GROUP_ITEMS = 3;
 const JOINED_NAMES = 4;
-const PULSE_ITEMS = 2;
+/** Four Pulse items (W3, §2), chosen from the newest PULSE_POOL: a few spare for one too old or made too long by a feed. */
+const PULSE_ITEMS = 4;
+const PULSE_POOL = 8;
+/** The open deals and Decisions a card shows as rows (W3, §2). */
+const DEAL_ITEMS = 3;
+const DECIDE_ITEMS = 3;
+/**
+ * A locked group line's bytes (ciphertext, nonce and metadata together) are carried for the app to open while they are at
+ * most this long; past it the line is `🔒 Message` alone (§2: three groups, at most 1.5 KB locked).
+ */
+const LOCKED_LINE_CHARS = 512;
+/**
+ * The signer's own ledger lines read for "This month", newest first: more than nearly anyone has in a month (about one
+ * circulation fee a day, and their trades). Past it the month is the newest MONTH_LINES, and says `more`.
+ */
+const MONTH_LINES = 200;
 /** The listings a saved search shows, then "N more" (the card frame's design §4). */
 const SEARCH_ITEMS = 4;
 /** The newest listings the Market card chooses its few from (starred categories first), and counts in `total14d`. */
@@ -213,26 +242,74 @@ export interface EventItem {
 }
 
 
+/**
+ * One of the signer's open deals (W3, §2): the listing, the other party by name (the signer is a party of it), whether the
+ * next step is the signer's, and when it was asked for.
+ */
+export interface DealItem { txId: string; postId: string; title: string; with: string | null; waitsOnMe: boolean; at: string | null }
+
+/**
+ * A month on a book (W3, §2), since the first of the month in UTC as `community.tradesThisMonth` counts it: its lines and
+ * the Beans in and out. On the signer's own (`beans`), a circulation fee is no trade: those are `fees`, apart.
+ */
+export interface MonthFigures { trades: number; in: number; out: number }
+
+/**
+ * An enterprise's latest line this month, for its keeper: the Beans (+ in, − out), when, and with whom. `who` is a member's
+ * or an enterprise's name (`kind` 'member'); for a deal in escrow, the Commons or anything else the app says what it is.
+ */
+export interface EnterpriseLine { amount: number; at: string; kind: 'member' | 'deal' | 'commons' | 'other'; who: string | null }
+
+/** An open Decision as a Decide row (W3, §2): `voted` is the signer's own ballot, never anyone else's. */
+export interface DecideItem { id: string; title: string; closesAt: string; voted: boolean }
+
+/**
+ * A chat's last line on "Your groups" (W3, §2), as the your-chats read gives it to the chat's own members: who (null for
+ * the node's own line), when, its text (`🔒 Message` for a locked line), and a locked line's bytes for an app holding the
+ * group's key to open, only while they are at most LOCKED_LINE_CHARS long.
+ */
+export interface GroupLastLine { who: string | null; at: string; text: string; locked?: { ciphertext: string; nonce: string; metadata: string | null } }
+
 export interface HomeCards {
     needs?: { items: NeedsItem[] };
     safety?: { words: true; signInLinked: false };
     find?: LandingCard;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
-    deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
-    /** `lifecycle` 'bounded': the first one kept is a project, and the card says "Your project" (group decisions §3.1). */
-    enterprise?: { id: string; name: string; requests: number; others: number; lifecycle: 'ongoing' | 'bounded' };
+    deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items: DealItem[] };
+    /**
+     * `lifecycle` 'bounded': the first one kept is a project, and the card says "Your project" (group decisions §3.1).
+     * `keepers` who can act for it; its balance, this month and the latest line only where Beans are on.
+     */
+    enterprise?: {
+        id: string; name: string; requests: number; others: number; lifecycle: 'ongoing' | 'bounded'; keepers: number;
+        balance?: number; month?: MonthFigures; latest?: EnterpriseLine | null;
+    };
     /** "Your shop and tools" (slice S4′): the reader's own shop, or none yet (the card still shows, with the tools). */
     shop?: { shop: ShopHomeCard | null };
     events?: { items: EventItem[]; radiusKm: number | null };
     market?: { items: MarketItem[]; total14d: number; more: boolean; examples?: true };
-    decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
-    groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean }[]; total: number };
+    /** The open Decisions, soonest closing first, and the first open poll (the soonest closing), its question as asked. */
+    decide?: {
+        open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
+        items: DecideItem[]; poll: { id: string; title: string; closesAt: string } | null;
+    };
+    groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last: GroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
-    pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }[] };
-    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
+    pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt: string | null }[] };
+    /** `month`: the signer's own ledger this month; `more` when it held more lines than are read (MONTH_LINES). */
+    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean; month: MonthFigures & { fees: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
-    /** The node's own place (local-config `location`) to two decimals, for a member; absent when the node has none and on the global profile. */
-    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
+    /**
+     * The community's figures, totals public by rule: `listings` (the public board's live listings) to anyone answered;
+     * to a member who reads as one, on a local community, who joined this week, the events coming up in the next fortnight
+     * (running now or starting by then, as the Events card lists them)
+     * and the Commons pot in whole Beans (where Beans are on). `place`: the node's own place (local-config `location`) to
+     * two decimals, for a member; absent when the node has none and on the global profile.
+     */
+    community?: {
+        name: string | null; members: number; listings: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
+        joined7d?: number; eventsSoon?: number; commonsPot?: number;
+    };
     /**
      * A card of a type that comes in many is keyed by its instance id (`search-k7mq`), not its type; so is any card the
      * member's version-2 layout names (a one-of-a-kind card's id is its type, so today's keys are unchanged).
@@ -479,7 +556,10 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             const [first] = deals;
             items.push({
                 kind: 'deal', count: deals.length, accent: true,
-                label: deals.length === 1 ? `A deal is waiting for you: ${clip(first.postTitle, TITLE_CHARS)}` : `${deals.length} deals waiting for you`,
+                // A deal whose listing row is gone has no title (review of #2416): the line without one, never a throw that drops the card.
+                label: deals.length === 1
+                    ? (first.postTitle ? `A deal is waiting for you: ${clip(first.postTitle, TITLE_CHARS)}` : 'A deal is waiting for you')
+                    : `${deals.length} deals waiting for you`,
                 target: deals.length === 1 && first.postId ? { to: 'deal', postId: first.postId, txId: first.id } : { to: 'my-deals' },
             });
         }
@@ -600,7 +680,34 @@ function dealsCard(c: Ctx): HomeCards['deals'] | undefined {
     if (!open.length) return undefined;
     const waiting = open.filter(t => waitsOn(t, me));
     const first = waiting[0];
-    return { open: open.length, waiting: waiting.length, waitingOnMe: first ? { txId: first.id, postId: first.postId, title: clip(first.postTitle, TITLE_CHARS) } : null };
+    // W3 (§2): the rows, the ones waiting on the signer first, then the newest. Each is the signer's own trade
+    // (getMarketplaceTransactions reads only theirs), so the other party's name is one a party of the deal reads.
+    const items = [...waiting, ...open.filter(t => !waitsOn(t, me))]
+        .filter(t => !!bounded(t.id, ID_CHARS) && !!bounded(t.postId, ID_CHARS))
+        .slice(0, DEAL_ITEMS)
+        .map((t): DealItem => {
+            const other = t.buyerPublicKey === me ? t.sellerCallsign : t.buyerCallsign;
+            return {
+                txId: t.id, postId: t.postId, title: clip(t.postTitle ?? '', TITLE_CHARS), with: other ? clip(other, NAME_CHARS) : null,
+                waitsOnMe: waitsOn(t, me), at: bounded(t.createdAt, ID_CHARS),
+            };
+        });
+    // A deal whose listing row is gone has no title (the read's LEFT JOIN): an empty one, never the card lost to a throw.
+    return { open: open.length, waiting: waiting.length, waitingOnMe: first ? { txId: first.id, postId: first.postId, title: clip(first.postTitle ?? '', TITLE_CHARS) } : null, items };
+}
+
+/** The first moment of this month in UTC: "this month" on every card that says it (`community.tradesThisMonth`, the months). */
+function monthStartOf(now: number): string {
+    const d = new Date(now);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
+}
+
+/** An enterprise's book line as its keeper's card says it: the other party named when it is a member or an enterprise. */
+function enterpriseLineOf(e: EnterpriseLedgerEntry): EnterpriseLine | null {
+    if (!bounded(e.timestamp, ID_CHARS)) return null;
+    const cp = e.counterparty;
+    const kind: EnterpriseLine['kind'] = cp === 'COMMONS_POOL' ? 'commons' : cp.startsWith('escrow_') ? 'deal' : getMember(cp) ? 'member' : 'other';
+    return { amount: e.netAmount, at: e.timestamp, kind, who: kind === 'member' ? clip(e.counterpartyName, NAME_CHARS) : null };
 }
 
 function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
@@ -614,7 +721,22 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     // Requests made to the enterprise that wait on its keepers: a trade asked of it, not yet accepted.
     const requests = (db.prepare("SELECT COUNT(*) AS c FROM marketplace_transactions WHERE seller_pubkey = ? AND status = 'requested'").get(id) as { c: number }).c;
     const lifecycle = (db.prepare('SELECT lifecycle FROM members WHERE public_key = ?').get(id) as { lifecycle: string | null } | undefined)?.lifecycle === 'bounded' ? 'bounded' : 'ongoing';
-    return { id, name: clip(getMember(id)?.callsign ?? '', NAME_CHARS), requests, others: kept.length - 1, lifecycle };
+    // W3 (§2): the keepers who can act for it (stewardship is public to members, treasuryKeepers).
+    const keepers = treasuryKeepers(id).filter(k => !k.suspended).length;
+    const card: NonNullable<HomeCards['enterprise']> = { id, name: clip(getMember(id)?.callsign ?? '', NAME_CHARS), requests, others: kept.length - 1, lifecycle, keepers };
+    if (!c.switches.beans) return card;
+    // Its book this month as its own screen reads it (routes/treasury.ts): the balance (getBalance, open, #1286), the
+    // month's lines and Beans in and out, and the latest line, whose other party its keeper reads by name.
+    const book = getEnterpriseLedger(id, { since: monthStartOf(c.now), limit: 1 });
+    const last = book.entries[book.entries.length - 1];
+    return {
+        ...card, balance: book.enterprise.balance,
+        // In as the ledger credited it, net of a payment's fee, as the Beans card and the latest line say it: the book's
+        // net change plus what went out. Its totalIncome is gross, so one 100-Bean payment would read "+100 in" beside
+        // "Latest: +98.5" and a balance that rose by 98.5 (review of #2416).
+        month: { trades: book.summary.transactionCount, in: round2(book.summary.netChange + book.summary.totalSpend), out: book.summary.totalSpend },
+        latest: last ? enterpriseLineOf(last) : null,
+    };
 }
 
 /** The listings' read for this reader: a member's own visibility, or the visitors' view (nobody in it, rough areas).
@@ -744,7 +866,31 @@ function decideCard(c: Ctx): HomeCards['decide'] | undefined {
     const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1, neighbourhood: getProfileSwitches().openMembership || undefined })
         .filter(p => p.status === 'active' && !!p.pollClosesAt && Date.parse(p.pollClosesAt) > c.now);
     if (!open.length && !polls.length) return undefined;
-    return { open: open.length, soonestClosesAt: soonest, polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL };
+    // W3 (§2): the rows, soonest closing first, each saying whether the signer has voted (their own ballots only: a
+    // Decision is a secret ballot), and the first open poll, the soonest closing, its question as asked.
+    const mine = open.length ? getOwnDecisionVotes(c.me!, open.map(d => d.id)) : new Map<string, unknown>();
+    const items = [...open]
+        .filter(d => !!bounded(d.id, ID_CHARS) && !!bounded(d.closesAt, ID_CHARS))
+        .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt))
+        .slice(0, DECIDE_ITEMS)
+        .map((d): DecideItem => ({ id: d.id, title: clip(d.title, TITLE_CHARS), closesAt: d.closesAt, voted: mine.has(d.id) }));
+    const firstPoll = polls.filter(p => !!bounded(p.id, ID_CHARS) && !!bounded(p.pollClosesAt, ID_CHARS))
+        .sort((a, b) => Date.parse(a.pollClosesAt!) - Date.parse(b.pollClosesAt!))[0];
+    return {
+        open: open.length, soonestClosesAt: soonest, polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL,
+        items, poll: firstPoll ? { id: firstPoll.id, title: clip(firstPoll.title, TITLE_CHARS), closesAt: firstPoll.pollClosesAt! } : null,
+    };
+}
+
+/** A chat's last line as "Your groups" carries it (GroupLastLine): every text cut, a locked line's bytes only while short. */
+function lastLineOf(m: YourChatLastMessage | null): GroupLastLine | null {
+    if (!m || !bounded(m.timestamp, ID_CHARS)) return null;
+    const l = m.locked;
+    const short = !!l && l.ciphertext.length + l.nonce.length + (l.metadata?.length ?? 0) <= LOCKED_LINE_CHARS;
+    return {
+        who: m.authorCallsign === null ? null : clip(m.authorCallsign, NAME_CHARS), at: m.timestamp, text: clip(m.text, TITLE_CHARS),
+        ...(l && short ? { locked: { ciphertext: l.ciphertext, nonce: l.nonce, metadata: l.metadata } } : {}),
+    };
 }
 
 function groupsCard(c: Ctx): HomeCards['groups'] | undefined {
@@ -754,7 +900,11 @@ function groupsCard(c: Ctx): HomeCards['groups'] | undefined {
     const items = [...all]
         .sort((a, b) => (b.unreadCount - a.unreadCount) || (b.lastActivityAt || '').localeCompare(a.lastActivityAt || ''))
         .slice(0, GROUP_ITEMS)
-        .map(g => ({ id: g.conversationId, kind: g.kind as 'group' | 'enterprise' | 'event', name: clip(g.name, NAME_CHARS), unread: g.unreadCount, muted: muted(g.mute, c.now) }));
+        .map(g => ({
+            id: g.conversationId, kind: g.kind as 'group' | 'enterprise' | 'event', name: clip(g.name, NAME_CHARS), unread: g.unreadCount, muted: muted(g.mute, c.now),
+            // W3 (§2): its last line, from the list of chats the signer is in (listYourChats): a chat's own members only.
+            last: lastLineOf(g.lastMessage),
+        }));
     return { items, total: all.length };
 }
 
@@ -782,7 +932,7 @@ function joinedCard(c: Ctx): HomeCards['joined'] | undefined {
 function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
     built('pulse');
     const since = c.now - PULSE_DAYS * DAY_MS;
-    const recent = getPulseFeed({ limit: 6 }).items.filter(i => !!i.publishedAt && Date.parse(i.publishedAt) >= since);
+    const recent = getPulseFeed({ limit: PULSE_POOL }).items.filter(i => !!i.publishedAt && Date.parse(i.publishedAt) >= since);
     // An item whose id or platform a feed or a peer made long is left out; its link, past URL_CHARS, is no link (the
     // harvester stores a feed's links uncut: pulse-submit's MAX_ITEM_URL_LENGTH is for submissions).
     const usable = recent.filter(i => !!bounded(i.id, ID_CHARS) && !!bounded(i.platform, ID_CHARS));
@@ -791,17 +941,46 @@ function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
         category: clip(String(i.category ?? ''), CATEGORY_CHARS), url: bounded(i.url, URL_CHARS),
         // Through the node's own proxy (an <img> can't sign; no member's address reaches a CDN), as the Pulse screen.
         thumbnailUrl: i.thumbnailUrl ? `/api/pulse/items/${encodeURIComponent(i.id)}/thumbnail` : null,
+        // W3 (§2): "by Mullum Ceramics · 3 h ago".
+        publishedAt: bounded(i.publishedAt, ID_CHARS),
     }));
     return items.length ? { items } : undefined;
 }
 
-/** H0b: the signer's own Beans and nothing else, where Beans are on. */
+/** A circulation fee's line (the demurrage row engine/audit.ts persistDecayEvents writes): no trade, counted apart. */
+const isCirculationFee = (t: { id: string; to: string }) => t.to === 'COMMONS_POOL' && t.id.startsWith('demurrage_');
+
+/**
+ * The signer's own month on the ledger (W3, §2), from their own history as GET /api/ledger/transactions reads it for them
+ * (getTransactions, newest first, one bounded read): the lines since the month began, Beans in as the ledger credited
+ * them (net of a payment's fee), out as sent, and the circulation fees apart from the trades.
+ */
+function ownMonthOf(me: string, now: number): NonNullable<HomeCards['beans']>['month'] {
+    const since = Date.parse(monthStartOf(now));
+    const read = getTransactions(me, MONTH_LINES + 1);
+    let trades = 0, beansIn = 0, beansOut = 0, fees = 0;
+    for (const t of read.slice(0, MONTH_LINES)) {
+        if (!(Date.parse(t.timestamp) >= since)) continue;
+        if (isCirculationFee(t)) { fees += t.amount; continue; }
+        trades++;
+        if (t.to === me) beansIn += t.amount - (t.taxFee || 0);
+        if (t.from === me) beansOut += t.amount;
+    }
+    // A line past the read that is still this month's: the month holds more than MONTH_LINES, and these are its newest.
+    const more = read.length > MONTH_LINES && Date.parse(read[MONTH_LINES].timestamp) >= since;
+    return { trades, in: round2(beansIn), out: round2(beansOut), fees: round2(fees), more };
+}
+
+/** H0b: the signer's own Beans and nothing else, where Beans are on; W3: their own month too. */
 function beansCard(c: Ctx): HomeCards['beans'] | undefined {
     built('beans');
     if (!c.switches.beans) return undefined;
     const b = getBalance(c.me!);
     // Room to spend: down to the floor they may use (credit-model), never below nothing.
-    return { balance: b.balance, room: Math.max(0, round2(b.balance - b.usableFloor)), tier: b.tier.name, activated: b.activated, frozen: b.frozen };
+    return {
+        balance: b.balance, room: Math.max(0, round2(b.balance - b.usableFloor)), tier: b.tier.name, activated: b.activated, frozen: b.frozen,
+        month: ownMonthOf(c.me!, c.now),
+    };
 }
 
 function noticesCard(c: Ctx): HomeCards['notices'] | undefined {
@@ -817,12 +996,10 @@ function communityCard(c: Ctx): HomeCards['community'] {
     built('community');
     const config = getLocalConfig();
     const counts = getPublicCommunityInfo();
-    const out: HomeCards['community'] = { name: config.communityName || config.callsign || null, members: counts.memberCount };
+    const out: Omit<NonNullable<HomeCards['community']>, 'listings'> = { name: config.communityName || config.callsign || null, members: counts.memberCount };
     // A community total, public by rule (privacy-defaults-2026-09-28): trades completed since the month began (UTC).
     if (c.switches.escrow) {
-        const d = new Date(c.now);
-        const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
-        out.tradesThisMonth = (db.prepare("SELECT COUNT(*) AS c FROM marketplace_transactions WHERE status = 'completed' AND completed_at >= ?").get(monthStart) as { c: number }).c;
+        out.tradesThisMonth = (db.prepare("SELECT COUNT(*) AS c FROM marketplace_transactions WHERE status = 'completed' AND completed_at >= ?").get(monthStartOf(c.now)) as { c: number }).c;
     }
     if (c.switches.directoryMirror) out.communities = listedCommunityCount();
     // The community's own place, rounded to about a kilometre, for the cards worked out on the device (sun and moon):
@@ -832,7 +1009,35 @@ function communityCard(c: Ctx): HomeCards['community'] {
     if (c.member && getNodeProfile() !== 'global' && place && Number.isFinite(place.lat) && Number.isFinite(place.lng)) {
         out.place = { lat: Math.round(place.lat * 100) / 100, lng: Math.round(place.lng * 100) / 100 };
     }
-    return out;
+    // W3 (§2): the public board's live listings (getActivePostCount, the same count /api/community/info gives), to anyone
+    // answered, after every field above, so a visitor's answer is what it was with this one added; then, to a member who
+    // reads as one on a local community (the global profile's figures are members, communities and listings), the rest.
+    return { ...out, listings: counts.postCount, ...(c.member && !c.switches.guestListingsOnly ? memberFigures(c, counts.commonsBalance) : {}) };
+}
+
+/**
+ * A local community's figures for a member (W3, §2): who joined this week by Who joined's rules (no enterprise, no
+ * visitor's row, nobody pruned or suspended, no system row), the reader included: a community total, as `members` beside
+ * it counts the reader, where the Joined card leaves the reader out (its faces are the people new to them; second
+ * review of #2416); the events coming up in the next fortnight by the Events card's rule (PostFilter.upcomingUntil: running now
+ * or starting by then, so a market week counts for its whole run; review of #2416), on idx_posts_event_start, counted
+ * over the public board as the listings are, and with the board's author rules as the card reads it (getPosts with no
+ * author): no host on holiday, no paused or winding-up enterprise (second review of #2416); and where Beans are on the
+ * Commons pot, in whole Beans as the card says it ("Commons pot 310 Beans"), so the 1.5% a trade between any two members
+ * pays in, or a circulation fee, moves nobody else's Home (its tag) until the pot moves by a Bean.
+ */
+function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCards['community']>, 'joined7d' | 'eventsSoon' | 'commonsPot'> {
+    const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members
+                                   WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
+                                     AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(iso(c.now - JOINED_DAYS * DAY_MS)) as { c: number }).c;
+    const eventsSoon = (db.prepare(`SELECT COUNT(*) AS c FROM posts
+                                     WHERE type = 'event' AND event_start_at IS NOT NULL AND event_start_at <= ? AND COALESCE(event_end_at, event_start_at) > ?
+                                       AND active = 1 AND status = 'active'
+                                       AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL
+                                       AND COALESCE(event_state, '') != 'cancelled'
+                                       AND author_pubkey NOT IN (${ON_HOLIDAY_SQL})
+                                       AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
+    return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot: Math.round(commonsBalance) } : {}) };
 }
 
 // ── the answer ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -897,8 +1102,19 @@ function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | 
     return HOME_CARD_IDS.filter(id => !hidden.has(id) || UNHIDEABLE.has(id) || (id === 'find' && findPinned)).map(id => ({ id, type: id }));
 }
 
+/** The whole Home, and what its tag is made of besides the answer itself (routes/home.ts homeEtag). */
+export interface HomeBuilt {
+    body: HomeAnswer;
+    /**
+     * The newest `lastActivityAt` of the signer's chats, when this answer read them (for `needs` or `groups`), else null:
+     * a new line in any of them moves the tag even where no card shows it, the member's own line from another device
+     * or one in a fourth group (W3, §2 "Budget").
+     */
+    chatStamp: string | null;
+}
+
 /** The whole Home for this reader (the route has already refused a reader homeReaderStanding refuses). */
-export function buildHome(reader: HomeReader): HomeAnswer {
+export function buildHome(reader: HomeReader): HomeBuilt {
     const now = reader.now ?? Date.now();
     const switches = getProfileSwitches();
     const me = reader.actor ?? null;
@@ -949,7 +1165,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
             standing: member ? 'member' : 'suspended',
         };
     }
-    return {
+    const body: HomeAnswer = {
         generatedAt: iso(now),
         profile: getNodeProfile(),
         features: { ...features, door },
@@ -959,6 +1175,8 @@ export function buildHome(reader: HomeReader): HomeAnswer {
         layout,
         cards,
     };
+    const chatStamp = c.chats ? c.chats.items.reduce<string | null>((newest, g) => (newest === null || g.lastActivityAt > newest ? g.lastActivityAt : newest), null) : null;
+    return { body, chatStamp };
 }
 
 /** The most ids `cards=` is read for: a full Home, the two always drawn and a pinned find, with room to spare. */

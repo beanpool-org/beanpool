@@ -498,7 +498,7 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
                     ? t('by {name} · {when}', { name: p.callsign, when })
                     : t('by {name}', { name: p.callsign });
                 const a11y = when
-                    ? t('{title}, by {name} · {when} Opens the Pulse.', { title, name: sentence(p.callsign), when })
+                    ? t('{title}, by {name}, {when}. Opens the Pulse.', { title, name: p.callsign, when })
                     : t('{title}, by {name} Opens the Pulse.', { title, name: sentence(p.callsign) });
                 return (
                     <HomeRow

@@ -834,9 +834,9 @@ function CommunityBody({
 
     const tiles = isGlobal ? globalTiles : localTiles;
 
-    const globalLine1 = tn(cm.members, '{n} member', '{n} members');
-    const globalLine2 = typeof cm.communities === 'number' ? tn(cm.communities, '{n} community listed', '{n} communities listed') : null;
-    const globalLine3 = typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings') : null;
+    const globalLine1 = tn(cm.members, '{n} member', '{n} members', { n: formatCount(cm.members) });
+    const globalLine2 = typeof cm.communities === 'number' ? tn(cm.communities, '{n} community listed', '{n} communities listed', { n: formatCount(cm.communities) }) : null;
+    const globalLine3 = typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings', { n: formatCount(cm.listings) }) : null;
 
     const localLine1 = (cm.members === 1 && !isVisitor && !hasDetailedStats)
         ? t("1 member. You're first. Invite someone.")

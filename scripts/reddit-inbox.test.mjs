@@ -176,6 +176,7 @@ test('the first run reads everything the topic holds, keeps each item, and print
         assert.match(r.out, /t1_def456\.json/);
         assert.deepEqual(readJson(path.join(dir, 'new', 't3_abc123.json')), POST);
         assert.deepEqual(readJson(path.join(dir, 'new', 't1_def456.json')), COMMENT);
+        assert.deepEqual(fs.readdirSync(path.join(dir, 'done')), [], 'done/ is made, for the director to move carded items into');
         assert.equal(server.asked.length, 1);
         assert.equal(server.asked[0].url, `${TOPIC}/json?poll=1&since=all`);
         assert.equal(server.asked[0].init.method, 'GET');
@@ -220,7 +221,7 @@ test('an item already in new/ or done/ is not kept again, even when the state is
     const file = topicFile(dir);
     try {
         await runOnce({ topicFile: file, dir, fetch: server.fetch });
-        fs.mkdirSync(path.join(dir, 'done'));
+        assert.ok(fs.statSync(path.join(dir, 'done')).isDirectory(), 'the run made done/');
         fs.renameSync(path.join(dir, 'new', 't3_abc123.json'), path.join(dir, 'done', 't3_abc123.json'));
         fs.rmSync(path.join(dir, 'state.json'));
         const r = await runOnce({ topicFile: file, dir, fetch: server.fetch });
@@ -228,6 +229,23 @@ test('an item already in new/ or done/ is not kept again, even when the state is
         assert.ok(server.asked[1].url.endsWith('since=all'));
         assert.deepEqual(fs.readdirSync(path.join(dir, 'new')), ['t1_def456.json']);
         assert.deepEqual(readJson(path.join(dir, 'state.json')).seen, ['t3_abc123', 't1_def456']);
+    } finally {
+        await server.close();
+    }
+});
+
+test('a file where done/ should be stops it, and nothing is kept', async () => {
+    const dir = tmp();
+    // What `mv t3_abc123.json done` makes when there is no done/: the item renamed to a file called done.
+    fs.writeFileSync(path.join(dir, 'done'), JSON.stringify(POST));
+    const server = await ntfy({ messages: [msg(POST), msg(COMMENT)] });
+    try {
+        const r = await runOnce({ topicFile: topicFile(dir), dir, fetch: server.fetch });
+        assert.equal(r.code, 1);
+        assert.match(r.err, /cannot make .*\/done\/ \(EEXIST\)/);
+        assert.match(r.err, /move it aside/);
+        assert.ok(!fs.existsSync(path.join(dir, 'state.json')), 'no state: the next run reads the same items');
+        assert.deepEqual(fs.readdirSync(path.join(dir, 'new')), []);
     } finally {
         await server.close();
     }

@@ -270,8 +270,17 @@ export async function run({
     }
 
     const newDir = path.join(dir, 'new');
+    // The director moves each carded item to done/ (TRIAGE.md, step 4); made here, so that move never renames an item to a
+    // file called done.
     const doneDir = path.join(dir, 'done');
-    fs.mkdirSync(newDir, { recursive: true });
+    for (const folder of [newDir, doneDir]) {
+        try {
+            fs.mkdirSync(folder, { recursive: true });
+        } catch (e) {
+            err(`reddit-inbox: cannot make ${shownPath(folder)}/ (${e?.code ?? 'error'}). If a file has that name, move it aside. Nothing was kept; run again.`);
+            return 1;
+        }
+    }
     const seen = new Set(state.seen);
     let lastId = state.lastId;
     let notItems = 0;

@@ -123,11 +123,13 @@ export function DealsBody({ card, colors }: { card: NonNullable<HomeCards['deals
         return (
             <>
                 {card.items.slice(0, 3).map(item => {
-                    const line = t('{title} · with {name}', { title: item.title, name: item.with ?? '' });
+                    const line = item.with
+                        ? t('{title} · with {name}', { title: item.title, name: item.with })
+                        : item.title;
                     const waitText = item.waitsOnMe ? t('waiting on you') : t('waiting on them');
                     const when = timeAgoInWords(item.at);
                     const sub = when ? `${waitText} · ${when}` : waitText;
-                    const a11y = t('{line}. {sub}. Opens the deal.', { line: sentence(line), sub: sentence(sub) });
+                    const a11y = t('{line} {sub} Opens the deal.', { line: sentence(line), sub: sentence(sub) });
                     return (
                         <HomeRow
                             key={item.txId}

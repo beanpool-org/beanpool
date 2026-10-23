@@ -23,6 +23,7 @@ import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, kn
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
+import { tierWords } from './trust-tier';
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
 export const HOME_CARD_IDS = [
@@ -436,7 +437,7 @@ export function beansLines(b: NonNullable<HomeCards['beans']>): { line: string; 
     }
     const amount = beansAmount(n);
     const line = b.frozen ? t('{amount} · spending paused', { amount }) : t('{amount} · room to spend {room}', { amount, room: count(Math.round(b.room)) });
-    return { line, note: b.tier || null };
+    return { line, note: b.tier ? tierWords(b.tier) : null };
 }
 
 /** "2 open · waiting on you: Mend clothes". */

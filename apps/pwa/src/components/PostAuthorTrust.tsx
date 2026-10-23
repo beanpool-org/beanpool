@@ -11,7 +11,8 @@
  */
 
 import { useState } from 'react';
-import { tierForCredit, type TierLevel, type TierName } from '@beanpool/core';
+import { t, tierForCredit, type TierLevel, type TierName } from '@beanpool/core';
+import { tierWords } from '../lib/trust-tier';
 
 import { resolveAvatarUrl } from '../lib/avatar';
 
@@ -100,7 +101,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
         }
     };
     const interactiveProps = isInteractive
-        ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown, 'aria-label': `View ${callsign}'s profile` }
+        ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown, 'aria-label': t("View {name}'s profile", { name: callsign }) }
         : {};
     const focusRing = isInteractive ? 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 rounded-sm' : '';
 
@@ -149,7 +150,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                 {showTier && (
                     <span data-testid="author-tier" className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold ${tier.bg} ${tier.border} ${tier.color}`}>
                         <span className="text-[11px]">{tier.emoji}</span>
-                        {tier.label}
+                        <span>{tierWords(tier.label)}</span>
                     </span>
                 )}
                 {/* Callsign */}

@@ -2469,8 +2469,8 @@ describe('Home in the member\'s language: every line a card draws from lib/home-
         decide: { open: 1, soonestClosesAt: new Date(Date.now() + 3 * 86_400_000).toISOString(), polls: 2, pollsMore: false },
         joined: { count7d: 5, radiusKm: null, names: [{ callsign: 'Kofi', avatarUrl: null }, { callsign: 'Wren', avatarUrl: null }] },
     });
-    /** What members and the node wrote, shown as written (the faces' initials are the callsigns'). */
-    const WRITTEN = ['Seed swap', 'Town Hall', 'Pottery lessons', 'Sourdough', 'Borrow a drill', 'How our LETS started', 'River Folk', 'Mullumbimby', 'Kofi', 'Wren', 'KO', 'WR', 'Resident', 'Ana'];
+    /** What members and the node wrote, shown as written (the faces' initials are the callsigns'). The tier is a word of ours. */
+    const WRITTEN = ['Seed swap', 'Town Hall', 'Pottery lessons', 'Sourdough', 'Borrow a drill', 'How our LETS started', 'River Folk', 'Mullumbimby', 'Kofi', 'Wren', 'KO', 'WR', 'Ana'];
 
     afterEach(() => backToEnglish());
 

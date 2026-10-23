@@ -301,7 +301,8 @@ export interface HomeCards {
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /**
      * The community's figures, totals public by rule: `listings` (the public board's live listings) to anyone answered;
-     * to a member who reads as one, on a local community, who joined this week, the events starting in the next fortnight
+     * to a member who reads as one, on a local community, who joined this week, the events coming up in the next fortnight
+     * (running now or starting by then, as the Events card lists them)
      * and the Commons pot in whole Beans (where Beans are on). `place`: the node's own place (local-config `location`) to
      * two decimals, for a member; absent when the node has none and on the global profile.
      */
@@ -1013,8 +1014,9 @@ function communityCard(c: Ctx): HomeCards['community'] {
 
 /**
  * A local community's figures for a member (W3, §2): who joined this week, as Who joined counts them, the reader
- * included; the events that start in the next fortnight (on idx_posts_event_start), counted over the public board as the
- * listings are; and where Beans are on the Commons pot, in whole Beans as the card says it ("Commons pot 310 Beans"), so
+ * included; the events coming up in the next fortnight by the Events card's rule (PostFilter.upcomingUntil: running now
+ * or starting by then, so a market week counts for its whole run; review of #2416), on idx_posts_event_start, counted
+ * over the public board as the listings are; and where Beans are on the Commons pot, in whole Beans as the card says it ("Commons pot 310 Beans"), so
  * the 1.5% a trade between any two members pays in, or a circulation fee, moves nobody else's Home (its tag) until the
  * pot moves by a Bean.
  */
@@ -1023,9 +1025,10 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
                                    WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                      AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(iso(c.now - JOINED_DAYS * DAY_MS)) as { c: number }).c;
     const eventsSoon = (db.prepare(`SELECT COUNT(*) AS c FROM posts
-                                     WHERE type = 'event' AND event_start_at >= ? AND event_start_at <= ? AND active = 1 AND status = 'active'
+                                     WHERE type = 'event' AND event_start_at IS NOT NULL AND event_start_at <= ? AND COALESCE(event_end_at, event_start_at) > ?
+                                       AND active = 1 AND status = 'active'
                                        AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL
-                                       AND COALESCE(event_state, '') != 'cancelled'`).get(iso(c.now), iso(c.now + EVENT_DAYS * DAY_MS)) as { c: number }).c;
+                                       AND COALESCE(event_state, '') != 'cancelled'`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
     return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot: Math.round(commonsBalance) } : {}) };
 }
 

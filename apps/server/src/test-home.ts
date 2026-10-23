@@ -932,6 +932,21 @@ async function main(): Promise<void> {
         assert(d.status === 200 && d.body?.cards?.community?.listings === info.postCount
             && ['joined7d', 'eventsSoon', 'commonsPot'].every(k => !(k in (d.body?.cards?.community ?? {}))),
             `a suspended member's community card: the listings count, none of what a member reads (${JSON.stringify(d.body?.cards?.community)})`);
+        // An event that is running (started an hour ago, ends in two) is coming up: counted as the Events card beside the
+        // figure lists it (review of #2416), and once it has ended, in neither. Posted with a start ahead, then moved.
+        const running = post(carol, 'event', 'general', 'HomeSentinel running now', {
+            eventStartAt: new Date(Date.now() + DAY).toISOString(), eventEndAt: new Date(Date.now() + DAY + 3600_000).toISOString(),
+        });
+        db.prepare('UPDATE posts SET event_start_at = ?, event_end_at = ? WHERE id = ?')
+            .run(new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 2 * 3600_000).toISOString(), running.id);
+        const soon = (await get('/api/home?cards=events,community', alice)).body?.cards;
+        const soonTitles = (soon?.events?.items ?? []).map((i: any) => i.title);
+        assert(soonTitles.length === 2 && soonTitles.includes('HomeSentinel running now') && soon?.community?.eventsSoon === soonTitles.length,
+            `community: a running event is among those coming up, as many as the Events card lists (${soon?.community?.eventsSoon}; ${JSON.stringify(soonTitles)})`);
+        db.prepare('UPDATE posts SET event_end_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), running.id);
+        const ended = (await get('/api/home?cards=events,community', alice)).body?.cards;
+        assert(ended?.community?.eventsSoon === 1 && !(ended?.events?.items ?? []).some((i: any) => i.id === running.id),
+            `and once it has ended, in neither (${ended?.community?.eventsSoon}; ${JSON.stringify((ended?.events?.items ?? []).map((i: any) => i.title))})`);
 
         // A locked line: its bytes while ciphertext, nonce and metadata come to 512 characters at most, "🔒 Message" always.
         const short = sealedLine(512);

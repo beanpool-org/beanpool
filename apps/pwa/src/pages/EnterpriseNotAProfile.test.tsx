@@ -195,17 +195,20 @@ describe('every door on the web lands on the enterprise page', () => {
             // No other screen renders the profile page itself: App.tsx's one overlay is the only way in.
             if (rel !== 'App.tsx' && !rel.endsWith('PublicProfilePage.tsx')) expect(s, rel).not.toMatch(/<PublicProfilePage\b/);
         }
-        // §1.1's eleven web components (the header's own-profile button included): each opens someone by key through
-        // onOpenProfile, which App.tsx (above) sends to the one profile overlay.
+        // §1.1's eleven web components (the header's own-profile button included), and a message request's sender on its
+        // card and in the chat's header (message requests S3): each opens someone by key through onOpenProfile, which
+        // App.tsx (above) sends to the one profile overlay.
         expect(doors.sort()).toEqual([
             path.join('components', 'ActivityWaterfall.tsx'),
             path.join('components', 'EventCard.tsx'),
             path.join('components', 'HeaderControls.tsx'),
             path.join('components', 'MarketplaceCard.tsx'),
+            path.join('components', 'MessageRequests.tsx'),
             path.join('components', 'PollCard.tsx'),
             path.join('components', 'PostAuthorTrust.tsx'),
             path.join('components', 'PulseFeedCard.tsx'),
             path.join('pages', 'MarketplacePage.tsx'),
+            path.join('pages', 'MessagesPage.tsx'),
             path.join('pages', 'PeoplePage.tsx'),
             path.join('pages', 'PulsePage.tsx'),
             path.join('pages', 'TreasuryDetailPage.tsx'),

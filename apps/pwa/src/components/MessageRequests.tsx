@@ -78,10 +78,10 @@ export function RequestActions({ conversationId, peerPubkey, peerName, identity,
             if (!alive.current) return;
             setBusy(false);
             onBlocked();
-        } catch (e: any) {
+        } catch (e) {
             if (!alive.current) return;
             setBusy(false);
-            setFailure(e?.message || t('That did not go through. Please try again.'));
+            setFailure((e as Error | null)?.message || t('That did not go through. Please try again.'));
         }
     }
 
@@ -161,7 +161,7 @@ function RequestCard({ entry, identity, preview, avatar, joinedWords, onOpen, on
                     {joinedWords && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{joinedWords}</span>}
                     {entry.addedYou && (
                         <span style={{
-                            fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '999px',
+                            fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '8px', overflowWrap: 'anywhere',
                             background: 'var(--bp-chip-ok-tint)', color: 'var(--bp-chip-ok-ink)',
                         }}>{t('{name} added you', { name })}</span>
                     )}
@@ -259,7 +259,6 @@ export function MessageRequestsList({ entries, count, identity, avatar, joinedWo
         };
         void Promise.all([next(), next(), next()]);
         return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [shown.map(keyOf).join(','), identity.publicKey]);
 
     async function ignoreAll() {

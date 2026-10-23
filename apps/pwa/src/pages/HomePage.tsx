@@ -31,7 +31,7 @@ import {
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    t, tn, word,
+    formatCount, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
@@ -1123,7 +1123,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const photo = resolveImageUrl(item.photoUrl);
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
         const price = !beansOn ? (isVisitor ? NO_BEANS_TERMS_TEXT : null)
-            : typeof item.credits === 'number' ? (item.credits > 0 ? tn(item.credits, '{n} Beans', '{n} Beans', { n: item.credits.toLocaleString('en') }) : t('Free', undefined, 'price')) : null;
+            : typeof item.credits === 'number' ? (item.credits > 0 ? tn(item.credits, '{n} Beans', '{n} Beans', { n: formatCount(item.credits) }) : t('Free', undefined, 'price')) : null;
         const km = distanceText(item.distanceKm);
         const kind = item.type === 'need' ? 'NEED' : 'OFFER';
         return (

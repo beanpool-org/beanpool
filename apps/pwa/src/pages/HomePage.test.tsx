@@ -509,6 +509,29 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         await screen.findByTestId('home-card-market');
         expect(screen.queryByTestId('home-hint')).toBeNull();
     });
+
+    it('a Market price of a thousand Beans or more in the language\'s number style: "1,500" in English, never in pt or es, where it reads as 1.5', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },
+        })));
+        // As App does: the root re-renders when the language changes (lib/useLanguage.ts).
+        const Live = () => { useLanguage(); return <HomePage identity={ME} onNavigate={vi.fn()} />; };
+        try {
+            render(<Live />);
+            await screen.findByTestId('home-card-market');
+            expect(marketTitles()).toEqual(['Offer, Cargo bike, 1,500 Beans']);
+            // formatCount: the digits alone outside English, as amounts are written (packages/beanpool-core/src/words.ts).
+            for (const [lang, beans] of [['pt', '1500 feijões'], ['es', '1500 frijoles']] as const) {
+                await act(async () => { await chooseAndShowLanguage(lang); });
+                const row = within(screen.getByTestId('home-card-market')).getByTestId('home-market-item');
+                expect(row, lang).toHaveTextContent(beans);
+                expect(row.getAttribute('aria-label'), lang).toContain(beans);
+                expect(row.textContent + (row.getAttribute('aria-label') ?? ''), lang).not.toContain('1,500');
+            }
+        } finally {
+            resetLanguageForTests();
+        }
+    });
 });
 
 describe("a visitor's Home in the global lobby (§5.3)", () => {

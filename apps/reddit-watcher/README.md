@@ -11,8 +11,9 @@ r/beanpool, the moderators get a short notification on their phones, so a person
 - Tapping the notification opens the post or comment on Reddit, where a moderator answers it as a person.
 - **The team's inbox (optional).** If the developers have set a second private topic (below), each new post or comment
   also sends one message there: its public text. A moderator's own tools read that topic on the moderator's own
-  computer and sort what is new. For a question the members' guide answers, they draft a reply, with the help of an AI
-  assistant, for a moderator to read, change and post by hand ([TRIAGE.md](TRIAGE.md)).
+  computer. There, an AI assistant (Anthropic's Claude, which the team uses) reads each new item's text to sort it and,
+  for a question the members' guide answers, to draft a reply. A moderator reads, changes and posts every reply by hand
+  ([TRIAGE.md](TRIAGE.md)).
 
 That is all it does. It **never posts, comments, votes, sends messages or moderates**: the app has no permission to
 use Reddit's API at all (`"reddit": false` in `devvit.json`). It only listens for new posts and comments.
@@ -23,8 +24,9 @@ public title of the post and the public link.
 **What the inbox carries, and never carries:** the post's or comment's id and link, the post's title and flair, the
 text as written (at most 2,000 characters), when Reddit says it was made, and, for a comment, the link to what it
 answers. It never carries who wrote it: no username, no account id, no user flair. The text is what the person wrote
-in public, so it can mention someone by name. Nothing is posted from it automatically, and no reply goes up without a
-moderator posting it.
+in public, so it can mention someone by name. On the team's computer that text goes to the AI assistant above, so
+Anthropic's service reads it too. Nothing is posted from it automatically, and no reply goes up without a moderator
+posting it.
 
 **What it leaves out:** posts and comments Reddit has marked as spam or that are already deleted; moderators' and
 admins' distinguished posts (the team's own announcements); posts and comments by the accounts the moderators list
@@ -61,7 +63,8 @@ The following domains are requested for this app:
   notification service with a publicly documented API ([docs.ntfy.sh/publish](https://docs.ntfy.sh/publish/)).
   If the developers set the team's inbox topic, there is one more HTTPS POST per new post or comment, to that second
   private topic on the same service. It carries the item's public text and links, and never who wrote it (above,
-  "What the inbox carries"). The app reads nothing back from ntfy.sh.
+  "What the inbox carries"). The app reads nothing back from ntfy.sh. The team's own computer reads that topic, and an
+  AI assistant there reads the text (above, "The team's inbox").
 
 ## Settings
 

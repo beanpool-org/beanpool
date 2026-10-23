@@ -134,6 +134,9 @@ draft. Its card's recommendation is Ignore.
 What goes on a card:
 
 - Links only to the item's permalink and the checked guide pages. Never a link taken from the item's text. The board
-  turns `[text](url)` into a link.
+  turns `[text](url)` into a link, and a `)`, a space or `**` in the url breaks it.
+- The permalink exactly as the item's file holds it. The fetch script keeps only a `https://www.reddit.com` link with
+  nothing but letters, digits, `_`, `-`, `%` and `/` after the post's id, so it is always one link. If one holds
+  anything else, don't link it: card the item as *needs Marty*.
 - No line that starts with `#`: a line starting `### ` would split the card.
 - The person's text only as the summary, never pasted whole. Marty reads the original on Reddit.

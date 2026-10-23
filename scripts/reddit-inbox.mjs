@@ -37,8 +37,10 @@ export const NTFY_HOSTS = ['ntfy.sh'];
 const NTFY_ID = /^[A-Za-z0-9]{12}$/;
 const REDDIT_ID = /^t[13]_[a-z0-9]{1,16}$/;
 // The app's links (apps/reddit-watcher/src/notice.ts): Reddit's PERMALINK path, or its own /comments/<id>/… when Reddit
-// gives no subreddit name. No other page on www.reddit.com, and no query or fragment, is one it sends.
-const PERMALINK_PATH = /^(\/r\/[A-Za-z0-9_]{2,21})?\/comments\/[a-z0-9]{1,16}(\/[^\s]*)?$/i;
+// gives no subreddit name. No other page on www.reddit.com, and no query or fragment, is one it sends. After the id, at
+// most a slug and a comment's id: Reddit's slugs are letters, digits and _, and the app's new URL() percent-encodes any
+// that aren't ASCII. Nothing else: the director pastes this link into the board's [text](url), which a ) or a [ breaks.
+const PERMALINK_PATH = /^(\/r\/[A-Za-z0-9_]{2,21})?\/comments\/[a-z0-9]{1,16}(\/([A-Za-z0-9_-]|%[0-9A-F]{2})*){0,3}$/i;
 // The app's isoTime() (agent-item.ts): toISOString(), nothing else. Date.parse alone lets text through ("Jan 1 2026 (…)").
 const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 // The app's limits (apps/reddit-watcher/src/agent-item.ts), with room: an item past them is not one the app sent.
@@ -117,6 +119,19 @@ export function visible(raw) {
     return out;
 }
 
+// The app's text rules, without their cut (the limits are checked already): oneLine() (notice.ts) for title and flair,
+// plainText() (agent-item.ts) for the body. The app's text has been through them already, so its items stay as sent.
+/** One line: no control characters, runs of space as one. */
+const oneLine = (text) => text.replace(/\p{Cc}+/gu, ' ').replace(/\s+/gu, ' ').trim();
+/** Text on its lines: no control characters but new lines and tabs, no line ending in spaces, no more than one blank line. */
+const plainText = (text) =>
+    text
+        .replace(/\r\n?/g, '\n')
+        .replace(/[^\P{Cc}\n\t]+/gu, ' ')
+        .replace(/[ \t]+$/gmu, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
 function redditLink(v) {
     if (!isStr(v, LIMITS.link)) return false;
     try {
@@ -137,7 +152,8 @@ function redditLink(v) {
 
 /**
  * One message's text as an inbox item, or null when it is not one the app sends (agent-item.ts): the fields and their
- * limits are checked, only those fields are kept, and their text is kept without what a reader cannot see.
+ * limits are checked, only those fields are kept, and their text is kept without what a reader cannot see and by the
+ * app's text rules: title and flair on one line, the body without control characters but its line breaks and tabs.
  */
 export function toInboxItem(text) {
     if (typeof text !== 'string' || text.length > 16_384) return null;
@@ -152,7 +168,7 @@ export function toInboxItem(text) {
     if (typeof m.id !== 'string' || !REDDIT_ID.test(m.id) || m.id.startsWith('t3_') !== (m.kind === 'post')) return null;
     if (!redditLink(m.permalink) || !isStr(m.title, LIMITS.title) || !isStr(m.body, LIMITS.body) || !isStr(m.flair, LIMITS.flair)) return null;
     if (m.createdAt !== null && !(typeof m.createdAt === 'string' && ISO_TIME.test(m.createdAt) && Number.isFinite(Date.parse(m.createdAt)))) return null;
-    const item = { v: 1, kind: m.kind, id: m.id, permalink: m.permalink, title: visible(m.title), body: visible(m.body), flair: visible(m.flair), createdAt: m.createdAt };
+    const item = { v: 1, kind: m.kind, id: m.id, permalink: m.permalink, title: oneLine(visible(m.title)), body: plainText(visible(m.body)), flair: oneLine(visible(m.flair)), createdAt: m.createdAt };
     if (m.kind === 'comment') {
         if (!redditLink(m.parentPermalink)) return null;
         item.parentPermalink = m.parentPermalink;

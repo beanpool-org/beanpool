@@ -371,6 +371,9 @@ test('a kept link is one link on the board: its card line gives that link and no
     for (const link of CARD_BREAKERS) {
         assert.notDeepEqual(boardLinks(`[Open on Reddit](${link})`), [{ text: 'Open on Reddit', href: link }], link);
     }
+    const triage = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/TRIAGE.md'), 'utf8').replace(/\s+/g, ' ');
+    assert.ok(triage.includes("- The permalink exactly as the item's file holds it."), 'TRIAGE.md: the card takes the permalink as kept');
+    assert.ok(triage.includes("If one holds anything else, don't link it: card the item as *needs Marty*."), 'TRIAGE.md: any other link is not linked');
 });
 
 test('createdAt is only the app\'s toISOString() time: no text rides in it, seen or hidden', () => {

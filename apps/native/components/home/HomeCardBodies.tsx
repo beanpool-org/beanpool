@@ -535,6 +535,7 @@ export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans
                 <HomeRow
                     colors={colors}
                     text={monthText}
+                    lines={3}
                     right={badgeNode}
                     a11y={tier ? t('{month}. {tier}. Opens your Ledger.', { month: monthText, tier }) : t('{month}. Opens your Ledger.', { month: monthText })}
                     onPress={() => router.push('/(tabs)/ledger')}

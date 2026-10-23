@@ -7,13 +7,9 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes, wordsFor } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes, word } from '@beanpool/core';
 import { prepared } from './statements.js';
 import { foldName } from './names.js';
-
-// The words layer in English: a node never writes in the device language (core words.test N11), and the server's catalog
-// holds this package's sentences (scripts/words/words.mjs PACKAGES).
-const { t: tr } = wordsFor('en');
 
 type Db = Database.Database;
 
@@ -521,7 +517,7 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
             return {
                 ok: false, reason: 'unknown_inviter',
                 error: isNodeMember(db, inviterPubkey) && isSuspendedAccount(db, inviterPubkey)
-                    ? tr('The member who made this ticket can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.')
+                    ? word('The member who made this ticket can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.')
                     : 'Inviter is not a formally recognized member of this decentralized mesh',
             };
         }

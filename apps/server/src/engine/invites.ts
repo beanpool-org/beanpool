@@ -12,7 +12,7 @@ import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './member-key.js';
-import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, wordsFor } from '@beanpool/core';
+import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, word } from '@beanpool/core';
 import {
     getMember,
     mayBringSomeoneIn,
@@ -30,9 +30,6 @@ import { ticketBinding } from './member-signature.js';
 import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
 import { assertMayBindInvite, confirmByInvite } from './names-list.js';
-
-// The words layer in English: a node never writes in the device language (core words.test N11).
-const { t: tr } = wordsFor('en');
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -279,7 +276,7 @@ export function redeemInvite(
         // ends (within its 30 days): the words say it can't be used now, and nothing of why.
         if (isPausedMember(invite.created_by)) {
             recordFunnelEvent('invite_failed', 'inviter_paused');
-            return { success: false, error: tr('The member who made this invite can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.') };
+            return { success: false, error: word('The member who made this invite can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.') };
         }
         recordFunnelEvent('invite_failed', 'inviter_gone');
         return { success: false, error: INVITER_GONE };

@@ -12,12 +12,12 @@
  * in with 12 words and has added no sign-in. Nothing is drawn while it has not answered, for an older node that does
  * not say, or offline. Home's answer says it too (its `safety` card, passed as `known`), so there the card not yet put
  * away is drawn with the answer, and its cell is there from the first paint; a return after ✕ waits for the node's
- * counts.
+ * counts. Home is told whether the card is drawn (`onDrawn`).
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`).
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { t, word } from '@beanpool/core';
 import { getCommunityMe } from '../lib/api';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
@@ -276,9 +276,11 @@ interface CardProps {
     frame?: (card: ReactNode) => ReactNode;
     /** The node has already said this member has only their 12 words (Home's answer): drawn without waiting for it again. */
     known?: boolean;
+    /** Told whether the card is drawn, before the page paints (Home: a card not drawn is not a place to move another to). */
+    onDrawn?: (drawn: boolean) => void;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false, onDrawn }: CardProps) {
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
@@ -301,6 +303,9 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
         setAway(false);
         update(putAway(schedule, standing));
     }, [away, standing]);
+
+    useLayoutEffect(() => { onDrawn?.(shown); }, [shown]);
+    useLayoutEffect(() => () => { onDrawn?.(false); }, []);
 
     return (
         <>

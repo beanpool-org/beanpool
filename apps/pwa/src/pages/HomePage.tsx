@@ -287,6 +287,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [interests, setInterests] = useState<string[] | null>(null);
     // Once shown or opened from Tune, the interests card stays for this visit: a first tap must not take it away.
     const [interestsOpen, setInterestsOpen] = useState(false);
+    // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
+    const [safetyDrawn, setSafetyDrawn] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     // A card's Settings… (from its "…" or Edit home).
@@ -1056,7 +1058,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
     const pins = pinnedCards(a, now);
-    const movable = shown.filter(c => canMoveCard(c.type, pins));
+    // Only the cards on screen: a "Your way back in" with nothing to say is no place to move to, or a press on the card
+    // next to it would swap the two in the saved list and move nothing anyone can see (PR #2411 review).
+    const movable = shown.filter(c => canMoveCard(c.type, pins) && (c.type !== 'safety' || safetyDrawn));
     const nameOf = (c: Pick<HomeCardInstance, 'type'>) => (isHomeCardId(c.type) ? cardTitle(c.type, a) : cardName(c.type, profile));
 
     function menuFor(card: HomeCardInstance) {
@@ -1218,7 +1222,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
                 // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
-                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} frame={(oneWayBack) => (
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn} frame={(oneWayBack) => (
                         <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                             {oneWayBack}

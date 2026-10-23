@@ -2572,6 +2572,52 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
+    // A card that is not drawn is not a place to move to: counted, the first press on the card after it swapped the two
+    // in the saved list, moved nothing on screen, and was saved to the account all the same (PR #2411 review).
+    it('"Your way back in" with nothing to show is passed over by the moves: the first card under Needs you cannot move earlier', async () => {
+        wordsOnly();
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        await landAt(1400, SAFETY);
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+        await pause();
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
+        fireEvent.click(within(screen.getByTestId('home-card-tips')).getByTestId('home-card-menu'));
+        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move later' })).toBeEnabled();
+    });
+
+    it('"Your way back in" with nothing to show: Move later on the card before it swaps with the next card on screen', async () => {
+        wordsOnly();
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        width = 1400;
+        nodeV2(answer({}, SAFETY), v2(['market', 'safety', 'events', 'pulse']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+        await pause();
+        expect(cardIds()).toEqual(['needs', 'market', 'events', 'pulse', 'community']);
+        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
+        fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
+        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'safety', 'market', 'pulse']));
+        expect(cardIds()).toEqual(['needs', 'events', 'market', 'pulse', 'community']);
+    });
+
+    it('"Your way back in" drawn is a place to move to; put away, it no longer is', async () => {
+        wordsOnly();
+        await landAt(1400, SAFETY);
+        const card = await screen.findByTestId('one-way-back-landing');
+        const tipsMenu = () => within(screen.getByTestId('home-card-tips')).getByTestId('home-card-menu');
+        fireEvent.click(tipsMenu());
+        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeEnabled();
+        fireEvent.click(tipsMenu());
+        expect(screen.queryByRole('button', { name: 'Move earlier' })).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: 'Hide this for now' }));
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        fireEvent.click(tipsMenu());
+        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
+    });
+
     // The answer's `safety` is the node's word that the member has only their 12 words, so a card not yet put away is
     // drawn with the answer. Drawn when its own request came back instead, its cell arrived second in the order and
     // every card after Needs you moved to another cell (PR #2411 review).

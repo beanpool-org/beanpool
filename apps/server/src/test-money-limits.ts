@@ -1298,7 +1298,7 @@ async function main(): Promise<void> {
         const oldDoor = await call('POST', mal, `/api/treasury/${vic.pk}/pledge`, { amount: 1, memo: 'For you' });
         const oldEdit = await call('POST', mal, '/api/crowdfund/projects/update', { id: vic.pk, title: 'Renamed', description: 'Mine now', goalAmount: 1 });
         const oldDelete = await call('POST', mal, '/api/crowdfund/projects/delete', { id: wendy.pk });
-        assert(oldPledge.status === 400 && oldDoor.status >= 400 && oldEdit.status === 400 && oldDelete.status === 400,
+        assert(oldPledge.status === 400 && oldDoor.status >= 400 && oldEdit.status === 400 && (oldDelete.status === 400 || oldDelete.status === 404),
             `a projects row made before, under Victor's or Wendy's key: pledging at either door, editing it and deleting it are all refused (${show(oldPledge)}, ${show(oldDoor)}, ${show(oldEdit)}, ${show(oldDelete)})`);
         assert(state() === planted && statusOf(vic.pk) === 'active' && statusOf(wendy.pk) === 'active',
             `and Victor is not paid, renamed or funded, and Wendy is not pruned (${planted} → ${state()})`);

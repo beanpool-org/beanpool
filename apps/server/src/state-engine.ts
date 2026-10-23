@@ -15,6 +15,7 @@ import {
     profileLimits, BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
+import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
@@ -9110,16 +9111,11 @@ export function getDirectoryInfo(): any {
         communityName: localConfig.communityName || null,
     };
 
-    if (config.publishLocation) {
-        // The centre to two decimals (~1 km), as /api/node/config gives it to anyone but an owner or admin: this is served
-        // unsigned at /api/directory/info and pushed to the directory, and the pin may be the operator's home. An area
-        // needs no closer place to warn a neighbour before they start a second community there.
-        const r = config.serviceRadius;
-        const km = (n: number) => (typeof n === 'number' ? Math.round(n * 100) / 100 : n);
-        info.serviceRadius = r && typeof r === 'object' ? { lat: km(r.lat), lng: km(r.lng), radiusKm: r.radiusKm } : r;
-    } else {
-        info.serviceRadius = null;
-    }
+    // The centre as /api/node/config gives it to a stranger (config/community-place.ts): to two decimals (~1 km) with
+    // "Share Location & Radius" on, null with it off. This is served unsigned at /api/directory/info and pushed to the
+    // directory, and the pin may be the operator's home. An area needs no closer place to warn a neighbour before they
+    // start a second community there.
+    info.serviceRadius = placeAs(config.serviceRadius, placeShownTo({ ownerOrAdmin: false }));
 
     if (config.publishMembers) {
         // The same count (members not pruned) from communityCountsCached: GET /api/directory/info is public and ran the

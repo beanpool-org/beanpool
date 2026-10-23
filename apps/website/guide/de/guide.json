@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "de",
-  "hash": "39d577186b4a38a62fa68f4164a95412b59dd898ec84fd5e3d8b0c8b18f04d3a",
+  "hash": "68d609c4b9a3ee63c47ec9dec6db91668a6d0d2d51ab5dcb8914a5591e16dfa2",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Dein Shop",
+      "summary": "Ein Schaufenster auf dein eigenes Konto, für die Angebote, die du auswählst, unter einem Namen.",
+      "help": "Deine Angebote unter einem Namen. Gib ihm einen Namen, sag, was für ein Shop er ist, schließe ihn vorübergehend oder ganz.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Was ein Shop ist"
+        },
+        {
+          "type": "p",
+          "text": "Dein Shop ist ein Schaufenster auf dein eigenes Konto. Er enthält die Angebote, die du hineinlegst, unter einem Namen und mit ein paar Worten dazu. Die Bohnen daraus gehören dir, wie bei jedem Angebot. Er ist kein Betrieb: Niemand sonst führt ihn, und er zeigt nichts, was deine Angebote nicht ohnehin zeigen."
+        },
+        {
+          "type": "p",
+          "text": "Du hast in jeder Community, in der du bist, einen Shop."
+        },
+        {
+          "type": "h2",
+          "text": "Ihn eröffnen"
+        },
+        {
+          "type": "p",
+          "text": "Öffne **Dein Shop** über die Karte **Dein Shop und Werkzeuge** auf der Startseite oder über **Werkzeuge**. Um die Karte auf die Startseite zu holen, nutze **Startseite bearbeiten** und füge **Dein Shop und Werkzeuge** hinzu."
+        },
+        {
+          "type": "p",
+          "text": "Tippe auf **Meinen Shop eröffnen**. Solange du ihm keinen Namen gibst, ist er nach dir benannt: „Shop von Ana“."
+        },
+        {
+          "type": "h2",
+          "text": "Name, Art und Worte"
+        },
+        {
+          "type": "p",
+          "text": "Jedes davon ist ein Feld. Fülle sie in beliebiger Reihenfolge aus, oder gar nicht:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Name:** bis zu 60 Zeichen. Lass ihn leer, um wieder nach dir benannt zu werden.",
+            "**Art:** eine von vierzehn, etwa **Werkzeug und Ausrüstung**, **Reparaturen** oder **Essen aus Garten oder Hof**. Das hilft Nachbarn, dich zu finden, und bestimmt, welche Werkzeuge angezeigt werden. Sonst ändert es nichts.",
+            "**Info:** was er ist, in wenigen Worten.",
+            "**Wie es bei mir läuft:** wo man etwas abholt und wann Sachen zurückkommen."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Angebote hineinlegen"
+        },
+        {
+          "type": "p",
+          "text": "Nur deine eigenen Angebote für alle hier kommen in einen Shop. Ein Gesuch oder ein Angebot für eine Gruppe oder für eine einzelne Person bleibt draußen."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Wenn du ein Angebot bearbeitest:** hake **In deinen Shop legen** an, oder nimm den Haken weg, um das Angebot herauszunehmen.",
+            "**Meine aktiven Angebote hinzufügen:** hake in Dein Shop die Angebote an, die du schon eingestellt hast, und tippe auf **In meinen Shop legen**.",
+            "**Aus einem Werkzeug:** Wenn du etwas aus einem Werkzeug einstellst, ist **In deinen Shop legen** angehakt. Hast du noch keinen Shop, wird er mit diesem Angebot eröffnet. Du kannst Titel oder Worte im neuen Angebotsformular ändern, und es kommt trotzdem hinein. Änderst du es ganz oder stellst du etwas anderes ein, erscheint es außerhalb deines Shops, und die App sagt es dir. Um es hineinzulegen, öffne es, tippe auf **Beitrag bearbeiten** und hake **In deinen Shop legen** an."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Das Formular für ein neues Angebot auf der Karte hat noch keinen Haken. Stelle das Angebot ein und lege es dann über seinen Bearbeiten-Bildschirm oder über Dein Shop hinein."
+        },
+        {
+          "type": "h2",
+          "text": "Ihn vorübergehend schließen"
+        },
+        {
+          "type": "p",
+          "text": "Tippe auf **Vorübergehend schließen**. Du kannst sagen, wann du zurück bist: in einer Woche, in zwei Wochen oder in einem Monat. Seine Angebote verschwinden vom Markt und warten. Solange er geschlossen ist, kommt nichts hinein, und keines seiner Angebote lässt sich einzeln wieder einstellen."
+        },
+        {
+          "type": "p",
+          "text": "Tippe auf **Meinen Shop wieder öffnen**, um alle zurückzuholen. Ein Angebot, das du selbst pausiert hattest, bleibt pausiert."
+        },
+        {
+          "type": "h2",
+          "text": "Ihn schließen"
+        },
+        {
+          "type": "p",
+          "text": "Tippe auf **Meinen Shop schließen**. Seine Angebote bleiben als gewöhnliche Angebote im Markt, oder sie enden ebenfalls, wenn du **Auch seine Angebote beenden** wählst. Deine privaten Werkzeuglisten bleiben auf deinem Telefon. Du kannst jederzeit einen neuen Shop eröffnen."
+        },
+        {
+          "type": "p",
+          "text": "Du kannst ihn weder schließen noch vorübergehend schließen, solange eine Vereinbarung über eine seiner Sachen angefragt oder im Gange ist. Die App sagt dir, wie viele Vereinbarungen offen sind, mit einer Schaltfläche zu **Meine Vereinbarungen**."
+        },
+        {
+          "type": "h2",
+          "text": "In der globalen Community"
+        },
+        {
+          "type": "p",
+          "text": "Ein Shop funktioniert in der globalen Community genauso. Wer noch nicht beigetreten ist, sieht, was für ein Shop es ist und wie viele Sachen darin sind, nie aber seinen oder deinen Namen."
+        },
+        {
+          "type": "h2",
+          "text": "In der Web-App"
+        },
+        {
+          "type": "p",
+          "text": "Die Web-App zeigt noch keine Shops an."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Meine Deals",
       "summary": "Ein Ort für alle deine laufenden Deals, aktiven Beiträge und vergangenen Abschlüsse.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Dinge in der Nähe finden",
       "summary": "Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Wenn dein Browser BeanPool bereits erlaubt, deinen Standort zu verwenden, kann sich die Auswahl direkt an deinem aktuellen Standort öffnen. Wenn nicht, öffnet sie sich an einem festen Ort. Prüfe die Stecknadel oder tippe auf das Fadenkreuz bzw. die Karte, bevor du auf **Anwenden** tippst. In der globalen Community sendet die Web-App den von dir gewählten Mittelpunkt an die Community, gerundet auf etwa 11 Meter."
+          "text": "In der Web-App öffnet sich die Auswahl am zuletzt gewählten Mittelpunkt oder sonst am Ort der Community selbst (an einer Weltansicht, falls sie keinen hat). Prüfe die Stecknadel, oder tippe auf die Karte, ziehe die Stecknadel oder tippe auf das Fadenkreuz, um den Mittelpunkt zu wählen, bevor du auf **Anwenden** tippst. Deinen Standort erfragt sie nur, wenn du auf das Fadenkreuz tippst. In der globalen Community sendet die Web-App den von dir gewählten Mittelpunkt an die Community, für Markt, Karte und Startseite, gerundet auf etwa einen Kilometer. Er geht näher heran, wenn du einen kleinen Umkreis wählst oder wenn eine auf der Startseite gespeicherte Suche in kleiner Entfernung schaut."
         },
         {
           "type": "p",
@@ -3741,8 +3860,8 @@
       "title": "Nachrichten",
       "summary": "Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.",
       "help": "Deine Chats. Einzelchats sind Ende-zu-Ende verschlüsselt. Tippe auf einen Chat zum Öffnen oder auf + zum Starten.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Aus einem Beitrag: Tippe auf **Nachricht** und den Namen der Person.",
+            "Aus einem Profil: Öffne das Profil der Person und tippe auf **Nachricht**. Dort kannst du sie auch als Freund hinzufügen.",
             "Aus dem **Chat**: Tippe auf die Stift-Schaltfläche und suche die Person nach Namen. In der weltweiten Gemeinschaft listet „Neue Nachricht“ die Personen auf, mit denen du gehandelt hast, sowie deine Freunde. Um andere zu finden, gib mindestens 2 Buchstaben ihres Namens ein.",
-            "Aus deinen Freunden: **Chat**, dann **Personen**, dann **Freunde**, und tippe auf die Nachrichten-Schaltfläche neben einem Namen."
+            "Aus der Mitgliederliste: **Chat**, dann **Personen**, und tippe auf 💬 neben dem Namen eines Mitglieds unter **Community** oder **Freunde**.",
+            "Aus einem Beitrag: Tippe auf **Nachricht** und den Namen der Person."
           ]
         },
         {
           "type": "p",
-          "text": "Verwende in der Web-App **✉️ Neue Direktnachricht** oder die Schaltfläche **💬 Nachricht** an einem Beitrag. Deine Freunde befinden sich unter dem Reiter **Leute**."
+          "text": "Verwende in der Web-App **Nachricht** im Profil der Person, 💬 in ihrer Zeile unter **Leute**, **✉️ Neue Direktnachricht** oder die Schaltfläche **💬 Nachricht** an einem Beitrag."
         },
         {
           "type": "h2",
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Leute und Freunde",
       "summary": "Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.",
-      "help": "Mitglieder deiner Community. Tippe auf ein Mitglied für das Profil, zum Chatten oder als Freund hinzufügen.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "Die Mitglieder deiner Community und deine Freunde. Tippe auf eine Person für das Profil oder auf 💬, um ihr zu schreiben.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Tippe auf eine Person, um ihr Profil zu sehen: ihre Bewertungen und Beiträge, und auf dem Telefon in einer Community mit Bohnen ihr Vertrauensabzeichen und ihre Trades. Siehe „Dein Profil“."
+          "text": "Tippe auf eine Person, um ihr Profil zu sehen: ihre Bewertungen und Beiträge, und auf dem Telefon in einer Community mit Bohnen ihr Vertrauensabzeichen und ihre Trades. Du kannst ihr direkt im Profil mit **Nachricht** schreiben oder sie mit **+ Freund hinzufügen** als Freund hinzufügen. Siehe „Dein Profil“."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "Tippe in der **Community** neben einem Namen auf **+ Hinzufügen**. Die Anzeige wechselt zu **Hinzugefügt**. Tippe auf **Hinzugefügt**, um die Person wieder zu entfernen. In der Web-App wechselt es zu **✓ Freund**, worauf du nicht klicken kannst: Um jemanden zu entfernen, nutze **Entfernen** unter **Freunde**.",
-            "Tippe unter **Freunde** auf die Nachrichten-Schaltfläche, um einen Chat zu starten, oder auf die Entfernen-Schaltfläche und dann auf **Entfernen**, um jemanden aus den Freunden zu nehmen.",
+            "Tippe in der **Community** auf 💬, um einen Chat zu starten, oder neben einem Namen auf **+ Hinzufügen**. Die Anzeige wechselt zu **Hinzugefügt**. Tippe auf **Hinzugefügt**, um die Person wieder zu entfernen. In der Web-App wechselt es zu **✓ Freund**, worauf du nicht klicken kannst: Um jemanden zu entfernen, nutze **Entfernen** unter **Freunde**. Du kannst jemandem auch direkt im Profil schreiben oder die Person dort als Freund hinzufügen.",
+            "Tippe unter **Freunde** auf 💬, um einen Chat zu starten, oder auf die Entfernen-Schaltfläche und dann auf **Entfernen**, um jemanden aus den Freunden zu nehmen.",
             "Wenn dich jemand hinzufügt, steht oben unter **Freunde**, wer es war (beispielsweise „Sam hat dich hinzugefügt“) mit **Auch hinzufügen**. Tippe zuerst auf den Namen, um das Profil anzusehen. Es gibt keine Push-Benachrichtigung. Die Zeile verschwindet, wenn du die Person ebenfalls hinzufügst, oder nach 30 Tagen. Bis zu 20 Personen werden angezeigt, danach die Anzahl weiterer Personen.",
             "Du kannst innerhalb von 24 Stunden bis zu 100 Personen hinzufügen. Das Entfernen von Personen zählt ebenfalls dazu. Erreichst du das Limit, weist die App darauf hin und nennt den Zeitpunkt, ab dem du wieder Personen hinzufügen kannst.",
             "Du kannst niemanden hinzufügen, den du blockiert hast: Hebe die Blockierung zuerst auf. Siehe „Jemanden blockieren“."
@@ -6720,8 +6840,8 @@
       "title": "Jemanden blockieren",
       "summary": "Beiträge und Nachrichten einer Person ausblenden und dies später wieder aufheben.",
       "help": "Personen, die du blockiert hast. Deren Inhalte sind für dich unsichtbar; hier kannst du jemanden wieder freigeben.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "Öffne die **Einstellungen**. Tippe unter **Rechtliches & Datenschutz** auf **Blockierte Benutzer verwalten**.",
-            "Tippe neben einem Namen auf **Freigeben** oder auf **Alle freigeben**."
+            "Tippe neben einem Namen auf **Freigeben** oder auf **Alle freigeben**.",
+            "In der Telefon-App kannst du jemanden auch über das Profil freigeben. Unter dem Namen steht „Du hast [Name] blockiert.“ Tippe dort auf **Freigeben**."
           ]
         },
         {

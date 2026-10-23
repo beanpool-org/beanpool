@@ -3,7 +3,7 @@ slug: near-you
 title: Encontrar cosas cerca de ti
 summary: Ver solo publicaciones dentro de cierta distancia de ti o de cualquier lugar que elijas.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## En la pestaña Mercado
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 En el teléfono, las publicaciones sin ubicación siempre se muestran. En la app web, una **Distancia** las oculta, excepto las encuestas. En la comunidad global la app web también las excluye mientras la lista esté cerca de ti (más abajo).
 
-Si tu navegador ya permite que BeanPool use tu ubicación, el selector puede abrirse en el lugar donde estás ahora. De lo contrario, se abre en un punto fijo. Revisa el pin, o toca el botón de la diana o el mapa, antes de tocar **Aplicar**. En la comunidad global la app web envía el centro que elegiste a la comunidad, redondeado a unos 11 metros.
+En la app web, el selector se abre en el último centro que elegiste o, si no, en el lugar de la propia comunidad (una vista del mundo si no tiene ninguno). Revisa el pin, o toca el mapa, arrastra el pin o toca el botón de la diana para elegir el centro, antes de tocar **Aplicar**. Solo pide tu ubicación cuando tocas el botón de la diana. En la comunidad global la app web envía el centro que elegiste a la comunidad, para el Mercado, el Mapa e Inicio, redondeado a aproximadamente un kilómetro. Se acerca más cuando eliges un radio pequeño, o cuando una búsqueda que guardaste en Inicio mira dentro de una distancia pequeña.
 
 En el teléfono el selector se abre en el último centro que elegiste, o en un punto fijo, así que toca primero el botón de la diana.
 

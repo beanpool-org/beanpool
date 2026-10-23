@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "it",
-  "hash": "e26e2256c54d2aaa3262a441efc4dec5d7cb5c8802784e2d397dbc0b775ea10d",
+  "hash": "b9bc2b7a6701363908243f386d3a7cf3dfeec52e8457c1963817d323cd91c4f7",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Il tuo negozio",
+      "summary": "Una vetrina sul tuo account, per le Offerte che scegli, sotto un unico nome.",
+      "help": "Le tue Offerte sotto un unico nome. Dagli un nome, indica che tipo di negozio è, chiudilo per ora oppure chiudilo.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Cos'è un negozio"
+        },
+        {
+          "type": "p",
+          "text": "Il tuo negozio è una vetrina sul tuo account. Contiene le Offerte che ci metti, sotto un unico nome, con qualche parola su di esso. I fagioli che ne arrivano sono tuoi, come per qualsiasi Offerta. Non è un'impresa: nessun altro lo gestisce e non mostra niente che le tue Offerte non mostrino già."
+        },
+        {
+          "type": "p",
+          "text": "Hai un negozio in ogni comunità di cui fai parte."
+        },
+        {
+          "type": "h2",
+          "text": "Aprirlo"
+        },
+        {
+          "type": "p",
+          "text": "Apri **Il tuo negozio** dalla scheda di Home **Il tuo negozio e i tuoi attrezzi**, oppure da **Attrezzi**. Per mettere la scheda in Home, usa **Modifica home** e aggiungi **Il tuo negozio e i tuoi attrezzi**."
+        },
+        {
+          "type": "p",
+          "text": "Tocca **Apri il mio negozio**. Finché non gli dai un nome, porta il tuo: \"Il negozio di Ana\"."
+        },
+        {
+          "type": "h2",
+          "text": "Nome, tipo e parole"
+        },
+        {
+          "type": "p",
+          "text": "Ognuno di questi è un campo. Compilali in qualsiasi ordine, o non compilarli affatto:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Nome**: fino a 60 caratteri. Lascialo vuoto per tornare a usare il tuo nome.",
+            "**Tipo**: uno tra quattordici, come **Attrezzi e attrezzature**, **Riparazioni** o **Cibo dall'orto o dalla fattoria**. Aiuta chi abita vicino a trovarti e sceglie gli attrezzi mostrati. Non cambia nient'altro.",
+            "**Informazioni**: cos'è, in poche parole.",
+            "**Come tratto**: dove ritirare le cose e quando tornano."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Metterci le Offerte"
+        },
+        {
+          "type": "p",
+          "text": "In un negozio entrano solo le tue Offerte per tutti qui. Una Richiesta, o un'Offerta per un gruppo o per una sola persona, resta fuori."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Quando modifichi un'Offerta:** spunta **Metti questo nel tuo negozio**, oppure togli la spunta per toglierla dal negozio.",
+            "**Aggiungi le mie Offerte attive:** in Il tuo negozio, spunta le Offerte che hai già pubblicato e tocca **Mettile nel mio negozio**.",
+            "**Da un attrezzo:** quando metti in lista qualcosa da un attrezzo, **Metti questo nel tuo negozio** è già spuntato. Se non hai ancora un negozio, si apre con quell'Offerta. Puoi cambiarne il titolo o le parole nel modulo della nuova Offerta e va comunque nel negozio. Se la cambi del tutto, o ne pubblichi un'altra al suo posto, viene pubblicata fuori dal tuo negozio e l'app te lo dice. Per metterla dentro, aprila, tocca **Modifica annuncio** e spunta **Metti questo nel tuo negozio**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Il modulo della nuova Offerta sulla mappa non ha ancora la spunta. Pubblica l'Offerta, poi mettila nel negozio dalla sua schermata di modifica o da Il tuo negozio."
+        },
+        {
+          "type": "h2",
+          "text": "Chiuderlo per ora"
+        },
+        {
+          "type": "p",
+          "text": "Tocca **Chiudi per ora**. Puoi indicare quando torni: tra una settimana, tra due settimane o tra un mese. Le sue Offerte escono dal Mercato e restano in attesa. Mentre è chiuso non entra nulla, e nessuna delle sue Offerte può essere rimessa online da sola."
+        },
+        {
+          "type": "p",
+          "text": "Tocca **Riapri il mio negozio** per rimetterle tutte online. Un'Offerta che avevi messo in pausa tu resta in pausa."
+        },
+        {
+          "type": "h2",
+          "text": "Chiuderlo"
+        },
+        {
+          "type": "p",
+          "text": "Tocca **Chiudi il mio negozio**. Le sue Offerte restano nel Mercato come normali Offerte, oppure terminano anch'esse se scegli **Termina anche le sue Offerte**. Le tue liste private di attrezzi restano sul tuo telefono. Puoi aprire un nuovo negozio quando vuoi."
+        },
+        {
+          "type": "p",
+          "text": "Non puoi chiuderlo, né chiuderlo per ora, mentre un accordo su una delle sue cose è stato richiesto o è in corso. L'app dice quanti accordi sono aperti, con un pulsante per **I miei accordi**."
+        },
+        {
+          "type": "h2",
+          "text": "Nella comunità globale"
+        },
+        {
+          "type": "p",
+          "text": "Un negozio funziona allo stesso modo nella comunità globale. Chi non si è unito vede che tipo di negozio è e quante cose contiene, mai il suo nome né il tuo."
+        },
+        {
+          "type": "h2",
+          "text": "Nell'app web"
+        },
+        {
+          "type": "p",
+          "text": "L'app web non mostra ancora i negozi."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "I miei accordi",
       "summary": "Un unico posto per ogni scambio in corso, ogni tuo annuncio e le transazioni passate.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Trovare cose vicino a te",
       "summary": "Mostra solo gli annunci entro una certa distanza da te o da qualsiasi punto tu scelga.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Se il tuo browser consente già a BeanPool di usare la tua posizione, il selettore può aprirsi su dove ti trovi adesso. In caso contrario, si apre su un punto fisso. Controlla il pin, o tocca il pulsante del mirino o la mappa, prima di toccare **Applica**. Sulla comunità globale l'app web invia il centro scelto alla comunità, approssimato a circa 11 metri."
+          "text": "Nell'app web il selettore si apre sull'ultimo centro che hai scelto, oppure sul luogo della comunità stessa (una vista del mondo se non ne ha uno). Controlla il pin, oppure tocca la mappa, trascina il pin o tocca il pulsante del mirino per scegliere il centro, prima di toccare **Applica**. Chiede la tua posizione solo quando tocchi il pulsante del mirino. Sulla comunità globale l'app web invia alla comunità il centro che hai scelto, per il Mercato, la Mappa e Home, approssimato a circa un chilometro. Diventa più preciso quando scegli un raggio piccolo, o quando una ricerca salvata in Home cerca entro una distanza piccola."
         },
         {
           "type": "p",
@@ -3741,8 +3860,8 @@
       "title": "Messaggi",
       "summary": "Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.",
       "help": "Le tue chat. Le chat individuali sono protette da crittografia end-to-end. Tocca una chat per aprirla.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Da un annuncio: tocca **Messaggio** e il nome della persona.",
+            "Da un profilo: apri il suo profilo e tocca **Invia messaggio**. Lì puoi anche aggiungere la persona come amica.",
             "Da **Parla**: tocca il pulsante con la matita, poi trova la persona per nome. Nella comunità globale, Nuovo messaggio elenca le persone con cui hai fatto scambi e i tuoi amici. Per trovare chiunque altro, digita almeno 2 lettere del suo nome.",
-            "Dai tuoi amici: **Parla**, poi **Persone**, poi **Amici**, e tocca il pulsante del messaggio accanto a un nome."
+            "Dall'elenco dei membri: **Parla**, poi **Persone**, e tocca 💬 accanto al nome di un membro in **Comunità** o **Amici**.",
+            "Da un annuncio: tocca **Messaggio** e il nome della persona."
           ]
         },
         {
           "type": "p",
-          "text": "Nella web app, usa **✉️ Nuovo MD**, oppure il pulsante **💬 Messaggio** su un annuncio. I tuoi amici si trovano sotto la scheda **Persone**."
+          "text": "Nella web app, usa **Invia messaggio** sul profilo, 💬 sulla sua riga sotto **Persone**, **✉️ Nuovo MD**, oppure il pulsante **💬 Messaggio** su un annuncio."
         },
         {
           "type": "h2",
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Persone e amici",
       "summary": "Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.",
-      "help": "Membri della tua comunità. Tocca una persona per visualizzarne il profilo, Offerte, Richieste e badge.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "I membri della tua comunità e i tuoi amici. Tocca una persona per vedere il suo profilo, oppure tocca 💬 accanto a un membro per scrivere un messaggio.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Tocca una persona per visualizzarne il profilo: le sue recensioni e i suoi annunci, e, sul telefono in una comunità con i fagioli, il suo badge di fiducia e i suoi scambi. Vedi \"Il tuo profilo\"."
+          "text": "Tocca una persona per visualizzarne il profilo: le sue recensioni e i suoi annunci, e, sul telefono in una comunità con i fagioli, il suo badge di fiducia e i suoi scambi. Puoi scrivere subito alla persona dal suo profilo con **Invia messaggio**, oppure aggiungerla come amica con **+ Aggiungi amico**. Vedi \"Il tuo profilo\"."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "In **Comunità**, tocca **+ Aggiungi** accanto a un nome. Cambia in **Aggiunto**. Tocca **Aggiunto** per rimuoverlo di nuovo. Nella web app cambia in **✓ Amico**, che non puoi toccare: per rimuovere qualcuno, usa **Rimuovi** sotto **Amici**.",
-            "In **Amici**, tocca il pulsante del messaggio per avviare una chat, oppure il pulsante di rimozione, poi **Rimuovi**, per togliere qualcuno.",
+            "In **Comunità**, tocca 💬 per avviare una chat, oppure tocca **+ Aggiungi** accanto a un nome. Cambia in **Aggiunto**. Tocca **Aggiunto** per rimuoverlo di nuovo. Nella web app cambia in **✓ Amico**, che non puoi toccare: per rimuovere qualcuno, usa **Rimuovi** sotto **Amici**. Puoi anche scrivere a qualcuno o aggiungerlo come amico direttamente dal suo profilo.",
+            "In **Amici**, tocca 💬 per avviare una chat, oppure il pulsante di rimozione, poi **Rimuovi**, per togliere qualcuno.",
             "Quando qualcuno ti aggiunge, in cima ad **Amici** compare chi lo ha fatto, ad esempio \"Sam ti ha aggiunto\", con **Aggiungi a tua volta**. Tocca il suo nome per vedere prima il suo profilo. Non c'è alcuna notifica. La riga scompare quando aggiungi a tua volta la persona, o dopo 30 giorni. Vengono mostrati fino a 20 utenti, poi quanti altri ancora.",
             "Puoi aggiungere fino a 100 persone nell'arco di 24 ore. Anche rimuovere qualcuno viene conteggiato. Se raggiungi il limite, l'app lo segnala e indica quando potrai aggiungere nuovamente qualcuno.",
             "Non puoi aggiungere qualcuno che hai bloccato: prima sbloccalo. Vedi \"Bloccare qualcuno\"."
@@ -6720,8 +6840,8 @@
       "title": "Bloccare qualcuno",
       "summary": "Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.",
       "help": "Persone che hai bloccato. I loro post e messaggi sono nascosti; sblocca qualcuno qui.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "Apri **Impostazioni**. Sotto **NOTE LEGALI E PRIVACY**, tocca **Gestisci utenti bloccati**.",
-            "Tocca **Sblocca** accanto a un nome, o **Sblocca tutti**."
+            "Tocca **Sblocca** accanto a un nome, o **Sblocca tutti**.",
+            "Nell'app per telefono puoi anche sbloccare una persona dal suo profilo. Sotto il nome compare \"Hai bloccato\" seguito dal nome. Tocca lì **Sblocca**."
           ]
         },
         {

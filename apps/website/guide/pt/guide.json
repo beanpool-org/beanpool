@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "pt",
-  "hash": "b6fbe2ba6dd9946852db86660083a9e57634ef22cc40a6e84c84a33100727c05",
+  "hash": "fe0c0a481d0b20d849b64dbf734ff7951fafd0610008a3bd03f668027ae7923d",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3209,6 +3210,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Sua loja",
+      "summary": "Uma vitrine na sua própria conta, para as Ofertas que você escolher, sob um só nome.",
+      "help": "Suas Ofertas sob um só nome. Dê um nome a ela, diga que tipo de loja é, feche por enquanto ou feche de vez.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "O que é uma loja"
+        },
+        {
+          "type": "p",
+          "text": "Sua loja é uma vitrine na sua própria conta. Ela reúne as Ofertas que você colocar nela, sob um só nome, com algumas palavras sobre ela. Os feijões que vêm delas são seus, como em qualquer Oferta. Ela não é um empreendimento: ninguém mais cuida dela, e ela não mostra nada que as suas Ofertas já não mostrem."
+        },
+        {
+          "type": "p",
+          "text": "Você tem uma loja em cada comunidade de que faz parte."
+        },
+        {
+          "type": "h2",
+          "text": "Como abrir"
+        },
+        {
+          "type": "p",
+          "text": "Abra **Sua loja** pelo cartão **Sua loja e ferramentas** do Início, ou por **Ferramentas**. Para colocar o cartão no Início, use **Editar início** e adicione **Sua loja e ferramentas**."
+        },
+        {
+          "type": "p",
+          "text": "Toque em **Abrir minha loja**. Enquanto você não der um nome a ela, ela leva o seu nome: \"Loja de Ana\"."
+        },
+        {
+          "type": "h2",
+          "text": "Nome, tipo e palavras"
+        },
+        {
+          "type": "p",
+          "text": "Cada um destes é um campo. Preencha em qualquer ordem, ou deixe em branco:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Nome**: até 60 caracteres. Deixe vazio para voltar a ter o seu nome.",
+            "**Tipo**: um entre catorze, como **Ferramentas e equipamentos**, **Consertos** ou **Comida da horta ou do sítio**. Ajuda os vizinhos a encontrar você e escolhe as ferramentas mostradas. Não muda mais nada.",
+            "**Sobre**: o que ela é, em poucas palavras.",
+            "**Como eu negocio**: onde buscar as coisas e quando elas voltam."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Como colocar Ofertas nela"
+        },
+        {
+          "type": "p",
+          "text": "Só entram numa loja as suas próprias Ofertas para todos aqui. Um Pedido, ou uma Oferta para um grupo ou para uma só pessoa, fica de fora."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ao editar uma Oferta:** marque **Colocar isto na sua loja**, ou desmarque para tirar a Oferta.",
+            "**Adicionar minhas Ofertas ativas:** em Sua loja, marque as Ofertas que você já tem no ar e toque em **Colocar na minha loja**.",
+            "**A partir de uma ferramenta:** quando você anuncia algo por uma ferramenta, **Colocar isto na sua loja** já vem marcado. Se você ainda não tem loja, ela abre com essa Oferta. Você pode mudar o título ou as palavras no formulário da nova Oferta e ela ainda entra. Se você mudar tudo, ou publicar outra coisa no lugar, ela vai ao ar fora da sua loja e o app avisa. Para colocá-la, abra-a, toque em **Edit Post** e marque **Colocar isto na sua loja**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "O formulário de nova Oferta no mapa ainda não tem essa caixa. Publique a Oferta e depois coloque-a na loja pela tela de edição dela ou por Sua loja."
+        },
+        {
+          "type": "h2",
+          "text": "Fechar por enquanto"
+        },
+        {
+          "type": "p",
+          "text": "Toque em **Fechar por enquanto**. Você pode dizer quando volta: em uma semana, em duas semanas ou em um mês. As Ofertas dela saem do Mercado e ficam esperando. Nada entra enquanto ela estiver fechada, e nenhuma das Ofertas dela pode voltar ao ar avulsa."
+        },
+        {
+          "type": "p",
+          "text": "Toque em **Reabrir minha loja** para colocar todas de volta. Uma Oferta que você mesmo pausou continua pausada."
+        },
+        {
+          "type": "h2",
+          "text": "Fechar de vez"
+        },
+        {
+          "type": "p",
+          "text": "Toque em **Fechar minha loja**. As Ofertas dela continuam no Mercado como Ofertas comuns, ou também terminam, se você escolher **Encerrar também as Ofertas dela**. Suas listas privadas de ferramentas ficam no seu celular. Você pode abrir uma nova loja quando quiser."
+        },
+        {
+          "type": "p",
+          "text": "Você não pode fechá-la, nem fechá-la por enquanto, enquanto houver um acordo pedido ou em andamento sobre uma das coisas dela. O app diz quantos acordos estão abertos, com um botão para **Meus acordos**."
+        },
+        {
+          "type": "h2",
+          "text": "Na comunidade global"
+        },
+        {
+          "type": "p",
+          "text": "Uma loja funciona do mesmo jeito na comunidade global. Quem ainda não entrou vê que tipo de loja é e quantas coisas há nela, nunca o nome dela nem o seu."
+        },
+        {
+          "type": "h2",
+          "text": "No app web"
+        },
+        {
+          "type": "p",
+          "text": "O app web ainda não mostra lojas."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Meus acordos",
       "summary": "Um só lugar para cada troca em andamento, cada anúncio ativo e suas trocas passadas.",
@@ -3636,8 +3755,8 @@
       "slug": "near-you",
       "title": "Encontrar coisas por perto",
       "summary": "Mostrar apenas anúncios a uma certa distância de você ou de qualquer lugar que escolher.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3667,7 +3786,7 @@
         },
         {
           "type": "p",
-          "text": "Se o seu navegador já permite que o BeanPool use sua localização, o seletor pode abrir diretamente onde você está agora. Caso contrário, abre em um ponto fixo. Confira o marcador, ou toque no botão da mira ou no mapa, antes de tocar em **Aplicar**. Na comunidade global, o aplicativo web envia o centro escolhido para a comunidade, arredondado para cerca de 11 metros."
+          "text": "No aplicativo web, o seletor abre no último centro que você escolheu ou, se não houver, no próprio local da comunidade (uma visão do mundo, se ela não tiver um). Confira o marcador, ou toque no mapa, arraste o marcador ou toque no botão da mira para escolher o centro, antes de tocar em **Aplicar**. O aplicativo só pede sua localização quando você toca no botão da mira. Na comunidade global, o aplicativo web envia à comunidade o centro que você escolheu, para o Mercado, o Mapa e o Início, arredondado para cerca de um quilômetro. O arredondamento fica mais preciso quando você escolhe um raio pequeno ou quando uma busca salva no Início procura a uma distância pequena."
         },
         {
           "type": "p",
@@ -3698,7 +3817,7 @@
             "Cada anúncio indica a que distância se encontra, como **📍 12 km**. Seus próprios anúncios estão sempre no Mapa e no Mercado perto da sua região, onde quer que estejam. Com uma **Distância** definida, o Mercado mostra apenas o que estiver dentro dela, incluindo os seus.",
             "Enquanto a lista estiver configurada para perto de você, publicações sem localização são omitidas. Uma enquete de alguém que não definiu sua região é uma delas. Para vê-las, redefina a **Distância** se tiver escolhido uma, e toque em **Mostrar de qualquer lugar**.",
             "Sob **Eventos**, a lista nunca é restrita pela sua região ou pela sua **Distância**, como antes.",
-            "Se não houver nada por perto, o Mapa avisa, com **Mostrar de qualquer lugar**. Depois, **Perto da sua área** (ou **Mais próximos primeiro, dentro do local escolhido**) traz de volta os mais próximos."
+            "Se não houver nada por perto, o Mapa avisa, com **Mostrar de qualquer lugar**. Depois, **Perto da sua área** (ou **Perto do lugar que você escolheu**) traz de volta os mais próximos."
           ]
         },
         {
@@ -3728,8 +3847,8 @@
       "title": "Mensagens",
       "summary": "Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.",
       "help": "Suas conversas. Conversas individuais têm proteção de ponta a ponta. Toque para abrir ou inicie uma a partir de um anúncio ou amigos.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3776,14 +3895,15 @@
         {
           "type": "ul",
           "items": [
-            "A partir de uma publicação: toque em **Mensagem** e no nome da pessoa.",
+            "A partir de um perfil: abra o perfil da pessoa e toque em **Mensagem**. Você também pode adicioná-la aos amigos ali.",
             "A partir de **Conversas**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.",
-            "A partir dos seus amigos: **Conversas**, depois **Pessoas**, depois **Amigos**, e toque no botão de mensagem ao lado de um nome."
+            "A partir da lista de membros: **Conversas**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.",
+            "A partir de uma publicação: toque em **Mensagem** e no nome da pessoa."
           ]
         },
         {
           "type": "p",
-          "text": "No app web, use **✉️ Nova mensagem direta** ou o botão **💬 Mensagem** em uma publicação. Seus amigos ficam sob a aba **Pessoas**."
+          "text": "No app web, use **Mensagem** no perfil da pessoa, 💬 na linha dela em **Pessoas**, **✉️ Nova mensagem direta** ou o botão **💬 Mensagem** em uma publicação."
         },
         {
           "type": "h2",
@@ -4296,8 +4416,8 @@
       "title": "Pessoas e amigos",
       "summary": "Encontre membros da sua comunidade, adicione amigos e apoie alguém.",
       "help": "Os membros da sua comunidade e seus amigos. Toque em alguém para ver o perfil ou em 💬 junto a um amigo para conversar.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4324,7 +4444,7 @@
         },
         {
           "type": "p",
-          "text": "Toque em uma pessoa para ver seu perfil: suas avaliações e publicações e, no celular em uma comunidade com feijões, seu selo de confiança e suas trocas. Veja \"Seu perfil\"."
+          "text": "Toque em uma pessoa para ver seu perfil: suas avaliações e publicações e, no celular em uma comunidade com feijões, seu selo de confiança e suas trocas. Você pode enviar uma mensagem direto do perfil da pessoa, com **Mensagem**, ou adicioná-la como amiga com **+ Adicionar amigo**. Veja \"Seu perfil\"."
         },
         {
           "type": "h2",
@@ -4333,8 +4453,8 @@
         {
           "type": "ul",
           "items": [
-            "Em **Comunidade**, toque em **+ Adicionar** ao lado de um nome. O botão muda para **Adicionado**. Toque em **Adicionado** para remover a pessoa novamente. No app web ele muda para **✓ Amigo**, no qual não é possível tocar: para remover alguém, use **Remover** sob **Amigos**.",
-            "Em **Amigos**, toque no botão de mensagem para iniciar uma conversa, ou no botão de remover e depois em **Remover** para tirar alguém da lista.",
+            "Em **Comunidade**, toque em 💬 para iniciar uma conversa ou em **+ Adicionar** ao lado de um nome. O botão muda para **Adicionado**. Toque em **Adicionado** para remover a pessoa novamente. No app web ele muda para **✓ Amigo**, no qual não é possível tocar: para remover alguém, use **Remover** sob **Amigos**. Você também pode enviar uma mensagem ou adicionar alguém como amigo direto do perfil da pessoa.",
+            "Em **Amigos**, toque em 💬 para iniciar uma conversa, ou no botão de remover e depois em **Remover** para tirar alguém da lista.",
             "Quando alguém adiciona você, o topo de **Amigos** diz quem adicionou, como \"Sam adicionou você\", com a opção **Adicionar de volta**. Toque no nome da pessoa para ver seu perfil primeiro. Nenhuma notificação é enviada. O aviso desaparece quando você adiciona de volta ou após 30 dias. São exibidas até 20 pessoas e, depois, quantas mais adicionaram você.",
             "Você pode adicionar até 100 pessoas em qualquer período de 24 horas. Remover alguém também entra nessa contagem. Se você atingir o limite, o aplicativo avisará quando você poderá adicionar alguém novamente.",
             "Não é possível adicionar alguém que você tenha bloqueado: desbloqueie a pessoa primeiro. Veja \"Bloquear alguém\"."
@@ -6707,8 +6827,8 @@
       "title": "Bloquear alguém",
       "summary": "Oculte as publicações e mensagens de alguém e desfaça isso quando quiser.",
       "help": "Pessoas que você bloqueou. As publicações e mensagens delas ficam ocultas para você; desbloqueie alguém aqui.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6800,7 +6920,8 @@
           "type": "ul",
           "items": [
             "Abra **Configurações**. Em **Jurídico e privacidade**, toque em **Gerenciar usuários bloqueados**.",
-            "Toque em **Desbloquear** ao lado de um nome ou em **Desbloquear todos**."
+            "Toque em **Desbloquear** ao lado de um nome ou em **Desbloquear todos**.",
+            "No aplicativo para celular, você também pode desbloquear alguém pelo perfil dela. Abaixo do nome aparece \"Você bloqueou\" e o nome da pessoa. Toque em **Desbloquear** ali."
           ]
         },
         {

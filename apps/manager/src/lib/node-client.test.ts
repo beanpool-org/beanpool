@@ -64,6 +64,8 @@ import {
     listOffboxBackups,
     getTlsStatus,
     setOwnAddress,
+    forgetStandby,
+    passwordNeeds2faError,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -261,6 +263,83 @@ describe('automation token, auth failure, and read limits helpers', () => {
 
         const bodyResult = await limits.body(Promise.resolve({ data: 123 }));
         expect(bodyResult).toEqual({ data: 123 });
+    });
+});
+
+describe('forgetStandby and passwordNeeds2faError', () => {
+    it('forgetStandby sends POST with standby id, password, and tfaToken and parses banner response', async () => {
+        const mockBanner = {
+            success: true,
+            incident: null,
+            standbys: [{ id: 'sb-1', label: 'Standby 1', lastPullAt: 100, lastCopyAt: null, lastExactAt: null, healthy: true }],
+        };
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => mockBanner,
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await forgetStandby('https://node.example.com', 'sb-1', 'adminpw', 'tfa-sess-999');
+        expect(res).toEqual(mockBanner);
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/standby-health/forget');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('adminpw');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess-999');
+        expect(JSON.parse(init.body)).toEqual({ id: 'sb-1', password: 'adminpw' });
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            statusText: 'Server Error',
+        }));
+        await expect(forgetStandby('https://node.example.com', 'sb-1')).rejects.toThrow('HTTP 500: Server Error');
+
+        vi.unstubAllGlobals();
+    });
+
+    it('passwordNeeds2faError handles non-403 responses, password_retired, and password_needs_2fa status codes', async () => {
+        // Non-403 response
+        const res200 = new Response(JSON.stringify({ ok: true }), { status: 200 });
+        expect(await passwordNeeds2faError(res200)).toBeNull();
+
+        // password_retired response
+        const resRetired = new Response(
+            JSON.stringify({ code: 'password_retired', error: 'Password retired' }),
+            { status: 403 }
+        );
+        const errRetired = await passwordNeeds2faError(resRetired);
+        expect(errRetired).toBeInstanceOf(Error);
+        expect(errRetired?.message).toContain(PASSWORD_RETIRED_HINT);
+
+        // password_needs_2fa with custom error text
+        const resNeeds2faCustom = new Response(
+            JSON.stringify({ code: 'password_needs_2fa', error: 'Custom 2FA required message' }),
+            { status: 403 }
+        );
+        const errCustom = await passwordNeeds2faError(resNeeds2faCustom);
+        expect(errCustom).toBeInstanceOf(Error);
+        expect(errCustom?.message).toContain('Custom 2FA required message');
+        expect(errCustom?.message).toContain(PASSWORD_NEEDS_2FA_HINT);
+
+        // password_needs_2fa with default fallback error text
+        const resNeeds2faDefault = new Response(
+            JSON.stringify({ code: 'password_needs_2fa', error: '' }),
+            { status: 403 }
+        );
+        const errDefault = await passwordNeeds2faError(resNeeds2faDefault);
+        expect(errDefault).toBeInstanceOf(Error);
+        expect(errDefault?.message).toContain('This node needs two-factor sign-in for the admin password.');
+        expect(errDefault?.message).toContain(PASSWORD_NEEDS_2FA_HINT);
+
+        // 403 with irrelevant code
+        const resOther403 = new Response(
+            JSON.stringify({ code: 'permission_denied', error: 'Access denied' }),
+            { status: 403 }
+        );
+        expect(await passwordNeeds2faError(resOther403)).toBeNull();
     });
 });
 

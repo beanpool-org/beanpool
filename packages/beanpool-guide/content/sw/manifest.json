@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Wanachama wa jumuiya yako na marafiki. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na rafiki kumtumia ujumbe.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Wanachama wa jumuiya yako na marafiki zako. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na mwanachama kumtumia ujumbe.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Kwa wamiliki wa jumuiya. Kuangalia maneno yako 12, kuchukua au kurejesha seva kwa simu yako, na ukaguzi ambao simu yako hufanya yenyewe.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Duka Lako",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Dirisha la mbele kwenye akaunti yako mwenyewe, kwa Ofa unazochagua, chini ya jina moja.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Ofa zako chini ya jina moja. Lipe jina, sema ni aina gani, lifunge kwa sasa, au lifunge kabisa.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

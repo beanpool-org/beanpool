@@ -532,10 +532,11 @@ async function main(): Promise<void> {
         const unplaced = await get('/api/home?cards=community', erin, { 'If-None-Match': movedPlace.etag! });
         assert(unplaced.status === 200 && !('place' in (unplaced.body?.cards?.community ?? {})), `and unset again, the place goes and the tag with it (${unplaced.status})`);
         // Public-routes audit NEW-1: the service area's centre is the manager's same pin, so anyone but an owner or admin gets
-        // it to two decimals too; the owner gets it exact (the manager's Node Identity screen saves it back).
+        // it to two decimals too; the owner gets it exact (the manager's Node Identity screen saves it back). With "Share
+        // Location & Radius" on: off, anyone but a member, owner or admin gets none (test-share-location-off).
         {
             const { updateNodeConfig } = await import('./state-engine.js');
-            updateNodeConfig({ serviceRadius: { lat: -28.55555, lng: 153.49999, radiusKm: 25 }, publishLocation: false });
+            updateNodeConfig({ serviceRadius: { lat: -28.55555, lng: 153.49999, radiusKm: 25 }, publishLocation: true });
             const rounded = JSON.stringify({ lat: -28.56, lng: 153.5, radiusKm: 25 });
             const areaUnsigned = await get('/api/node/config');
             assert(areaUnsigned.status === 200 && JSON.stringify(areaUnsigned.body?.serviceRadius) === rounded,

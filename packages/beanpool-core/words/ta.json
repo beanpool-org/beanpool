@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-23",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "பயறு",
@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "மேலே: பயறு என்பது உங்கள் சமூகம் மற்றும் வழிகாட்டி, ? இந்தத் திரையை விளக்குகிறது, ஸ்லைடர்கள் அமைப்புகள் ஆகும்.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "மேலே: ? நீங்கள் இருக்கும் திரையை விளக்குகிறது; அமைப்புகள் பகுதியில்தான் முழு வழிகாட்டியும் உள்ளது.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "உங்கள் முதல் அட்டைகளைச் சேர்க்கவும்: முகப்பில் வைக்க ஒன்றைத் தட்டவும். அல்லது முடிந்தது என்பதைத் தட்டுங்கள், முகப்பு வழக்கமான ஐந்துடன் தொடங்கும்.",
-  "Step {n} of {total}": "படி {n} / {total}"
+  "Step {n} of {total}": "படி {n} / {total}",
+  "Things you own and might lend, and who has them.": "நீங்கள் வைத்திருக்கும், இரவல் தரக்கூடிய பொருட்களும், அவை யாரிடம் உள்ளன என்பதும்.",
+  "Tool shed": "கருவிக் கொட்டகை",
+  "When something lent outside BeanPool is due back": "BeanPool-க்கு வெளியே இரவல் கொடுத்த ஒன்று திரும்ப வர வேண்டிய நேரம்",
+  "Your shop and tools": "உங்கள் கடையும் கருவிகளும்",
+  "Your shop, and things you can do on your own.": "உங்கள் கடை, மற்றும் நீங்களாகவே செய்யக்கூடியவை.",
+  "Your things, and what is out.": "உங்கள் பொருட்களும், வெளியே உள்ளவையும்.",
+  "a drill": "ஒரு துளைப்பான்",
+  "a ladder": "ஒரு ஏணி",
+  "a tent": "ஒரு கூடாரம்",
+  "{name} is due back": "{name} திரும்ப வர வேண்டும்",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} பொருள் · உங்கள் கொட்டகையில்",
+    "other": "{n} பொருட்கள் · அனைத்தும் உங்கள் கொட்டகையில்"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} பொருள் · {listed} உங்கள் கடையில் · {out} வெளியே",
+    "other": "{n} பொருட்கள் · {listed} உங்கள் கடையில் · {out} வெளியே"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} பொருள் · {out} வெளியே",
+    "other": "{n} பொருட்கள் · {out} வெளியே"
+  }
 }

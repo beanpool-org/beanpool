@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cửa hàng — BeanPool members' guide</title>
+    <meta name="description" content="Một ô cửa sổ trước tài khoản của riêng bạn, dành cho những Chia sẻ bạn chọn, dưới một cái tên.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Chợ</a></p>
+        <h1>Cửa hàng</h1>
+        <p class="lede">Một ô cửa sổ trước tài khoản của riêng bạn, dành cho những Chia sẻ bạn chọn, dưới một cái tên.</p>
+        <h2>Cửa hàng là gì</h2>
+        <p>Cửa hàng của bạn là một ô cửa sổ trước tài khoản của riêng bạn. Nó chứa những Chia sẻ bạn đưa vào, dưới một cái tên, kèm vài từ giới thiệu. Đậu từ các Chia sẻ đó là của bạn, như với mọi Chia sẻ khác. Nó không phải là một doanh nghiệp: không ai khác giữ nó, và nó không hiển thị thêm điều gì mà các Chia sẻ của bạn chưa hiển thị.</p>
+        <p>Bạn có một cửa hàng trong mỗi cộng đồng mà bạn tham gia.</p>
+        <h2>Mở cửa hàng</h2>
+        <p>Mở <strong>Cửa hàng của bạn</strong> từ thẻ <strong>Cửa hàng và dụng cụ của bạn</strong> trên Trang chủ, hoặc từ <strong>Dụng cụ</strong>. Để đưa thẻ này lên Trang chủ, hãy dùng <strong>Chỉnh sửa trang chủ</strong> và thêm <strong>Cửa hàng và dụng cụ của bạn</strong>.</p>
+        <p>Nhấn <strong>Mở cửa hàng của tôi</strong>. Cho đến khi bạn đặt tên, nó được gọi theo tên bạn: &quot;Cửa hàng của Ana&quot;.</p>
+        <h2>Tên, loại và phần giới thiệu</h2>
+        <p>Mỗi mục dưới đây là một ô riêng. Hãy điền theo thứ tự bất kỳ, hoặc không điền gì cũng được:</p>
+        <ul>
+            <li><strong>Tên</strong>: tối đa 60 ký tự. Để trống thì nó lại được gọi theo tên bạn.</li>
+            <li><strong>Loại</strong>: một trong mười bốn loại, chẳng hạn <strong>Dụng cụ và thiết bị</strong>, <strong>Sửa chữa</strong> hoặc <strong>Thực phẩm từ vườn hoặc nông trại</strong>. Nó giúp hàng xóm tìm thấy bạn và chọn các dụng cụ được hiển thị. Nó không thay đổi gì khác.</li>
+            <li><strong>Giới thiệu</strong>: nó là gì, trong vài từ.</li>
+            <li><strong>Cách tôi giao dịch</strong>: nơi đến lấy đồ, và khi nào đồ được trả lại.</li>
+        </ul>
+        <h2>Đưa Chia sẻ vào cửa hàng</h2>
+        <p>Chỉ những Chia sẻ của chính bạn dành cho mọi người ở đây mới đưa vào cửa hàng được. Một Nhu cầu, hoặc một Chia sẻ dành cho một nhóm hay một người, sẽ không nằm trong đó.</p>
+        <ul>
+            <li><strong>Khi bạn chỉnh sửa một Chia sẻ:</strong> đánh dấu <strong>Đưa món này vào cửa hàng của bạn</strong>, hoặc bỏ dấu để gỡ Chia sẻ đó ra.</li>
+            <li><strong>Thêm các Chia sẻ đang hoạt động của tôi:</strong> trong Cửa hàng của bạn, đánh dấu những Chia sẻ bạn đã đăng và nhấn <strong>Đưa chúng vào cửa hàng của tôi</strong>.</li>
+            <li><strong>Từ một dụng cụ:</strong> khi bạn đăng một món từ một dụng cụ, <strong>Đưa món này vào cửa hàng của bạn</strong> đã được đánh dấu sẵn. Nếu bạn chưa có cửa hàng, cửa hàng sẽ được mở cùng với Chia sẻ đó. Bạn có thể đổi tiêu đề hoặc nội dung trên biểu mẫu Chia sẻ mới mà nó vẫn được đưa vào. Nếu bạn đổi hoàn toàn, hoặc đăng một thứ khác thay vào, nó sẽ được đăng ngoài cửa hàng của bạn và ứng dụng sẽ báo cho bạn. Để đưa nó vào, hãy mở nó, nhấn <strong>Chỉnh sửa bài đăng</strong> và đánh dấu <strong>Đưa món này vào cửa hàng của bạn</strong>.</li>
+        </ul>
+        <p>Biểu mẫu Chia sẻ mới trên bản đồ chưa có ô đánh dấu này. Hãy đăng Chia sẻ trước, rồi đưa nó vào từ màn hình chỉnh sửa hoặc từ Cửa hàng của bạn.</p>
+        <h2>Tạm đóng cửa hàng</h2>
+        <p>Nhấn <strong>Tạm đóng</strong>. Bạn có thể cho biết khi nào quay lại: trong một tuần, trong hai tuần hoặc trong một tháng. Các Chia sẻ của nó được gỡ khỏi Chợ và chờ đó. Không có gì được thêm vào khi cửa hàng đang đóng, và không Chia sẻ nào của nó có thể tự được đăng lại riêng.</p>
+        <p>Nhấn <strong>Mở lại cửa hàng của tôi</strong> để đưa tất cả trở lại. Một Chia sẻ mà chính bạn đã tạm dừng sẽ vẫn tạm dừng.</p>
+        <h2>Đóng hẳn cửa hàng</h2>
+        <p>Nhấn <strong>Đóng cửa hàng của tôi</strong>. Các Chia sẻ của nó vẫn ở lại trên Chợ như những Chia sẻ bình thường, hoặc cũng kết thúc nếu bạn chọn <strong>Kết thúc cả các Chia sẻ của nó</strong>. Danh sách dụng cụ riêng của bạn vẫn nằm trên điện thoại của bạn. Bạn có thể mở một cửa hàng mới bất cứ lúc nào.</p>
+        <p>Bạn không thể đóng hẳn hay tạm đóng cửa hàng khi một giao dịch về một món trong đó đang được yêu cầu hoặc đang diễn ra. Ứng dụng cho biết có bao nhiêu giao dịch đang mở, kèm một nút đến <strong>Giao dịch của tôi</strong>.</p>
+        <h2>Trên cộng đồng toàn cầu</h2>
+        <p>Cửa hàng hoạt động giống nhau trên cộng đồng toàn cầu. Người chưa tham gia chỉ thấy đó là loại cửa hàng gì và có bao nhiêu món trong đó, không bao giờ thấy tên của nó hay tên của bạn.</p>
+        <h2>Trong ứng dụng web</h2>
+        <p>Ứng dụng web chưa hiển thị cửa hàng.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Đăng Lời đề nghị hoặc Nhu cầu</strong><span>Đăng thứ bạn có thể làm hoặc trao tặng, hoặc thứ bạn đang tìm kiếm.</span></a></li>
+            <li><a href="my-deals.html"><strong>Giao dịch</strong><span>Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Xem qua chợ</strong><span>Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Chế độ nghỉ lễ</strong><span>Chế độ nghỉ lễ ẩn các Lời đề nghị và tạm dừng các yêu cầu mới khi bạn vắng mặt.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

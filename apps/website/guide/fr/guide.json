@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "fr",
-  "hash": "f803340cf55846887b0a8b736fb36ab98d13d66e24ccb706c4e4e360bd14a1ee",
+  "hash": "c58a965e5c441e3a83c0eb575fc7fe546b238b6ff2d8d483e401ca8625abd64a",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Votre boutique",
+      "summary": "Une vitrine sur votre propre compte, pour les Offres que vous choisissez, sous un seul nom.",
+      "help": "Vos Offres sous un seul nom. Nommez-la, dites de quel type elle est, fermez-la pour le moment, ou fermez-la définitivement.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Ce qu'est une boutique"
+        },
+        {
+          "type": "p",
+          "text": "Votre boutique est une vitrine sur votre propre compte. Elle réunit les Offres que vous y mettez, sous un seul nom, avec quelques mots de présentation. Les Beans qu'elles rapportent sont à vous, comme pour toute Offre. Ce n'est pas une entreprise : personne d'autre ne la gère, et elle n'affiche rien que vos Offres n'affichent déjà."
+        },
+        {
+          "type": "p",
+          "text": "Vous avez une boutique dans chaque communauté dont vous faites partie."
+        },
+        {
+          "type": "h2",
+          "text": "L'ouvrir"
+        },
+        {
+          "type": "p",
+          "text": "Ouvrez **Votre boutique** depuis la carte **Votre boutique et vos outils** de l'Accueil, ou depuis **Outils**. Pour mettre la carte sur l'Accueil, utilisez **Modifier l'accueil** et ajoutez **Votre boutique et vos outils**."
+        },
+        {
+          "type": "p",
+          "text": "Touchez **Ouvrir ma boutique**. Tant que vous ne lui avez pas donné de nom, elle porte le vôtre : « Boutique d'Ana »."
+        },
+        {
+          "type": "h2",
+          "text": "Son nom, son type et sa présentation"
+        },
+        {
+          "type": "p",
+          "text": "Chacun de ces éléments est un champ. Remplissez-les dans l'ordre que vous voulez, ou laissez-les vides :"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Nom** : jusqu'à 60 caractères. Laissez vide pour qu'elle porte de nouveau votre nom.",
+            "**Type** : un parmi quatorze, comme **Outils et équipement**, **Réparations** ou **Aliments du jardin ou de la ferme**. Cela aide vos voisins à vous trouver et choisit les outils affichés. Cela ne change rien d'autre.",
+            "**À propos** : ce que c'est, en quelques mots.",
+            "**Comment je procède** : où venir chercher les choses, et quand elles reviennent."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Y mettre des Offres"
+        },
+        {
+          "type": "p",
+          "text": "Seules vos propres Offres ouvertes à tout le monde ici entrent dans une boutique. Une Demande, ou une Offre pour un groupe ou pour une seule personne, reste dehors."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Quand vous modifiez une Offre :** cochez **Mettre ceci dans votre boutique**, ou décochez pour sortir l'Offre de la boutique.",
+            "**Ajouter mes Offres en cours :** dans Votre boutique, cochez les Offres que vous avez déjà publiées et touchez **Les mettre dans ma boutique**.",
+            "**Depuis un outil :** quand vous proposez quelque chose depuis un outil, **Mettre ceci dans votre boutique** est coché. Si vous n'avez pas encore de boutique, elle s'ouvre avec cette Offre. Vous pouvez changer son titre ou sa présentation dans le formulaire de la nouvelle Offre, et elle y entre quand même. Si vous la changez complètement, ou si vous publiez autre chose à la place, elle est publiée hors de votre boutique et l'application vous le dit. Pour l'y mettre, ouvrez-la, touchez **Modifier l'annonce** et cochez **Mettre ceci dans votre boutique**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Le formulaire de nouvelle Offre sur la carte n'a pas encore cette case. Publiez l'Offre, puis mettez-la dans la boutique depuis son écran de modification ou depuis Votre boutique."
+        },
+        {
+          "type": "h2",
+          "text": "La fermer pour le moment"
+        },
+        {
+          "type": "p",
+          "text": "Touchez **Fermer pour le moment**. Vous pouvez dire quand vous serez de retour : dans une semaine, dans deux semaines ou dans un mois. Ses Offres quittent le Marché et attendent. Rien n'y entre tant qu'elle est fermée, et aucune de ses Offres ne peut être remise en ligne séparément."
+        },
+        {
+          "type": "p",
+          "text": "Touchez **Rouvrir ma boutique** pour toutes les remettre. Une Offre que vous aviez vous-même mise en pause reste en pause."
+        },
+        {
+          "type": "h2",
+          "text": "La fermer"
+        },
+        {
+          "type": "p",
+          "text": "Touchez **Fermer ma boutique**. Ses Offres restent sur le Marché comme des Offres ordinaires, ou prennent fin aussi si vous choisissez **Mettre fin aussi à ses Offres**. Vos listes d'outils privées restent sur votre téléphone. Vous pouvez ouvrir une nouvelle boutique à tout moment."
+        },
+        {
+          "type": "p",
+          "text": "Vous ne pouvez ni la fermer, ni la fermer pour le moment, tant qu'un accord portant sur l'un de ses objets est demandé ou en cours. L'application indique combien d'accords sont ouverts, avec un bouton vers **Mes accords**."
+        },
+        {
+          "type": "h2",
+          "text": "Sur la communauté globale"
+        },
+        {
+          "type": "p",
+          "text": "Une boutique fonctionne de la même façon sur la communauté globale. Une personne qui n'a pas rejoint voit de quel type de boutique il s'agit et combien d'objets elle contient, jamais son nom ni le vôtre."
+        },
+        {
+          "type": "h2",
+          "text": "Dans l'application web"
+        },
+        {
+          "type": "p",
+          "text": "L'application web n'affiche pas encore les boutiques."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Mes accords",
       "summary": "Un seul endroit pour chaque accord en cours, chaque annonce active et vos échanges passés.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Trouver près de chez vous",
       "summary": "Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Si votre navigateur autorise déjà BeanPool à utiliser votre position, le sélecteur peut s'ouvrir sur l'endroit où vous vous trouvez. Sinon, il s'ouvre sur un point fixe. Vérifiez le repère, ou touchez le bouton de la cible ou la carte avant de toucher **Appliquer**. Sur la communauté globale, l'application web transmet le centre que vous avez choisi à la communauté, arrondi à environ 11 mètres près."
+          "text": "Dans l'application web, le sélecteur s'ouvre sur le dernier centre que vous avez choisi, ou sinon sur le lieu de la communauté elle-même (une vue du monde si elle n'en a pas). Vérifiez le repère, ou touchez la carte, faites glisser le repère ou touchez le bouton de la cible pour choisir le centre, avant de toucher **Appliquer**. Elle ne demande votre position que lorsque vous touchez le bouton de la cible. Sur la communauté globale, l'application web transmet à la communauté le centre que vous avez choisi, pour le Marché, la Carte et l'Accueil, arrondi à environ un kilomètre. Il devient plus précis lorsque vous choisissez un petit rayon, ou lorsqu'une recherche enregistrée sur l'Accueil porte sur une courte distance."
         },
         {
           "type": "p",
@@ -3741,8 +3860,8 @@
       "title": "Messages",
       "summary": "Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.",
       "help": "Vos discussions. Un échange individuel est chiffré de bout en bout. Touchez un échange pour l'ouvrir ou démarrez-en un depuis une annonce ou vos amis.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Depuis une annonce : touchez **Message** suivi du nom de la personne.",
+            "Depuis un profil : ouvrez son profil et touchez **Message**. Vous pouvez aussi l'y ajouter comme ami.",
             "Depuis **Échanges** : touchez le bouton du crayon, puis trouvez la personne par son nom. Sur la communauté mondiale, Nouveau message liste les membres avec qui vous avez déjà conclu un accord ainsi que vos amis. Pour trouver n'importe qui d'autre, saisissez au moins 2 lettres de son nom.",
-            "Depuis vos amis : ouvrez **Échanges**, puis **Membres**, puis **Amis**, et touchez le bouton de message à côté d'un nom."
+            "Depuis la liste des membres : ouvrez **Échanges**, puis **Membres**, et touchez 💬 à côté du nom d'un membre dans **Communauté** ou **Amis**.",
+            "Depuis une annonce : touchez **Message** suivi du nom de la personne."
           ]
         },
         {
           "type": "p",
-          "text": "Dans l'application web, utilisez **✉️ Nouveau message direct**, ou le bouton **💬 Message** sur une publication. Vos amis figurent sous l'onglet **Membres**."
+          "text": "Dans l'application web, utilisez **Message** sur son profil, 💬 sur sa ligne sous **Membres**, **✉️ Nouveau message direct**, ou le bouton **💬 Message** sur une publication."
         },
         {
           "type": "h2",
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Membres et amis",
       "summary": "Trouver des membres de votre communauté, ajouter des amis et parrainer quelqu'un.",
-      "help": "Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un ami pour lui écrire.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un membre pour lui écrire.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Touchez une personne pour voir son profil : ses évaluations et ses annonces, et, sur le téléphone dans une communauté avec des Beans, son badge de confiance et ses échanges. Voir « Votre profil »."
+          "text": "Touchez une personne pour voir son profil : ses évaluations et ses annonces, et, sur le téléphone dans une communauté avec des Beans, son badge de confiance et ses échanges. Vous pouvez lui écrire directement depuis son profil avec **Message**, ou l'ajouter comme ami avec **+ Ajouter aux amis**. Voir « Votre profil »."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "Dans **Communauté**, touchez **+ Ajouter** à côté d'un nom. Il se transforme en **Ajouté**. Touchez **Ajouté** pour retirer cette personne. Dans l'application web, il se transforme en **✓ Ami**, sur lequel vous ne pouvez pas appuyer : pour retirer quelqu'un, utilisez **Retirer** sous **Amis**.",
-            "Dans **Amis**, touchez le bouton de message pour démarrer une discussion, ou le bouton de suppression, puis **Retirer**, pour retirer quelqu'un.",
+            "Dans **Communauté**, touchez 💬 pour démarrer une discussion, ou touchez **+ Ajouter** à côté d'un nom. Il se transforme en **Ajouté**. Touchez **Ajouté** pour retirer cette personne. Dans l'application web, il se transforme en **✓ Ami**, sur lequel vous ne pouvez pas appuyer : pour retirer quelqu'un, utilisez **Retirer** sous **Amis**. Vous pouvez aussi écrire à quelqu'un ou l'ajouter comme ami directement depuis son profil.",
+            "Dans **Amis**, touchez 💬 pour démarrer une discussion, ou le bouton de suppression, puis **Retirer**, pour retirer quelqu'un.",
             "Quand quelqu'un vous ajoute, le haut de **Amis** indique qui, comme « Sam vous a ajouté », avec **Ajouter en retour**. Touchez son nom pour voir d'abord son profil. Il n'y a pas de notification. La ligne disparaît quand vous l'ajoutez en retour, ou après 30 jours. Jusqu'à 20 personnes sont affichées, puis le nombre de personnes restantes.",
             "Vous pouvez ajouter jusqu'à 100 personnes par tranche de 24 heures. En retirer compte également. Si vous atteignez cette limite, l'application vous l'indique ainsi que le moment où vous pourrez à nouveau ajouter quelqu'un.",
             "Vous ne pouvez pas ajouter une personne que vous avez bloquée : débloquez-la d'abord. Voir « Bloquer quelqu'un »."
@@ -6720,8 +6840,8 @@
       "title": "Bloquer quelqu'un",
       "summary": "Masquer les publications et messages d'une personne, et annuler ce blocage plus tard.",
       "help": "Personnes que vous avez bloquées. Leurs annonces et messages vous sont masqués ; débloquez une personne ici.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "Ouvrez les **Paramètres**. Sous **Mentions légales et confidentialité**, touchez **Gérer les utilisateurs bloqués**.",
-            "Touchez **Débloquer** à côté d'un nom, ou **Tout débloquer**."
+            "Touchez **Débloquer** à côté d'un nom, ou **Tout débloquer**.",
+            "Dans l'application mobile, vous pouvez aussi débloquer une personne depuis son profil. Sous son nom, il est écrit « Vous avez bloqué » suivi de son nom. Touchez **Débloquer** à cet endroit."
           ]
         },
         {

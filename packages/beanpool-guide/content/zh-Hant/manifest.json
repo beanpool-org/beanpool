@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "社群成員與你的好友。點擊某人查看其個人檔案，或點擊好友旁的 💬 傳送訊息。",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "社群成員與你的好友。點一下某人即可查看其個人檔案,或點成員旁的 💬 傳訊息給他們。",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "適用於社群所有者。核對 12 個助記詞、用手機接管或復原伺服器，以及手機自身的自動檢查。",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "你的小店",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "你自己帳號的一扇櫥窗,把你挑選的「提供」集中在同一個名稱下。",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "你的「提供」集中在同一個名稱下。替它命名、說明是哪一類小店,可以暫時休息,也可以關閉。",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

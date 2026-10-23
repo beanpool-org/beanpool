@@ -1073,7 +1073,29 @@ export function communityLines(card: HomeCards['community'] | undefined, profile
 }
 
 /** "38 communities listed": the worldwide community's count of the communities in its directory. */
-const communitiesListed = (n: number) => tn(n, '{n} community listed', '{n} communities listed', { n: formatCount(n) });
+export const communitiesListed = (n: number) => tn(n, '{n} community listed', '{n} communities listed', { n: formatCount(n) });
+
+/**
+ * Relative time in words for Home rows: "Just now", "5m ago", "2h ago", "3d ago", or the date ("15 Oct").
+ * Shown through t() in the member's language.
+ */
+export function timeAgoInWords(dateString: string | null | undefined, nowMs: number = Date.now()): string {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    const diffMs = nowMs - date.getTime();
+    if (diffMs < 0) return t('Just now');
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return t('Just now');
+    if (diffMin < 60) return t('{n}m ago', { n: diffMin });
+    if (diffHour < 24) return t('{n}h ago', { n: diffHour });
+    if (diffDay < 7) return t('{n}d ago', { n: diffDay });
+    return formatDate(date, 'day-month');
+}
 
 /**
  * The faces and names Who joined may show: a local community's (the members list shows them to members already); on the

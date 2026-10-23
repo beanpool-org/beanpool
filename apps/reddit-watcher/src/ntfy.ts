@@ -49,7 +49,7 @@ export function ntfyRequest(notice: Notice, topic: URL, token?: unknown): { url:
 }
 
 /**
- * One POST of an inbox item: the JSON is the message. No title, tag or tap, since no phone shows it, and `Firebase: no`
+ * One POST of an inbox item: the JSON is the message. No title, tag or tap, since no phone shows it, and `X-Firebase: no`
  * keeps ntfy.sh from passing it on to Google's push service for Android phones: the fetch script reads the topic itself.
  */
 export function agentRequest(message: string, topic: URL): { url: string; init: RequestInit } {
@@ -57,7 +57,7 @@ export function agentRequest(message: string, topic: URL): { url: string; init: 
         url: topic.href,
         init: {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain; charset=utf-8', Firebase: 'no' },
+            headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Firebase': 'no' },
             body: message,
             redirect: 'manual',
             signal: AbortSignal.timeout(SEND_TIMEOUT_MS),

@@ -246,7 +246,7 @@ describe('agentRequest', () => {
         expect(url).toBe(INBOX);
         expect(init.method).toBe('POST');
         expect(init.body).toBe('{"v":1}');
-        expect(init.headers).toEqual({ 'Content-Type': 'text/plain; charset=utf-8', Firebase: 'no' });
+        expect(init.headers).toEqual({ 'Content-Type': 'text/plain; charset=utf-8', 'X-Firebase': 'no' });
     });
 
     it('never follows a redirect, and gives up on a send that stalls', () => {

@@ -1,5 +1,6 @@
 // Tests for scripts/reddit-inbox.mjs, the team's Reddit inbox fetch, against a stand-in ntfy on this machine: nothing
-// reaches ntfy.sh, and no real topic is read. Run by test-all.sh (the `reddit_inbox` check):
+// reaches ntfy.sh, and no real topic is read. Also the sorting subagent's agent file (apps/reddit-watcher/TRIAGE.md, step
+// 2), since CI runs these and not the watcher app's own tests. Run by test-all.sh (the `reddit_inbox` check):
 // node --test scripts/reddit-inbox.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -411,6 +412,20 @@ test('it only reads: no agent, no process, no send, no loop', () => {
         assert.ok(!code.includes(banned), banned);
     }
     assert.equal((src.match(/fetchFn\(/g) ?? []).length, 1, 'one request, in one place');
+});
+
+test('the sorting subagent can only read: its agent file allows Read, Glob and Grep, and TRIAGE.md uses it', () => {
+    const agent = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/agents/reddit-sorter.md'), 'utf8');
+    const front = agent.match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? '';
+    const fields = Object.fromEntries(front.split('\n').map((l) => [l.slice(0, l.indexOf(':')), l.slice(l.indexOf(':') + 1).trim()]));
+    // No other field: nothing that adds tools, servers or permissions.
+    assert.deepEqual(Object.keys(fields).sort(), ['description', 'model', 'name', 'tools']);
+    assert.equal(fields.name, 'reddit-sorter');
+    assert.equal(fields.tools, 'Read, Glob, Grep');
+    assert.equal(fields.model, 'sonnet');
+    const triage = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/TRIAGE.md'), 'utf8');
+    assert.ok(triage.includes('`subagent_type: reddit-sorter`'));
+    assert.ok(triage.includes('cp apps/reddit-watcher/agents/reddit-sorter.md .claude/agents/reddit-sorter.md'));
 });
 
 test('run as a command: refuses without a private topic file, and never prints what one holds', () => {

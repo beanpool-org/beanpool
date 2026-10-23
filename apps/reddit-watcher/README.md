@@ -234,6 +234,8 @@ A new post in r/beanpool then shows up the next time the script runs. What happe
   item, with its own repeat marker, never logging a topic, the token, or what anyone wrote.
 - `../../scripts/reddit-inbox.mjs` — the fetch script the director runs once an hour ([TRIAGE.md](TRIAGE.md)). It is
   plain Node, so its tests run in CI (`node --test scripts/reddit-inbox.test.mjs`, test-all.sh's `reddit_inbox`).
+- `agents/reddit-sorter.md` — the agent type that sorts each new item (TRIAGE.md, step 2): Sonnet, with only Read, Glob
+  and Grep. `.claude/` is git-ignored, so the director copies it there once (TRIAGE.md, "Setting it up, once").
 - `src/server/` — the one endpoint Devvit calls (`/internal/triggers/new-item`), as in Reddit's
   [Devvit Web template](https://github.com/reddit/devvit-template-hello-world).
 - `npm test` (vitest), `npm run typecheck`, `npm run build` (esbuild, CommonJS into `dist/server`, which Devvit runs).

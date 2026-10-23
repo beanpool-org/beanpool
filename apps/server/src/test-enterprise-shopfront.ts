@@ -33,7 +33,9 @@
  *      one comes off, a paused one keeping its place; un-featured the same way; out of the shop or the shop closed, the
  *      stamp goes; a muted author can't feature and can un-feature; an enterprise suspended or wound up can neither, as
  *      its shop routes refuse it (403 enterprise_closed, their words), while its keeper's own Offer stays theirs; the
- *      stamp is the member's read's and not a visitor's
+ *      stamp is the member's read's and not a visitor's; its keepers read its Offers as it would (`author=`, the Manage
+ *      console's read): a paused one with its stamp, and all of them while it is paused for the season, which nobody
+ *      else reads; a member bound as a keeper or unbound is never confirmed (304) the copy they held of the other view
  *   6. a standby: a whole copy carries each listing's stamp and the chat's new name; a delta carries a new name, About, purpose, logo and a stamp
  *      cleared, and the standby's copy of the enterprise's shop says the new name
  *
@@ -57,7 +59,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, exportSyncState, signSyncPayload, importRemoteState, setNodeRole, reconcileLedgerFromDb,
     adminAssignTreasuryOperator, getMemberTrustProfile, getMemberTrustStats, treasuryKeepers, pausePost, resumePost, removePost,
-    purgeMemberSelf,
+    purgeMemberSelf, pauseEnterprise, resumeEnterprise,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -100,11 +102,11 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
 }
 
 type Method = 'GET' | 'PUT' | 'DELETE' | 'POST';
-interface Res { status: number; body: any; text: string }
-async function call(method: Method, id: Id | null, route: string, body?: unknown): Promise<Res> {
+interface Res { status: number; body: any; text: string; etag?: string | null }
+async function call(method: Method, id: Id | null, route: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...extra };
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -118,7 +120,7 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty or not JSON */ }
-    return { status: res.status, body: parsed, text };
+    return { status: res.status, body: parsed, text, etag: res.headers.get('etag') };
 }
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 220)}`;
 /** A refusal in a sentence: its code, and words a member can read that end as a sentence does. */
@@ -511,6 +513,34 @@ async function main(): Promise<void> {
     const whilePaused = await call('PUT', kit, featurePath(shelf[7]), { featured: true });
     assert(paused === true && sentence(whilePaused, 409, 'feature_shelf_full') && featuredAtOf(shelf[1]) !== null,
         `a paused featured Offer keeps its place on the shelf (${show(whilePaused)})`);
+    // Its keepers read its Offers as it would (engine readsAsAuthor), the paused one too, as the console's Featured does to
+    // count the shelf and take one off; and while it is paused for the season, when everyone else reads none. Anyone who
+    // keeps nothing here reads them as the board has them (review of #2405, utils/shop.ts readEnterpriseOffers).
+    const offersRoute = `/api/marketplace/posts?author=${ent}&type=offer&limit=200`;
+    const idsOf = (r: Res): string[] => (Array.isArray(r.body) ? r.body : []).map((p: any) => p.id);
+    const kitReads = await call('GET', kit, offersRoute);
+    const maxReads = await call('GET', max, offersRoute);
+    const pausedRow = (Array.isArray(kitReads.body) ? kitReads.body : []).find((p: any) => p.id === shelf[1]);
+    assert(kitReads.status === 200 && pausedRow?.status === 'paused' && typeof pausedRow?.featuredAt === 'string' && pausedRow.featuredAt === featuredAtOf(shelf[1])
+        && maxReads.status === 200 && !idsOf(maxReads).includes(shelf[1]) && idsOf(maxReads).includes(shelf[0]),
+        `a keeper reads its paused featured Offer, with its stamp; a member who keeps nothing here doesn't (${show(kitReads)} | ${show(maxReads)})`);
+    const seasonPaused = attempt(() => pauseEnterprise(ent, lou.pk).paused);
+    const kitInSeason = await call('GET', kit, offersRoute);
+    const maxInSeason = await call('GET', max, offersRoute);
+    attempt(() => resumeEnterprise(ent, lou.pk));
+    assert(seasonPaused === true && idsOf(kitInSeason).includes(shelf[0]) && idsOf(kitInSeason).includes(shelf[1])
+        && maxInSeason.status === 200 && idsOf(maxInSeason).length === 0,
+        `paused for the season, its keepers still read its Offers, and everyone else none (${idsOf(kitInSeason).length} | ${show(maxInSeason)})`);
+    // Which view it is goes in the tag: a member bound as a keeper, or unbound, is never confirmed the copy they held.
+    const ned = member('NedSentinel');
+    const nedBefore = await call('GET', ned, offersRoute);
+    adminAssignTreasuryOperator(ent, ned.pk, 'admin');
+    const nedKeeps = await call('GET', ned, offersRoute, undefined, { 'If-None-Match': nedBefore.etag ?? '' });
+    db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').run(ent, ned.pk);
+    const nedLeft = await call('GET', ned, offersRoute, undefined, { 'If-None-Match': nedKeeps.etag ?? '' });
+    assert(nedBefore.status === 200 && typeof nedBefore.etag === 'string' && !idsOf(nedBefore).includes(shelf[1])
+        && nedKeeps.status === 200 && idsOf(nedKeeps).includes(shelf[1]) && nedLeft.status === 200 && !idsOf(nedLeft).includes(shelf[1]),
+        `a member bound as a keeper, then unbound, reads the view that is theirs now, never a 304 of the other (${nedBefore.status}, ${nedKeeps.status}, ${nedLeft.status})`);
     attempt(() => resumePost(shelf[1], ent));
     const removed = attempt(() => removePost(shelf[2], ent));
     const afterEnd = await call('PUT', kit, featurePath(shelf[7]), { featured: true });

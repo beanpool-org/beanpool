@@ -50,7 +50,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { ownWithheldLine, withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { word } from '@beanpool/core';
@@ -479,9 +479,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // `online=1`: online events only, wherever they are (DESIGN-event-times §9). They have no place, so a read within a
     // radius never meets them; an app reading by radius asks for them beside it. Only with events asked for.
     const eventOnline = wantsEvents && ctx.query.online === '1' ? true : undefined;
-    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
-    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
-    // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
+    // viewerPubkey (the signed requester) lets an author see their OWN paused posts, and a keeper those of an enterprise
+    // they keep (engine readsAsAuthor); others don't. A post hidden by reports (G3) reaches its author, and the moderators
+    // (includeHidden), and nobody else. The visitors' view is read for nobody in particular: no own posts, no hidden ones,
+    // no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
     // Where anyone can join in a minute (`openMembership`, the global node), a member is someone who spent a minute, so
@@ -528,7 +529,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
     // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
     const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${exactPart}`;
+    // A keeper reads one enterprise's listings as it would (engine readsAsAuthor: its paused ones too, and while it is off the
+    // board), so the tag says which view this is: a member bound as a keeper, or unbound, changes the answer and no listing,
+    // and the copy they held must not be confirmed with a 304. The author's own read, and every other, is tagged as before.
+    const keeperPart = author && reader && author !== reader && readsAsAuthor(db, reader, author) ? ':keeper' : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 

@@ -5,7 +5,8 @@
  * lost and nothing said where to go. Now:
  *   1. the claim screen stays with no account (utils/auth-return.ts setupRedirect) and offers "Make my account", which
  *      keeps the claim on the phone (utils/onboarding-state.ts PendingClaim) and opens the first screen;
- *   2. the first screen says the claim waits and names the door that needs no invite (components/ClaimWaitingNote.tsx);
+ *   2. the first screen says, under its doors, that the claim waits, and names the door that needs no invite
+ *      (components/ClaimWaitingNote.tsx);
  *   3. once an account is made, whichever door made it and after any restart, the root guard's landing from welcome is the
  *      claim screen with the server, the code's id and the code (utils/member-landing.ts landOnClaim);
  *   4. the waiting claim goes after the claim, when the member leaves it, on a wipe, and once its day is out.
@@ -232,13 +233,15 @@ describe('the model is the app', () => {
         expect(effect).toContain('subscribePendingOnboarding(refresh)');
     });
 
-    it('app/welcome.tsx draws the line between the title and the doors', () => {
+    it('app/welcome.tsx draws the line right under the doors (which stay above the fold), before the sentence about BeanPool', () => {
         const welcome = read('../../app/welcome.tsx');
-        const title = welcome.indexOf("<Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>");
-        const line = welcome.indexOf('<ClaimWaitingNote style={styles.claimWaitingNote} />');
         const doors = welcome.indexOf('<WelcomeDoors door={globalDoor}');
-        expect(title).toBeGreaterThan(0);
-        expect(line).toBeGreaterThan(title);
-        expect(doors).toBeGreaterThan(line);
+        const line = welcome.indexOf('<ClaimWaitingNote style={styles.claimWaitingNote} />');
+        const about = welcome.indexOf('<Text style={styles.homeAbout}>');
+        expect(doors).toBeGreaterThan(0);
+        expect(line).toBeGreaterThan(doors);
+        expect(about).toBeGreaterThan(line);
+        // Nothing but a comment between the doors and the line.
+        expect(welcome.slice(welcome.indexOf('/>', doors) + 2, line).replace(/\{\/\*[\s\S]*?\*\/\}/g, '').trim()).toBe('');
     });
 });

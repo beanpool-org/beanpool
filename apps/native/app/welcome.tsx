@@ -3503,10 +3503,11 @@ export default function WelcomeScreen() {
                     {/* The language, before anything else: a small switch, never a step (director amendment 2). */}
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
-                    {/* A claim waiting for this phone's account (app/claim-community.tsx): above the doors, read before one is chosen. */}
-                    <ClaimWaitingNote style={styles.claimWaitingNote} />
 
                     <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={openGlobalDoor} styles={styles} />
+                    {/* A claim waiting for this phone's account (app/claim-community.tsx): right under the doors, which stay above
+                        the fold, and before the sentence about BeanPool. */}
+                    <ClaimWaitingNote style={styles.claimWaitingNote} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
@@ -3553,7 +3554,7 @@ const styles = StyleSheet.create({
     // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
     // A claim waiting for this account (components/ClaimWaitingNote.tsx): body ink on a card, readable in light and dark.
-    claimWaitingNote: { width: '100%', marginTop: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, color: colors.text.body, fontSize: 15, lineHeight: 21, textAlign: 'center', overflow: 'hidden' },
+    claimWaitingNote: { width: '100%', marginTop: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, color: colors.text.body, fontSize: 15, lineHeight: 21, textAlign: 'center', overflow: 'hidden' },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
     // The sentence about BeanPool, under the doors (it was the subtitle above them).
     homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },

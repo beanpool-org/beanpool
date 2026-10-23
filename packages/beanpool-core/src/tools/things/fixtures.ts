@@ -2,10 +2,10 @@
  * The Tool shed fixtures, read by generic tests (__tests__/tools-template.test.ts)
  * and never shipped.
  */
-import type { ToolFixtures } from '../check.js';
+import { toolDocBytes, type ToolFixtures } from '../check.js';
 import {
+    THINGS_DOC_BYTES,
     THINGS_LEND_TERMS_CHARS,
-    THINGS_MAX_ITEMS,
     THINGS_NAME_CHARS,
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
@@ -45,7 +45,8 @@ const small: ThingsDoc = {
     ],
 };
 
-const fullThings: Thing[] = Array.from({ length: THINGS_MAX_ITEMS }, (_, n) =>
+/** One thing of the full shed (from 0): a long name, terms and a note; every third in the shop, every third lent out. */
+const fullThing = (n: number): Thing =>
     thing(n + 1, `Tool ${n + 1} - ${'x'.repeat(THINGS_NAME_CHARS - 15)}`, {
         replacementValue: '150 Beans',
         lendTerms: 'Standard lending terms apply to all borrowed tools.',
@@ -61,8 +62,17 @@ const fullThings: Thing[] = Array.from({ length: THINGS_MAX_ITEMS }, (_, n) =>
                   },
               }
             : {}),
-    }),
-);
+    });
+
+/** As many as fit: the shed's bound is its size alone, so the full shed is things until the next would pass it. */
+const fullThings: Thing[] = [];
+for (let n = 0, bytes = toolDocBytes({ v: 1, things: [] }); ; n++) {
+    const next = fullThing(n);
+    const more = toolDocBytes(next) + (n > 0 ? 1 : 0);
+    if (bytes + more > THINGS_DOC_BYTES) break;
+    fullThings.push(next);
+    bytes += more;
+}
 
 const full: ThingsDoc = {
     v: 1,

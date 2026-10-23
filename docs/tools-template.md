@@ -22,13 +22,17 @@ written to it: read its three folders for a worked example.
 A tool imports React, `@beanpool/core`, its own folder and the template's host and primitives, and nothing else (the
 eslint fence). It talks to the app only through `host`, which has exactly the functions its permissions grant
 (`narrowHost` in `packages/beanpool-core/src/tools/host.ts`). Its data is one JSON document with `v` at the top, at most
-64 KB, kept on the phone (or in the browser); photos stay on the device (files on the phone, this browser's tool store on
+64 KB unless its manifest names more (`doc.maxBytes`, at most 128 KB: the Tool shed names 128 KB), and while its server
+copy is on, never more than the community's server says it keeps of it (its answers' `max`: a server from before a tool
+could name more keeps 64 KB; `toolDocMaxBytes` in `packages/beanpool-core/src/tools/check.ts`). Switching the copy on
+with more than that sends nothing and says so, in the tool's own words if its manifest has `tooBig` (how to make room),
+else the template's. It is kept on the phone (or in the browser); photos stay on the device (files on the phone, this browser's tool store on
 the web), and reach the node only inside a listing the member posts. A tool whose permissions include
 `node-copy` also has a private copy on the community's server, on by default and switched off by the member in the
 tool's Settings (`apps/*/tools/node-copy.ts`, the rule in `packages/beanpool-core/src/tools/reconcile.ts`); without that
 permission nothing of it leaves the device.
 
-**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`, and `set`, which writes the document whole), `navigate`
+**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`; `set`, which writes the document whole; and `maxBytes`, the most it may take now: `set` refuses more, unless it is no bigger than the document it holds, so one kept before the server said it keeps less can still be made smaller), `navigate`
 (to another of its screens) and `back` (as the header's Back goes: what a form does once it is saved), and `now`. Each
 permission grants one more: `photos` and `camera` (pick or take a photo, 800 px, kept on the device, by `ref`), `offerDoor`
 and `needDoor` (the composer, prefilled; nothing is posted until the member taps Post), `posts` (pause, resume and the
@@ -55,7 +59,8 @@ it scrolls a box being typed in, and the buttons under it, above the keyboard),
    `wordn('{n} thing', '{n} things')` pair with its count as `n`, so "1 thing" reads right in every language), one emoji,
    the permissions you need and no more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the
    tool has something to say on Home or at a time. A tool's Home card is offered once from inside the tool, never added
-   to Home by itself.
+   to Home by itself. A tool with `node-copy` that names a bigger `doc.maxBytes` may add `tooBig(doc, maxBytes)`, a line
+   that says how to make room in its own terms (the Tool shed: about how many things to delete).
 3. **Write the document's rules and tests in core** (`<id>/doc.ts`, `<id>/__tests__/`), and `<id>/fixtures.ts`: a stored
    value of every version the tool ever wrote, and the empty, small and full documents. `read()` never throws, reads every
    older version, and keeps the keys of a newer one it doesn't know.

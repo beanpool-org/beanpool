@@ -74,8 +74,9 @@ export function phoneToolNode(owner: ToolCopyOwner, tool: string, holds: Holds):
 
 /**
  * The phone's side of one tool's copy: its row (a take or a sent copy changes it only if no write landed meanwhile) and
- * its setting, the one writer of `nodeCopy`. Nothing is written once the job may no longer go on (`holds`), asked after
- * the file is opened, so the file written is the community's that was asked about.
+ * its setting, the one writer of `nodeCopy` and of `nodeMax` (the server's bound on the document, which the store holds
+ * to). Nothing is written once the job may no longer go on (`holds`), asked after the file is opened, so the file
+ * written is the community's that was asked about.
  */
 export function phoneToolDevice(owner: string, tool: string, url: string | null, holds: Holds): ToolCopyDevice {
     return {
@@ -107,6 +108,11 @@ export function phoneToolDevice(owner: string, tool: string, url: string | null,
         },
         setting: async () => (await readToolSettings(owner, tool, url)).nodeCopy,
         setSetting: async (on) => { if (await holds()) await patchToolSettings(owner, tool, { nodeCopy: on }, url); },
+        // The server's bound on this document, beside the setting: written when it says something new.
+        heardMax: async (max) => {
+            if ((await readToolSettings(owner, tool, url)).nodeMax === max || !await holds()) return;
+            await patchToolSettings(owner, tool, { nodeMax: max }, url);
+        },
     };
 }
 
@@ -175,8 +181,11 @@ export function toolCopyAfterWrite(c: PhoneToolCopy, then: (outcome: ToolCopyOut
     queue.later(keyOf(c), async () => then(await sync(c, turn)));
 }
 
-/** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
-export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
+/**
+ * The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered.
+ * `too-big`: the phone holds more than the server keeps, so nothing was sent.
+ */
+export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'too-big' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
     const turn = turnFor(c);
     return queue.run(keyOf(c), async () => {

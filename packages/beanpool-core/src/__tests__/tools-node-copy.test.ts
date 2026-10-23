@@ -43,6 +43,83 @@ describe("the node's answer (toolRemoteOf)", () => {
     });
 });
 
+describe("the most the node keeps of a tool's document: its answers' `max`", () => {
+    const KIT = { id: 'kit', permissions: ['node-copy'], doc: { version: 1, empty: () => ({ v: 1 }), read: (r: unknown) => r } } as unknown as ToolManifest;
+    const T2 = '2026-10-20T02:00:00.000Z';
+    /** A device holding a document of `bytes` bytes, never sent, and each `max` it heard. */
+    function holding(bytes: number, setting?: boolean) {
+        const body = JSON.stringify({ v: 1, pad: 'x'.repeat(bytes - '{"v":1,"pad":""}'.length) });
+        expect(body.length).toBe(bytes);
+        const d = { setting, heard: [] as number[], sent: 0 };
+        const device: ToolCopyDevice = {
+            read: async () => ({ body, updatedAt: T1, syncedAt: null }),
+            take: async () => true,
+            sent: async () => { d.sent++; },
+            setting: async () => d.setting,
+            setSetting: async (on) => { d.setting = on; },
+            heardMax: async (max) => { d.heard.push(max); },
+        };
+        return { d, device };
+    }
+    /** A node that keeps nothing yet, answering `max` (or none) to a GET and a PUT, and what was sent to it. */
+    function keeping(max: unknown) {
+        const sent: string[] = [];
+        const node: ToolCopyNode = {
+            get: async () => { sent.push('GET'); return { status: 200, json: { tool: 'kit', doc: null, updatedAt: null, deletedAt: null, bytes: 0, ...(max === undefined ? {} : { max }) } }; },
+            put: async (doc, turnOn) => { sent.push(turnOn ? 'PUT turn-on' : 'PUT'); return { status: 200, json: { success: true, tool: 'kit', updatedAt: T2, bytes: JSON.stringify(doc).length, ...(max === undefined ? {} : { max }) } }; },
+            delete: async () => { sent.push('DELETE'); return { status: 200, json: { success: true } }; },
+        };
+        return { sent, node };
+    }
+
+    it("each GET's and PUT's `max` is handed to the device: the host's bound from then on", async () => {
+        const { d, device } = holding(1_000);
+        const { sent, node } = keeping(131_072);
+        expect(await syncToolCopy(KIT, device, node)).toBe('put');
+        expect(sent).toEqual(['GET', 'PUT']);
+        expect(d.heard).toEqual([131_072, 131_072]);
+    });
+
+    it('a node that says no max, or one no node would say, is heard as nothing', async () => {
+        for (const max of [undefined, null, 0, -5, '65536', 1.5, Number.POSITIVE_INFINITY]) {
+            const { d, device } = holding(1_000);
+            expect(await syncToolCopy(KIT, device, keeping(max).node), String(max)).toBe('put');
+            expect(d.heard, String(max)).toEqual([]);
+        }
+    });
+
+    it("never a PUT past the node's max: an older node's 64 KB keeps a 70 KB shed on the device, and nothing is sent", async () => {
+        const { d, device } = holding(70_000);
+        const old = keeping(65_536);
+        // Said as what it is, too big for this node, never as no answer: the node answered.
+        expect(await syncToolCopy(KIT, device, old.node)).toBe('too-big');
+        expect(old.sent).toEqual(['GET']);
+        expect(d.heard).toEqual([65_536]);
+        expect(d.sent).toBe(0);
+        // The member's switch-on there is too big, not "failed" (that is the offline line), and the setting is not written.
+        const off = holding(70_000, false);
+        const again = keeping(65_536);
+        expect(await turnToolCopyOn(KIT, off.device, again.node)).toBe('too-big');
+        expect(again.sent).toEqual(['GET']);
+        expect(off.d.setting).toBe(false);
+        // No answer at all is still "failed", whatever the device holds.
+        const away = holding(70_000, false);
+        const down: ToolCopyNode = { get: async () => null, put: async () => null, delete: async () => null };
+        expect(await turnToolCopyOn(KIT, away.device, down)).toBe('failed');
+        expect(away.d.setting).toBe(false);
+        // A node that keeps 128 KB of it takes the same document.
+        const { device: same } = holding(70_000);
+        const now = keeping(131_072);
+        expect(await syncToolCopy(KIT, same, now.node)).toBe('put');
+        expect(now.sent).toEqual(['GET', 'PUT']);
+        // Exactly at the max is not past it.
+        const { device: edge } = holding(65_536);
+        const at = keeping(65_536);
+        expect(await syncToolCopy(KIT, edge, at.node)).toBe('put');
+        expect(at.sent).toEqual(['GET', 'PUT']);
+    });
+});
+
 describe("the owner's path: never a body field naming anyone", () => {
     it("the member's own route, or the enterprise's through its keeper route", () => {
         expect(toolCopyPath({ kind: 'member', publicKey: 'me' }, 'kit')).toBe('/api/tools/kit');
@@ -93,7 +170,7 @@ describe('a server that never answers', () => {
         let setting: boolean | undefined;
         const device: ToolCopyDevice = {
             read: async () => ({ body: '{"v":1}', updatedAt: T1, syncedAt: null }), take: async () => true, sent: async () => {},
-            setting: async () => setting, setSetting: async (on: boolean) => { setting = on; },
+            setting: async () => setting, setSetting: async (on: boolean) => { setting = on; }, heardMax: async () => {},
         };
         // A node not handed through the queue's held(): the next job waits for no request of this one's (the hosts' do,
         // and let each go at the limit: below).
@@ -228,6 +305,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             sent: async (_was, _body, at) => { d.updatedAt = at; d.syncedAt = at; },
             setting: async () => d.setting,
             setSetting: async (on) => { d.setting = on; },
+            heardMax: async () => {},
         };
         return { d, store };
     }
@@ -241,6 +319,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             sent: async () => { d.wrote.push('sent'); },
             setting: async () => d.setting,
             setSetting: async (on) => { d.setting = on; },
+            heardMax: async () => {},
         };
         return { d, store };
     }
@@ -556,6 +635,7 @@ describe('two devices on one node that orders the writes (S2.2): the four review
             sent: async (_was, _b, at) => { Object.assign(d, { updatedAt: at, syncedAt: at }); },
             setting: async () => d.setting,
             setSetting: async (on) => { d.setting = on; },
+            heardMax: async () => {},
         };
         const node = server.node(name);
         return {

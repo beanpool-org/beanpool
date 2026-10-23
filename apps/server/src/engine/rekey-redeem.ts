@@ -31,22 +31,23 @@ import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import { assertMayRekey, completeRekey, type RekeyRequestRow } from './member-wizards.js';
+import { word } from '@beanpool/core';
 
 /** The one sentence for a code that is unknown, used, expired or cancelled. */
-export const REKEY_CODE_NOT_VALID = 'That code isn’t valid. Ask the admin for a new one.';
+export const REKEY_CODE_NOT_VALID = word('That code isn’t valid. Ask the admin for a new one.');
 /** A phone that already holds an account here (a member, a visitor or a closed account). */
-export const REKEY_KEY_HAS_ACCOUNT = 'This phone already has an account in this community, so it can’t take over another one. Use a phone with no account here, or ask the admin to paste its key instead.';
+export const REKEY_KEY_HAS_ACCOUNT = word('This phone already has an account in this community, so it can’t take over another one. Use a phone with no account here, or ask the admin to paste its key instead.');
 /** A code that has taken all the phones it will. */
-export const REKEY_CODE_FULL = 'This code can’t take any more phones. Ask the admin for a new one.';
+export const REKEY_CODE_FULL = word('This code can’t take any more phones. Ask the admin for a new one.');
 /** An address's wrong codes this hour are used up. */
-export const REKEY_TOO_MANY_WRONG = 'Too many wrong codes have been tried from here in the last hour. Try again later.';
+export const REKEY_TOO_MANY_WRONG = word('Too many wrong codes have been tried from here in the last hour. Try again later.');
 /** Codes starting like this one have been guessed at too often this hour. */
-export const REKEY_PREFIX_HAMMERED = 'Too many wrong codes like this one have been tried in the last hour. Ask the admin for a new code, or try again later.';
+export const REKEY_PREFIX_HAMMERED = word('Too many wrong codes like this one have been tried in the last hour. Ask the admin for a new code, or try again later.');
 
 /** The admin typed digits no phone waiting on the code shows. */
-export const REKEY_WRONG_NUMBER = 'No phone waiting on this code shows that number. Check the number on their phone and type it again.';
+export const REKEY_WRONG_NUMBER = word('No phone waiting on this code shows that number. Check the number on their phone and type it again.');
 /** The third wrong number: the code stops. */
-export const REKEY_CODE_STOPPED = 'Three wrong numbers were typed, so this code has stopped. Make a new code with the member there.';
+export const REKEY_CODE_STOPPED = word('Three wrong numbers were typed, so this code has stopped. Make a new code with the member there.');
 
 export const REKEY_MAX_PROPOSERS = 5;
 /** Wrong numbers typed on one code before it stops (settings-signin-pairing's PAIRING_CONFIRM_TRIES). */
@@ -255,11 +256,11 @@ export function declineRekeyProposal(oldPublicKey: string, newPublicKey: string,
     const cleanOperator = (operator || '').trim().toLowerCase() || 'owner:password';
     const req = db.prepare("SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC, id DESC LIMIT 1")
         .get(cleanOld) as RekeyRequestRow | undefined;
-    if (!isLive(req, now)) throw new RekeyRedeemRefusal(404, 'no_live_code', 'This member has no re-key code waiting. Make a new code.');
+    if (!isLive(req, now)) throw new RekeyRedeemRefusal(404, 'no_live_code', word('This member has no re-key code waiting. Make a new code.'));
     assertMayRekey(cleanOld, cleanOperator);
     const at = new Date(now).toISOString();
     const changed = db.prepare('UPDATE rekey_proposals SET declined_at = ? WHERE code = ? AND new_pubkey = ? AND declined_at IS NULL').run(at, req.code, cleanNew).changes;
-    if (changed !== 1) throw new RekeyRedeemRefusal(404, 'no_such_phone', 'No phone with that key is waiting on this code.');
+    if (changed !== 1) throw new RekeyRedeemRefusal(404, 'no_such_phone', word('No phone with that key is waiting on this code.'));
     const declines = (db.prepare('SELECT COUNT(*) AS n FROM rekey_proposals WHERE code = ? AND declined_at IS NOT NULL').get(req.code) as { n: number }).n;
     logger.info('AUTH', `[Rekey] A phone (${shortKey(cleanNew)}) declined by ${/^[0-9a-f]{64}$/.test(cleanOperator) ? shortKey(cleanOperator) : cleanOperator}`);
     return { declined: true, declines };
@@ -281,11 +282,11 @@ export function bindRekeyByMatch(oldPublicKey: string, rawCode: unknown, rawMatc
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
     if (!req || req.old_pubkey !== cleanOld || !isLive(req, now)) {
-        throw new RekeyRedeemRefusal(404, 'no_live_code', 'This member has no re-key code waiting. Make a new code.');
+        throw new RekeyRedeemRefusal(404, 'no_live_code', word('This member has no re-key code waiting. Make a new code.'));
     }
     assertMayRekey(cleanOld, cleanOperator);
     const match = typeof rawMatch === 'string' ? rawMatch.trim() : '';
-    if (!/^\d{2}$/.test(match)) throw new RekeyRedeemRefusal(400, 'match_required', 'Type the two digits on their phone.');
+    if (!/^\d{2}$/.test(match)) throw new RekeyRedeemRefusal(400, 'match_required', word('Type the two digits on their phone.'));
 
     const found = db.prepare('SELECT new_pubkey FROM rekey_proposals WHERE code = ? AND match = ? AND declined_at IS NULL').get(code, match) as { new_pubkey: string } | undefined;
     if (found) return completeRekey(cleanOld, found.new_pubkey, code, cleanOperator);

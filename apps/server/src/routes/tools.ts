@@ -7,6 +7,9 @@
  *                                                   or 410 { error, code: 'tool_copy_off', deletedAt } (below)
  *   DELETE /api/tools/:tool                       → { success: true, tool, removed }
  *
+ * `max` is the most this tool's document may take here (engine/tool-state.ts toolStateMaxBytes: the Tool shed's 128 KB,
+ * 64 KB for a tool that names none), which the apps hold to; a node from before it answers 65536 for every tool.
+ *
  * and the same for an enterprise's tools, by a keeper of it, with the enterprise as the owner:
  *
  *   GET | PUT | DELETE /api/treasury/:treasury/tools/:tool
@@ -47,10 +50,11 @@ import { db } from '../db/db.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import {
-    readToolState, writeToolState, deleteToolState, toolStateDeletedAt, toolIdRefusal, ToolStateRefusal, TOOL_STATE_MAX_BYTES,
+    readToolState, writeToolState, deleteToolState, toolStateDeletedAt, toolIdRefusal, ToolStateRefusal, toolStateMaxBytes,
 } from '../engine/tool-state.js';
 import type Koa from 'koa';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 type Op = 'read' | 'write';
 /** A request as the router hands it over, with the body the JSON middleware parsed (https-server.ts). */
@@ -65,7 +69,7 @@ function refuse(ctx: Ctx, status: number, error: string, code?: string, extra: R
 /** The verified signer, or undefined once the refusal is written. */
 function signer(ctx: Ctx): string | undefined {
     const actor = ctx.state.actor as string | undefined;
-    if (!actor) refuse(ctx, 401, 'A signed request is required');
+    if (!actor) refuse(ctx, 401, word('A signed request is required'));
     return actor;
 }
 
@@ -74,7 +78,7 @@ function ownOwner(ctx: Ctx, op: Op): string | undefined {
     const actor = signer(ctx);
     if (!actor) return undefined;
     if (op === 'read' ? !passesReadGate(actor) : !isNodeMember(actor)) {
-        if (op === 'read') refuse(ctx, 403, 'Read access requires a member identity');
+        if (op === 'read') refuse(ctx, 403, word('Read access requires a member identity'));
         else refuse(ctx, 403, NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE);
         return undefined;
     }
@@ -91,14 +95,14 @@ function enterpriseOwner(ctx: Ctx, op: Op): string | undefined {
     if (!actor) return undefined;
     const treasury = String(ctx.params.treasury ?? '');
     const row = db.prepare('SELECT status FROM members WHERE public_key = ? AND is_treasury = 1').get(treasury) as { status: string | null } | undefined;
-    if (!row) { refuse(ctx, 404, 'Not a treasury'); return undefined; }
-    if (!canOperateTreasury(actor, treasury)) { refuse(ctx, 403, 'You are not a keeper of this enterprise'); return undefined; }
+    if (!row) { refuse(ctx, 404, word('Not a treasury')); return undefined; }
+    if (!canOperateTreasury(actor, treasury)) { refuse(ctx, 403, word('You are not a keeper of this enterprise')); return undefined; }
     if (row.status === 'pruned' || row.status === 'disabled' || row.status === 'suspended') {
-        refuse(ctx, 403, 'This enterprise has been closed, so its tools can no longer be read or changed.', 'enterprise_closed');
+        refuse(ctx, 403, word('This enterprise has been closed, so its tools can no longer be read or changed.'), 'enterprise_closed');
         return undefined;
     }
     if (op === 'write' && row.status === 'completed') {
-        refuse(ctx, 403, 'This enterprise has been wound up, so its tools can no longer be changed.', 'enterprise_closed');
+        refuse(ctx, 403, word('This enterprise has been wound up, so its tools can no longer be changed.'), 'enterprise_closed');
         return undefined;
     }
     return treasury;
@@ -139,7 +143,7 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => string | undefined) {
                 updatedAt: state?.updatedAt ?? null,
                 deletedAt,
                 bytes: state?.bytes ?? 0,
-                max: TOOL_STATE_MAX_BYTES,
+                max: toolStateMaxBytes(tool),
             });
         },
         put: async (ctx: Ctx) => {
@@ -148,7 +152,7 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => string | undefined) {
             if (!owner || !tool) return;
             try {
                 const state = writeToolState(owner, tool, ctx.requestBody?.doc, { turnOn: ctx.requestBody?.turnOn === true });
-                answer(ctx, { success: true, tool, updatedAt: state.updatedAt, bytes: state.bytes, max: TOOL_STATE_MAX_BYTES });
+                answer(ctx, { success: true, tool, updatedAt: state.updatedAt, bytes: state.bytes, max: toolStateMaxBytes(tool) });
             } catch (e) {
                 if (!answeredRefusal(ctx, e)) throw e;
             }

@@ -12,6 +12,8 @@ related: the-top-bar, browsing-the-market, your-profile, finding-a-community, be
 
 The phone and the web app show the same cards, with a few differences. This page says "on the phone" or "in the web app" where they differ.
 
+In the web app, on a wide screen, the cards stand side by side in two or three columns, in your order: across, then down. **Needs you** and **Your community** run across the whole width, and so do the one-time tip and the "fewer cards" note (below): under **Needs you**, or above the cards when **Needs you** is not showing. The phone always shows one column.
+
 ## Getting started
 
 A new member's Home starts nearly empty: one card, **Getting started**, between **Needs you** and **Your community** (on the global community, **Find your community** stays above it). It says "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs."
@@ -87,7 +89,9 @@ Tap **…** to:
 - **Move down:** swaps the card with the card below it.
 - **Remove:** takes the card off Home, with its settings. **Add a card** puts it back. Nothing asks you to confirm. Removing **Tips** is the same as **Don't show tips again**.
 
-In the web app, **Your way back in** has a **…** too, with **Move up**, **Move down** and **Remove**.
+In the web app, on a wide screen, where the cards stand side by side, the two moves say **Move earlier** and **Move later**. They do the same thing: the card swaps with the one before it or after it in your order.
+
+In the web app, **Your way back in** has a **…** too, with the two moves and **Remove**.
 
 A move is greyed out when there is nowhere to go: at the top or bottom of the cards you can move. The first card under **Needs you** cannot move up, and the last card above **Your community** cannot move down.
 

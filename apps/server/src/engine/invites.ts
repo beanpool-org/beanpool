@@ -12,7 +12,7 @@ import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './member-key.js';
-import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, word } from '@beanpool/core';
 import {
     getMember,
     mayBringSomeoneIn,
@@ -61,7 +61,7 @@ export function previewAdmitsInvite(codeOrTicket: string): boolean {
     return !!invite && madeByOwnerOrAdmin(invite);
 }
 
-const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
+const INVITER_GONE = word('The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.');
 
 /**
  * Where the node's `invites` switch is off (the global node, config/node-profile.ts), nothing here makes an invite or
@@ -141,9 +141,9 @@ export function adminGenerateInvite(
     return invite;
 }
 
-const REPLACED_KEY = 'This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.';
-const CLOSED_ACCOUNT = 'This key’s account in this community was closed, so it can’t join again with this invite.';
-const VISITOR_UNSIGNED = 'Joining with this key needs a request signed by it. Join from the app that holds it.';
+const REPLACED_KEY = word('This key was replaced by a new one, so it can’t join with this invite. Use the device or the 12 words that hold the new key.');
+const CLOSED_ACCOUNT = word('This key’s account in this community was closed, so it can’t join again with this invite.');
+const VISITOR_UNSIGNED = word('Joining with this key needs a request signed by it. Join from the app that holds it.');
 
 /**
  * A key whose account here was closed (removed, or deleted by its owner: its row is 'pruned') joins with no invite. It
@@ -175,6 +175,13 @@ function unsignedVisitorRefusal(joinerSigned: boolean): { success: false; error:
 }
 
 /**
+ * The code beside a spent invite's or ticket's sentence, for the apps to read instead of its English (they still match
+ * "already been used" / "already been redeemed" until they read this: invite-next.ts, welcome.tsx, _layout.tsx, the
+ * web's WelcomePage.tsx), so the sentence can be translated once they do.
+ */
+export const INVITE_USED_CODE = 'invite_used';
+
+/**
  * Validates and redeems standard INV- code, registering the member and seeding earned credit. `joinerSigned`: the
  * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal).
  */
@@ -184,7 +191,7 @@ export function redeemInvite(
     publicKey: string,
     callsign: string,
     joinerSigned = false
-): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
     assertInvitesOn();
     // One key, one spelling (engine/member-key.ts), before any lookup or write: a member's key in capitals is no other
@@ -198,14 +205,14 @@ export function redeemInvite(
     const invite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(code) as any;
     if (!invite) {
         recordFunnelEvent('invite_failed', 'invalid');
-        return { success: false, error: 'Invalid invite code' };
+        return { success: false, error: word('Invalid invite code') };
     }
 
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const createdAtTime = new Date(invite.created_at).getTime();
     if (Date.now() - createdAtTime > THIRTY_DAYS_MS) {
         recordFunnelEvent('invite_failed', 'expired');
-        return { success: false, error: 'This invite code has expired (maximum 30 days validation)' };
+        return { success: false, error: word('This invite code has expired (maximum 30 days validation)') };
     }
 
     // A private preview (config/private-preview.ts) admits only an owner's or admin's invite: a seed invite issued
@@ -223,7 +230,7 @@ export function redeemInvite(
     const knock = db.prepare('SELECT pubkey FROM join_requests WHERE invite_code = ?').get(invite.code) as { pubkey: string } | undefined;
     if (knock && knock.pubkey !== String(publicKey).toLowerCase()) {
         recordFunnelEvent('invite_failed', 'wrong_key');
-        return { success: false, error: 'This invite was made for someone else, so it can’t be used here. Ask a member for your own invite.' };
+        return { success: false, error: word('This invite was made for someone else, so it can’t be used here. Ask a member for your own invite.') };
     }
     // Nor, with any invite, a key a re-key replaced (engine/member-wizards.ts). Admitted, the replaced key would be a
     // second member, able to make invites of its own (`generateInvite` asks only for a member row): the thing the
@@ -256,7 +263,7 @@ export function redeemInvite(
     // deliberately not enforced here, so an invitee picks whatever callsign they want.
     if (invite.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
-        return { success: false, error: 'This invite has already been used' };
+        return { success: false, error: 'This invite has already been used', code: INVITE_USED_CODE };
     }
 
     if (!canInvite(invite.created_by)) {
@@ -276,7 +283,7 @@ export function redeemInvite(
     })();
     if (!member) {
         recordFunnelEvent('invite_failed', 'registration_failed');
-        return { success: false, error: 'Registration failed' };
+        return { success: false, error: word('Registration failed') };
     }
 
     // Pre-seed earned credit for tiered genesis invites
@@ -302,7 +309,7 @@ export function redeemOfflineTicket(
     joinerPublicKey: string,
     callsign: string,
     joinerSigned = false
-): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
+): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
     assertInvitesOn();
     // One key, one spelling, as in redeemInvite.
@@ -359,7 +366,7 @@ export function redeemOfflineTicket(
     const existingInvite = db.prepare("SELECT * FROM invite_codes WHERE code COLLATE NOCASE = ?").get(codeHash) as any;
     if (existingInvite?.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
-        return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+        return { success: false, error: 'This exact mathematical offline ticket has already been redeemed', code: INVITE_USED_CODE };
     }
     // Where only admins invite (the door, config/door.ts), a ticket made by a member is refused. A code is made here, so
     // one made before the door closed still joins; a ticket is made on the phone and this server first sees it now, and
@@ -399,7 +406,7 @@ export function redeemOfflineTicket(
     })();
     if (!member) {
         recordFunnelEvent('invite_failed', 'registration_failed');
-        return { success: false, error: 'Registration failed during state sync' };
+        return { success: false, error: word('Registration failed during state sync') };
     }
 
     return { success: true, member };

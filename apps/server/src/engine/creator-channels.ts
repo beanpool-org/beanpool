@@ -29,6 +29,10 @@ import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 import { scrubPulseItems } from './pulse-resolver.js';
 import { channelIdentityFromRow, matchIdentity, type ChannelIdentity, type PlatformIdentity } from './platform-identity.js';
+import { word, wordsFor } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
 export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'learn' | 'other';
@@ -232,11 +236,11 @@ function assertPublicHostname(hostname: string): void {
 
     if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
         host.endsWith('.internal') || host.endsWith('.home.arpa')) {
-        throw new ChannelError('PRIVATE_HOST', 'That address is not reachable from the internet.');
+        throw new ChannelError('PRIVATE_HOST', word('That address is not reachable from the internet.'));
     }
     // IPv6 loopback, link-local (fe80::/10) and unique-local (fc00::/7).
     if (host === '::1' || host === '::' || /^fe[89ab][0-9a-f]:/i.test(host) || /^f[cd][0-9a-f]{2}:/i.test(host)) {
-        throw new ChannelError('PRIVATE_HOST', 'That address is not reachable from the internet.');
+        throw new ChannelError('PRIVATE_HOST', word('That address is not reachable from the internet.'));
     }
     const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (v4) {
@@ -247,13 +251,13 @@ function assertPublicHostname(hostname: string): void {
             (a === 192 && b === 168) ||
             (a === 100 && b >= 64 && b <= 127) ||     // carrier-grade NAT
             a >= 224) {                                // multicast and reserved
-            throw new ChannelError('PRIVATE_HOST', 'That address is not reachable from the internet.');
+            throw new ChannelError('PRIVATE_HOST', word('That address is not reachable from the internet.'));
         }
         return;
     }
     // A hostname with no dot is a bare machine name on the local network, not a website.
     if (!host.includes('.')) {
-        throw new ChannelError('BAD_URL', 'That does not look like a website address.');
+        throw new ChannelError('BAD_URL', word('That does not look like a website address.'));
     }
 }
 
@@ -335,8 +339,8 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     // "bean pool.org", which fails to parse and reports BAD_URL for a link they typed correctly.
     // Whitespace is never valid inside a URL or a handle, so there is nothing to preserve.
     const input = (raw || '').replace(/\s+/g, '');
-    if (!input) throw new ChannelError('EMPTY', 'Paste a link or handle.');
-    if (input.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', 'That link is too long.');
+    if (!input) throw new ChannelError('EMPTY', word('Paste a link or handle.'));
+    if (input.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', word('That link is too long.'));
 
     // A bare @handle only makes sense for the platforms that have handles.
     //
@@ -375,7 +379,7 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         })();
         if (built) {
             if (built.handle.length > MAX_HANDLE_LENGTH) {
-                throw new ChannelError('TOO_LONG', 'That account name is too long.');
+                throw new ChannelError('TOO_LONG', word('That account name is too long.'));
             }
             return built;
         }
@@ -386,23 +390,23 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     // strings end up as tappable links, so the reason matters.
     const explicitScheme = input.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
     if (explicitScheme && !/^https?$/i.test(explicitScheme[1])) {
-        throw new ChannelError('BAD_SCHEME', 'Links must start with https://');
+        throw new ChannelError('BAD_SCHEME', word('Links must start with https://'));
     }
 
     let parsed: URL;
     try {
         parsed = new URL(/^https?:\/\//i.test(input) ? input : `https://${input}`);
     } catch {
-        throw new ChannelError('BAD_URL', 'That does not look like a link.');
+        throw new ChannelError('BAD_URL', word('That does not look like a link.'));
     }
 
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-        throw new ChannelError('BAD_SCHEME', 'Links must start with https://');
+        throw new ChannelError('BAD_SCHEME', word('Links must start with https://'));
     }
     // `https://user:pass@example.com/feed` would otherwise be stored verbatim on a publicly
     // readable row, mirrored and backed up, while the chip shows only the hostname.
     if (parsed.username || parsed.password) {
-        throw new ChannelError('HAS_CREDENTIALS', 'Please paste a link without a username or password in it.');
+        throw new ChannelError('HAS_CREDENTIALS', word('Please paste a link without a username or password in it.'));
     }
     if (platform !== 'website' && platform !== 'rss') {
         const allowed = PLATFORM_HOSTS[platform];
@@ -410,9 +414,11 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             // `my.ceramics` parses as a hostname, so the bare-handle branch declined it and we land
             // here. Say what actually fixes it rather than "that is not an instagram link".
             const looksLikeHandle = /^[A-Za-z0-9._-]+$/.test(input) && !/^https?:/i.test(input);
+            // English's article is its own: a sentence for each, so another language writes neither.
+            const name = { platform: PLATFORM_DISPLAY[platform] };
             throw new ChannelError('WRONG_HOST', looksLikeHandle
-                ? `If that is your ${PLATFORM_DISPLAY[platform]} handle, put an @ in front of it.`
-                : `That is not ${PLATFORM_ARTICLE[platform]} ${PLATFORM_DISPLAY[platform]} link.`);
+                ? tr('If that is your {platform} handle, put an @ in front of it.', name)
+                : PLATFORM_ARTICLE[platform] === 'an' ? tr('That is not an {platform} link.', name) : tr('That is not a {platform} link.', name));
         }
         if (!SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase().replace(/^www\./, ''))) {
             parsed.hostname = CANONICAL_HOST[platform];
@@ -520,11 +526,11 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // `/groups/`, `/share/`, `/pages/` with nothing after them fell through to the generic
         // branch and stored `facebook.com/groups` with handle `groups` — a dead link that every
         // such paste then collided with.
-        throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
+        throw new ChannelError('NO_HANDLE', word('That link does not point to an account. Try your handle.'));
     } else if (platform === 'facebook' && /^profile\.php$/i.test(seg0)) {
         // Reached only when there was no `id` to keep — `/profile.php` alone identifies nobody, and
         // storing it would put a dead link on the profile with "profile.php" as the handle.
-        throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
+        throw new ChannelError('NO_HANDLE', word('That link does not point to an account. Try your handle.'));
     } else if (platform === 'facebook' && FB_PREFIX_DEPTH.has(seg0) && segments[1]) {
         // These prefixes carry the identity BELOW the first segment, and how far below differs:
         // `/groups/<id>` is one deep, while `/people/<name>/<id>` and `/share/p/<id>` are two.
@@ -558,16 +564,16 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     // that points at no account. Storing it would put an empty chip on the member's profile.
     const isBareVideo = platform === 'youtube' && seg0 === 'watch' && !!ytVideoId;
     if (!handle && !isShortLink && !isBareVideo && platform !== 'website' && platform !== 'rss') {
-        throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
+        throw new ChannelError('NO_HANDLE', word('That link does not point to an account. Try your handle.'));
     }
 
     const url = parsed.toString();
-    if (url.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', 'That link is too long.');
+    if (url.length > MAX_URL_LENGTH) throw new ChannelError('TOO_LONG', word('That link is too long.'));
     // Rejected, NOT truncated. Slicing decoupled the handle from the URL it was derived from, so
     // the chip named one account while the link pointed at another — and for a `/people/<slug>/<id>`
     // handle the truncation could cut off the very id that distinguishes the page.
     if (handle && handle.length > MAX_HANDLE_LENGTH) {
-        throw new ChannelError('TOO_LONG', 'That account name is too long.');
+        throw new ChannelError('TOO_LONG', word('That account name is too long.'));
     }
     return { url, handle };
 }
@@ -729,7 +735,7 @@ export function addChannel(input: {
 
     const existing = listChannels(input.ownerPubkey);
     if (existing.length >= MAX_CHANNELS_PER_MEMBER) {
-        throw new ChannelError('AT_LIMIT', `You can have up to ${MAX_CHANNELS_PER_MEMBER} channels. Remove one first.`);
+        throw new ChannelError('AT_LIMIT', tr('You can have up to {n} channels. Remove one first.', { n: MAX_CHANNELS_PER_MEMBER }));
     }
     // Tombstones are NEVER hard-deleted. The delta exporter selects on `updated_at >= since` and
     // the importer is upsert-only, so a row removed here is a row a lagging replica never hears
@@ -747,7 +753,7 @@ export function addChannel(input: {
         `SELECT COUNT(*) AS c FROM creator_channels WHERE owner_pubkey = ? AND created_at >= ?`
     ).get(input.ownerPubkey, new Date(Date.now() - CHURN_WINDOW_MS).toISOString()) as any).c as number;
     if (recentRows >= MAX_ROWS_PER_WINDOW) {
-        throw new ChannelError('TOO_MANY', 'You have added and removed a lot of channels this month. Remove one you are not using, or try again later.');
+        throw new ChannelError('TOO_MANY', word('You have added and removed a lot of channels this month. Remove one you are not using, or try again later.'));
     }
 
     const { url, handle } = normaliseChannelInput(platform, input.raw);
@@ -759,7 +765,7 @@ export function addChannel(input: {
     // `rss`, and a member is entitled to both — one as a card, one as the autolisting feed.
     const dedupeKey = channelDedupeKey(platform, url);
     if (existing.some(c => channelDedupeKey(c.platform, c.url) === dedupeKey)) {
-        throw new ChannelError('DUPLICATE', 'You have already added that channel.');
+        throw new ChannelError('DUPLICATE', word('You have already added that channel.'));
     }
 
     const id = `chan_${crypto.randomBytes(12).toString('hex')}`;
@@ -817,7 +823,7 @@ export function updateChannel(
         `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
     ).get(id) as any;
     if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
-    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', word('That is not your channel.'));
 
     if (patch.category !== undefined && !CHANNEL_CATEGORIES.includes(patch.category as ChannelCategory)) {
         throw new ChannelError('BAD_CATEGORY', 'Unknown category.');
@@ -825,7 +831,7 @@ export function updateChannel(
     // Without this a website could be made "primary video", demoting every real video channel and
     // leaving the feed with no cross-post winner at all.
     if (patch.isPrimaryVideo === true && !VIDEO_PLATFORMS.has(row.platform as ChannelPlatform)) {
-        throw new ChannelError('NOT_VIDEO', 'Only a video channel can be your main one.');
+        throw new ChannelError('NOT_VIDEO', word('Only a video channel can be your main one.'));
     }
 
     const now = new Date().toISOString();
@@ -876,7 +882,7 @@ export function updateChannel(
 export function deleteChannel(ownerPubkey: string, id: string): boolean {
     const row = db.prepare(`SELECT owner_pubkey FROM creator_channels WHERE id = ?`).get(id) as any;
     if (!row) return false;
-    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', word('That is not your channel.'));
 
     const wasPrimary = getChannel(id)?.isPrimaryVideo === true;
     const now = new Date().toISOString();
@@ -927,13 +933,13 @@ export function connectTarget(ownerPubkey: string, id: string, platform: string)
         `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
     ).get(id) as any;
     if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
-    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', word('That is not your channel.'));
     if (row.platform !== platform) {
         throw new ChannelError('BAD_PLATFORM', `Channel platform is ${row.platform}, but verification is for ${platform}.`);
     }
     const claimed = channelIdentityFromRow(row.platform, row.url, row.handle);
     if (!claimed) {
-        throw new ChannelError('NOT_VERIFIABLE', 'Add this channel as @handle to verify it.');
+        throw new ChannelError('NOT_VERIFIABLE', word('Add this channel as @handle to verify it.'));
     }
     return { row, claimed };
 }
@@ -957,7 +963,7 @@ export function badgeChannelFromIdentity(ownerPubkey: string, target: ConnectTar
     if (!matchIdentity(claimed, found, row.platform_account_id)) {
         throw new ChannelError(
             'ACCOUNT_MISMATCH',
-            `The ${PLATFORM_DISPLAY[row.platform as ChannelPlatform]} account you signed in to is not the one on this channel. Sign in to that account and connect again.`
+            tr('The {platform} account you signed in to is not the one on this channel. Sign in to that account and connect again.', { platform: PLATFORM_DISPLAY[row.platform as ChannelPlatform] })
         );
     }
 
@@ -1019,7 +1025,7 @@ export function disconnectChannelOauth(ownerPubkey: string, id: string): Creator
         `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
     ).get(id) as any;
     if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
-    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', word('That is not your channel.'));
 
     const now = new Date().toISOString();
     const nativeAutolist = canAutolist(row.platform as ChannelPlatform, row.url || '') ? 1 : 0;

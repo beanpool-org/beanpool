@@ -56,8 +56,13 @@ export type ToolPermission = (typeof TOOL_PERMISSIONS)[number];
 export const TOOL_LIMITS = {
     /** Characters of an id: `tool-<id>` must fit Home's 24-character type (home-frame.ts HOME_FRAME_LIMITS.typeChars). */
     idChars: 16,
-    /** Bytes of a stored document, serialised as JSON (UTF-8): the node's bound on member_tool_state.body. */
+    /**
+     * Bytes of a stored document, serialised as JSON (UTF-8), of a tool that names no bound of its own: what the node
+     * keeps of it, and of every tool on a node from before a tool could name more (its answers' `max`).
+     */
     docBytes: 65_536,
+    /** The most a tool may name as its own bound (`doc.maxBytes`): the node's CHECK on member_tool_state.body. */
+    docBytesMax: 131_072,
     /** Lines on the tool's Home card. */
     homeLines: 2,
     /** Reminders due() may return at once. */
@@ -108,7 +113,10 @@ export interface ToolDoc<D> {
     empty(): D;
     /** Any stored value to this version: tolerant, never throws; an unreadable value is empty(). */
     read(raw: unknown): D;
-    /** At most TOOL_LIMITS.docBytes. Over it, the tool's own sentence says why, never a silent drop. */
+    /**
+     * Its own bound, at most TOOL_LIMITS.docBytesMax; none is TOOL_LIMITS.docBytes. The node keeps this much of it, and a
+     * node that keeps less says so (toolDocMaxBytes). Over it, the tool's own sentence says why, never a silent drop.
+     */
     maxBytes?: number;
 }
 
@@ -132,6 +140,12 @@ export interface ToolManifest<D = unknown> {
     screens: readonly string[];
     /** The Tools row's state line, or null for none. */
     row(doc: D, now: number): ToolLine | null;
+    /**
+     * Only for a tool that asks for `node-copy`: what its Settings say when switching the copy on finds the document more
+     * than the server keeps (`maxBytes`, its answer's `max`), so nothing changed: how to make room, in the tool's own
+     * words and never bytes. None: the template's own sentence.
+     */
+    tooBig?(doc: D, maxBytes: number): ToolLine;
     /** The empty state's "I'm starting out" door: three example rows, and the members' guide page it links to. */
     examples: readonly WordKey[];
     guide?: string;

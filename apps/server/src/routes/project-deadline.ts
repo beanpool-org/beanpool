@@ -13,12 +13,17 @@
  * Not in the past (Marty, 9 Oct: "Refuse it"): a new or edited project must end today or later. Only a deadline that
  * is sent is held to this, so an edit that leaves deadlineAt out keeps a deadline that has since passed.
  */
+import { word, wordsFor } from '@beanpool/core';
+
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 export const PROJECT_DEADLINE_FORMAT_ERROR =
-    "A project's deadline must be a date, like 2026-12-31 or 2026-12-31T17:00:00Z.";
+    word("A project's deadline must be a date, like 2026-12-31 or 2026-12-31T17:00:00Z.");
 export const projectDeadlineTooFarError = (maxDays: number) =>
-    `A project's deadline can be at most ${maxDays} days away.`;
-export const PROJECT_DEADLINE_PAST_ERROR = "A project's deadline can't be in the past.";
+    tr("A project's deadline can be at most {n} days away.", { n: maxDays });
+export const PROJECT_DEADLINE_PAST_ERROR = word("A project's deadline can't be in the past.");
 
 const ISO_DEADLINE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:\d{2}))?$/;
 const DAY_MS = 1000 * 60 * 60 * 24;

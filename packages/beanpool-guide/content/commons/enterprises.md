@@ -22,7 +22,7 @@ Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each
 
 ## What an enterprise page shows
 
-An enterprise's page is its shop front. On the phone, every member sees, from the top:
+An enterprise's page is its shop front. Every member sees, from the top:
 
 - its picture, its name, what kind of shop it is and since when it has been here;
 - what it is for;
@@ -39,8 +39,6 @@ An enterprise's page is its shop front. On the phone, every member sees, from th
 
 Where a community lets people who are not members read its pages, they see its picture, name and kind, what it is for, its keepers' names, About and a project's goal, but not its listings, badges or money. Most communities don't: there, only members can open the page.
 
-In the web app the page still shows the balance and its keepers near the top.
-
 At the bottom, **Report Enterprise** (**Report Project** on a project) if something is wrong.
 
 ## Backing an enterprise
@@ -51,12 +49,12 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 
 ## If you keep it
 
-If you keep an enterprise, or help run a project, tap **Manage** at the top of its page on the phone. Everything only its keepers do is there, so its page shows what every member sees. **Manage** shows only what you can do:
+If you keep an enterprise, or help run a project, everything only its keepers do is under **Manage**: at the top of its page on the phone, and in the web app its page has two tabs, **Page** and **Manage**. So its page shows what every member sees. A community admin sees **Manage** too. **Manage** shows only what you can do:
 
 - requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See "Keepers".
-- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its kind or **How we deal**. Change what you want, then tap **Save** once.
-- **Featured** (its keepers only): tap an Offer to put it on its shelf, or take it off. Six at most. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in.
-- **Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay.
+- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its kind or **How we deal**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.
+- **Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.
+- **Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.
 - **Decisions:** its keepers' votes.
 - Removing a keeper, and stepping down.
 - **Season & lifecycle controls:** pausing and closing it (below).
@@ -67,8 +65,6 @@ If you keep an enterprise, or help run a project, tap **Manage** at the top of i
 - **Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.
 - **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
 - **Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See "Rules and how decisions work".
-
-In the web app these are still on its page: **Operator controls** has posting, **To Commons**, pausing and closing, and **Set map pin** puts it on the map.
 
 Before a project reaches its goal, its leader can also cancel it (on the phone, under **Manage**), and every pledge goes back.
 
@@ -85,4 +81,4 @@ It starts straight away, and you are its leader (a project) or its lead keeper (
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 
-On the phone, its keepers change its picture and its words under **Manage** (see "If you keep it"). In the web app they cannot be changed yet.
+Its keepers change its picture and its words under **Manage**, in either app (see "If you keep it").

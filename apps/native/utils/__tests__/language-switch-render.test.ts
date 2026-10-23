@@ -84,7 +84,7 @@ vi.mock('expo-location', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { currentLanguage, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
-import { LanguageProvider, useWords } from '../../components/LanguageProvider';
+import { LanguageProvider, useWords, whenLanguagePicked } from '../../components/LanguageProvider';
 import { LanguageRow, LanguageSwitch } from '../../components/LanguagePicker';
 import { LANGUAGE_NAMES, LANGUAGE_PREFERENCE_KEY, languageHeader } from '../language-choice';
 import YourAreaScreen from '../../app/your-area';
@@ -218,6 +218,24 @@ describe('which language a phone starts in', () => {
             expect(mem.store.get(LANGUAGE_PREFERENCE_KEY)).toBe('ru');
             act(() => root?.unmount()); host?.remove(); root = null; host = null;
             mem.holds.clear();
+        }
+    });
+
+    it('a pick is told once it is the language in use, so the community hears it for its pushes at once; a launch tells nothing', async () => {
+        const told: { lang: UiLang; forNode: unknown }[] = [];
+        whenLanguagePicked((lang) => told.push({ lang, forNode: languageHeader()['X-Language'] }));
+        try {
+            mem.store.set(LANGUAGE_PREFERENCE_KEY, 'de');
+            await mount([createElement(LanguageSwitch, { key: 's' }), createElement(Probe, { key: 'p' })], { deviceTags: ['en-US'] });
+            expect(told, 'starting in the stored choice is no pick').toEqual([]);
+            await click('language-switch');
+            await click('language-ru');
+            expect(told).toEqual([{ lang: 'ru', forNode: 'ru' }]);
+            await click('language-switch');
+            await click('language-ru');
+            expect(told.length, 'the same language again tells nothing more').toBe(1);
+        } finally {
+            whenLanguagePicked(null);
         }
     });
 

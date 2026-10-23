@@ -5,14 +5,15 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { pseudoLocalise, setLanguage } from '../../../words.js';
+import { toolDocBytes } from '../../check.js';
 import { TOOL_LIMITS } from '../../manifest.js';
 import { TOOL_SHOP_CLOSED, isShopClosedRefusal, type ToolDealSummary } from '../../host.js';
-import { THINGS_MAX_ITEMS, THINGS_NAME_CHARS, readThingsDoc, type Thing, type ThingsDoc } from '../doc.js';
+import { THINGS_DOC_BYTES, THINGS_NAME_CHARS, readThingsDoc, type Thing, type ThingsDoc } from '../doc.js';
 import { FIXTURES } from '../fixtures.js';
 import { thingsCounts } from '../manifest.js';
 import {
     BACK_AROUND_DAYS, THING_FILTERS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack, offersToLink,
-    openDealsByPost, removeThing, saveThing, setListed, shedFits, shedFullLine, shedHasRoom, shedThings, shedTooBigLine, shopClosedLine,
+    openDealsByPost, removeThing, saveThing, setListed, shedFits, shedFullLine, shedRoom, shedRoomLine, shedThings, shopClosedLine,
     takeOutOfShop, thingCategories, thingCategory, thingConditionName, thingInFilter, thingInput, thingInputProblems,
     thingListDraft, thingRowLine, thingState, thingStateLine, thingsLoans, type ThingInput,
 } from '../shed.js';
@@ -172,15 +173,42 @@ describe('the edit screen: its fields, what stops a save, and saving', () => {
         expect((d.things[0] as Thing).gone).toBe(true);
     });
 
-    it('room: at most 100 things the member still has, a deleted one not counted; the refusals say the bound as core has it', () => {
+    it('room is counted by size alone: a 101st small thing fits; a shed past the bound it is held to does not', () => {
         const many = (n: number) => Array.from({ length: n }, (_, i) => thing(`t${i}`, `Thing ${i}`));
-        expect(shedHasRoom(doc(...many(THINGS_MAX_ITEMS - 1)))).toBe(true);
-        expect(shedHasRoom(doc(...many(THINGS_MAX_ITEMS)))).toBe(false);
-        expect(shedHasRoom(doc(...many(THINGS_MAX_ITEMS - 1), thing('g', 'Gone', { gone: true })))).toBe(true);
-        expect(shedFullLine()).toBe('Your Tool shed holds 100 things. Delete one first.');
-        expect(shedTooBigLine()).toBe(`Your Tool shed is full: it keeps up to ${TOOL_LIMITS.docBytes / 1024} KB. Delete something you no longer have, or shorten some notes.`);
-        expect(shedFits(FIXTURES.docs.full)).toBe(true);
-        expect(shedFits(doc(thing('a', 'x'.repeat(70_000))))).toBe(false);
+        const next = saveThing(doc(...many(100)), blank({ name: 'Drill' }), { id: null, newId: 'n101', now: NOW });
+        expect(shedThings(next)).toHaveLength(101);
+        expect(shedFits(next, THINGS_DOC_BYTES)).toBe(true);
+        expect(shedFits(FIXTURES.docs.full, THINGS_DOC_BYTES)).toBe(true);
+        expect(shedFits(doc(thing('a', 'x'.repeat(140_000))), THINGS_DOC_BYTES)).toBe(false);
+        // The bound is the host's (host.doc.maxBytes()): an older node's 64 KB holds less than the shed's own 128 KB.
+        expect(shedFits(doc(thing('a', 'x'.repeat(70_000))), THINGS_DOC_BYTES)).toBe(true);
+        expect(shedFits(doc(thing('a', 'x'.repeat(70_000))), TOOL_LIMITS.docBytes)).toBe(false);
+    });
+
+    it("room: about how many more things fit, in things the size of the member's own on average, or a typical one while there are none", () => {
+        const typical = shedRoom(doc(), THINGS_DOC_BYTES);
+        // A typical thing is a few hundred bytes: some hundreds fit in 128 KB, and half as many in an older node's 64 KB.
+        expect(typical).toBeGreaterThan(300);
+        expect(typical).toBeLessThan(700);
+        expect(shedRoom(doc(), TOOL_LIMITS.docBytes)).toBeLessThanOrEqual(Math.ceil(typical / 2));
+        // Exactly: the bytes left over the average bytes one of the member's things takes (its JSON and its comma), floored.
+        const own = [thing('a', 'Drill'), thing('b', 'Ladder', { lendTerms: 'x'.repeat(300) })];
+        const each = Math.ceil(own.reduce((s, t) => s + toolDocBytes(t) + 1, 0) / own.length);
+        const d = doc(...own);
+        expect(shedRoom(d, THINGS_DOC_BYTES)).toBe(Math.floor((THINGS_DOC_BYTES - toolDocBytes(d)) / each));
+        // A deleted thing takes its few bytes of the room, and is not what the member's things are like.
+        const withGone = doc(...own, thing('g', 'Gone', { gone: true }));
+        expect(shedRoom(withGone, THINGS_DOC_BYTES)).toBe(Math.floor((THINGS_DOC_BYTES - toolDocBytes(withGone)) / each));
+        // Full, or past the bound (an older node keeps less than the phone already has): none, never below.
+        expect(shedRoom(FIXTURES.docs.full, THINGS_DOC_BYTES)).toBeLessThanOrEqual(1);
+        expect(shedRoom(FIXTURES.docs.full, TOOL_LIMITS.docBytes)).toBe(0);
+    });
+
+    it('the room and full lines say things and words, never bytes', () => {
+        expect(shedRoomLine(1)).toBe('Room for about 1 more thing');
+        expect(shedRoomLine(240)).toBe('Room for about 240 more things');
+        expect(shedFullLine()).toBe('Your Tool shed is full. Delete something you no longer have, or shorten some notes.');
+        for (const line of [shedRoomLine(240), shedFullLine()]) expect(line).not.toMatch(/KB|byte/);
     });
 });
 

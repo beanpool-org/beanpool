@@ -22,13 +22,15 @@ written to it: read its three folders for a worked example.
 A tool imports React, `@beanpool/core`, its own folder and the template's host and primitives, and nothing else (the
 eslint fence). It talks to the app only through `host`, which has exactly the functions its permissions grant
 (`narrowHost` in `packages/beanpool-core/src/tools/host.ts`). Its data is one JSON document with `v` at the top, at most
-64 KB, kept on the phone (or in the browser); photos stay on the device (files on the phone, this browser's tool store on
+64 KB unless its manifest names more (`doc.maxBytes`, at most 128 KB: the Tool shed names 128 KB), and never more than the
+community's server says it keeps of it (its answers' `max`: a server from before a tool could name more keeps 64 KB;
+`toolDocMaxBytes` in `packages/beanpool-core/src/tools/check.ts`), kept on the phone (or in the browser); photos stay on the device (files on the phone, this browser's tool store on
 the web), and reach the node only inside a listing the member posts. A tool whose permissions include
 `node-copy` also has a private copy on the community's server, on by default and switched off by the member in the
 tool's Settings (`apps/*/tools/node-copy.ts`, the rule in `packages/beanpool-core/src/tools/reconcile.ts`); without that
 permission nothing of it leaves the device.
 
-**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`, and `set`, which writes the document whole), `navigate`
+**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`; `set`, which writes the document whole; and `maxBytes`, the most it may take now), `navigate`
 (to another of its screens) and `back` (as the header's Back goes: what a form does once it is saved), and `now`. Each
 permission grants one more: `photos` and `camera` (pick or take a photo, 800 px, kept on the device, by `ref`), `offerDoor`
 and `needDoor` (the composer, prefilled; nothing is posted until the member taps Post), `posts` (pause, resume and the

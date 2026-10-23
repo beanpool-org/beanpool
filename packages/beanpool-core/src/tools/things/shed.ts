@@ -13,10 +13,8 @@ import { formatDate, t, tn } from '../../words.js';
 import { PRICING_CATEGORIES, normalizeCategory } from '../../pricing-catalog.js';
 import { toolDocBytes } from '../check.js';
 import type { ToolDealSummary, ToolOfferDraft } from '../host.js';
-import { TOOL_LIMITS } from '../manifest.js';
 import {
     THINGS_LEND_TERMS_CHARS,
-    THINGS_MAX_ITEMS,
     THINGS_NAME_CHARS,
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
@@ -288,23 +286,48 @@ export function saveThing(doc: ThingsDoc, input: ThingInput, at: { id: string | 
     return { ...doc, things: [...(doc.things ?? []), made] };
 }
 
-/** Whether another thing can be added: fewer than THINGS_MAX_ITEMS the member still has. */
-export function shedHasRoom(doc: ThingsDoc): boolean {
-    return (doc.things ?? []).filter(isLiveThing).length < THINGS_MAX_ITEMS;
+/**
+ * Whether a document fits `maxBytes`, the host's bound (host.doc.maxBytes(): the shed's 128 KB, or less on a node that
+ * keeps less), so the host will keep it. Size is the shed's one bound: there is no count of things.
+ */
+export function shedFits(doc: ThingsDoc, maxBytes: number): boolean {
+    return toolDocBytes(doc) <= maxBytes;
 }
 
-/** Whether a document fits the store's bound (64 KB, as core reports it), so the host will keep it. */
-export function shedFits(doc: ThingsDoc): boolean {
-    return toolDocBytes(doc) <= TOOL_LIMITS.docBytes;
+/**
+ * A thing as most are, for the room of a shed with nothing in it yet: a short name, a category and a condition, a line of
+ * how it is lent, a photo, an id and its two times, as the edit screen saves them (about 240 bytes).
+ */
+const TYPICAL_THING: Thing = {
+    id: 'mh3k9x2a-q8w7e6r5',
+    name: 'Cordless drill',
+    category: 'tools',
+    condition: 'good',
+    lendTerms: 'Back within a week, charged.',
+    photo: 'mh3k9x2a-q8w7e6r5',
+    createdAt: '2026-10-23T08:37:00.000Z',
+    updatedAt: '2026-10-23T08:37:00.000Z',
+};
+
+/** The bytes one more thing takes in the document: its JSON and the comma before it. */
+const thingBytes = (thing: unknown) => toolDocBytes(thing) + 1;
+
+/**
+ * About how many more things fit in `maxBytes` (the host's bound, host.doc.maxBytes()): the bytes left, in things the
+ * size of the member's own on average, or of a typical one while they have none. Never below 0, also for a document
+ * already past the bound (one kept before an older node said it keeps less).
+ */
+export function shedRoom(doc: ThingsDoc, maxBytes: number): number {
+    const live = (doc.things ?? []).filter(isLiveThing);
+    const each = live.length > 0 ? Math.ceil(live.reduce((sum, thing) => sum + thingBytes(thing), 0) / live.length) : thingBytes(TYPICAL_THING);
+    return Math.max(0, Math.floor((maxBytes - toolDocBytes(doc)) / each));
 }
 
-/** Said when a new thing would be one too many. */
-export const shedFullLine = () => tn(THINGS_MAX_ITEMS, 'Your Tool shed holds {n} thing. Delete one first.', 'Your Tool shed holds {n} things. Delete one first.');
+/** The room in a sentence, in things, never bytes: "Room for about 240 more things". */
+export const shedRoomLine = (n: number) => tn(n, 'Room for about {n} more thing', 'Room for about {n} more things');
 
-/** Said when a save would take the document past the store's bound: the bound as core reports it. */
-export const shedTooBigLine = () => t('Your Tool shed is full: it keeps up to {kb} KB. Delete something you no longer have, or shorten some notes.', {
-    kb: Math.floor(TOOL_LIMITS.docBytes / 1024),
-});
+/** Said when there is no room, or a save would take the document past the host's bound: in words, never bytes. */
+export const shedFullLine = () => t('Your Tool shed is full. Delete something you no longer have, or shorten some notes.');
 
 /**
  * Said when its Offer can't be put back because the member's shop is closed for now (isShopClosedRefusal): nothing goes

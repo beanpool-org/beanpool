@@ -82,8 +82,11 @@ export function isShopClosedRefusal(e: unknown): boolean {
 export interface ToolHostBase<D> {
     owner: { kind: 'member' | 'enterprise'; publicKey: string; name: string };
     node: { url: string | null; profile: string; features: Record<string, unknown> | null };
-    /** The one store (§1.6): set() writes the document whole and syncs it. */
-    doc: { get(): D; set(next: D): Promise<void> };
+    /**
+     * The one store (§1.6): set() writes the document whole and syncs it, and refuses one over maxBytes(): the most it may
+     * take now (toolDocMaxBytes: the tool's own bound, never past what the community's server said it keeps).
+     */
+    doc: { get(): D; set(next: D): Promise<void>; maxBytes(): number };
     /** Within the tool; back is the host's. */
     navigate(screen: string, params?: Record<string, string>): void;
     /** Back, as the header's ← goes: what a form does once it is saved (the screen it was opened from, else out of the tool). */

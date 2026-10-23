@@ -1,6 +1,6 @@
 /**
  * The Tool shed's one document (scratch/tools/DESIGN-tool-template-fable.md §1.2, §3.1, slice T1.1):
- * what you own and might lend, and who has them. Plain JSON with `v` at the top, at most 64 KB,
+ * what you own and might lend, and who has them. Plain JSON with `v` at the top, at most 128 KB,
  * kept on the phone, and with a private copy on the node when 'node-copy' is on.
  *
  * Photos are refs to files on the phone (or IndexedDB blobs on web), never bytes here.
@@ -8,13 +8,13 @@
 
 export const THINGS_DOC_VERSION = 1;
 /**
- * The most things the document keeps that the member still has ({@link isLiveThing}): the number the counts show and the
- * "holds 100 things" refusal names. A `gone` thing (sold, broken) is kept and not counted, so gone things ahead of live
- * ones never push a live one out. It is not what keeps the document under its byte bound: at every field's cap a thing
- * is about 1.4 KB (about 4.5 KB in emoji), so some 45 of them fill 64 KB, and past the bound the write is refused
- * (maxBytes), never cut. That bound is also what bounds the gone things.
+ * The most the document takes, as JSON (UTF-8): its one bound, by size alone (Marty, 23 Oct 2026: "could we double it to
+ * 128KB? and yes go by size"), so there is no count of things. A typical thing is about 240 bytes, so some 550 fit; at
+ * every field's cap one is about 1.2 KB (about 3.9 KB in emoji), so some 110 do (33). Past it the write is refused, never cut,
+ * and the screens say how many more fit (shed.ts shedRoom). It also bounds the `gone` things, kept and never counted.
+ * A node from before it keeps 64 KB, and says so (toolDocMaxBytes).
  */
-export const THINGS_MAX_ITEMS = 100;
+export const THINGS_DOC_BYTES = 131_072;
 export const THINGS_NAME_CHARS = 80;
 export const THINGS_CATEGORY_CHARS = 40;
 export const THINGS_REPLACEMENT_VALUE_CHARS = 40;
@@ -83,7 +83,7 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeo
 /** Whether an item of the list is one this build reads, not a newer version's {@link UnreadThing}. */
 export const isThing = (t: unknown): t is Thing => isPlainObject(t) && typeof t.id === 'string' && typeof t.name === 'string';
 
-/** A thing the member still has (not `gone`): what {@link THINGS_MAX_ITEMS} caps and what every count counts. */
+/** A thing the member still has (not `gone`): what every count counts. */
 export const isLiveThing = (t: unknown): t is Thing => isThing(t) && t.gone !== true;
 
 /**
@@ -178,10 +178,11 @@ function readThing(raw: unknown, ours: boolean): Thing | null {
 
 /**
  * Any stored value as this build's document: tolerant, never throws, empty() for anything unreadable.
- * This build's version and older are held to its bounds. A newer version (from a newer app on another
+ * This build's version and older are held to its fields' bounds. A newer version (from a newer app on another
  * device) is read for what this build knows and kept whole, every key at the top and on each item, every
- * item past this build's bound, and every item this build can't read (an {@link UnreadThing}, left as it
+ * field past this build's bound, and every item this build can't read (an {@link UnreadThing}, left as it
  * was in its place), so writing it back loses nothing; the bounds of a newer version are the newer app's.
+ * Every thing is kept, however many: the document's one bound is its size (THINGS_DOC_BYTES).
  */
 export function readThingsDoc(raw: unknown): ThingsDoc {
     if (!isPlainObject(raw) || typeof raw.v !== 'number' || !Number.isInteger(raw.v) || raw.v < 1) {
@@ -195,12 +196,9 @@ export function readThingsDoc(raw: unknown): ThingsDoc {
         if (read) return [read];
         return ours ? [] : [t as UnreadThing];
     });
-
-    // The cap counts live things only; a gone thing keeps its place and is never what pushes a live one out.
-    let live = 0;
     return {
         ...raw,
         v: Math.max(raw.v, THINGS_DOC_VERSION),
-        things: ours ? things.filter((t) => !isLiveThing(t) || ++live <= THINGS_MAX_ITEMS) : things,
+        things,
     };
 }

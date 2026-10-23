@@ -12,6 +12,7 @@ import {
     type ToolPermission,
 } from '../manifest.js';
 import {
+    THINGS_DOC_BYTES,
     THINGS_DOC_VERSION,
     emptyThingsDoc,
     isLentTo,
@@ -44,7 +45,7 @@ export interface ThingsCounts {
 
 /**
  * Counts of things in the shed:
- * - things: active things you own (!gone, {@link isLiveThing}: the number THINGS_MAX_ITEMS caps)
+ * - things: active things you own (!gone, {@link isLiveThing})
  * - out: things currently lent out (a lentTo this build reads, {@link isLentTo})
  * - listed: things in your shop ready to lend (a string postId, not out)
  * - shelf: things at home not listed or lent (neither)
@@ -141,7 +142,7 @@ export const THINGS: ToolManifest<ThingsDoc> = {
         version: THINGS_DOC_VERSION,
         empty: emptyThingsDoc,
         read: readThingsDoc,
-        maxBytes: TOOL_LIMITS.docBytes,
+        maxBytes: THINGS_DOC_BYTES,
     },
     screens: ['main', 'thing', 'edit', 'loans'],
     row: (d, now) => {

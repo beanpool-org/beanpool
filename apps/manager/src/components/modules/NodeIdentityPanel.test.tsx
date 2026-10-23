@@ -150,13 +150,6 @@ describe('NodeIdentityPanel Component', () => {
         expect(document.getElementById('directory-push-interval')).toBeInTheDocument();
         expect(document.getElementById('publish-now-btn')).toBeInTheDocument();
 
-        // Checkboxes
-        expect(document.getElementById('publish-location')).toBeInTheDocument();
-        expect(document.getElementById('publish-members')).toBeInTheDocument();
-        expect(document.getElementById('publish-contact-email')).toBeInTheDocument();
-        expect(document.getElementById('publish-contact-phone')).toBeInTheDocument();
-        expect(document.getElementById('publish-health')).toBeInTheDocument();
-
         // Community contacts
         expect(screen.getByRole('heading', { level: 4, name: 'Community Contacts' })).toBeInTheDocument();
         expect(screen.getByLabelText(/Contact Email/i)).toBeInTheDocument();
@@ -192,64 +185,6 @@ describe('NodeIdentityPanel Component', () => {
 
         const scheduleSelect = document.getElementById('directory-push-interval') as HTMLSelectElement;
         expect(scheduleSelect.value).toBe('6');
-
-        const publishEmailCheckbox = document.getElementById('publish-contact-email') as HTMLInputElement;
-        const publishPhoneCheckbox = document.getElementById('publish-contact-phone') as HTMLInputElement;
-        expect(publishEmailCheckbox.checked).toBe(false);
-        expect(publishPhoneCheckbox.checked).toBe(true);
-    });
-
-    it('shows both contact switches off unless the node says the owner turned each on, and saves the one turned on', async () => {
-        // A node that doesn't name the switches, holding only the old single one as true: that was no owner's choice.
-        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/community-info')) {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({ communityName: 'Quiet Valley', contactEmail: 'hi@quiet.example', contactPhone: '+61 400 111 222' }),
-                });
-            }
-            if (url.includes('/api/local/admin/diagnostics')) {
-                // The stored name (the box's source since #1935); no contacts named.
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ communityName: 'Quiet Valley' }) });
-            }
-            if (url.includes('/api/node/config')) {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({ publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true, directoryPushIntervalHours: 12, serviceRadius: null }),
-                });
-            }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-        }));
-
-        await act(async () => {
-            render(
-                <NodeIdentityPanel
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    onRefreshDiag={vi.fn()}
-                />
-            );
-        });
-        await waitFor(() => expect(screen.getByDisplayValue('Quiet Valley')).toBeInTheDocument());
-
-        const email = document.getElementById('publish-contact-email') as HTMLInputElement;
-        const phone = document.getElementById('publish-contact-phone') as HTMLInputElement;
-        expect(email.checked).toBe(false);
-        expect(phone.checked).toBe(false);
-
-        await act(async () => {
-            fireEvent.click(email);
-        });
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-        });
-
-        const configCall = (global.fetch as any).mock.calls.find((call: any[]) => call[0].includes('/api/local/admin/node/config'));
-        expect(configCall).toBeDefined();
-        const body = JSON.parse(configCall[1].body);
-        expect(body.publishContactEmail).toBe(true);
-        expect(body.publishContactPhone).toBe(false);
-        expect('publishContacts' in body).toBe(false);
     });
 
     it('syncs service radius slider and km input', async () => {
@@ -572,11 +507,6 @@ describe('NodeIdentityPanel Component', () => {
                 method: 'POST',
                 body: JSON.stringify({
                     password: mockProfile.adminPassword,
-                    publishLocation: true,
-                    publishMembers: true,
-                    publishContactEmail: false,
-                    publishContactPhone: true,
-                    publishHealth: true,
                     directoryPushIntervalHours: 24,
                     serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 50 },
                 }),
@@ -1174,170 +1104,9 @@ describe('NodeIdentityPanel Component', () => {
             expect('contactPhone' in body).toBe(false);
         });
     });
-    describe('requests to join (G6)', () => {
-        function mockKnockNode(config: Record<string, unknown>, open: number) {
-            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-                if (url.includes('/api/node/config')) {
-                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishLocation: true, directoryPushIntervalHours: 12, serviceRadius: null, ...config }) });
-                }
-                if (url.includes('/api/local/admin/knocks')) {
-                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ acceptKnocks: config.acceptKnocks, takingKnocks: config.acceptKnocks, open }) });
-                }
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-            }));
-        }
-
-        const nodeConfigBody = () => {
-            const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
-            return call ? JSON.parse(call[1].body) : undefined;
-        };
-        // How this community works, the one place the switch changes (slice S2): only a change goes there.
-        const shapeBodies = () => (global.fetch as any).mock.calls
-            .filter((c: any[]) => c[0].includes('/api/local/admin/community-shape')).map((c: any[]) => JSON.parse(c[1].body));
-
-        it('shows the switch and how many are waiting, and saves the owner\'s choice under How this community works', async () => {
-            mockKnockNode({ acceptKnocks: true }, 2);
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            const toggle = await waitFor(() => {
-                const el = document.getElementById('accept-knocks') as HTMLInputElement;
-                expect(el).toBeInTheDocument();
-                return el;
-            });
-            expect(toggle.checked).toBe(true);
-            await waitFor(() => expect(document.getElementById('open-knocks')).toHaveTextContent('2 requests waiting for an answer.'));
-            const countCall = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/knocks'));
-            expect(countCall[1].headers).toBeDefined();
-
-            await act(async () => {
-                fireEvent.click(toggle);
-            });
-            expect(toggle.checked).toBe(false);
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            expect('acceptKnocks' in nodeConfigBody()).toBe(false);
-            expect(shapeBodies()).toEqual([expect.objectContaining({ changes: { knocks: false } })]);
-        });
-
-        it('a Save with the switch as the node has it sends nothing to How this community works', async () => {
-            mockKnockNode({ acceptKnocks: true }, 0);
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            await waitFor(() => expect(document.getElementById('accept-knocks')).toBeInTheDocument());
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            expect(nodeConfigBody()).toBeDefined();
-            expect(shapeBodies()).toEqual([]);
-        });
-
-        it('an admin\'s change is refused there, in the node\'s words', async () => {
-            mockKnockNode({ acceptKnocks: true }, 0);
-            const base = (global.fetch as any).getMockImplementation();
-            (global.fetch as any).mockImplementation((url: string, init?: RequestInit) => url.includes('/api/local/admin/community-shape')
-                ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'Only an owner of this community can change how it works' }) })
-                : base(url, init));
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            const toggle = await waitFor(() => {
-                const el = document.getElementById('accept-knocks') as HTMLInputElement;
-                expect(el).toBeInTheDocument();
-                return el;
-            });
-            await act(async () => { fireEvent.click(toggle); });
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            await waitFor(() => expect(screen.getByText('Only an owner of this community can change how it works')).toBeInTheDocument());
-        });
-
-        it('says when nobody is waiting', async () => {
-            mockKnockNode({ acceptKnocks: false }, 0);
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            await waitFor(() => expect(document.getElementById('open-knocks')).toHaveTextContent('No requests waiting.'));
-            expect((document.getElementById('accept-knocks') as HTMLInputElement).checked).toBe(false);
-        });
-
-        it('hides the switch for a node that has no such setting, and never sends it there', async () => {
-            mockKnockNode({}, 0);
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            expect(document.getElementById('accept-knocks')).toBeNull();
-            expect((global.fetch as any).mock.calls.some((c: any[]) => c[0].includes('/api/local/admin/knocks'))).toBe(false);
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            expect(nodeConfigBody()).toBeDefined();
-            expect('acceptKnocks' in nodeConfigBody()).toBe(false);
-            expect(shapeBodies()).toEqual([]);
-        });
-    });
-
-    describe('message requests', () => {
-        function mockRequestsNode(config: Record<string, unknown>) {
-            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-                if (url.includes('/api/node/config')) {
-                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishLocation: true, directoryPushIntervalHours: 12, serviceRadius: null, ...config }) });
-                }
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-            }));
-        }
-
-        const nodeConfigBody = () => {
-            const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
-            return call ? JSON.parse(call[1].body) : undefined;
-        };
-        const shapeBodies = () => (global.fetch as any).mock.calls
-            .filter((c: any[]) => c[0].includes('/api/local/admin/community-shape')).map((c: any[]) => JSON.parse(c[1].body));
-
-        it('shows the switch as the node has it, and saves the owner\'s choice under How this community works', async () => {
-            mockRequestsNode({ dmRequests: false });
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            const toggle = await waitFor(() => {
-                const el = document.getElementById('dm-requests') as HTMLInputElement;
-                expect(el).toBeInTheDocument();
-                return el;
-            });
-            expect(toggle.checked).toBe(false);
-            expect(screen.getByText('💬 Message Requests')).toBeInTheDocument();
-            await act(async () => {
-                fireEvent.click(toggle);
-            });
-            expect(toggle.checked).toBe(true);
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            expect('dmRequests' in nodeConfigBody()).toBe(false);
-            expect(shapeBodies()).toEqual([expect.objectContaining({ changes: { dmRequests: true } })]);
-        });
-
-        it('hides the switch for a node that has no such setting, and never sends it there', async () => {
-            mockRequestsNode({});
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
-            });
-            expect(document.getElementById('dm-requests')).toBeNull();
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            expect(nodeConfigBody()).toBeDefined();
-            expect('dmRequests' in nodeConfigBody()).toBe(false);
-            expect(shapeBodies()).toEqual([]);
-        });
-    });
-
     describe("a Save never writes a directory setting or a service area the node didn't give (the private preview's password read)", () => {
-        const SETTINGS = ['publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'];
-        const CONTROLS = ['publish-location', 'publish-members', 'publish-contact-email', 'publish-contact-phone', 'publish-health', 'directory-push-interval'];
+        const SETTINGS = ['directoryPushIntervalHours'];
+        const CONTROLS = ['directory-push-interval'];
         const AREA_CONTROLS = ['location-search', 'radius-slider', 'radius-km'];
         const AREA = { lat: -28.55555, lng: 153.49999, radiusKm: 25 };
 
@@ -1353,20 +1122,16 @@ describe('NodeIdentityPanel Component', () => {
         };
 
         it.each([
-            // What a private preview answered an owner signed in with the password, before the node gave them the whole
-            // config: the service area alone. The form's defaults would have switched "Share Location & Radius" back on.
             ['the service area alone', () => Promise.resolve({ ok: true, json: () => Promise.resolve({ serviceRadius: AREA }) })],
             ['a refusal', () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'boom' }) })],
             ['no answer', () => Promise.reject(new TypeError('offline'))],
-        ])('after %s: the switches and the schedule are closed, a line says why, and a Save leaves them all out', async (_what, config) => {
+        ])('after %s: the schedule is closed, a line says why, and a Save leaves it out', async (_what, config) => {
             configAnswers(config);
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
             });
             await waitFor(() => expect(screen.getByText(/couldn.t load the directory settings/i)).toBeInTheDocument());
             for (const id of CONTROLS) expect(document.getElementById(id)).toBeDisabled();
-            // Message requests: a switch only for a read that gave it, so none here.
-            expect(document.getElementById('dm-requests')).toBeNull();
 
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
@@ -1374,7 +1139,6 @@ describe('NodeIdentityPanel Component', () => {
             const body = nodeConfigBody();
             expect(body).toBeDefined();
             for (const name of SETTINGS) expect(name in body).toBe(false);
-            expect('dmRequests' in body).toBe(false);
         });
 
         it('the area alone still saves the pin it gave, exact', async () => {
@@ -1398,8 +1162,7 @@ describe('NodeIdentityPanel Component', () => {
             ['the settings without the area', () => Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({
-                    publishLocation: false, publishMembers: true, publishContactEmail: false, publishContactPhone: false,
-                    publishHealth: true, directoryPushIntervalHours: 12,
+                    directoryPushIntervalHours: 12,
                 }),
             })],
         ])("after %s: the area is closed, a line says why, and a Save leaves it out (null would clear the node's)", async (_what, config) => {
@@ -1422,14 +1185,14 @@ describe('NodeIdentityPanel Component', () => {
             configAnswers(() => Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({
-                    serviceRadius: null, publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false,
-                    publishHealth: true, directoryPushIntervalHours: 12,
+                    serviceRadius: null,
+                    directoryPushIntervalHours: 12,
                 }),
             }));
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
             });
-            await waitFor(() => expect(document.getElementById('publish-location')).not.toBeDisabled());
+            await waitFor(() => expect(document.getElementById('directory-push-interval')).not.toBeDisabled());
             for (const id of AREA_CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
             expect(screen.queryByText(/couldn.t load the service area/i)).toBeNull();
 
@@ -1454,15 +1217,13 @@ describe('NodeIdentityPanel Component', () => {
             configAnswers(() => Promise.resolve({
                 ok: true,
                 json: () => Promise.resolve({
-                    serviceRadius: AREA, publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
-                    publishHealth: false, directoryPushIntervalHours: 0, lastDirectoryPush: null, acceptKnocks: true, door: 'admins',
-                    dmRequests: false,
+                    serviceRadius: AREA, directoryPushIntervalHours: 12, lastDirectoryPush: null,
                 }),
             }));
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
             });
-            await waitFor(() => expect((document.getElementById('publish-contact-email') as HTMLInputElement).checked).toBe(true));
+            await waitFor(() => expect((document.getElementById('directory-push-interval') as HTMLSelectElement).value).toBe('12'));
             for (const id of CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
             expect(screen.queryByText(/couldn.t load the directory settings/i)).toBeNull();
             for (const id of AREA_CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
@@ -1472,11 +1233,9 @@ describe('NodeIdentityPanel Component', () => {
                 fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
             });
             expect(nodeConfigBody()).toMatchObject({
-                publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
-                publishHealth: false, directoryPushIntervalHours: 0, serviceRadius: AREA,
+                directoryPushIntervalHours: 12, serviceRadius: AREA,
             });
-            // Requests to join and message requests, as the node has them: nowhere (node/config never takes them now).
-            expect('dmRequests' in nodeConfigBody() || 'acceptKnocks' in nodeConfigBody()).toBe(false);
+            expect('publishLocation' in nodeConfigBody() || 'publishContactEmail' in nodeConfigBody()).toBe(false);
             expect((global.fetch as any).mock.calls.some((c: any[]) => c[0].includes('/api/local/admin/community-shape'))).toBe(false);
         });
     });

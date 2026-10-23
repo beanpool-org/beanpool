@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestModeOf, requestAfterRead, decisionFailureWords, requestPendingRefusal } from './dm-requests';
+import { requestModeOf, requestAfterRead, requestAfterOwnLine, decisionFailureWords, requestPendingRefusal } from './dm-requests';
 
 // The rules lib/dm-requests.ts reads from the node's answers (PR #2392 at 7d20c62d; shapes as its routes give them).
 
@@ -32,6 +32,20 @@ describe('requestModeOf', () => {
         expect(requestModeOf(mine, ME, [lineBy(ME, '2026-10-23T01:31:26.628Z', 'image')])).toBe('mine-waiting');
     });
 
+    it('where the node says whether the reader\'s next line is the request (nextLineIsRequest), its count, not the page\'s', () => {
+        // A block lifted (PR #2404 review 4356625513): the line kept for the reader during it is in their read, and never
+        // reached the other person, so the node doesn't count it and takes their next line as the request.
+        const lifted = dm({ state: 'pending', from: ME, at: AT, nextLineIsRequest: true });
+        expect(requestModeOf(lifted, ME, [lineBy(ME, AT)])).toBe('mine-unsent');
+        expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT, nextLineIsRequest: false }), ME, [lineBy(ME, AT)])).toBe('mine-waiting');
+        expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT, nextLineIsRequest: false }), ME, [])).toBe('mine-waiting');
+        expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT, nextLineIsRequest: true }), ME, [])).toBe('mine-unsent');
+        // Not known until this chat's lines are read, as before; and the rest never depend on it.
+        expect(requestModeOf(lifted, ME, null)).toBe('mine-loading');
+        expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT, nextLineIsRequest: true }), ME, [])).toBe('none');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [])).toBe('to-me');
+    });
+
     it('30 days on (expired), the reader\'s next line is a new request', () => {
         expect(requestModeOf(dm({ state: 'expired', from: ME, at: AT }), ME, [lineBy(ME, AT)])).toBe('mine-unsent');
     });
@@ -58,6 +72,24 @@ describe('requestAfterRead', () => {
         // Another request (another time): the node's.
         const fresh = { state: 'pending' as const, from: PEER, at: '2026-11-30T00:00:00.000Z' };
         expect(requestAfterRead(accepted, { request: fresh })).toEqual(fresh);
+    });
+});
+
+describe('requestAfterOwnLine', () => {
+    it('the node took the reader\'s line where it said the next was the request: the next one is not', () => {
+        expect(requestAfterOwnLine({ state: 'pending', from: ME, at: AT, nextLineIsRequest: true }, ME))
+            .toEqual({ state: 'pending', from: ME, at: AT, nextLineIsRequest: false });
+    });
+    it('anything else as it was: someone else\'s, accepted, expired, or a node that doesn\'t say', () => {
+        for (const r of [
+            { state: 'pending' as const, from: PEER, at: AT, nextLineIsRequest: true },
+            { state: 'accepted' as const, from: ME, at: AT, nextLineIsRequest: true },
+            { state: 'expired' as const, from: ME, at: AT, nextLineIsRequest: true },
+            { state: 'pending' as const, from: ME, at: AT },
+            { state: 'pending' as const, from: ME, at: AT, nextLineIsRequest: false },
+        ]) expect(requestAfterOwnLine(r, ME)).toBe(r);
+        expect(requestAfterOwnLine(null, ME)).toBeNull();
+        expect(requestAfterOwnLine(undefined, ME)).toBeUndefined();
     });
 });
 

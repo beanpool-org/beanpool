@@ -87,6 +87,10 @@ const REQUESTED_AT = '2026-10-23T01:31:26.627Z';   // the request is made by Bo'
 const LINE_AT = '2026-10-23T01:31:26.628Z';
 const chat = { id: CONV, type: 'dm', participants: [ann.publicKey, bo.publicKey] };
 const pending = (from = bo.publicKey) => ({ state: 'pending', from, at: REQUESTED_AT });
+/** Bo's own view of his request: the node says whether his next line is its line, by its own count (PR #2404 review 4356625513). */
+const mine = (nextLineIsRequest: boolean) => ({ ...pending(), nextLineIsRequest });
+const picture = () => new File([new Uint8Array(1)], 'shot.png', { type: 'image/png' });
+const clipboardWith = (file: File) => ({ files: [file], items: [{ kind: 'file', type: file.type, getAsFile: () => file }], types: ['Files'] });
 
 /** Bo's line as this app sends it (lib/dm-lock.ts), as the node stores and serves it (#2392's GET /api/messages/:id row). */
 function line(from: typeof ann, text: string, at = LINE_AT, extra: Partial<ApiMessage> = {}): ApiMessage {
@@ -562,6 +566,58 @@ describe('the sender\'s side', () => {
         expect(screen.queryByTestId('chat-drop-hint')).toBeNull();
         await act(async () => { open(); });
         await screen.findByTestId('request-waiting');
+    });
+
+    it('a pasted photo is taken before the first line, and not while the chat is still being read: no preview, nor once it is', async () => {
+        node.list = boList(mine(true));
+        node.reads[CONV] = readOf(mine(true), []);
+        const { unmount } = render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-first-line');
+        fireEvent.paste(screen.getByPlaceholderText('Message...'), { clipboardData: clipboardWith(picture()) });
+        expect(await screen.findByTestId('chat-image-preview')).toBeInTheDocument();
+        unmount();
+
+        let open!: () => void;
+        node.gates[CONV] = new Promise<void>((r) => { open = r; });
+        node.list = boList(mine(false));
+        node.reads[CONV] = readOf(mine(false), [line(bo, 'Hi Ann')]);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        const composer = await screen.findByPlaceholderText('Message...');
+        fireEvent.paste(composer, { clipboardData: clipboardWith(picture()) });
+        await act(async () => {});
+        expect(screen.queryByTestId('chat-image-preview')).toBeNull();
+        await act(async () => { open(); });
+        await screen.findByTestId('request-waiting');
+        expect(screen.queryByTestId('chat-image-preview')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    });
+
+    it('after a block is lifted, the line kept during it is no request\'s: the node says the next line is, and the composer is back', async () => {
+        // Bo's line kept for him alone while Ann blocked him is in his read; it never reached her, and once she lifts the
+        // block the node takes his next line as the request (#2392 review 4354388176). The page can't tell which line was
+        // kept, and doesn't: it reads the node's word.
+        node.list = boList(mine(true));
+        node.reads[CONV] = readOf(mine(true), [line(bo, 'Hi Ann')]);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        expect(await screen.findByTestId('request-first-line')).toHaveTextContent('Your first message goes to Ann as a request. You can write more once they accept.');
+        expect(screen.getByPlaceholderText('Message...')).toBeEnabled();
+        expect(screen.queryByTestId('request-waiting')).toBeNull();
+        expect(await screen.findByText('Hi Ann')).toBeInTheDocument();
+    });
+
+    it('once the node takes that line, the composer waits, before the chat is read again or if that read fails', async () => {
+        node.list = boList(mine(true));
+        node.reads[CONV] = readOf(mine(true), [line(bo, 'Hi Ann')]);
+        vi.mocked(sendMessageApi).mockResolvedValue({ success: true } as never);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-first-line');
+        // The read after the send never comes back (a dropped connection).
+        node.gates[CONV] = new Promise<void>(() => {});
+        fireEvent.change(screen.getByPlaceholderText('Message...'), { target: { value: 'Hello again' } });
+        fireEvent.click(screen.getByTitle('Send message'));
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Requests. You can write more once they accept.');
+        expect(sendMessageApi).toHaveBeenCalledTimes(1);
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
     });
 
     it('their own line can still be edited while it waits', async () => {

@@ -18,7 +18,8 @@
  *      as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
  *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
- *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance in a
+ *      line kept during it doesn't count, the opener's own reads say their next line is the request, and it is the one Ann
+ *      sees; an acceptance in a
  *      conversation still kept for its opener rings only them; an acceptance never rings
  *      someone who has blocked the one whose act it was, and an opener who blocked Ann reads an acceptance she made after
  *      the block as a request still waiting, until they lift it
@@ -40,6 +41,9 @@
  *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself
  *  19. on again: what Ann did while off (her line, a friend add, her own open) accepted what waited for her, so each chat
  *      stays in her chats
+ *
+ * In every part, only the opener's own view of a request says whether their next line is its line (`nextLineIsRequest`),
+ * by the node's count (PR #2404 review 4356625513); the person it is for never reads it.
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -189,6 +193,17 @@ const linesBy = (conv: string, author: Id) =>
 const inChats = (list: any, conv: string) => !!list?.conversations?.some((c: any) => c.id === conv);
 const inRequests = (list: any, conv: string) => !!list?.requests?.conversations?.some((c: any) => c.id === conv);
 const entryOf = (list: any, conv: string) => list?.conversations?.find((c: any) => c.id === conv) ?? list?.requests?.conversations?.find((c: any) => c.id === conv);
+/**
+ * What the opener's own list entry and read of the chat say of their next line (`nextLineIsRequest`), as the node counts
+ * their lines: the page can't tell by counting, as it can't tell a line kept for them during a block from one that reached
+ * the other person (PR #2404 review 4356625513).
+ */
+async function nextLineSays(opener: Id, conv: string): Promise<unknown[]> {
+    const entry = entryOf(await listOf(opener), conv);
+    const read = await call('GET', opener, `/api/messages/${conv}`);
+    return [entry?.request?.nextLineIsRequest, read.body?.conversation?.request?.nextLineIsRequest];
+}
+const allSay = (says: unknown[], v: boolean) => says.length === 2 && says.every(s => s === v);
 /** The request row as the node holds it. */
 const rowOf = (conv: string): any => attempt(() => db.prepare('SELECT * FROM dm_requests WHERE conversation_id = ?').get(conv));
 /** Set a request's age, as if it had been made `days` ago. */
@@ -265,6 +280,8 @@ async function globalRun(): Promise<void> {
     const boConv: string = bOpen.body?.conversation?.id;
     assert(bOpen.status === 200 && bOpen.body?.conversation?.request?.state === 'pending' && bOpen.body?.conversation?.request?.from === bo.pk,
         `Bo's open is a request from him, waiting (${show(bOpen)})`);
+    assert(bOpen.body?.conversation?.request?.nextLineIsRequest === true && allSay(await nextLineSays(bo, boConv), true),
+        `before he writes, his open, his list and his read say his next line is the request (${JSON.stringify(bOpen.body?.conversation?.request)})`);
     assert(rowOf(boConv)?.state === 'pending' && rowOf(boConv)?.from_pubkey === bo.pk && rowOf(boConv)?.to_pubkey === ann.pk,
         'the node holds it: from Bo, to Ann, waiting');
     // The apps ask for the chat when someone taps Message, before they type: an open with no line asks Ann nothing yet
@@ -300,6 +317,10 @@ async function globalRun(): Promise<void> {
     const boList1 = await listOf(bo);
     assert(inChats(boList1, boConv) && entryOf(boList1, boConv)?.request?.state === 'pending' && !boList1?.requests?.count,
         'his own list has the chat, marked as his waiting request');
+    const boSays1 = await nextLineSays(bo, boConv);
+    assert(allSay(boSays1, false), `after his line, his list and his read say his next line is not (${JSON.stringify(boSays1)})`);
+    const annViews = [entryOf(annList1, boConv)?.request, annRead.body?.conversation?.request, entryOf(await listOf(ann), boConv)?.request];
+    assert(annViews.every(r => !!r && !('nextLineIsRequest' in r)), `Ann's views of it never say (${JSON.stringify(annViews)})`);
     // An open with no line can't be ignored, so it never swallows the line that comes after it; and the 30 days run from
     // that line, not from the open (PR #2392 review 4354580417).
     const rae = member('Rae');
@@ -533,13 +554,22 @@ async function globalRun(): Promise<void> {
         && uBlocked.status === 403 && uBlocked.body?.code === 'dm_request_pending' && vBlocked.status === 403 && vBlocked.body?.code === 'dm_request_pending'
         && rowOf(umaConv)?.state === 'pending' && rowOf(vicConv)?.state === 'pending',
         `while blocked, each first line is kept for its sender alone and the next is refused, as any request's (${show(uBlocked)}; ${show(vBlocked)})`);
+    const blockedSays = [await nextLineSays(uma, umaConv), await nextLineSays(vic, vicConv), await nextLineSays(ida, idaConv)];
+    assert(blockedSays.every(s => allSay(s, false)),
+        `while the block holds, Uma's and Vic's own reads say their next line is not the request, as Ida's do (${JSON.stringify(blockedSays)})`);
     const unUma = await call('POST', ann, '/api/blocks/remove', { targetPubkey: uma.pk });
     const unVic = await call('POST', ann, '/api/blocks/remove', { targetPubkey: vic.pk });
+    const liftedSays = [await nextLineSays(uma, umaConv), await nextLineSays(vic, vicConv)];
+    const idaLifted = await nextLineSays(ida, idaConv);
+    assert(liftedSays.every(s => allSay(s, true)) && allSay(idaLifted, false),
+        `once it is lifted, their own reads say their next line is the request, the kept one not counted; Ida's still say not (${JSON.stringify(liftedSays)}; ${JSON.stringify(idaLifted)})`);
     const u2 = await send(umaConv, uma);
     const v2 = await send(vicConv, vic);
     await sleep(150);
     assert(unUma.status === 200 && unVic.status === 200 && u2.status === 200 && v2.status === 200,
         `Ann lifts both blocks: each one's next line goes through (${show(u2)}; ${show(v2)})`);
+    const afterSays = [await nextLineSays(uma, umaConv), await nextLineSays(vic, vicConv)];
+    assert(afterSays.every(s => allSay(s, false)), `after it, their own reads say the next is not (${JSON.stringify(afterSays)})`);
     const annList6b = await listOf(ann);
     const annReadUma = await call('GET', ann, `/api/messages/${umaConv}`);
     const annReadVic = await call('GET', ann, `/api/messages/${vicConv}`);
@@ -709,6 +739,8 @@ async function globalRun(): Promise<void> {
     assert(typeof expired === 'number' && expired >= 1 && rowOf(halConv)?.state === 'expired' && !inRequests(annList8, halConv) && !inChats(annList8, halConv),
         `a request 31 days old expires and leaves her requests (${expired} expired)`);
     assert(entryOf(await listOf(hal), halConv)?.request?.state === 'expired', 'Hal\'s app is told it expired');
+    const halSays = await nextLineSays(hal, halConv);
+    assert(allSay(halSays, true), `and that his next line is the request, his line in it or not (${JSON.stringify(halSays)})`);
     const h2 = await send(halConv, hal);
     await sleep(100);
     assert(h2.status === 200 && rowOf(halConv)?.state === 'pending' && Date.parse(rowOf(halConv)?.requested_at) > Date.now() - HOUR

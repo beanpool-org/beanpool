@@ -27,8 +27,8 @@
  *   7. A long refusal holds the node's one event loop for no time: one that echoes 160 KB or 1 MB of what a request
  *      sent, or 1 MB of a catalog sentence again and again, comes back as it came, the way out taking under 100 ms over
  *      it, with the suite's French, every marked sentence in French, and the shipped catalogs; over HTTP the answer is
- *      the one without the header, byte for byte. One just under the longest the way out reads still comes in French,
- *      in the same time.
+ *      the one without the header, byte for byte. One just under the longest the way out reads, a short catalog sentence
+ *      499 times, still comes in French in the same time.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-words.ts
  */
@@ -810,12 +810,13 @@ async function testLongRefusals(): Promise<void> {
         }
 
         // Just under the longest the way out reads (member-words.ts LONGEST_REFUSAL_READ, 2,000 characters), with every
-        // marked sentence in French: still read, and in the same time.
-        useCatalogsForTests('fr', { server: catalogs[1][1]!, core: FR_CORE });
-        const many = 'Or the group can vote. '.repeat(86).trim();
+        // marked sentence in French: still read, and in the same time. A short sentence of the catalog's, again and again,
+        // is the most runs it can find: tried from each sentence to the end, this took half a second.
+        useCatalogsForTests('fr', { server: { ...catalogs[1][1]!, 'No.': 'Non.' }, core: FR_CORE });
+        const many = 'No. '.repeat(499).trim();
         const nearLong = await wayOutOver(many);
-        assert(many.length < 2000 && nearLong.error === 'Ou le groupe peut voter. '.repeat(86).trim() && nearLong.ms < LONG_REFUSAL_MS,
-            `a refusal of ${many.length} characters, a catalog sentence 86 times, comes in French in ${nearLong.ms.toFixed(1)} ms`);
+        assert(many.length < 2000 && nearLong.error === 'Non. '.repeat(499).trim() && nearLong.ms < LONG_REFUSAL_MS,
+            `a refusal of ${many.length} characters, a catalog sentence 499 times, comes in French in ${nearLong.ms.toFixed(1)} ms`);
         const unknown = echoed('a. B'.repeat(480));
         const nearUnknown = await wayOutOver(unknown);
         assert(unknown.length < 2000 && nearUnknown.error === unknown && nearUnknown.ms < LONG_REFUSAL_MS,

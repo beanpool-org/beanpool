@@ -36,6 +36,9 @@ export const NTFY_HOSTS = ['ntfy.sh'];
 // ntfy's message ids: 12 letters and digits. Anything else is never put in a request.
 const NTFY_ID = /^[A-Za-z0-9]{12}$/;
 const REDDIT_ID = /^t[13]_[a-z0-9]{1,16}$/;
+// The app's links (apps/reddit-watcher/src/notice.ts): Reddit's PERMALINK path, or its own /comments/<id>/… when Reddit
+// gives no subreddit name. No other page on www.reddit.com, and no query or fragment, is one it sends.
+const PERMALINK_PATH = /^(\/r\/[A-Za-z0-9_]{2,21})?\/comments\/[a-z0-9]{1,16}(\/[^\s]*)?$/i;
 // The app's isoTime() (agent-item.ts): toISOString(), nothing else. Date.parse alone lets text through ("Jan 1 2026 (…)").
 const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 // The app's limits (apps/reddit-watcher/src/agent-item.ts), with room: an item past them is not one the app sent.
@@ -118,7 +121,15 @@ function redditLink(v) {
     if (!isStr(v, LIMITS.link)) return false;
     try {
         const u = new URL(v);
-        return u.origin === 'https://www.reddit.com' && u.href === v && !u.username && !u.password;
+        return (
+            u.origin === 'https://www.reddit.com' &&
+            u.href === v &&
+            !u.username &&
+            !u.password &&
+            !u.search &&
+            !u.hash &&
+            PERMALINK_PATH.test(u.pathname)
+        );
     } catch {
         return false;
     }

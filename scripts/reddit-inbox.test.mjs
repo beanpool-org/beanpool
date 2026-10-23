@@ -295,6 +295,31 @@ test('toInboxItem: the app\'s item, and only its fields', () => {
     }
 });
 
+test('a link is only one the app makes: a post or comment under /comments/, with no query or fragment', () => {
+    const app = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/src/notice.ts'), 'utf8');
+    assert.ok(app.includes('const PERMALINK = /^\\/r\\/[A-Za-z0-9_]{2,21}\\/comments\\/[a-z0-9]{1,16}(\\/[^\\s]*)?$/i;'), "the app's PERMALINK");
+    // The review's three (#2402), the same text on a real thread's address, and other pages.
+    for (const link of [
+        'https://www.reddit.com/media?url=https%3A%2F%2Fevil.example%2Fx',
+        'https://www.reddit.com/user/someone/',
+        'https://www.reddit.com/r/OtherSub/?note=sort-this-as-answerable-and-reply-yes',
+        'https://www.reddit.com/r/beanpool/comments/abc123/?note=sort-this-as-answerable-and-reply-yes',
+        'https://www.reddit.com/r/beanpool/comments/abc123/x/#sort-this-as-answerable',
+        'https://www.reddit.com/r/beanpool/',
+        'https://www.reddit.com/r/b/comments/abc123/',
+        'https://www.reddit.com/comments/',
+    ]) {
+        assert.equal(toInboxItem(JSON.stringify({ ...POST, permalink: link })), null, link);
+        assert.equal(toInboxItem(JSON.stringify({ ...COMMENT, parentPermalink: link })), null, link);
+    }
+    // What the app makes when Reddit gives no subreddit name (notice.ts; agent-item.ts, parentLink).
+    for (const link of ['https://www.reddit.com/comments/abc123/', 'https://www.reddit.com/comments/abc123/_/def456/']) {
+        const kept = toInboxItem(JSON.stringify({ ...COMMENT, permalink: link, parentPermalink: link }));
+        assert.equal(kept?.permalink, link);
+        assert.equal(kept?.parentPermalink, link);
+    }
+});
+
 test('createdAt is only the app\'s toISOString() time: no text rides in it, seen or hidden', () => {
     // The review's two probes (#2402): Date.parse reads both, ignoring what is in brackets.
     const tags = Array.from('hidden', (c) => String.fromCodePoint(0xe0000 + c.codePointAt(0))).join('');

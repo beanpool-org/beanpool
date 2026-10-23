@@ -21,7 +21,10 @@
  *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance in a
  *      conversation still kept for its opener rings only them; an acceptance never rings
  *      someone who has blocked the one whose act it was, and an opener who blocked Ann reads an acceptance she made after
- *      the block as a request still waiting, until they lift it
+ *      the block as a request still waiting, until they lift it; and the mirror: while Ann blocks an opener, an acceptance
+ *      of his own act after her block (a role's line or reaction) is in none of her lists, her unread count or her badge,
+ *      and reads as she left it; she may Ignore it and he reads nothing new; it shows once she lifts the block, or by her
+ *      own act or a trade's, and a removal ignores it
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
@@ -29,6 +32,8 @@
  *  11. a removed sender's request goes; a deleted sender's line is blanked and their request goes (R15); neither becomes a
  *      chat or counts as unread; one waiting for a removed member goes from the node
  *  12. Ignore all
+ *  12b. a visitor it is sent to (a key with no row here, as a member of another community over the relay is) accepts it,
+ *      ignores it and ignores all, and hears each on its socket; a request in a chat it isn't in, and a block, stay refused
  *  13. a re-key moves the requests to the new key
  *  14. a standby: every decision refused, and an open that would make a request; a whole copy and a delta carry the
  *      requests verbatim, never a blocked opener's; a promoted copy answers as the main server did (R16)
@@ -37,7 +42,8 @@
  *  16. the operator turns them on in Settings; then a stranger's open is a request, and a chat opened before stays open
  *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7)
  *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's (one that had lapsed
- *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself
+ *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself; so
+ *      does one she ignored and then blocked its opener, accepted by his own act while on, or written in by him while off
  *  19. on again: what Ann did while off (her line, a friend add, her own open) accepted what waited for her, so each chat
  *      stays in her chats
  *
@@ -619,6 +625,88 @@ async function globalRun(): Promise<void> {
         'Ann hears her own acceptances (her other devices)');
     assert(updated(annSock, yulConv, annHeard6).length === 0, 'and Ann, who blocked Yul, hears nothing of his line accepting his');
     for (const s of [wesSock, xanSock]) s.ws.close();
+    // Nor does it show in what she reads (the director's mirror of option b, 23 Oct, on the deciding pass at 7d20c62d): while
+    // Ann blocks him, an acceptance of the blocked opener's own act after her block reads to her as not made. Rex, blocked
+    // after his line and made a moderator, accepts his by reacting to it; Sid, whose request Ann ignored before she blocked
+    // him, made an admin, by writing. None of the three is in her chats, her requests, her unread count or her badge, and
+    // she reads each as she left it.
+    const [rex, sid] = [member('Rex'), member('Sid')];
+    const rexConv: string = (await open(rex, ann)).body?.conversation?.id;
+    const sidConv: string = (await open(sid, ann)).body?.conversation?.id;
+    const rexLine: string = (await send(rexConv, rex)).body?.message?.id;
+    await send(sidConv, sid);
+    const ignoreSid = await decide(ann, sidConv, 'ignore');
+    const blocksMirror = [await call('POST', ann, '/api/blocks', { targetPubkey: rex.pk }), await call('POST', ann, '/api/blocks', { targetPubkey: sid.pk })];
+    grantNodeRole(rex.pk, 'moderator', owner.pk);
+    grantNodeRole(sid.pk, 'admin', owner.pk);
+    const rexReacts = await react(rexLine, rex);
+    const s2 = await send(sidConv, sid);
+    await sleep(100);
+    assert(ignoreSid.status === 200 && blocksMirror.every(r => r.status === 200) && rexReacts.status === 200 && s2.status === 200
+        && [yulConv, rexConv, sidConv].every(c => rowOf(c)?.state === 'accepted'),
+        `Rex's reaction and Sid's line each accept their own, as Yul's line did (${show(rexReacts)}; ${show(s2)})`);
+    const annMirror = await listOf(ann);
+    const countsMirror: Record<string, number> = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [yulConv]: 1 };
+    const annReads = async (c: string) => (await call('GET', ann, `/api/messages/${c}`)).body?.conversation?.request?.state;
+    const [annYul, annRex, annSid] = [await annReads(yulConv), await annReads(rexConv), await annReads(sidConv)];
+    assert(![yulConv, rexConv, sidConv].some(c => inChats(annMirror, c) || inRequests(annMirror, c) || c in countsMirror),
+        `none of the three is in Ann's chats, her requests, her unread count or her badge (${[yulConv, rexConv, sidConv].map(c => `${inChats(annMirror, c)}/${countsMirror[c] ?? 0}`).join(', ')})`);
+    assert(annYul === 'pending' && annRex === 'pending' && annSid === 'ignored',
+        `she reads each as she left it: Yul's and Rex's waiting, Sid's ignored (${annYul}, ${annRex}, ${annSid})`);
+    // She may Ignore one (the director: Ann may Ignore it, and the opener reads nothing new). Yul reads it accepted, his own
+    // act, before and after, hears nothing, and writes on.
+    const yulSock = await socket(yul);
+    await sleep(50);
+    const yulReads = async () => JSON.stringify([entryOf(await listOf(yul), yulConv)?.request, (await call('GET', yul, `/api/messages/${yulConv}`)).body?.conversation?.request]);
+    const yulBefore = await yulReads();
+    const ignoreYul = await decide(ann, yulConv, 'ignore');
+    await sleep(100);
+    const yulAfter = await yulReads();
+    const yulHeard = heardOf(yulSock, yulConv).length;
+    const y3 = await send(yulConv, yul);
+    assert(ignoreYul.status === 200 && ignoreYul.body?.request?.state === 'ignored' && await annReads(yulConv) === 'ignored'
+        && !inChats(await listOf(ann), yulConv), `Ann may Ignore Yul's: she reads it ignored (${show(ignoreYul)})`);
+    assert(yulAfter === yulBefore && JSON.parse(yulBefore)[0]?.state === 'accepted' && yulHeard === 0 && y3.status === 200,
+        `and Yul reads nothing new: accepted, as his own act made it, and he writes on (${yulBefore} → ${yulAfter}; heard ${yulHeard}; ${show(y3)})`);
+    // It shows once she lifts the block, as option b's opener reads one once they lift theirs: her Ignore was of a request
+    // he had accepted already.
+    const unYul = await call('POST', ann, '/api/blocks/remove', { targetPubkey: yul.pk });
+    const annLifted = await listOf(ann);
+    const countsLifted: Record<string, number> = attempt(() => getListedUnreadCounts(ann.pk)) ?? {};
+    assert(unYul.status === 200 && inChats(annLifted, yulConv) && entryOf(annLifted, yulConv)?.request?.state === 'accepted' && countsLifted[yulConv] >= 1,
+        `once she lifts the block, Yul's acceptance shows: a chat of hers, accepted, his line unread (${entryOf(annLifted, yulConv)?.request?.state}, ${countsLifted[yulConv]})`);
+    yulSock.ws.close();
+    // A trade between Ann and Sid opening accepts it for both, as a trade accepts any request: it is a chat of hers.
+    const sidPost = crypto.randomUUID();
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+                VALUES (?, 'offer', 'general', 'Eggs', 'A dozen', 5, ?, ?, 1, 'active')`).run(sidPost, ann.pk, iso(Date.now()));
+    const sidTrade = attempt(() => ensureTransactionConversation(sidPost, sid.pk, ann.pk));
+    const annTrade = await listOf(ann);
+    assert(sidTrade === sidConv && inChats(annTrade, sidConv) && entryOf(annTrade, sidConv)?.request?.state === 'accepted',
+        `a trade between Ann and Sid opening shows his to her, accepted (${entryOf(annTrade, sidConv)?.request?.state})`);
+    // Rex is removed: one hidden from Ann is ignored, as one nobody accepted is, so it never becomes a chat of hers.
+    attempt(() => adminPruneUser(rex.pk, 'owner:password'));
+    const annRexGone = await listOf(ann);
+    const countsRexGone: Record<string, number> = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [rexConv]: 1 };
+    assert(rowOf(rexConv)?.state === 'ignored' && !inChats(annRexGone, rexConv) && !inRequests(annRexGone, rexConv) && !(rexConv in countsRexGone),
+        `Rex removed, his is ignored, and still in none of her lists nor her badge (row ${rowOf(rexConv)?.state})`);
+    // Each blocks the other: Tia's line accepts hers, hidden from Ann. Ann's own Accept then shows it to her, and Tia, whose
+    // own act accepted it first, still reads it accepted and writes on.
+    const tia = member('Tia');
+    const tiaConv: string = (await open(tia, ann)).body?.conversation?.id;
+    await send(tiaConv, tia);
+    const blocksTia = [await call('POST', ann, '/api/blocks', { targetPubkey: tia.pk }), await call('POST', tia, '/api/blocks', { targetPubkey: ann.pk })];
+    grantNodeRole(tia.pk, 'moderator', owner.pk);
+    const t2 = await send(tiaConv, tia);
+    const annTiaBefore = await annReads(tiaConv);
+    await sleep(5);
+    const tAccept = await decide(ann, tiaConv, 'accept');
+    const tiaReads = entryOf(await listOf(tia), tiaConv)?.request?.state;
+    const t3 = await send(tiaConv, tia);
+    const annTia = await listOf(ann);
+    assert(blocksTia.every(r => r.status === 200) && t2.status === 200 && annTiaBefore === 'pending' && tAccept.status === 200
+        && tAccept.body?.request?.state === 'accepted' && inChats(annTia, tiaConv) && tiaReads === 'accepted' && t3.status === 200,
+        `blocking each other, Tia's line accepts hers (Ann reads ${annTiaBefore}); Ann's Accept shows it to her, and Tia reads it accepted still (${tiaReads}; ${show(t3)})`);
     // Nor does it show in what they read (the director's option b on review 4354581168): while Zak blocks Ann, her reply
     // reads to him as a request still waiting, and so does her adding Ora; each one's next line is refused as a waiting
     // request's is. Pip, who blocked Ann too, waits, for the comparison. It shows once the block is lifted.
@@ -801,6 +889,59 @@ async function globalRun(): Promise<void> {
         `every waiting request is ignored at once, and none is left (${show(all)}; ${waiting} were waiting)`);
     assert(rowOf(fConv)?.state === 'ignored' && rowOf(boConv)?.state === 'accepted', 'an accepted chat is left as it is');
 
+    // ── 12b. a visitor it is sent to ────────────────────────────────────────────────────────────
+    // A key with no row here that a member messages is a visitor's row (members.is_visitor), as a member of another community
+    // reached over the relay is. A request waiting for one is theirs to decide (the director's option b on PR #2392 review
+    // 4355750376): Accept, Ignore and Ignore all, and their sockets hear each. Nothing else is new to them.
+    console.log('── 12b. a visitor decides a request sent to them ──');
+    const vee = newId('Vee');
+    const [abe, cal, dot] = [member('Abe'), member('Cal'), member('Dot')];
+    const vOpen = await open(abe, vee);
+    const veeConv: string = vOpen.body?.conversation?.id;
+    const veeRow = db.prepare('SELECT is_visitor FROM members WHERE public_key = ?').get(vee.pk) as { is_visitor?: number } | undefined;
+    const ab1 = await send(veeConv, abe);
+    const ab2 = await send(veeConv, abe);
+    assert(vOpen.status === 200 && veeRow?.is_visitor === 1 && rowOf(veeConv)?.state === 'pending' && rowOf(veeConv)?.from_pubkey === abe.pk
+        && ab1.status === 200 && ab2.status === 403 && ab2.body?.code === 'dm_request_pending',
+        `Abe messages a key with no row: a visitor's row, and his open a request; his first line goes, his second waits (${show(ab2)})`);
+    const calConv: string = (await open(cal, vee)).body?.conversation?.id;
+    const dotConv: string = (await open(dot, vee)).body?.conversation?.id;
+    await send(calConv, cal);
+    await send(dotConv, dot);
+    const veeSock = await socket(vee);
+    await sleep(50);
+    const veeList = (await call('GET', vee, `/api/messages/conversations/${vee.pk}`)).body;
+    assert(veeList?.requests?.count === 3 && (veeList?.conversations ?? []).length === 0,
+        `Vee has all three under requests, none in her chats (${veeList?.requests?.count} waiting)`);
+    const vAccept = await decide(vee, veeConv, 'accept');
+    const vIgnore = await decide(vee, calConv, 'ignore');
+    const vAll = await call('POST', vee, '/api/messages/request/ignore-all', {});
+    await sleep(150);
+    assert(vAccept.status === 200 && vAccept.body?.request?.state === 'accepted' && rowOf(veeConv)?.state === 'accepted',
+        `Vee accepts Abe's (${show(vAccept)})`);
+    assert(vIgnore.status === 200 && vIgnore.body?.request?.state === 'ignored' && rowOf(calConv)?.state === 'ignored',
+        `she ignores Cal's (${show(vIgnore)})`);
+    assert(vAll.status === 200 && vAll.body?.ignored === 1 && rowOf(dotConv)?.state === 'ignored', `and Ignore all takes Dot's (${show(vAll)})`);
+    const ab3 = await send(veeConv, abe);
+    const ca2 = await send(calConv, cal);
+    const veeList2 = (await call('GET', vee, `/api/messages/conversations/${vee.pk}`)).body;
+    assert(ab3.status === 200 && ca2.status === 403 && ca2.body?.code === 'dm_request_pending' && inChats(veeList2, veeConv)
+        && veeList2?.requests?.count === 0, `Abe writes on, in her chats; Cal's next line waits, as for any ignored request (${show(ab3)}; ${show(ca2)})`);
+    const veeHeard = veeSock.events.filter(e => e.type === 'dm_request_updated' || e.type === 'dm_requests_ignored');
+    assert(veeHeard.some(e => e.type === 'dm_request_updated' && e.conversationId === veeConv && e.request?.state === 'accepted')
+        && veeHeard.some(e => e.type === 'dm_request_updated' && e.conversationId === calConv && e.request?.state === 'ignored')
+        && veeHeard.some(e => e.type === 'dm_requests_ignored' && e.conversationIds?.includes(dotConv)),
+        `her socket hears each of her decisions, as her other devices would (${veeHeard.map(e => e.type).join(', ') || 'nothing'})`);
+    veeSock.ws.close();
+    // Nothing else: a request in a chat she isn't in is the gate's refusal, as for any write of hers it doesn't name, and she
+    // still can't block.
+    const idaBefore = JSON.stringify(rowOf(idaConv));
+    const vOther = await decide(vee, idaConv, 'accept');
+    const vBlock = await call('POST', vee, '/api/blocks', { targetPubkey: cal.pk });
+    assert(vOther.status === 403 && vOther.body?.code === 'not_a_member' && JSON.stringify(rowOf(idaConv)) === idaBefore
+        && vBlock.status === 403 && vBlock.body?.code === 'not_a_member',
+        `a request in a chat she isn't in is refused as a non-member's, and so is a block (${show(vOther)}; ${show(vBlock)})`);
+
     // ── 13. a re-key ────────────────────────────────────────────────────────────────────────────
     console.log('── 13. a re-key moves them ──');
     const lu = member('Lu');
@@ -964,9 +1105,20 @@ async function localRun(): Promise<void> {
     attempt(() => requestsEngine.expireOldRequests(Date.now()));
     const opLapsed = rowOf(opConv)?.state;
     attempt(() => adminPruneUser(op.pk, 'owner:password'));
+    // And two Ann ignored and then blocked (the director's mirror of option b, 23 Oct): Pia, made a moderator, writes while
+    // on, which accepts hers, hidden from Ann; Ros writes once requests are off, a line kept for him alone.
+    const [pia, ros] = [member('Pia'), member('Ros')];
+    const piaConv: string = (await open(pia, ann)).body?.conversation?.id;
+    const rosConv: string = (await open(ros, ann)).body?.conversation?.id;
+    for (const [c, s] of [[piaConv, pia], [rosConv, ros]] as [string, Id][]) await send(c, s);
+    const ignorePiaRos = [await decide(ann, piaConv, 'ignore'), await decide(ann, rosConv, 'ignore')];
+    const blocksPiaRos = [await call('POST', ann, '/api/blocks', { targetPubkey: pia.pk }), await call('POST', ann, '/api/blocks', { targetPubkey: ros.pk })];
+    grantNodeRole(pia.pk, 'moderator', owner.pk);
+    const pi2 = await send(piaConv, pia);
     const unreadOn = (await listOf(ann))?.totalUnread;
     const off = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
     const c3 = await send(cyConv, cy);
+    const ro2 = await send(rosConv, ros);
     await sleep(100);
     const annOff = await listOf(ann);
     assert(off.status === 200 && off.body?.dmRequests === false && c3.status === 200 && inChats(annOff, cyConv) && !('requests' in (annOff ?? {})),
@@ -978,6 +1130,9 @@ async function localRun(): Promise<void> {
         && ![ikeConv, jemConv, kitConv].some(c => inChats(annOff, c) || c in countsOff)
         && annOff?.totalUnread === unreadOn + entryOf(annOff, cyConv)?.unreadCount,
         `the requests ignored while on stay out of her chats and her unread count (unread ${unreadOn} → ${annOff?.totalUnread})`);
+    assert(ignorePiaRos.every(r => r.status === 200) && blocksPiaRos.every(r => r.status === 200) && pi2.status === 200 && ro2.status === 200
+        && rowOf(piaConv)?.state === 'accepted' && rowOf(rosConv)?.state === 'ignored' && ![piaConv, rosConv].some(c => inChats(annOff, c) || c in countsOff),
+        `nor does Pia's, accepted by her own line while Ann blocks her, nor Ros's, whose line while off is kept for him alone (${rowOf(piaConv)?.state}, ${rowOf(rosConv)?.state})`);
     // Either of them writing again, or Ann asking for the chat herself, brings it back as an ordinary chat, so nothing is
     // stored or pushed into a chat she can't find.
     const pushedOff = noticesTo(ann).length;
@@ -994,6 +1149,14 @@ async function localRun(): Promise<void> {
     const countsBack = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [opConv]: 1 };
     assert(opLapsed === 'expired' && rowOf(opConv)?.state === 'ignored' && !inChats(annOff, opConv) && !inChats(annBack, opConv) && !(opConv in countsBack),
         `so does one that had lapsed before its opener was removed: ignored, out of her chats and her badge (${opLapsed} → ${rowOf(opConv)?.state})`);
+    // Ann's own line brings Pia's back, as it brings back one she ignored; and once she lifts the block on Ros, his next line
+    // brings his.
+    const annToPia = await send(piaConv, ann);
+    const unRos = await call('POST', ann, '/api/blocks/remove', { targetPubkey: ros.pk });
+    const ro3 = await send(rosConv, ros);
+    const annBack2 = await listOf(ann);
+    assert(annToPia.status === 200 && unRos.status === 200 && ro3.status === 200 && inChats(annBack2, piaConv) && inChats(annBack2, rosConv),
+        `Ann's own line brings Pia's back to her chats, and Ros's next line, once she lifts the block, his (${show(annToPia)}; ${show(ro3)})`);
 
     // ── 19. on again ────────────────────────────────────────────────────────────────────────────
     console.log('── 19. on again ──');

@@ -2050,11 +2050,6 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (activeKey !== publicKey) {
-        ctx.status = 403;
-        ctx.body = { error: word('You may only update your own preferences') };
-        return;
-    }
     // setMemberPreferences THROWS on a body it refuses (a key that isn't a push setting, holiday mode
     // among them, a toggle that isn't true or false, or a rejected eventReminderOffsets) rather than
     // saving the rest, so a member never believes they set something they didn't. Holiday mode is

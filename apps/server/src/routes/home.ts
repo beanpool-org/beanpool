@@ -40,6 +40,7 @@ import { buildHome, homeReaderStanding, parseAskedCards, parseLands } from './ho
 import { VIEW_HEADER } from './viewer.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 /** The answer's tag: the reader and the answer, never the moment it was made. */
 export function homeEtag(actor: string | undefined, body: { generatedAt: string }): string {
@@ -56,7 +57,7 @@ export function createHomeRoutes(_deps: RouteDeps): Router {
         const standing = homeReaderStanding(actor);
         if (standing === 'refused') {
             ctx.status = actor ? 403 : 401;
-            ctx.body = { error: actor ? 'Read access requires a member identity' : 'A signed request is required', code: 'members_only' };
+            ctx.body = { error: actor ? word('Read access requires a member identity') : word('A signed request is required'), code: 'members_only' };
             return;
         }
         const point = parsePoint(ctx.query);

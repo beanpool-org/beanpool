@@ -42,7 +42,7 @@ import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import type { Member } from '@beanpool/engine';
-import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -94,6 +94,9 @@ import {
     closeGroupByVote,
     afterGroupVote,
 } from './state-engine.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 /** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
 export type DecisionTouch = 'member' | 'pool' | 'scope';
@@ -417,8 +420,7 @@ const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>
  * then they are a member like any other. Moderators are members with a job, and a vote can still remove one.
  */
 const NODE_OPERATOR_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['remove_member', 'suspend_member']);
-export const NODE_OPERATOR_VOTE_REFUSAL = "A community vote can't remove or suspend an owner or admin of this community's "
-    + "server: they run the server itself. An owner can take that role away first; after that, they are a member like any other.";
+export const NODE_OPERATOR_VOTE_REFUSAL = word("A community vote can't remove or suspend an owner or admin of this community's server: they run the server itself. An owner can take that role away first; after that, they are a member like any other.");
 
 /**
  * The node profile switch an effect needs (config/node-profile.ts), or null. Every effect needs `decisions`: with
@@ -471,8 +473,8 @@ function assertEffectAllowedHere(effect: DecisionEffect): void {
     const off = switchOffFor(effect);
     if (off === 'beans') {
         throw new BeansOffError(effect === 'pay_out'
-            ? 'Beans are switched off on this node, so an enterprise has nothing to pay out.'
-            : 'Beans are switched off on this node, so the Commons has nothing to grant or write off.');
+            ? word('Beans are switched off on this node, so an enterprise has nothing to pay out.')
+            : word('Beans are switched off on this node, so the Commons has nothing to grant or write off.'));
     }
     if (off) throw new FeatureOffError(off);
 }
@@ -480,8 +482,8 @@ function assertEffectAllowedHere(effect: DecisionEffect): void {
 /** The node's impersonal voice: author of Decisions it opens by itself (emergency-suspension ratification). */
 export const SYSTEM_AUTHOR = 'SYSTEM';
 
-export const NO_TRADE_POOL_VOTE_ERROR = 'Voting on community money opens after your first completed trade.';
-export const JOINED_AFTER_OPEN_ERROR = 'Only members who joined before this Decision opened can vote on it.';
+export const NO_TRADE_POOL_VOTE_ERROR = word('Voting on community money opens after your first completed trade.');
+export const JOINED_AFTER_OPEN_ERROR = word('Only members who joined before this Decision opened can vote on it.');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -613,7 +615,7 @@ export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; er
         "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'community'"
     ).get(authorPubkey) as any)?.c || 0;
     if (openCount >= 1) {
-        return { ok: false, error: 'Member already has an open decision (limit 1)' };
+        return { ok: false, error: word('Member already has an open decision (limit 1)') };
     }
 
     return { ok: true };
@@ -626,18 +628,18 @@ export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; er
 export function checkProposalStanding(authorPubkey: string): { ok: boolean; error?: string } {
     // A visitor's row proposes nothing, as a key with no row proposes nothing (getActingMember).
     const member = getActingMember(authorPubkey);
-    if (!member) return { ok: false, error: 'Member not found' };
-    if (member.status !== 'active') return { ok: false, error: 'Member is not active' };
+    if (!member) return { ok: false, error: word('Member not found') };
+    if (member.status !== 'active') return { ok: false, error: word('Member is not active') };
     const frozenRow = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(authorPubkey) as any;
-    if (frozenRow?.credit_frozen === 1) return { ok: false, error: 'Member credit is frozen' };
-    if (member.isTreasury) return { ok: false, error: 'Enterprises cannot propose decisions' };
+    if (frozenRow?.credit_frozen === 1) return { ok: false, error: word('Member credit is frozen') };
+    if (member.isTreasury) return { ok: false, error: word('Enterprises cannot propose decisions') };
 
     // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit, which
     // adminSetTier and genesis invites write): badges are recognition and unlock nothing (Marty, 23 Oct).
     const tradeVal = engine.qualifiedTradeValue(db, authorPubkey);
     const isAdmin = isNodeAdmin(authorPubkey);
     if (tradeVal <= 0 && !isAdmin) {
-        return { ok: false, error: 'You can propose a Decision once you have completed a trade' };
+        return { ok: false, error: word('You can propose a Decision once you have completed a trade') };
     }
     return { ok: true };
 }
@@ -654,11 +656,11 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
 export function checkVoterEligibility(voterPubkey: string, decision?: { opensAt: string } | null): { ok: boolean; error?: string } {
     // A visitor's row votes on nothing, as a key with no row votes on nothing (getActingMember).
     const member = getActingMember(voterPubkey);
-    if (!member) return { ok: false, error: 'Member not found' };
-    if (member.status !== 'active') return { ok: false, error: 'Voter account is not active' };
+    if (!member) return { ok: false, error: word('Member not found') };
+    if (member.status !== 'active') return { ok: false, error: word('Voter account is not active') };
     const row = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen, joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;
-    if (row?.credit_frozen === 1) return { ok: false, error: 'Voter credit is frozen' };
-    if (member.isTreasury) return { ok: false, error: 'Enterprise accounts cannot vote' };
+    if (row?.credit_frozen === 1) return { ok: false, error: word('Voter credit is frozen') };
+    if (member.isTreasury) return { ok: false, error: word('Enterprise accounts cannot vote') };
     if (decision) {
         const joined = parseDbTime(row?.joined_at);
         const opened = parseDbTime(decision.opensAt);
@@ -714,7 +716,7 @@ const GRANT_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['gra
 
 export const GRANT_CAP_WINDOW_DAYS = 30;
 
-export const GRANT_AMOUNT_ERROR = 'A grant needs an amount in Beans above 0.';
+export const GRANT_AMOUNT_ERROR = word('A grant needs an amount in Beans above 0.');
 
 let grantCapClock: () => number = () => Date.now();
 
@@ -780,15 +782,16 @@ export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantC
 }
 
 /** What a member reads when the Commons figures aren't numbers, so there is no cap to quote. */
-export const GRANT_CAP_UNKNOWN = "Grants can't be proposed until the Commons figures are fixed. Nothing has moved.";
+export const GRANT_CAP_UNKNOWN = word("Grants can't be proposed until the Commons figures are fixed. Nothing has moved.");
 
 /** The sentence a member sees when their grant is over the cap. */
 export function grantCapRefusal(cap: CommonsGrantCap): string {
     // A cap that isn't a finite number has no figure to quote ("Infinity Beans"); say what is wrong instead.
     if (!Number.isFinite(cap.capCents)) return GRANT_CAP_UNKNOWN;
-    const holds = cap.heldCents < 0 ? `owes ${beansText(cap.heldCents)} Beans` : `holds ${beansText(cap.heldCents)} Beans`;
-    return `This grant is bigger than the Commons could pay: it ${holds} and took in ${beansText(cap.inflowCents)} Beans `
-        + `over the last ${GRANT_CAP_WINDOW_DAYS} days, so the most you can ask for now is ${beansText(Math.max(0, cap.capCents))} Beans.`;
+    const figures = { held: beansText(cap.heldCents), inflow: beansText(cap.inflowCents), days: GRANT_CAP_WINDOW_DAYS, most: beansText(Math.max(0, cap.capCents)) };
+    return cap.heldCents < 0
+        ? tr('This grant is bigger than the Commons could pay: it owes {held} Beans and took in {inflow} Beans over the last {days} days, so the most you can ask for now is {most} Beans.', figures)
+        : tr('This grant is bigger than the Commons could pay: it holds {held} Beans and took in {inflow} Beans over the last {days} days, so the most you can ask for now is {most} Beans.', figures);
 }
 
 /**
@@ -880,7 +883,7 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     // A debt is forgiven only while it is open (design §4.2 (c)); its subject is the record's id, never a name.
     if (opts.effect === 'forgive_debt') {
         const debt = typeof opts.subject === 'string' ? debtRecord(opts.subject) : undefined;
-        if (!debt || debt.status !== 'open') throw new Error('Name an open debt record to forgive.');
+        if (!debt || debt.status !== 'open') throw new Error(word('Name an open debt record to forgive.'));
     }
 
     // Before anything is written: a grant bigger than the Commons could pay is refused now, not after a vote.
@@ -976,18 +979,18 @@ export function castDecisionVote(
     // A node with formal Decisions off takes no vote, on any Decision, open or not (routes answer 404 feature_off).
     if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
-    if (!decision || (scope && decision.scopeKind !== scope)) return { success: false, creditsUsed: 0, error: 'Decision not found' };
+    if (!decision || (scope && decision.scopeKind !== scope)) return { success: false, creditsUsed: 0, error: word('Decision not found') };
     if (madeWithoutVote(decision)) {
         return {
             success: false,
             creditsUsed: 0,
-            error: 'Nobody votes on this suspension: community votes were switched off on this node when it was made, so it '
-                + `lifts by itself on ${decision.closesAt.slice(0, 10)}, or sooner if a moderator lifts it`,
+            error: tr('Nobody votes on this suspension: community votes were switched off on this node when it was made, so it lifts by itself on {date}, or sooner if a moderator lifts it',
+                { date: decision.closesAt.slice(0, 10) }),
         };
     }
     if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
     if (parseDbTime(decision.closesAt) <= Date.now()) {
-        return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
+        return { success: false, creditsUsed: 0, error: word('Voting window has closed') };
     }
 
     if (decision.scopeKind !== 'community') return castScopedVote(decision, voterPubkey, support, signature);
@@ -1294,7 +1297,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 "UPDATE decisions SET status = 'execution_blocked', execution_error = 'Funding queue full: maximum 1 queued grant permitted per §3.7', updated_at = ? WHERE id = ?"
             ).run(now, decisionId);
             announceDecisionUpdated(decisionId);
-            return { success: false, status: 'execution_blocked', error: 'Funding queue is full (max 1 queued grant per §3.7)' };
+            return { success: false, status: 'execution_blocked', error: word('Funding queue is full (max 1 queued grant per §3.7)') };
         }
 
         db.prepare(
@@ -2401,21 +2404,21 @@ export function tickDecisions(asOfTime?: number): {
 // ── Scoped Decisions: an enterprise's keepers (DESIGN-group-decisions §2, slice S1) ─────────────────
 
 /** Why a scoped effect is refused as a community Decision. */
-export const SCOPED_EFFECT_NOT_COMMUNITY = "That is decided by an enterprise's keepers, in that enterprise, not by the whole community.";
+export const SCOPED_EFFECT_NOT_COMMUNITY = word("That is decided by an enterprise's keepers, in that enterprise, not by the whole community.");
 /** A roll of one holds no vote (§2.2): arithmetic, not a gate. */
-export const ROLL_OF_ONE = 'Nobody else keeps this enterprise, so there is nobody to vote.';
+export const ROLL_OF_ONE = word('Nobody else keeps this enterprise, so there is nobody to vote.');
 export const NOT_ENOUGH_LEFT = 'Not enough people left to decide';
 export const WINDING_UP_VOID = 'The enterprise is winding up';
-export const SCOPED_ALREADY_VOTED = "You have already voted on this. A keepers' vote can't be changed.";
-export const NOT_ON_ROLL = "Only the keepers on this vote's roll can vote on it.";
+export const SCOPED_ALREADY_VOTED = word("You have already voted on this. A keepers' vote can't be changed.");
+export const NOT_ON_ROLL = word("Only the keepers on this vote's roll can vote on it.");
 export const SCOPED_NO_ADMIN_HALT = "An enterprise's keepers' vote has no admin halt: an admin may pause the enterprise or unbind a keeper instead.";
-export const PROJECT_LEADER_STAYS = "A project's leader can't be voted out by its collaborators: the project is the leader's goal.";
-export const PAY_SELF_REFUSAL = "You can't propose paying yourself. Another keeper can propose it.";
-export const SCOPED_ONE_OPEN = 'You already have an open vote in this enterprise. Wait for it to close first.';
+export const PROJECT_LEADER_STAYS = word("A project's leader can't be voted out by its collaborators: the project is the leader's goal.");
+export const PAY_SELF_REFUSAL = word("You can't propose paying yourself. Another keeper can propose it.");
+export const SCOPED_ONE_OPEN = word('You already have an open vote in this enterprise. Wait for it to close first.');
 /** A replace_lead or remove_keeper subject off the roll at execution (§2.3): suspended, barred from operating, or a visitor. */
 export const SUBJECT_OFF_ROLL = 'They are not on this enterprise’s roll now (their account is not active, or they may not act for it)';
 /** A pay-out to an enterprise that has wound up (its account is closed: state-engine transfer refuses it). */
-export const RECIPIENT_WOUND_UP = 'That enterprise has wound up and its account is closed, so it can’t be paid.';
+export const RECIPIENT_WOUND_UP = word('That enterprise has wound up and its account is closed, so it can’t be paid.');
 export const WAGE_NEEDS_SURPLUS = 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus)';
 /** How long a passed vote waits on an enterprise an admin suspended or disabled before it is void (§2.6). */
 export const SCOPED_WAIT_DAYS = 90;
@@ -2630,14 +2633,14 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
     if (!roll.some(k => k.pubkey === opts.authorPubkey)) throw new ScopedNotFoundError();
     if (!SCOPED_EFFECTS.has(opts.effect)) throw new Error(`Unknown decision effect '${opts.effect}'`);
     assertEffectAllowedHere(opts.effect);
-    if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error(`${WINDING_UP_VOID}, so it takes no new votes.`);
-    if (ent.status !== 'active') throw new Error('This enterprise is not active, so it takes no new votes.');
+    if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error(word('The enterprise is winding up, so it takes no new votes.'));
+    if (ent.status !== 'active') throw new Error(word('This enterprise is not active, so it takes no new votes.'));
     if (roll.length < 2) throw new Error(ROLL_OF_ONE);
 
     const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';
     const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description).trim() : '';
-    if (!title) throw new Error('A vote needs a title.');
-    if (description.length < 10) throw new Error('Say why, in at least 10 characters.');
+    if (!title) throw new Error(word('A vote needs a title.'));
+    if (description.length < 10) throw new Error(word('Say why, in at least 10 characters.'));
     if (!fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
     if (!fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) throw new Error(DECISION_DESCRIPTION_TOO_LONG);
 
@@ -2647,16 +2650,17 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
         const to = typeof opts.params?.to === 'string' ? opts.params.to : '';
         // A number only: "40", true or [5] is the wrong shape, never read as one.
         const cents = typeof opts.params?.amount === 'number' ? floorCents(opts.params.amount) : NaN;
-        if (!Number.isFinite(cents) || cents <= 0) throw new Error('A pay-out needs an amount in Beans above 0.');
-        if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error('Name a member or an enterprise of this community to pay.');
+        if (!Number.isFinite(cents) || cents <= 0) throw new Error(word('A pay-out needs an amount in Beans above 0.'));
+        if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error(word('Name a member or an enterprise of this community to pay.'));
         const recipient = getMember(to);
-        if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error('Name a member or an enterprise of this community to pay.');
+        if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error(word('Name a member or an enterprise of this community to pay.'));
         if (recipient.status === 'completed') throw new Error(RECIPIENT_WOUND_UP);
         if (to === opts.authorPubkey) throw new Error(PAY_SELF_REFUSAL);
         const held = floorCents(getBalance(opts.scopeId).balance);
         if (cents > held) throw new Error(`The enterprise holds ${beansText(Math.max(0, held))} Beans, so it can't pay ${beansText(cents)}.`);
         if (isEnterpriseKeeper(opts.scopeId, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
-            throw new Error(`${WAGE_NEEDS_SURPLUS}: ${beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0)))} Beans now.`);
+            throw new Error(tr('Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus): {surplus} Beans now.',
+                { surplus: beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) }));
         }
         const memo = typeof opts.params?.memo === 'string' ? replaceLoneSurrogates(opts.params.memo).slice(0, 280) : '';
         // The recipient is the subject, so a re-key mid-vote moves it with every other subject (engine/key-move.ts).
@@ -2664,14 +2668,14 @@ export function createScopedDecision(opts: CreateScopedDecisionOptions, push: Sc
         params = { amount: cents / 100, ...(memo ? { memo } : {}) };
     } else {
         subject = typeof opts.subject === 'string' ? opts.subject : null;
-        if (!subject || !roll.some(k => k.pubkey === subject)) throw new Error('Name a keeper on this enterprise’s roll.');
+        if (!subject || !roll.some(k => k.pubkey === subject)) throw new Error(word('Name a keeper on this enterprise’s roll.'));
         if (opts.effect === 'remove_keeper') {
-            if (subject === opts.authorPubkey) throw new Error('To leave, step down instead.');
+            if (subject === opts.authorPubkey) throw new Error(word('To leave, step down instead.'));
             const why = keeperRemovalByVoteRefusal(opts.scopeId, subject);
             if (why) throw new Error(why);
         } else {
             if (ent.lifecycle === 'bounded') throw new Error(PROJECT_LEADER_STAYS);
-            if (roll.find(k => k.pubkey === subject)!.role === 'lead') throw new Error('They are already the lead keeper.');
+            if (roll.find(k => k.pubkey === subject)!.role === 'lead') throw new Error(word('They are already the lead keeper.'));
         }
     }
 
@@ -2865,18 +2869,18 @@ export function openScopedDecisionsFor(member: string): Decision[] {
 
 /** A group's vote has no admin halt (§5, pick 6): node admins hold no power over groups. */
 export const GROUP_NO_ADMIN_HALT = "A group's vote has no admin halt: node admins hold no power over groups.";
-export const GROUP_ROLL_OF_ONE = 'Nobody else in this group can vote, so there is nobody to vote with.';
+export const GROUP_ROLL_OF_ONE = word('Nobody else in this group can vote, so there is nobody to vote with.');
 /** Off a group vote's roll: an observer, someone who joined after it opened, or who left during it. */
-export const GROUP_NOT_ON_ROLL = "Only the group's members and convenors on this vote's roll can vote on it. Observers watch.";
-export const GROUP_ALREADY_VOTED = "You have already voted on this. A group's vote can't be changed.";
-export const GROUP_OBSERVER_NO_VOTE = 'Observers watch a group’s votes. Only its members and convenors vote.';
-export const GROUP_ONE_OPEN = 'You already have an open vote in this group. Wait for it to close first.';
+export const GROUP_NOT_ON_ROLL = word("Only the group's members and convenors on this vote's roll can vote on it. Observers watch.");
+export const GROUP_ALREADY_VOTED = word("You have already voted on this. A group's vote can't be changed.");
+export const GROUP_OBSERVER_NO_VOTE = word('Observers watch a group’s votes. Only its members and convenors vote.');
+export const GROUP_ONE_OPEN = word('You already have an open vote in this group. Wait for it to close first.');
 export const GROUP_CLOSED_VOID = 'The group is closed';
 /** The line a group's chat takes when its members close it by a vote. */
 export const GROUP_CLOSED_LINE = 'The group was closed by its members’ vote. Its chat stays to read.';
 export const GROUP_GONE = 'The group no longer exists';
 export const GROUP_SUBJECT_OFF_ROLL = 'They are not a member or convenor of this group now';
-export const GROUP_LEAD_UNTOUCHED = 'This vote never changes the lead convenor’s role. To choose a new lead, vote for one.';
+export const GROUP_LEAD_UNTOUCHED = word('This vote never changes the lead convenor’s role. To choose a new lead, vote for one.');
 const JOIN_POLICIES = new Set(['open', 'request_to_join', 'invite_only']);
 
 function nameOf(pubkey: string): string {
@@ -2997,8 +3001,8 @@ function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVote
 
     const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';
     const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description).trim() : '';
-    if (!title) throw new Error('A vote needs a title.');
-    if (description.length < 10) throw new Error('Say why, in at least 10 characters.');
+    if (!title) throw new Error(word('A vote needs a title.'));
+    if (description.length < 10) throw new Error(word('Say why, in at least 10 characters.'));
     if (!fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
     if (!fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) throw new Error(DECISION_DESCRIPTION_TOO_LONG);
 
@@ -3010,8 +3014,8 @@ function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVote
         case 'set_group_role': {
             subject = typeof opts.subject === 'string' ? opts.subject : null;
             const role = opts.params?.role;
-            if (role !== 'convenor' && role !== 'member') throw new Error('Choose convenor or member.');
-            if (!onRoll(subject)) throw new Error('Name a member or convenor of this group.');
+            if (role !== 'convenor' && role !== 'member') throw new Error(word('Choose convenor or member.'));
+            if (!onRoll(subject)) throw new Error(word('Name a member or convenor of this group.'));
             if (subject === lead) throw new Error(GROUP_LEAD_UNTOUCHED);
             if (roll.find(k => k.pubkey === subject)!.role === role) throw new Error(role === 'convenor' ? 'They are already a convenor.' : 'They are already a member.');
             params = { role };
@@ -3019,22 +3023,22 @@ function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVote
         }
         case 'replace_lead_convenor': {
             subject = typeof opts.subject === 'string' ? opts.subject : null;
-            if (!onRoll(subject)) throw new Error('Name a member or convenor of this group.');
-            if (subject === lead) throw new Error('They already lead this group.');
+            if (!onRoll(subject)) throw new Error(word('Name a member or convenor of this group.'));
+            if (subject === lead) throw new Error(word('They already lead this group.'));
             break;
         }
         case 'remove_group_member': {
             subject = typeof opts.subject === 'string' ? opts.subject : null;
-            if (!subject || !inGroupNow(groupId, subject)) throw new Error('Name someone in this group.');
-            if (subject === opts.authorPubkey) throw new Error('To leave, leave the group instead.');
-            if (subject === lead) throw new Error('The lead convenor is replaced, not removed. Vote for a new lead first.');
+            if (!subject || !inGroupNow(groupId, subject)) throw new Error(word('Name someone in this group.'));
+            if (subject === opts.authorPubkey) throw new Error(word('To leave, leave the group instead.'));
+            if (subject === lead) throw new Error(word('The lead convenor is replaced, not removed. Vote for a new lead first.'));
             break;
         }
         case 'set_join_policy': {
             const policy = opts.params?.policy;
-            if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) throw new Error('Choose open, ask to join, or invite only.');
+            if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) throw new Error(word('Choose open, ask to join, or invite only.'));
             const now = (db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string }).join_policy;
-            if (now === policy) throw new Error('The group already has that join policy.');
+            if (now === policy) throw new Error(word('The group already has that join policy.'));
             params = { policy };
             break;
         }

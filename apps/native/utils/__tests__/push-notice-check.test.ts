@@ -557,9 +557,9 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.notice', { screen: 'nowhere' })).toBe('/(tabs)');
     });
 
-    it("a keepers' vote opening lands on the enterprise it names, its key in the node's own shape; anything else on Home (opus-1767 N4)", () => {
+    it("a keepers' vote opening lands in the console of the enterprise it names (its Decisions block, S7), its key in the node's own shape; anything else on Home (opus-1767 N4)", () => {
         const ENT = 'e1'.repeat(32);
-        expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: ENT })).toBe(`/treasury-detail?publicKey=${ENT}`);
+        expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: ENT })).toBe(`/treasury-manage?publicKey=${ENT}`);
         for (const bad of [...FORGED, ENT.toUpperCase(), ENT.slice(1), `${ENT}0`, `${ENT}&x=1`, 42, null, ['a'], { a: 1 }]) {
             expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: bad })).toBe('/(tabs)');
         }

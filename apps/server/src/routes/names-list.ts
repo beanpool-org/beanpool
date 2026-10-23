@@ -53,10 +53,10 @@ import {
     readNamesCopyOf, saveNamesCopy, readBoundInvites,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
-const STANDBY_NAMES = 'This server is a standby copy of the community, not its main server. The names list opens on the main server, '
-    + 'which logs who reads it; this copy keeps it, sealed, for a take-over.';
-const GLOBAL_NAMES = 'The global community keeps no names list: nobody there is confirmed by name. Each local community keeps its own.';
+const STANDBY_NAMES = word('This server is a standby copy of the community, not its main server. The names list opens on the main server, which logs who reads it; this copy keeps it, sealed, for a take-over.');
+const GLOBAL_NAMES = word('The global community keeps no names list: nobody there is confirmed by name. Each local community keeps its own.');
 
 const DEFAULT_LOG_LIMIT = 50;
 const MAX_LOG_LIMIT = 200;
@@ -85,7 +85,7 @@ function admin(ctx: any): string | null {
     const key = actor.toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(key)) { answer(ctx, 400, 'The key that signed this request must be 64 hexadecimal characters.', 'bad_key'); return null; }
     const member = getMember(key);
-    if (!member || member.status !== 'active' || isVisitorKey(key)) { answer(ctx, 403, 'Not an active member of this community.', 'not_member'); return null; }
+    if (!member || member.status !== 'active' || isVisitorKey(key)) { answer(ctx, 403, word('Not an active member of this community.'), 'not_member'); return null; }
     if (getNodeRole() !== 'primary') { answer(ctx, 409, STANDBY_NAMES, STANDBY_CODE); return null; }
     reconcileHolders();
     try {
@@ -173,7 +173,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         if (!actor) return;
         try {
             const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id));
-            if (!invite) return answer(ctx, 403, 'Only registered members can generate invites', 'not_member');
+            if (!invite) return answer(ctx, 403, word('Only registered members can generate invites'), 'not_member');
             ctx.status = 201;
             ctx.body = { success: true, invite };
         } catch (e) {
@@ -207,7 +207,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         return { log: readHealthAccessLog(limit, 'balance'), tradeLog: readHealthAccessLog(limit, 'trades') };
     }));
     router.post('/api/names/health/settings', (ctx) => asAdmin(ctx, (actor, body) => {
-        if (!isNodeOwner(actor)) throw new NamesListError(403, 'owner_only', 'Only an owner of this community can change what the admins see.');
+        if (!isNodeOwner(actor)) throw new NamesListError(403, 'owner_only', word('Only an owner of this community can change what the admins see.'));
         return setHealthSettings(actor, body);
     }));
 

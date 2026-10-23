@@ -61,6 +61,10 @@ import { NamesListError } from '../engine/names-list.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import type { RouteDeps } from './types.js';
+import { word, wordsFor } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 const DEFAULT_LIST_LIMIT = 20;
 /** Each knock may carry an avatar (up to KNOCK_RULES.avatarChars), so a page is kept small. */
@@ -88,22 +92,22 @@ function signer(ctx: any, unsignedMessage: string): string | null {
 
 /** A member here in good standing, who may see and answer knocks, or null once the refusal is written. */
 function answeringMember(ctx: any): string | null {
-    const key = signer(ctx, 'A signed request is required.');
+    const key = signer(ctx, word('A signed request is required.'));
     if (!key) return null;
     // Answering brings someone in (or shuts them out): not a visitor's row, which gets a non-member's answer. A member
     // whose account is paused, whom the invite test refuses too, is told so in their own words, as before.
     if (!isNodeMember(key)) {
-        answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
+        answer(ctx, 403, word('Only a member of this community can see or answer requests to join.'), 'not_member');
         return null;
     }
     try {
         assertMemberActive(key);
     } catch {
-        answer(ctx, 403, 'Your account here is suspended, so you can’t answer requests to join.', 'not_active');
+        answer(ctx, 403, word('Your account here is suspended, so you can’t answer requests to join.'), 'not_active');
         return null;
     }
     if (!mayBringSomeoneIn(key)) {
-        answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
+        answer(ctx, 403, word('Only a member of this community can see or answer requests to join.'), 'not_member');
         return null;
     }
     return key;
@@ -120,16 +124,16 @@ const chars = (s: string) => Array.from(s).length;
 function parseCallsign(raw: unknown): Parsed<string> {
     if (typeof raw !== 'string') return { ok: false, error: "'callsign' is required: the name you'd like this community to see." };
     const callsign = raw.replace(CONTROL, '').replace(/\s+/g, ' ').trim();
-    if (chars(callsign) < 2) return { ok: false, error: 'Please give a name of at least 2 characters.' };
-    if (chars(callsign) > KNOCK_RULES.callsignChars) return { ok: false, error: `Please keep your name to ${KNOCK_RULES.callsignChars} characters.` };
+    if (chars(callsign) < 2) return { ok: false, error: word('Please give a name of at least 2 characters.') };
+    if (chars(callsign) > KNOCK_RULES.callsignChars) return { ok: false, error: tr('Please keep your name to {n} characters.', { n: KNOCK_RULES.callsignChars }) };
     return { ok: true, value: callsign };
 }
 
 function parseMessage(raw: unknown): Parsed<string> {
     if (typeof raw !== 'string') return { ok: false, error: "'message' is required: a few words about yourself." };
     const message = raw.replace(CONTROL, '').trim();
-    if (!message) return { ok: false, error: 'Please say a few words about yourself.' };
-    if (chars(message) > KNOCK_RULES.messageChars) return { ok: false, error: `Please keep your message to ${KNOCK_RULES.messageChars} characters.` };
+    if (!message) return { ok: false, error: word('Please say a few words about yourself.') };
+    if (chars(message) > KNOCK_RULES.messageChars) return { ok: false, error: tr('Please keep your message to {n} characters.', { n: KNOCK_RULES.messageChars }) };
     return { ok: true, value: message };
 }
 
@@ -139,9 +143,9 @@ function parseAvatar(raw: unknown): Parsed<string | null> {
     if (typeof raw !== 'string') return { ok: false, error: "'avatar' must be a picture." };
     const value = raw.trim();
     if (/^bundled:\/\/[A-Za-z0-9_-]{1,64}$/.test(value)) return { ok: true, value };
-    if (value.length > KNOCK_RULES.avatarChars) return { ok: false, error: 'That picture is too large. Please choose a smaller one.' };
+    if (value.length > KNOCK_RULES.avatarChars) return { ok: false, error: word('That picture is too large. Please choose a smaller one.') };
     const refusal = /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(value) ? avatarValueRefusal(value) : { kind: 'format' as const };
-    if (refusal) return { ok: false, error: photoRefusalText(refusal, 'The picture must be a JPEG, PNG, WebP or GIF image.') };
+    if (refusal) return { ok: false, error: photoRefusalText(refusal, word('The picture must be a JPEG, PNG, WebP or GIF image.')) };
     return { ok: true, value: stripImageValue(value) };
 }
 
@@ -157,23 +161,23 @@ function parseFromNode(raw: unknown): Parsed<string | null> {
     return { ok: true, value: host };
 }
 
-const KEY_INVALIDATED = 'This key was replaced by a new one, so it can’t ask to join. Use the device or the 12 words that hold the new key.';
+const KEY_INVALIDATED = word('This key was replaced by a new one, so it can’t ask to join. Use the device or the 12 words that hold the new key.');
 
 function refuseKnock(ctx: any, reason: KnockRefusal): void {
     switch (reason) {
         case 'already_member':
             return answer(ctx, 409, 'You are already a member of this community.', reason);
         case 'account_closed':
-            return answer(ctx, 403, 'This key’s account in this community was closed, so it can’t ask to join again.', reason);
+            return answer(ctx, 403, word('This key’s account in this community was closed, so it can’t ask to join again.'), reason);
         case 'key_invalidated':
             return answer(ctx, 403, KEY_INVALIDATED, reason);
         case 'knock_open':
             // An open knock, and a declined one in its 30 days, get this same answer: a decline is never a message.
-            return answer(ctx, 409, 'You’ve already asked to join. There’s no answer yet.', reason);
+            return answer(ctx, 409, word('You’ve already asked to join. There’s no answer yet.'), reason);
         case 'knock_approved':
-            return answer(ctx, 409, 'A member has already invited you. Your app can join with that invite now.', reason);
+            return answer(ctx, 409, word('A member has already invited you. Your app can join with that invite now.'), reason);
         case 'rate_limited':
-            return answer(ctx, 429, `Too many requests to join have come from this network today (${KNOCK_RULES.perAddressPerDay}). Please try again tomorrow.`, reason);
+            return answer(ctx, 429, tr('Too many requests to join have come from this network today ({n}). Please try again tomorrow.', { n: KNOCK_RULES.perAddressPerDay }), reason);
         case 'busy':
             // A node-wide ceiling, either one: nothing the applicant did, and nothing that tells a flood which.
             return answer(ctx, 429, 'This community isn’t taking new requests right now. Try again in a few days.', reason);
@@ -186,21 +190,21 @@ function refusedOnStandby(ctx: any, message: string): boolean {
     answer(ctx, 503, message, 'standby');
     return true;
 }
-const STANDBY_KNOCK = 'This server is a standby copy of the community, not its main server, so it can’t take requests to join. Please ask at the community’s own address.';
-const STANDBY_ANSWER = 'This server is a standby copy of the community, not its main server. Requests to join are answered on the main server.';
+const STANDBY_KNOCK = word('This server is a standby copy of the community, not its main server, so it can’t take requests to join. Please ask at the community’s own address.');
+const STANDBY_ANSWER = word('This server is a standby copy of the community, not its main server. Requests to join are answered on the main server.');
 
 function refuseAnswer(ctx: any, reason: AnswerRefusal): void {
     switch (reason) {
         case 'not_found':
-            return answer(ctx, 404, 'There’s no such request to join.', reason);
+            return answer(ctx, 404, word('There’s no such request to join.'), reason);
         case 'answered':
-            return answer(ctx, 409, 'Another member has already answered this request.', reason);
+            return answer(ctx, 409, word('Another member has already answered this request.'), reason);
         case 'lapsed':
-            return answer(ctx, 409, 'This request is more than 30 days old and has lapsed. They can ask again.', reason);
+            return answer(ctx, 409, word('This request is more than 30 days old and has lapsed. They can ask again.'), reason);
         case 'already_member':
-            return answer(ctx, 409, 'They have already joined this community.', reason);
+            return answer(ctx, 409, word('They have already joined this community.'), reason);
         case 'key_invalidated':
-            return answer(ctx, 409, 'This request came from a key that has since been replaced by a new one, so there is nothing to answer.', reason);
+            return answer(ctx, 409, word('This request came from a key that has since been replaced by a new one, so there is nothing to answer.'), reason);
         case 'admins_only':
             return answer(ctx, 403, ADMINS_ONLY_ANSWER_MESSAGE, reason);
     }
@@ -282,7 +286,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         // whatever ENFORCE_READ_AUTH says. answeringMember has already refused a suspended or disabled member and a
         // visitor's row; the read test is asked here too, by name, so this read can't drift from the others.
         if (!readsAsMember(member)) {
-            return answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
+            return answer(ctx, 403, word('Only a member of this community can see or answer requests to join.'), 'not_member');
         }
         // Where only admins invite, the requests are theirs to answer, so theirs to read: what an applicant sent (a name,
         // a message, a photo) goes to nobody who can't act on it. The phone shows a member no section for a 403.

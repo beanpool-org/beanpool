@@ -4,7 +4,9 @@
  * `beanpool://claim?node=…[&id=…][&code=…]` link (the terminal QR `beanpool claim` prints, the manager's unclaimed card),
  * from Find a community's address check, or with no server yet from "Set up a new community server" (Find a community,
  * Start a community: components/SetUpServerRow.tsx), where Scan the code reads the server's QR before its address is
- * known. utils/node-claim.ts has the steps and the reasons; the code never leaves the phone.
+ * known. utils/node-claim.ts has the steps and the reasons; the code never leaves the phone. On a phone with no account
+ * yet (the QR scanned before one was made) it offers "Make my account": the claim waits on the phone for the account
+ * (utils/onboarding-state.ts PendingClaim) and the root guard comes back here with it once the account is made.
  *
  * One column at 320dp and 1.3× font, 48dp targets, as settings-signin.tsx. The full address is shown wrapped, never
  * truncated: it is the one thing a phishing server cannot make look right.
@@ -33,6 +35,7 @@ import {
     claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeAddresses, type ClaimStatus,
 } from '../utils/node-claim';
 import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan, parseClaimLink } from '../utils/claim-link';
+import { clearPendingClaim, handOverPendingClaim, setPendingClaim } from '../utils/onboarding-state';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 
 export { ErrorBoundary };
@@ -232,6 +235,8 @@ export default function ClaimCommunityScreen() {
             origin, identity, code, codeId: status.codeId, salt: status.salt,
             callsign: needsCallsign ? callsign : '', isOwner: ownerCheckViaRole,
         });
+        // A claim kept for this account ("Make my account") is spent, or can no longer be: taken off the phone.
+        if (out.kind === 'owner' || out.kind === 'already-claimed' || out.kind === 'code-changed') await clearPendingClaim();
         if (out.kind === 'owner') { await afterOwner(origin); return; }
         setPhase('form');
         setError(claimOutcomeWords(out, name));
@@ -258,10 +263,32 @@ export default function ClaimCommunityScreen() {
         }
     };
 
+    // ── No account yet ──────────────────────────────────────────────────────────────────────────────────
+    // The server's QR scanned on a phone with no account (Dax, 23 Oct 2026: it opened the first screen and the claim was
+    // lost). The claim is kept for the account the phone makes (utils/onboarding-state.ts PendingClaim), the first screen
+    // opens to make it, and once it is made the root guard lands back here with the claim (utils/member-landing.ts
+    // landOnClaim). Nothing is claimed until the member taps "Claim and become owner" then.
+    const makeAccount = async () => {
+        await setPendingClaim({ node: origin, codeId: linkId || null, code: linkCode || null });
+        router.replace('/welcome');
+    };
+
+    // A claim kept for this phone's account goes once the screen is up with the account: the claim is in this screen's
+    // route from here, and the guard's landing from welcome, which brought it, is the tabs again however the member leaves
+    // (the system back, the app closed: PR #2412 review). Before the account it goes on Back, and when the server already
+    // has an owner. One claim waits at a time; the QR opens it again.
+    const leave = () => {
+        void clearPendingClaim();
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+    };
+    useEffect(() => { if (identity) void handOverPendingClaim(); }, [identity]);
+    useEffect(() => { if (identity && status?.kind === 'claimed') void clearPendingClaim(); }, [identity, status]);
+
     // ── Screens ─────────────────────────────────────────────────────────────────────────────────────────
     const header = (
         <View style={styles.header}>
-            <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
+            <Pressable onPress={leave} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Back')}>
                 <MaterialCommunityIcons name="arrow-left" size={24} color={placeholder} />
             </Pressable>
             {/* 208dp between the two 48dp slots; at 1.3× the words take two lines rather than an ellipsis. The community's
@@ -272,8 +299,21 @@ export default function ClaimCommunityScreen() {
     );
 
     let body: React.ReactNode;
-    if (!identity) {
-        body = <Text style={styles.note}>{t('This phone has no BeanPool account yet. Set one up first, then open the claim link again.')}</Text>;
+    if (!identity && status?.kind !== 'claimed') {
+        body = (
+            <>
+                <Text style={styles.title}>{named ? t('Claim {name}', { name: named }) : t('Claim a community')}</Text>
+                {origin ? <Text style={styles.address} selectable>{origin}</Text> : null}
+                <Text style={styles.lead} testID="claim-no-account">
+                    {linkCode
+                        ? t('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here, with the code filled in.')
+                        : t('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here.')}
+                </Text>
+                <Pressable style={styles.primary} onPress={makeAccount} accessibilityRole="button" testID="claim-make-account">
+                    <Text style={styles.primaryText}>{t('Make my account')}</Text>
+                </Pressable>
+            </>
+        );
     } else if (!origin) {
         body = (
             <>

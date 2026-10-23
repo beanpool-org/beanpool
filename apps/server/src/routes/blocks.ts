@@ -35,13 +35,14 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { listBlocks, addBlocks, addKnownBlocks, removeBlock, clearBlocks, BlockRefusal, MEMBER_BLOCKS_MAX } from '../engine/member-blocks.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 /** The verified signer, or undefined once the refusal is written. */
 function signer(ctx: any): string | undefined {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return undefined;
     }
     return actor;
@@ -58,7 +59,7 @@ function changer(ctx: any): string | undefined {
     }
     if (getNodeRole() !== 'primary') {
         ctx.status = 503;
-        ctx.body = { error: 'This server is a standby copy of the community, not its main server. Blocks are changed on the main server.', code: 'standby' };
+        ctx.body = { error: word('This server is a standby copy of the community, not its main server. Blocks are changed on the main server.'), code: 'standby' };
         return undefined;
     }
     return actor;
@@ -86,7 +87,7 @@ export function createBlockRoutes(_deps: RouteDeps): Router {
     router.get('/api/blocks', async (ctx) => {
         const actor = signer(ctx);
         if (!actor) return;
-        if (!passesReadGate(actor)) return refuse(ctx, 403, 'Read access requires a member identity');
+        if (!passesReadGate(actor)) return refuse(ctx, 403, word('Read access requires a member identity'));
         answer(ctx, actor);
     });
 

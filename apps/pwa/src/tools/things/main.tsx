@@ -1,11 +1,12 @@
 /**
  * Your things (the Tool shed's `main`, DESIGN-tool-library-fable.md §2.2): Add a thing, the filters All · In your shop ·
  * Out · On your shelf, and a row for each thing the member has, newest first, with its photo and its state; then Loans.
- * The page above draws the count line (the manifest's row) and, while the shed is empty, the two doors.
+ * Under Add, the room left in things, never bytes ("Room for about 240 more things", or the shed full), against the
+ * host's bound. The page above draws the count line (the manifest's row) and, while the shed is empty, the two doors.
  */
 import { useMemo, useState } from 'react';
 import {
-    openDealsByPost, shedThings, t, thingCategory, thingInFilter, thingRowLine, thingState, thingsLoans,
+    openDealsByPost, shedFullLine, shedRoom, shedRoomLine, shedThings, t, thingCategory, thingInFilter, thingRowLine, thingState, thingsLoans,
     type ThingFilter, type ThingsScreenProps,
 } from '@beanpool/core';
 import { ToolButton, ToolChips, ToolLive, ToolNote, ToolRow, ToolSection } from '../ui';
@@ -20,6 +21,7 @@ export function Main({ host }: ThingsScreenProps) {
     const things = shedThings(doc);
     const shown = things.filter((thing) => thingInFilter(thingState(thing, open), filter));
     const loans = thingsLoans(doc, deals, now).length;
+    const room = shedRoom(doc, host.doc.maxBytes());
     // No count until the deals are known: before they arrive, or when they couldn't be read, it could leave out a loan.
     const loansLine = deals === null || failed ? null
         : loans > 0 ? t('Out or asked for: {count}', { count: loans }) : t('Nothing out right now');
@@ -35,6 +37,8 @@ export function Main({ host }: ThingsScreenProps) {
                 <div className={BUTTONS}>
                     <ToolButton kind="primary" onClick={() => host.navigate('edit')} testId="things-add">{t('Add a thing')}</ToolButton>
                 </div>
+                {/* A standing line, not news: no tone, so no live region (a refusal is said where it happens). */}
+                <ToolNote text={room > 0 ? shedRoomLine(room) : shedFullLine()} testId="things-room" />
                 {things.length === 0 ? (
                     <ToolNote text={t("Nothing here yet. Add the first thing you'd lend: a drill, a ladder, a tent.")} testId="things-empty" />
                 ) : (

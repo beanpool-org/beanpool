@@ -93,7 +93,7 @@ function textOf(raw: unknown): string {
  */
 export function changeEnterpriseFace(treasury: string, actor: string, changes: FaceChanges, opts: { lead: boolean }, now: number = Date.now()): { face: EnterpriseFace; changed: boolean } {
     const row = faceRowOf(treasury);
-    if (!row) throw new EnterpriseFaceRefusal(404, 'not_an_enterprise', 'Not a treasury');
+    if (!row) throw new EnterpriseFaceRefusal(404, 'not_an_enterprise', word('Not a treasury'));
     const { name: rawName, purpose: rawPurpose, about: rawAbout, avatar: rawAvatar } = changes;
     if (rawName === undefined && rawPurpose === undefined && rawAbout === undefined && rawAvatar === undefined) {
         throw new EnterpriseFaceRefusal(400, 'nothing_to_change', FACE_NOTHING);

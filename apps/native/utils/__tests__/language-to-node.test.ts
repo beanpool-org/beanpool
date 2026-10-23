@@ -1,7 +1,8 @@
 /**
  * The language the phone writes in, told to its node (Marty's call M6; translation design §3): `X-Language` on every signed
- * request through db.ts — `signedRequest` and `signedRequestWithMethod` (review of #1954, N4) — exactly as LANGS spells
- * it, following a switch at once, and never the pseudo-locale. Not signed: the signature covers what it always did.
+ * request through db.ts — `signedRequest`, `signedRequestWithMethod` (review of #1954, N4) and `signedGet`, so a refused read
+ * comes back in it too — exactly as LANGS spells it, following a switch at once, and never the pseudo-locale. Not signed:
+ * the signature covers what it always did.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +27,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { setLanguage } from '@beanpool/core';
-import { signedRequest, signedRequestWithMethod } from '../db';
+import { signedGet, signedRequest, signedRequestWithMethod } from '../db';
 import { buildSignedHeaders } from '../crypto';
 
 const fetchMock = vi.fn();
@@ -64,5 +65,17 @@ describe('X-Language on signed requests', () => {
         setLanguage('xx');
         await signedRequest('/api/x', { a: 1 });
         expect(fetchMock.mock.calls[1][1].headers['X-Language']).toBe('en');
+    });
+
+    it('signedGet carries it too, beside the signature and under a caller\'s own headers', async () => {
+        setLanguage('pt');
+        await signedGet('/api/enterprises');
+        expect(fetchMock.mock.calls[0][1].headers).toEqual({
+            Accept: 'application/json', 'X-Language': 'pt', 'X-Signed': 'GET https://test.beanpool.org/api/enterprises',
+        });
+        expect(buildSignedHeaders).toHaveBeenCalledWith('GET', 'https://test.beanpool.org/api/enterprises', '', 'me-priv', 'me-pub');
+        setLanguage('xx');
+        await signedGet('/api/x', { customHeaders: { 'If-None-Match': '"e1"' } });
+        expect(fetchMock.mock.calls[1][1].headers).toMatchObject({ 'X-Language': 'en', 'If-None-Match': '"e1"' });
     });
 });

@@ -528,19 +528,31 @@ export function phoneAddressWarning(to: string | null, coming: string | null = n
     ];
 }
 
+/** The app's pages in the stores, the app the website links to (apps/website/index.html; routes/invite-trampoline.ts). */
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=org.beanpool.pillar';
+const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
+
 /**
- * The steps on the member's phone, named as the phone shows them: the QR opens apps/native/app/claim-community.tsx
- * (titled "Claim ‹name›" once it knows the server, "Claim a community" while it asks for the address); by hand it is
- * Find a community (app/find-community.tsx, reached from Home's "Communities near you"), whose search box offers
- * "Claim ‹name›" for a typed address with no owner. test-claim-cli checks each label is still in those files.
+ * What to do next, in order, on the phone that will own the community (Dax, 23 Oct 2026: "the start seed prompt doesn't
+ * specify exactly where to go", and half an hour went on finding out): the app from its store, an account on it, then the
+ * QR. Named as the phone shows them: a phone with no account makes one on the first screen, whose open door with no
+ * invite is "Explore BeanPool worldwide" (components/WelcomeDoors.tsx); the QR opens apps/native/app/claim-community.tsx
+ * (titled "Claim ‹name›" once it knows the server, "Claim a community" while it asks for the address), which offers
+ * "Make my account" to a phone scanned before it had one; by hand it is Find a community (app/find-community.tsx, reached
+ * from Home's "Communities near you"), whose search box offers "Claim ‹name›" for a typed address with no owner.
+ * test-claim-cli checks each label is still in those files.
  */
 function phoneSteps(address: string | null): string[] {
     const finish = 'fill in "Your name here" and tap "Claim and become owner".';
     return [
+        'Next, on your phone (with BeanPool and your account on it already, go to 3):',
+        `  1. Install BeanPool: Google Play ${PLAY_STORE_URL}`,
+        `     or the App Store ${APP_STORE_URL}`,
+        '  2. Open BeanPool and make your account (no invite? tap "Explore BeanPool worldwide"). It shows you 12 words: write them on paper.',
         address
-            ? `On your phone, scan this QR code. BeanPool opens "Claim ‹name›" with the code filled in: ${finish}`
-            : `On your phone, scan this QR code. BeanPool opens "Claim a community" with the code filled in: type this server's address under "Server address", tap "Check this server", ${finish}`,
-        `Or open BeanPool → Find a community ("Communities near you" on Home), type ${address ?? "this server's address"} in the search box, tap "Claim ‹name›", type the code under "Claim code", ${finish}`,
+            ? `  3. Scan this QR code with the phone's camera. BeanPool opens "Claim ‹name›" with the code filled in: ${finish}`
+            : `  3. Scan this QR code with the phone's camera. BeanPool opens "Claim a community" with the code filled in: type this server's address under "Server address", tap "Check this server", ${finish}`,
+        `  4. Or open BeanPool → Find a community ("Communities near you" on Home), type ${address ?? "this server's address"} in the search box, tap "Claim ‹name›", type the code under "Claim code", ${finish}`,
         'That phone becomes the owner. The code works once.',
     ];
 }

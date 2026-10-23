@@ -12,6 +12,8 @@ related: the-top-bar, browsing-the-market, your-profile, finding-a-community, be
 
 The phone and the web app show the same cards, with a few differences. This page says "on the phone" or "in the web app" where they differ.
 
+In the web app, on a wide screen, the cards stand side by side in two or three columns, in your order: across, then down. **Needs you** and **Your community** run across the whole width, and so do the one-time tip and the "fewer cards" note (below): under **Needs you**, or above the cards when **Needs you** is not showing. The phone always shows one column.
+
 ## Getting started
 
 A new member's Home starts nearly empty: one card, **Getting started**, between **Needs you** and **Your community** (on the global community, **Find your community** stays above it). It says "This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs."
@@ -56,7 +58,7 @@ Home shows only the cards that have something to tell you, in your own order. A 
 - **Tips:** one short tip at a time about how BeanPool works, for members. Tap **Next** for the next one, or **Read more** to open the page of this guide it comes from. A new tip also shows on your first visit of a new day. The card goes by itself once you have seen every tip, or at once when you tap **Don't show tips again**. Adding it again with **Add a card** starts the tips again from the first one.
 - **What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.
 - **Your deals:** shows your open deals and deals waiting on you. Not on the global community: there, **My Deals** in the Market shows example deals from a local community instead.
-- **Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. Not on the global community: there, **Commons** shows an example enterprise from a local community instead.
+- **Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. With a request waiting, tap it to open **Manage**, where you approve it. Not on the global community: there, **Commons** shows an example enterprise from a local community instead.
 - **Coming up:** upcoming events near you, with your RSVP.
 - **New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. If you typed your town in **Find your community**, the phone counts from that town. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.
 - **Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.
@@ -87,7 +89,9 @@ Tap **…** to:
 - **Move down:** swaps the card with the card below it.
 - **Remove:** takes the card off Home, with its settings. **Add a card** puts it back. Nothing asks you to confirm. Removing **Tips** is the same as **Don't show tips again**.
 
-In the web app, **Your way back in** has a **…** too, with **Move up**, **Move down** and **Remove**.
+In the web app, on a wide screen, where the cards stand side by side, the two moves say **Move earlier** and **Move later**. They do the same thing: the card swaps with the one before it or after it in your order.
+
+In the web app, **Your way back in** has a **…** too, with the two moves and **Remove**.
 
 A move is greyed out when there is nowhere to go: at the top or bottom of the cards you can move. The first card under **Needs you** cannot move up, and the last card above **Your community** cannot move down.
 

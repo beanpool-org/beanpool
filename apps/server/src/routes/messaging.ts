@@ -9,7 +9,7 @@ import {
     getConversationsByMember, toggleMessageReaction,
     getConversationMessages, getConversation,
     markConversationRead, getListedUnreadCounts, getUnreadCounts,
-    getMember, isNodeMember, getNodeRole,
+    getMember, isNodeMember, isLiveVisitor, getNodeRole,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -65,13 +65,13 @@ function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, n
     return true;
 }
 
-const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
+const CONVERSATION_NOT_FOUND = { status: 404, error: word('Conversation not found') };
 
 /** Going to this event chat's event, and waiting for the host to let them in (engine/event-thread.ts waitingForHost). */
 function eventWaitingFor(postId: string, actor: string | undefined): boolean {
     try { return waitingForHost(loadEventForThread(postId), actor); } catch { return false; }
 }
-const SEND_NOT_FOUND = { status: 400, error: 'Failed to send — conversation not found or not a participant' };
+const SEND_NOT_FOUND = { status: 400, error: word('Failed to send — conversation not found or not a participant') };
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -432,9 +432,11 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
 });
 
 /**
- * A message request (engine/dm-requests.ts) is decided by the person it was sent to, signed by them, a member here, on the
- * main server: a standby answers 503 `standby` and writes nothing, as a block's change does (routes/blocks.ts). The actor,
- * or undefined once the refusal is written.
+ * A message request (engine/dm-requests.ts) is decided by the person it was sent to, signed by them, a member here or a
+ * visitor's row (isLiveVisitor: a key a member messaged, or a member of another community reached over the relay, which
+ * may decide one sent to it and nothing else new; the director's option b on PR #2392 review 4355750376, and the visitor
+ * gate names these two routes, visitor-allowlist.ts), on the main server: a standby answers 503 `standby` and writes
+ * nothing, as a block's change does (routes/blocks.ts). The actor, or undefined once the refusal is written.
  */
 function requestDecider(ctx: any): string | undefined {
     const actor = ctx.state.actor as string | undefined;
@@ -443,7 +445,7 @@ function requestDecider(ctx: any): string | undefined {
         ctx.body = { error: word('A signed request is required') };
         return undefined;
     }
-    if (!isNodeMember(actor)) {
+    if (!isNodeMember(actor) && !isLiveVisitor(actor)) {
         ctx.status = 403;
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
         return undefined;
@@ -524,7 +526,7 @@ router.post('/api/messages/mark-read', async (ctx) => {
             return;
         }
         ctx.status = 404;
-        ctx.body = { error: 'Conversation not found' };
+        ctx.body = { error: word('Conversation not found') };
         return;
     }
     // A group chat's read cursor lives on the member's participant row, which follows the group. A keeper's lives
@@ -601,7 +603,7 @@ router.post('/api/messages/mute', async (ctx) => {
             return;
         }
         ctx.status = 404;
-        ctx.body = { error: 'Conversation not found' };
+        ctx.body = { error: word('Conversation not found') };
         return;
     }
     if (conv.type === GROUP_THREAD_TYPE && refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
@@ -646,7 +648,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
             return;
         }
         ctx.status = 404;
-        ctx.body = { error: 'Conversation not found' };
+        ctx.body = { error: word('Conversation not found') };
         return;
     }
     // A group's chat is its current active members, re-checked against the group rather than the participants
@@ -763,7 +765,7 @@ router.post('/api/messages/react', async (ctx) => {
         const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {
             ctx.status = 404;
-            ctx.body = { error: 'Message not found' };
+            ctx.body = { error: word('Message not found') };
             return;
         }
         ctx.body = { success: true, metadata: result.metadata };

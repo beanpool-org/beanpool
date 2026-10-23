@@ -5,13 +5,15 @@
  * never held by BeanPool), how they lend it, the longest loan, and a note only they see. Save keeps it and goes back.
  * The phone's twin is apps/native/tools/things/edit.tsx.
  *
- * A save is refused, in one sentence and with nothing written, for a 101st thing and for a shed past the store's bound
- * (64 KB, as core reports it). A photo chosen and not kept is taken out of the store again, by Cancel or by leaving
+ * A save is refused, in one sentence and with nothing written, for a shed past the host's bound (host.doc.maxBytes(): the
+ * shed's 128 KB, or less on a server that keeps less): its size is the one bound, so a 101st small thing is kept. A shed
+ * already past it (kept before the server said it keeps less) still saves a change that makes it no bigger. A
+ * photo chosen and not kept is taken out of the store again, by Cancel or by leaving
  * any other way (the page's back, the browser's); a save under way keeps what it saves and tidies the rest.
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-    THING_CONDITIONS, THING_INPUT_CHARS, findThing, normalizeCategory, saveThing, shedFits, shedFullLine, shedHasRoom, shedTooBigLine,
+    THING_CONDITIONS, THING_INPUT_CHARS, findThing, normalizeCategory, saveThing, shedFits, shedFullLine,
     t, thingCategories, thingCategory, thingConditionName, thingInput, thingInputProblems,
     type ThingCondition, type ThingInput, type ThingsScreenProps, type ToolPhoto as Photo,
 } from '@beanpool/core';
@@ -78,10 +80,9 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
         setProblem(null);
         if (thingInputProblems(input).length > 0) return;
         const doc = host.doc.get();
-        if (!existing && !shedHasRoom(doc)) { setProblem(shedFullLine()); return; }
         const now = host.now();
         const next = saveThing(doc, input, { id: existing?.id ?? null, newId: newThingId(now), now });
-        if (!shedFits(next)) { setProblem(shedTooBigLine()); return; }
+        if (!shedFits(next, host.doc.maxBytes(), doc)) { setProblem(shedFullLine()); return; }
         setBusy(true);
         saving.current = true;
         try {

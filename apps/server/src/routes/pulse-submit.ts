@@ -69,7 +69,10 @@ import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
@@ -181,18 +184,18 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
 } {
     const trimmed = (rawUrl || '').trim();
     if (!trimmed) {
-        throw new PulseError('INVALID_URL', 'URL cannot be empty.');
+        throw new PulseError('INVALID_URL', word('URL cannot be empty.'));
     }
 
     let parsed: URL;
     try {
         parsed = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
     } catch {
-        throw new PulseError('INVALID_URL', 'Invalid URL format.');
+        throw new PulseError('INVALID_URL', word('Invalid URL format.'));
     }
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        throw new PulseError('INVALID_URL', 'Only HTTP and HTTPS URLs are supported.');
+        throw new PulseError('INVALID_URL', word('Only HTTP and HTTPS URLs are supported.'));
     }
 
     // Strict IP vs Hostname validation against private/reserved addresses
@@ -432,13 +435,13 @@ function matchOwnedChannel(
     ).all(actorPubkey) as any[];
 
     if (ownedChannels.length === 0) {
-        throw new PulseError('NOT_YOURS', 'You do not have any creator channels registered.');
+        throw new PulseError('NOT_YOURS', word('You do not have any creator channels registered.'));
     }
 
     if (requestedChannelId) {
         const found = ownedChannels.find(c => c.id === requestedChannelId);
         if (!found) {
-            throw new PulseError('NOT_YOURS', 'Channel does not belong to you or does not exist.');
+            throw new PulseError('NOT_YOURS', word('Channel does not belong to you or does not exist.'));
         }
         const platformMatch = found.platform === platform ||
             ((platform === 'website' || platform === 'rss') && (found.platform === 'website' || found.platform === 'rss'));
@@ -474,7 +477,7 @@ function matchOwnedChannel(
 
         // If the URL has an explicit handle that conflicts with all member channels on that platform, reject it
         if (platform === 'tiktok' || platform === 'instagram' || platform === 'youtube' || platform === 'soundcloud') {
-            throw new PulseError('NOT_YOURS', `The account "${accountHandle}" in the URL does not match your owned channels.`);
+            throw new PulseError('NOT_YOURS', tr('The account "{handle}" in the URL does not match your owned channels.', { handle: accountHandle }));
         }
     }
 
@@ -495,7 +498,7 @@ function matchOwnedChannel(
         } catch {
             // ignore
         }
-        throw new PulseError('NOT_YOURS', 'The website domain does not match any of your registered website/RSS channels.');
+        throw new PulseError('NOT_YOURS', word('The website domain does not match any of your registered website/RSS channels.'));
     }
 
     // Fall back to primary video channel or the first compatible channel
@@ -653,7 +656,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 
@@ -663,13 +666,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (!rawUrl) {
             ctx.status = 400;
-            ctx.body = { error: 'invalid_url', message: 'URL is required.' };
+            ctx.body = { error: 'invalid_url', message: word('URL is required.') };
             return;
         }
 
         if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
             ctx.status = 400;
-            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
+            ctx.body = { error: 'url_too_long', message: tr('URL exceeds maximum length of {n} characters.', { n: MAX_ITEM_URL_LENGTH }) };
             return;
         }
 
@@ -711,7 +714,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                 return;
             }
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to preview URL.') };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, word('Failed to preview URL.')) };
         }
     });
 
@@ -727,7 +730,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         // A Pulse item is on everyone's feed, so a muted member (G3) submits none.
@@ -751,7 +754,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                 customThumbnailUrl = trimmedThumb;
             } else {
                 ctx.status = 400;
-                ctx.body = { error: 'invalid_thumbnail_url', message: `Thumbnail URL must be a valid HTTP or HTTPS URL under ${MAX_ITEM_THUMBNAIL_URL_LENGTH} characters.` };
+                ctx.body = { error: 'invalid_thumbnail_url', message: tr('Thumbnail URL must be a valid HTTP or HTTPS URL under {n} characters.', { n: MAX_ITEM_THUMBNAIL_URL_LENGTH }) };
                 return;
             }
         }
@@ -760,13 +763,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (!rawUrl) {
             ctx.status = 400;
-            ctx.body = { error: 'invalid_url', message: 'URL is required.' };
+            ctx.body = { error: 'invalid_url', message: word('URL is required.') };
             return;
         }
 
         if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
             ctx.status = 400;
-            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
+            ctx.body = { error: 'url_too_long', message: tr('URL exceeds maximum length of {n} characters.', { n: MAX_ITEM_URL_LENGTH }) };
             return;
         }
 
@@ -870,7 +873,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             }
             if (err instanceof WriterLimitError && respondProfileRefusal(ctx, err)) return;
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to submit post.') };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, word('Failed to submit post.')) };
         }
     });
 
@@ -882,7 +885,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 
@@ -891,13 +894,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (!channel) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'Channel not found.' };
+            ctx.body = { error: 'not_found', message: word('Channel not found.') };
             return;
         }
 
         if (channel.owner_pubkey !== actor) {
             ctx.status = 403;
-            ctx.body = { error: 'not_yours', message: 'That is not your channel.' };
+            ctx.body = { error: 'not_yours', message: word('That is not your channel.') };
             return;
         }
 
@@ -936,7 +939,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 
@@ -945,13 +948,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
 
         if (!item || item.deleted_at !== null) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'Item not found.' };
+            ctx.body = { error: 'not_found', message: word('Item not found.') };
             return;
         }
 
         if (item.owner_pubkey !== actor) {
             ctx.status = 403;
-            ctx.body = { error: 'not_yours', message: 'That item belongs to another member.' };
+            ctx.body = { error: 'not_yours', message: word('That item belongs to another member.') };
             return;
         }
 
@@ -970,7 +973,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
 
@@ -1042,7 +1045,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const actor = ctx.state.actor;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Signed request required' };
+            ctx.body = { error: word('Signed request required') };
             return;
         }
         if (respondIfMuted(ctx, actor)) return;
@@ -1072,13 +1075,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const channel = stmtGetChannelById.get(channelId) as any;
         if (!channel) {
             ctx.status = 404;
-            ctx.body = { error: 'not_found', message: 'Channel not found.' };
+            ctx.body = { error: 'not_found', message: word('Channel not found.') };
             return;
         }
 
         if (channel.owner_pubkey !== actor) {
             ctx.status = 403;
-            ctx.body = { error: 'not_yours', message: 'That is not your channel.' };
+            ctx.body = { error: 'not_yours', message: word('That is not your channel.') };
             return;
         }
 
@@ -1267,7 +1270,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             };
         } catch (err: any) {
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to ingest OAuth items.') };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, word('Failed to ingest OAuth items.')) };
         }
     });
 

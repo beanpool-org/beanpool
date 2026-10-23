@@ -10,12 +10,15 @@ import { needsTargetHref } from '../needs-you';
  * would never be sent one.
  */
 describe('a keepers\' vote lands on its enterprise', () => {
-    it('the landing opens the enterprise\'s own screen, by its key', () => {
-        expect(needsTargetHref({ to: 'enterprise', id: 'ent-key' })).toEqual({ pathname: '/treasury-detail', params: { publicKey: 'ent-key' } });
+    // Its Decisions block is in the keepers' console since slice S7 (app/treasury-manage.tsx), not on its public page.
+    it('the landing opens the enterprise\'s keepers\' console, by its key', () => {
+        expect(needsTargetHref({ to: 'enterprise', id: 'ent-key' })).toEqual({ pathname: '/treasury-manage', params: { publicKey: 'ent-key' } });
     });
 
-    it('the screen it names is one the app has', () => {
-        expect(fs.existsSync(path.join(__dirname, '..', '..', 'app', 'treasury-detail.tsx'))).toBe(true);
+    it('the screen it names is one the app has, and it draws the Decisions block', () => {
+        const screen = path.join(__dirname, '..', '..', 'app', 'treasury-manage.tsx');
+        expect(fs.existsSync(screen)).toBe(true);
+        expect(fs.readFileSync(screen, 'utf-8')).toMatch(/<EnterpriseDecisions\s/);
     });
 
     it('Home\'s read says the app opens it (utils/__tests__/home-store.test.ts checks the address)', () => {

@@ -57,6 +57,16 @@ export function toolDocBytes(doc: unknown): number {
     return n;
 }
 
+/**
+ * The most bytes a tool's document may take: its own bound (TOOL_LIMITS.docBytes when it names none), never past
+ * TOOL_LIMITS.docBytesMax, and never past what the community's server said it keeps of it (`nodeMax`, its answers'
+ * `max`, once heard: an older node answers 65536 for every tool). Each host's store refuses a write over it.
+ */
+export function toolDocMaxBytes(m: { doc: { maxBytes?: number } }, nodeMax?: number | null): number {
+    const own = Math.min(m.doc.maxBytes ?? TOOL_LIMITS.docBytes, TOOL_LIMITS.docBytesMax);
+    return typeof nodeMax === 'number' && Number.isFinite(nodeMax) && nodeMax > 0 ? Math.min(own, nodeMax) : own;
+}
+
 const SCREEN_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 const GUIDE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -120,7 +130,7 @@ export function toolManifestProblems(m: ToolManifest): string[] {
         return out;
     }
     const max = doc.maxBytes ?? TOOL_LIMITS.docBytes;
-    if (max > TOOL_LIMITS.docBytes) say(`its document is at most ${TOOL_LIMITS.docBytes} bytes, the node's bound.`);
+    if (max > TOOL_LIMITS.docBytesMax) say(`its document is at most ${TOOL_LIMITS.docBytesMax} bytes, the node's bound.`);
     let empty: unknown;
     try {
         empty = doc.empty();

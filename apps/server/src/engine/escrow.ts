@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind, word } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -21,8 +21,12 @@ import {
     hasListedOffer,
     getMarketplaceTransaction,
     CONTRIBUTION_REQUIRED_ERROR,
-    type MarketplaceTransaction
+    type MarketplaceTransaction,
+    unauthorized,
 } from '@beanpool/engine';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
@@ -100,7 +104,7 @@ const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings befo
  */
 function assertMemberActive(publicKey: string): void {
     assertAccountOpen(publicKey);
-    if (!isSyntheticAccount(publicKey) && isVisitorKey(db, publicKey)) throw new Error('Member not found');
+    if (!isSyntheticAccount(publicKey) && isVisitorKey(db, publicKey)) throw new Error(word('Member not found'));
 }
 
 /**
@@ -110,7 +114,7 @@ function assertMemberActive(publicKey: string): void {
 function assertAccountOpen(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member) throw new Error('Member not found');
+    if (!member) throw new Error(word('Member not found'));
     if (member.status === 'disabled') throw new Error(word('Account is disabled'));
     if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
@@ -191,12 +195,19 @@ function postHiddenNoNewDeal(): Error {
 // and the refund ruling put every listing back already.
 
 /** The refusal to anyone who asks for a lendable Offer while it is out. */
-export const LOAN_OUT_ERROR = "It's out on loan right now. Ask again when it's back.";
+export const LOAN_OUT_ERROR = word("It's out on loan right now. Ask again when it's back.");
 /** The refusal to a one-step accept of a lendable Offer, from any app or the API: it is asked for, never taken. */
-export const LEND_ASK_FIRST_ERROR = 'Ask to borrow it: the lender says yes first.';
+export const LEND_ASK_FIRST_ERROR = word('Ask to borrow it: the lender says yes first.');
 export const LEND_ASK_FIRST_CODE = 'lend_ask_first';
+/**
+ * The codes beside a trade step's refusal that means it moved on since the app showed it: the post was taken or changed
+ * (acceptPost, requestPost), the deal was closed or is not this member's (cancelling it). The apps say so in their own words and
+ * refresh (apps/native/utils/changed-elsewhere.ts), so the sentence beside the code is free to be translated.
+ */
+export const POST_GONE_CODE = 'post_gone';
+export const TRANSACTION_GONE_CODE = 'transaction_gone';
 /** A loan's length (its deal's quantity, @beanpool/core loanDays) below a day. */
-export const LOAN_TOO_SHORT_ERROR = 'A loan is for at least 1 day.';
+export const LOAN_TOO_SHORT_ERROR = word('A loan is for at least 1 day.');
 /** A loan longer than its lender's longest (posts.lend_max_days). */
 export function loanTooLongError(maxDays: number): string {
     return `This can be borrowed for up to ${maxDays} day${maxDays === 1 ? '' : 's'}.`;
@@ -324,11 +335,11 @@ export function requestPost(
     // and "This direct post is not addressed to you" that it was someone's direct post.
     if (!post || postOutOfSight(post, requesterPublicKey)
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
-        throw new Error('Post not found');
+        throw Object.assign(new Error(word('Post not found')), { code: POST_GONE_CODE });
     }
     // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
     if (post.lendable === 1 && post.status === 'pending') throw loanOut();
-    if (post.status !== 'active') throw new Error('Post is not active');
+    if (post.status !== 'active') throw Object.assign(new Error(word('Post is not active')), { code: POST_GONE_CODE });
     assertAccountOpen(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
     if (authorMember?.is_treasury) {
@@ -358,13 +369,13 @@ export function requestPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(targetGroupId, requesterPublicKey);
         if (!isMem && authorPubkey !== requesterPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active member of the group to request this post');
+            throw new Error(unauthorized(word('Must be an active member of the group to request this post')));
         }
     }
     if (audienceScope === 'direct') {
         const isTarget = targetPubkey === requesterPublicKey || assignedTo === requesterPublicKey || authorPubkey === requesterPublicKey;
         if (!isTarget) {
-            throw new Error('UNAUTHORIZED: This direct post is not addressed to you');
+            throw new Error(unauthorized(word('This direct post is not addressed to you')));
         }
     }
 
@@ -480,7 +491,7 @@ export function approvePostRequest(
     const isEnterpriseNeed = !isOffer && Boolean(buyerMember?.is_treasury);
     if (isEnterpriseNeed && opts?.authSigner && opts.authSigner === row.seller_pubkey) {
         const name = buyerMember?.callsign?.trim() || 'this enterprise';
-        const err: any = new Error(`Another keeper of ${name} needs to approve this — you cannot approve a job you are being paid for.`);
+        const err: any = new Error(tr('Another keeper of {name} needs to approve this — you cannot approve a job you are being paid for.', { name }));
         err.status = 403;
         err.statusCode = 403;
         err.code = 'TWO_PERSON_RULE';
@@ -737,7 +748,7 @@ export function acceptPost(
         // A lendable Offer that is out says so, to anyone who may see it (as requestPost).
         const out = post ? null : db.prepare("SELECT * FROM posts WHERE id = ? AND lendable = 1 AND status = 'pending' AND active = 1").get(postId) as any;
         if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
-        throw new Error('Post not found or not active');
+        throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
     // A lendable Offer is asked for: the lender says yes first (requestPost, then approvePostRequest). Refused here, to anyone
     // who may see it, before anything is held, whoever they are: a member the lender has blocked is told the same words, and
@@ -769,13 +780,13 @@ export function acceptPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(targetGroupId, buyerPublicKey);
         if (!isMem) {
-            throw new Error('UNAUTHORIZED: Must be an active member of the group to accept this offer');
+            throw new Error(unauthorized(word('Must be an active member of the group to accept this offer')));
         }
     }
     if (audienceScope === 'direct') {
         const isTarget = targetPubkey === buyerPublicKey || assignedTo === buyerPublicKey;
         if (!isTarget) {
-            throw new Error('UNAUTHORIZED: This direct offer is not addressed to you');
+            throw new Error(unauthorized(word('This direct offer is not addressed to you')));
         }
     }
     if (post.authorPublicKey === buyerPublicKey) throw new Error(word('Cannot accept your own post'));
@@ -818,7 +829,7 @@ export function acceptPost(
     // When an enterprise accepts an Offer, the acting keeper cannot accept their own personal offer on behalf of the enterprise.
     if (isEnterprisePayer && opts?.authSigner && opts.authSigner === post.authorPublicKey) {
         const name = buyerMember?.callsign?.trim() || 'this enterprise';
-        const err: any = new Error(`Another keeper of ${name} needs to approve this — you cannot approve a job you are being paid for.`);
+        const err: any = new Error(tr('Another keeper of {name} needs to approve this — you cannot approve a job you are being paid for.', { name }));
         err.status = 403;
         err.statusCode = 403;
         err.code = 'TWO_PERSON_RULE';
@@ -987,7 +998,7 @@ export function completePostTransaction(
         }
         if (opts.authSigner === row.seller_pubkey) {
             const name = buyerMember?.callsign?.trim() || 'this enterprise';
-            const err: any = new Error(`Another keeper of ${name} needs to complete this — you cannot complete a job you are being paid for.`);
+            const err: any = new Error(tr('Another keeper of {name} needs to complete this — you cannot complete a job you are being paid for.', { name }));
             err.status = 403;
             err.statusCode = 403;
             err.code = 'TWO_PERSON_RULE';

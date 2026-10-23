@@ -41,7 +41,8 @@
  *     activity (a reply in its DM) cancels no proposal; the vote carries and the new lead answers a request to keep the
  *     enterprise. The same for a group it convenes. A member's lead active this month is not replaced (control).
  *  3. What a visitor keeps: it replies in its DM (the app may ask for the DM again first), marks it read and mutes it,
- *     edits and deletes its own lines there and reacts there (the director, 2026-09-26); it sends Beans it holds to a
+ *     edits and deletes its own lines there and reacts there (the director, 2026-09-26), and accepts or ignores a message
+ *     request sent to it there, or all of them (PR #2392 review 4355750376; test-dm-requests 12b); it sends Beans it holds to a
  *     member, under the send gate as anyone is, and a visitor that never traded is told in plain words that it receives
  *     Beans and passes them on once it joins; it reads its own messages and Beans. Its own lines in a group's chat or an
  *     event's chat from before this rule it changes as a key with no row would (it can't), it opens no DM with a member
@@ -685,9 +686,11 @@ async function main(): Promise<void> {
     // What a visitor may do: a line in its DM, marking it read, muting it, editing and deleting its own lines there and reacting
     // there (the body names Alice's line in its DM), Beans (sections 3 and 4). Section 3 checks each, and that a line outside its
     // DM is answered as for a key with no row. And deleting its own row (test-removed-member-delete), which the sweeps below
-    // must not do to Vera or Zed.
+    // must not do to Vera or Zed. And a message request sent to it, accepted or ignored, or all of them ignored (the director's
+    // option b on PR #2392 review 4355750376; test-dm-requests section 12b checks each).
     const MAY = new Set(['POST /api/messages/send', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/ledger/transfer',
-        'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react', 'POST /api/member/purge']);
+        'POST /api/messages/edit', 'POST /api/messages/delete', 'POST /api/messages/react', 'POST /api/member/purge',
+        'POST /api/messages/request', 'POST /api/messages/request/ignore-all']);
     const materialise = (p: string, treasury = enterpriseKey) => p.replace(/:([A-Za-z]+)/g, (_, name: string) => {
         if (name === 'id') return p.startsWith('/api/groups/') ? group.id : p.startsWith('/api/marketplace/') ? event.id
             : p.startsWith('/api/crowdfund/') ? project : p.startsWith('/api/commons/decisions/') ? decision.id : 'sweep';
@@ -1053,6 +1056,8 @@ async function main(): Promise<void> {
             // Its own direct conversations: asking for one it is in again, a reply, its own lines, reacting, marking read, muting.
             'POST /api/messages/conversation', 'POST /api/messages/send', 'POST /api/messages/edit', 'POST /api/messages/delete',
             'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute',
+            // A message request sent to it: accepting or ignoring one in a DM it is in, and ignoring all (PR #2392 review 4355750376).
+            'POST /api/messages/request', 'POST /api/messages/request/ignore-all',
             // Its phone, so what is sent to it reaches it: a push token, taking it away, which pushes it wants.
             'POST /api/push-tokens', 'DELETE /api/push-tokens', 'POST /api/members/preferences',
             // Beans it holds (the send gate then decides).
@@ -1079,7 +1084,7 @@ async function main(): Promise<void> {
         // elsewhere. An allowlisted write naming what isn't the visitor's own (the body names another's DM, Alice's listing, or a
         // preference that isn't a push's) is refused the same.
         const OWN_ONLY = new Set(['POST /api/messages/conversation', 'POST /api/messages/send', 'POST /api/messages/edit', 'POST /api/messages/delete',
-            'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/members/preferences',
+            'POST /api/messages/react', 'POST /api/messages/mark-read', 'POST /api/messages/mute', 'POST /api/messages/request', 'POST /api/members/preferences',
             'POST /api/marketplace/posts/remove']);
         for (const v of [wes, zed, vera]) {
             const stampBefore = (db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(v.pk) as any)?.last_active_at;

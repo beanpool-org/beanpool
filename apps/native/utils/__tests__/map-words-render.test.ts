@@ -193,7 +193,7 @@ beforeEach(() => {
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: LOCAL, checkedAt: new Date().toISOString() } }));
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { vi.useRealTimers(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: unknown = createElement(MapScreen)) {
@@ -335,9 +335,16 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(host.textContent).toContain(xx('No price here: say in the description what you would like in return, or that it is free.'));
         expect(byLabel(xx('Price'))).toBeNull();
         expect(bypassing(), 'the form without Beans').toEqual([]);
-        // Sent with nothing filled in.
-        await click(byText(xx('📂 Select a category')), 'submit');
+        // Sent with nothing filled in. The line hides itself 3 s later on a bare timer in map.tsx, run here on a fake clock so it
+        // never outlives the test: left running, it fired after the file's jsdom was gone ("window is not defined", CI 23 Oct).
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const submit = byText(xx('📂 Select a category'));
+        expect(submit, 'submit').toBeTruthy();
+        await act(async () => { (submit as HTMLElement).click(); });
         expect(host.textContent).toContain(xx('⚠️ Please complete all required fields'));
+        await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+        vi.useRealTimers();
+        expect(host.textContent).not.toContain(xx('⚠️ Please complete all required fields'));
         // Adding a photo, and the camera refused.
         await click(byLabel(xx('Add photo')), 'Add photo');
         expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Cancel')]);

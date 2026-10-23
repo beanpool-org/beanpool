@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { word, wordn, type WordKey } from '../words.js';
 import { HOME_FRAME_LIMITS } from '../home-frame.js';
 import {
-    TOOLS, TOOL_LIMITS, toolFixtureProblems, toolHomeCardType, toolLineText, toolManifestProblems,
+    TOOLS, TOOL_LIMITS, toolDocMaxBytes, toolFixtureProblems, toolHomeCardType, toolLineText, toolManifestProblems,
     type ToolFixtures, type ToolManifest,
 } from '../tools/index.js';
 
@@ -43,6 +43,20 @@ describe('every registered tool', () => {
 
     it("a tool's Home card type fits Home's bound on a type", () => {
         expect(toolHomeCardType('x'.repeat(TOOL_LIMITS.idChars)).length).toBeLessThanOrEqual(HOME_FRAME_LIMITS.typeChars);
+    });
+
+    it("a document's bound: the tool's own (64 KB when it names none), never past 128 KB, never past what the node said it keeps", () => {
+        expect(TOOL_LIMITS.docBytes).toBe(65_536);
+        expect(TOOL_LIMITS.docBytesMax).toBe(131_072);
+        const named = (maxBytes?: number) => ({ doc: { maxBytes } });
+        expect(toolDocMaxBytes(named())).toBe(65_536);
+        expect(toolDocMaxBytes(named(131_072))).toBe(131_072);
+        expect(toolDocMaxBytes(named(1_000_000))).toBe(131_072);
+        // A node from before tools could name more answers 65536 for every tool: the bound is that.
+        expect(toolDocMaxBytes(named(131_072), 65_536)).toBe(65_536);
+        expect(toolDocMaxBytes(named(), 131_072)).toBe(65_536);
+        // Nothing heard, or nothing a node would say, is no bound of the node's.
+        for (const junk of [undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(toolDocMaxBytes(named(131_072), junk)).toBe(131_072);
     });
 
     for (const tool of TOOLS) {
@@ -135,7 +149,8 @@ describe('the checks bite', () => {
         one(toolManifestProblems({ ...good, screens: ['list', 'main'] }), /start with 'main'/);
         one(toolManifestProblems({ ...good, examples: [] }), /examples/);
         one(toolManifestProblems({ ...good, needs: { fee: 'money' as never } }), /needs.fee is not a node feature/);
-        one(toolManifestProblems({ ...good, doc: { ...good.doc, maxBytes: 100_000 } }), /at most 65536 bytes/);
+        one(toolManifestProblems({ ...good, doc: { ...good.doc, maxBytes: TOOL_LIMITS.docBytesMax + 1 } }), /at most 131072 bytes/);
+        expect(toolManifestProblems({ ...good, doc: { ...good.doc, maxBytes: TOOL_LIMITS.docBytesMax } })).toEqual([]);
         one(toolManifestProblems({ ...good, doc: { ...good.doc, read: () => { throw new Error('no'); } } }).slice(0, 1), /throws/);
     });
 

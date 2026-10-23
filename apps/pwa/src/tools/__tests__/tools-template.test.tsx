@@ -139,16 +139,20 @@ function layoutProblems(root: HTMLElement): string[] {
 
 async function axeProblems(root: HTMLElement): Promise<string[]> {
     // jsdom computes no colours: contrast is the central tokens' (each with its dark pair) and the browser checks'.
-    const result = await axe.run(root, { rules: { 'color-contrast': { enabled: false } } });
+    // Every rule still runs and every violation keeps all its nodes; only the passes go unnamed. Naming each passing node
+    // costs a selector search of the whole page, which on the full shed's 316 rows took the run from ~1 s to over 30 s.
+    const result = await axe.run(root, { rules: { 'color-contrast': { enabled: false } }, resultTypes: ['violations'] });
     return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
 }
 
 describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
-    it('the checks bite: an unwrapped line, a word too wide, a nameless button and a word outside t() are each found', async () => {
+    it('the checks bite: an unwrapped line, a word too wide, nameless buttons (each one named) and a word outside t() are each found', async () => {
         const bad = render(
             <div>
                 <p>{'[' + 'Ŵ'.repeat(30) + ']'}</p>
                 <button type="button" className="break-words"><span aria-hidden="true">…</span></button>
+                <button type="button" className="break-words">[Ök]</button>
+                <button type="button" id="second-nameless" className="break-words"><span aria-hidden="true">…</span></button>
                 <span className="break-words">Plain English</span>
             </div>,
         );
@@ -156,7 +160,10 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         const layout = layoutProblems(root);
         expect(layout.some((p) => p.startsWith('not wrapped'))).toBe(true);
         expect(layout.some((p) => p.startsWith('too wide'))).toBe(true);
-        expect((await axeProblems(root)).some((p) => p.startsWith('button-name'))).toBe(true);
+        // Passes go unnamed (axeProblems), but a violation still names every node it found.
+        const nameless = (await axeProblems(root)).find((p) => p.startsWith('button-name'));
+        expect(nameless?.split(', ')).toHaveLength(2);
+        expect(nameless).toContain('#second-nameless');
         expect(bypassing(root)).toContain('text: "Plain English"');
     });
 
@@ -569,6 +576,7 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
     const REMOVED = "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.";
     const OLDER = "Your community's server can't keep a copy yet, so for now it stays in this browser only.";
     const FAILED = "Couldn't reach your community's server, so nothing changed. Try again when you're online.";
+    const TOO_BIG = "This is more than your community's server keeps for now, so nothing changed and it stays in this browser only. Make it smaller, then switch the copy on again.";
     const ONE_DEVICE = 'One device at a time: the copy you changed last is the one kept.';
     const SYNCED_AT = '2026-10-21T07:00:00.000Z';
     /**
@@ -585,11 +593,13 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         refusesOff: false,
         before: null as null | ((method: string) => void),
         clock: Date.parse('2026-10-21T08:00:00.000Z'),
+        /** The `max` its answers say it keeps of a tool's document; none: today's stand-in, which says none. */
+        max: undefined as number | undefined,
     };
     let kept: Case;
     beforeEach(() => {
         server.rows.clear(); server.tombs.clear(); server.log.length = 0; server.mode = 'up'; server.sendsDeletedAt = false;
-        server.refusesOff = false; server.before = null;
+        server.refusesOff = false; server.before = null; server.max = undefined;
         localStorage.setItem('bp_node_url', 'https://mullum.example');
         kept = { manifest: { ...scaffold.manifest, id: 'kept', permissions: ['node-copy'] }, fixtures: scaffold.fixtures, loader: scaffold.loader };
         vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -605,7 +615,7 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
             const row = server.rows.get(tool);
             const now = (server.clock += 1000);
             let json: unknown;
-            if (method === 'GET') json = { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(server.sendsDeletedAt || server.refusesOff ? { deletedAt: row ? null : server.tombs.get(tool) ?? null } : {}) };
+            if (method === 'GET') json = { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(server.sendsDeletedAt || server.refusesOff ? { deletedAt: row ? null : server.tombs.get(tool) ?? null } : {}), ...(server.max ? { max: server.max } : {}) };
             else if (method === 'PUT' && server.refusesOff && body.turnOn !== true && !row && server.tombs.has(tool)) {
                 const deletedAt = server.tombs.get(tool);
                 return new Response(JSON.stringify({ error: "This tool's copy was switched off, so nothing was kept. Switch it on again in Settings to keep one.", code: 'tool_copy_off', deletedAt }), { status: 410 });
@@ -737,6 +747,35 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         expect(server.log[1].body).toEqual({ doc: scaffold.fixtures.docs.small, turnOn: true });
         expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(PRIVATE));
         expect(await readToolSettings(OWNER, 'kept')).toEqual({ nodeCopy: true });
+    });
+
+    it("switching on with more than the server keeps: the template's own sentence, in xx, never the offline one, and the switch stays off", async () => {
+        await showIn('xx');
+        expect(await writeToolRecord(OWNER, 'kept', { body: JSON.stringify(scaffold.fixtures.docs.small), updatedAt: SYNCED_AT, syncedAt: null })).toBe(true);
+        expect(await patchToolSettings(OWNER, 'kept', { nodeCopy: false })).toBe(true);
+        // A server that keeps less than this tool's document (an older one keeps 64 KB; the fixture is smaller than that).
+        server.max = 16;
+        const view = draw(kept, { id: 'kept', screen: 'main', key: null });
+        await view.findByText('Ladder');
+        await settings(view);
+        const toggle = view.getByTestId('tool-node-copy');
+        await act(async () => { fireEvent.click(toggle); });
+        expect(await view.findByTestId('tool-node-copy-too-big')).toHaveTextContent(xx(TOO_BIG));
+        expect(view.getByTestId('tool-node-copy-too-big')).toHaveAttribute('role', 'status');
+        expect(view.queryByTestId('tool-node-copy-failed')).toBeNull();
+        expect(toggle).toHaveAttribute('aria-checked', 'false');
+        expect(server.log.map((r) => r.method)).toEqual(['GET']);
+        expect(await readToolSettings(OWNER, 'kept')).toEqual({ nodeCopy: false, nodeMax: 16 });
+        expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(BROWSER_ONLY));
+        const page = view.getByTestId('tools-page');
+        expect(bypassing(page, { others: memberText(scaffold.fixtures.docs.small) })).toEqual([]);
+        expect(layoutProblems(page)).toEqual([]);
+        expect(await axeProblems(page)).toEqual([]);
+        // Tried again with the server unreachable: the offline line, and not this one.
+        server.mode = 'down';
+        await act(async () => { fireEvent.click(toggle); });
+        expect(await view.findByTestId('tool-node-copy-failed')).toHaveTextContent(xx(FAILED));
+        expect(view.queryByTestId('tool-node-copy-too-big')).toBeNull();
     });
 
     it('Remove my data with the copy on: the words say the server copy goes too; the server first, or nothing', async () => {

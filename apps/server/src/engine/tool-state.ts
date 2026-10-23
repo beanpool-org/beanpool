@@ -9,7 +9,8 @@
  *   keepers read and write (routes/tools.ts). The owner comes from the signature, or the enterprise from the path, never
  *   from the body.
  * - The document is the device's, written whole, last writer wins: a JSON object with its own `v`, which the node never
- *   reads. At most TOOL_STATE_MAX_BYTES as stored; over it the write is refused with a sentence, never cut short.
+ *   reads. At most its tool's bound as stored (toolStateMaxBytes: 64 KB, or what the tool's manifest names, at most
+ *   128 KB: the Tool shed's); over it the write is refused with a sentence, never cut short.
  * - The tool's id is 1 to 24 of a-z, 0-9 and '-' (the template's ids are at most 16, §1.2); `community:` is kept for the
  *   runtime plugins a community may add later (template §5), refused here in a sentence of its own.
  * - Private: no list, search, Home answer to another member, pooled count or admin screen reads it. The community's
@@ -38,16 +39,31 @@
  * ## What one owner can make this node keep
  *
  * At most TOOL_STATE_TOOLS_MAX different tools, counting those deleted within the tombstones' 30 days, so at most that many
- * rows of 64 KB and that many tombstones, whatever they send. Each write is also one of the signer's day of signed writes
+ * rows of 64 KB, the Tool shed's of 128 KB (2,112 KB in all, where every tool at 128 KB would be 4 MB), and that many
+ * tombstones, whatever they send. Each write is also one of the signer's day of signed writes
  * (the gateway's day budget, config/writer-limits.ts signedWritesPerDay), or the enterprise's for a keeper's. A delete
  * of a tool with no copy leaves its removal, which counts the same; at the cap, a delete of a tool not among them
  * writes nothing (the design's §4 residual 5: that tool's own write is refused at the cap anyway).
  */
+import { TOOL_LIMITS, toolById, toolDocMaxBytes } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 
-/** The most a tool's document may take as stored, as UTF-8 (the schema's CHECK on member_tool_state.body). */
-export const TOOL_STATE_MAX_BYTES = 65_536;
+/** The most a tool's document may take as stored, as UTF-8, when its manifest names no bound of its own: 64 KB. */
+export const TOOL_STATE_MAX_BYTES = TOOL_LIMITS.docBytes;
+
+/** The most any tool's may take: the schema's CHECK on member_tool_state.body (db.ts rebuilds an older table's), 128 KB. */
+export const TOOL_STATE_CEILING_BYTES = TOOL_LIMITS.docBytesMax;
+
+/**
+ * The most this tool's document may take here, as stored: the bound its manifest in this build names (@beanpool/core
+ * toolDocMaxBytes: the Tool shed's 128 KB), or TOOL_STATE_MAX_BYTES for a tool this build doesn't have. Every answer of
+ * the routes says it (`max`), and the apps hold to it, so a newer app on this node never writes past it.
+ */
+export function toolStateMaxBytes(tool: string): number {
+    const manifest = toolById(tool);
+    return manifest ? toolDocMaxBytes(manifest) : TOOL_STATE_MAX_BYTES;
+}
 
 /**
  * The most different tools one owner keeps copies of, counting those deleted within the tombstones' 30 days. The
@@ -166,7 +182,7 @@ export interface ToolStateWriteOptions {
 
 /**
  * Keeps `doc` as `owner`'s copy of this tool's document, in place of any before it. Refused, before anything is
- * written: a bad tool id, a document that is no JSON object or is over TOOL_STATE_MAX_BYTES, an ordinary write (not
+ * written: a bad tool id, a document that is no JSON object or is over its tool's bound (toolStateMaxBytes), an ordinary write (not
  * `turnOn`) of a tool whose copy its owner removed (410 tool_copy_off, with the removal's `deletedAt`), or a new tool
  * past TOOL_STATE_TOOLS_MAX. On a standby, StandbyLedgerError (config/node-role.ts).
  */
@@ -178,9 +194,10 @@ export function writeToolState(owner: string, tool: string, doc: unknown, opts: 
     }
     const body = JSON.stringify(doc);
     const bytes = Buffer.byteLength(body, 'utf8');
-    if (bytes > TOOL_STATE_MAX_BYTES) {
+    const max = toolStateMaxBytes(tool);
+    if (bytes > max) {
         throw new ToolStateRefusal(413, 'tool_doc_too_large',
-            `This tool's copy would be ${Math.ceil(bytes / 1024)} KB, and the community keeps at most ${TOOL_STATE_MAX_BYTES / 1024} KB for each tool. Take something out of it, then try again.`);
+            `This tool's copy would be ${Math.ceil(bytes / 1024)} KB, and the community keeps at most ${max / 1024} KB for this tool. Take something out of it, then try again.`);
     }
     return db.transaction((): ToolState => {
         if (!opts.turnOn && rowAt(owner, tool) === null) {

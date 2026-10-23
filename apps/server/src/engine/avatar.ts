@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, memberPhotoNotMovedYet } from '../db/db.js';
-import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl, isBundledAvatar } from '@beanpool/core';
+import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl, isBundledAvatar, word, wordsFor } from '@beanpool/core';
 import { isStorableImageValue, stripImageMetadata, tooManyPixels } from '../storage/image-metadata.js';
 
 
@@ -40,7 +40,7 @@ export function sniffRasterImageType(buf: Buffer): string | null {
     return null;
 }
 
-export const AVATAR_FORMAT_ERROR = 'Avatar must be a JPEG, PNG, WebP or GIF image';
+export const AVATAR_FORMAT_ERROR = word('Avatar must be a JPEG, PNG, WebP or GIF image');
 
 /**
  * Why a node refuses a photo value: it is no picture the node stores (`format`: not a JPEG, PNG, WebP or GIF, or one
@@ -51,10 +51,13 @@ export const AVATAR_FORMAT_ERROR = 'Avatar must be a JPEG, PNG, WebP or GIF imag
 export type PhotoRefusal = { kind: 'format' } | { kind: 'pixels'; width: number; height: number };
 
 const FORMAT: PhotoRefusal = { kind: 'format' };
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 /** The pixel refusal's own words, the same on every route. */
 export function tooManyPixelsText(size: { width: number; height: number }): string {
-    return `That photo is too big to show on phones (${size.width} × ${size.height} pixels). Crop it and try again.`;
+    return tr('That photo is too big to show on phones ({width} × {height} pixels). Crop it and try again.', { width: size.width, height: size.height });
 }
 
 /** A refusal in a route's words: the pixel sentence, or the route's own format sentence. */

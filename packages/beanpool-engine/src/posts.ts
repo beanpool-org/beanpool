@@ -14,11 +14,14 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf, lendBackAroundOf, tierForCredit } from '@beanpool/core';
+import { avatarUrlOf, lendBackAroundOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
 import { readRepeatRule, readRepeatSkips, restorableBefore, upcoming, type EventRepeatRule } from './event-series.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 type Db = Database.Database;
 
@@ -253,6 +256,13 @@ export interface PostFilter {
     query?: string;
     authorPubkey?: string;
     viewerPubkey?: string;
+    /**
+     * A keeper's read of the enterprise that is `authorPubkey`, as it would read its own (readsAsAuthor: its paused
+     * listings too, and while it is paused for the season or winding up): the list route's `keeper=1`, which the keepers'
+     * Manage console sends. Honoured only for a `viewerPubkey` who keeps it; anyone else reads as without it. Unset, a
+     * keeper reads the enterprise's listings as every member does, as its public page does (PR #2405 review 4355985890).
+     */
+    asKeeper?: boolean;
     sync?: boolean;
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
@@ -609,10 +619,10 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
 export function validatePostPhotos(photos: string[] | undefined): void {
     if (photos === undefined) return;
     if (!Array.isArray(photos)) throw new Error('photos must be an array');
-    if (photos.length > MAX_POST_PHOTOS) throw new Error(`A post can have at most ${MAX_POST_PHOTOS} photos. Take one off to add another.`);
+    if (photos.length > MAX_POST_PHOTOS) throw new Error(tr('A post can have at most {n} photos. Take one off to add another.', { n: MAX_POST_PHOTOS }));
     for (const p of photos) {
         if (typeof p !== 'string' || !/^data:image\/(jpeg|jpg|png|webp);base64,/.test(p)) {
-            throw new Error('Each photo must be a base64 data URL (JPEG, PNG, or WebP)');
+            throw new Error(word('Each photo must be a base64 data URL (JPEG, PNG, or WebP)'));
         }
         if (p.length > MAX_PHOTO_BASE64_CHARS) {
             throw new Error(word('Photo too large — resize to 800px JPEG before uploading'));
@@ -885,6 +895,19 @@ function enterprisesKeptBy(db: Db, member: string): Set<string> {
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.member_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0`).all(member) as Array<{ treasury_pubkey: string }>;
     return new Set(rows.map(r => r.treasury_pubkey));
+}
+
+/**
+ * Whether `viewer` may read `author`'s listings as their author does (a list read with `authorPubkey`: the paused ones
+ * too, and an enterprise's while it is paused for the season or winding up): the author, or a keeper of the enterprise
+ * that is it (enterprisesKeptBy). A keeper's Manage console features and un-features its paused Offers (apps/native
+ * app/treasury-manage.tsx), and a paused one keeps its place on the shelf (engine/shops.ts SHELF_SQL), so the console
+ * has to read them; it asks for that view (PostFilter.asKeeper), and every other keeper's read is a member's. `kept` is
+ * the reader's enterprises when the caller holds them already.
+ */
+export function readsAsAuthor(db: Db, viewer: string | undefined, author: string | undefined, kept?: () => Set<string>): boolean {
+    if (!viewer || !author) return false;
+    return viewer === author || (kept ? kept() : enterprisesKeptBy(db, viewer)).has(author);
 }
 
 /**
@@ -1225,7 +1248,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
-    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
+    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, asKeeper: null, sync: null, beansOnly: null,
     lendable: null, shopId: null, inShop: null, nearestPerShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
@@ -1776,8 +1799,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     const params: any[] = [];
 
     const byId = !!filter?.id || !!filter?.ids;
+    const viewer = filter?.viewerPubkey;
+    // The enterprises the reader keeps (enterprisesKeptBy), read once and only if a read needs them: one author's listings
+    // read by a keeper of it in the keeper's view, or a sync read.
+    let keeps: Set<string> | undefined;
+    const viewerKeeps = () => keeps ??= viewer ? enterprisesKeptBy(db, viewer) : new Set<string>();
     if (!byId && !filter?.updatedAfter && !filter?.sync) {
-        const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
+        // The author's own read, or a keeper's asked for as the enterprise's (asKeeper); a keeper's plain read is a member's.
+        const selfView = (!!filter?.authorPubkey && filter.authorPubkey === viewer)
+            || (!!filter?.asKeeper && readsAsAuthor(db, viewer, filter?.authorPubkey, viewerKeeps));
         if (!filter?.includeInactive) {
             where += selfView
                 ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
@@ -1828,11 +1858,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
-    const viewer = filter?.viewerPubkey;
     const viewerIsVisitor = isVisitorKey(db, viewer);
-    // The enterprises the reader keeps (enterprisesKeptBy), read once and only if a sync read needs them.
-    let keeps: Set<string> | undefined;
-    const viewerKeeps = () => keeps ??= viewer ? enterprisesKeptBy(db, viewer) : new Set<string>();
     // What a delta read sends this reader again whatever changed (offBoardPostsToResend).
     let resend = new Set<string>();
     if (filter?.includeAllScopes) {

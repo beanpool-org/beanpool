@@ -40,6 +40,7 @@ import {
     listPlaceWatches, setPlaceWatch, removePlaceWatch, PlaceWatchLimitError, placeWatchLimit, PLACE_WATCH_RADIUS_KM,
 } from '../engine/place-watches.js';
 import type { RouteDeps } from './types.js';
+import { word } from '@beanpool/core';
 
 const MAX_QUERY_CHARS = 80;
 const DEFAULT_LIMIT = 20;
@@ -90,12 +91,12 @@ function watcher(ctx: any): string | null {
     if (!actor) {
         // With read auth on, the middleware refuses an unsigned list first; kept so the handler never relies on it.
         ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
+        ctx.body = { error: word('A signed request is required') };
         return null;
     }
     if (!isNodeMember(actor)) {
         ctx.status = 403;
-        ctx.body = { error: 'Only a member of this community can watch a place here' };
+        ctx.body = { error: word('Only a member of this community can watch a place here') };
         return null;
     }
     return actor;
@@ -277,7 +278,7 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         if (!actor) return;
         if (!removePlaceWatch(actor, String(ctx.params.id))) {
             ctx.status = 404;
-            ctx.body = { error: 'You have no watch with that id.' };
+            ctx.body = { error: word('You have no watch with that id.') };
             return;
         }
         ctx.body = { success: true };

@@ -92,7 +92,7 @@ export class MessagingError extends Error {
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
     const member = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member) throw new MessagingError('Member not found');
+    if (!member) throw new MessagingError(word('Member not found'));
     if (member.status === 'disabled' && member.is_visitor) throw new MessagingError(word('Account is disabled'));
     if (member.status === 'pruned') throw new MessagingError(word('Account has been pruned'));
     // The old key of a member being re-keyed (a lost or stolen phone): its row is 'suspended', which the lines above
@@ -101,7 +101,7 @@ function assertMemberActive(publicKey: string): void {
 }
 
 /** A visitor's line anywhere but a direct conversation it is in: refused in the words a key with no row is refused in. */
-const VISITOR_SEND_REFUSAL = 'Member not found';
+const VISITOR_SEND_REFUSAL = word('Member not found');
 
 /**
  * Whether `publicKey` is a visitor's row (isLiveVisitor) and `messageId` a line of a direct conversation it is in. There
@@ -194,7 +194,7 @@ function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey
  * any other type with this, as a 410.
  */
 export const CHAT_GROUP_REMOVED_ERROR =
-    'Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.';
+    word('Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.');
 
 /**
  * A member's words in a direct conversation are stored only end-to-end encrypted: the privacy policy tells members
@@ -210,7 +210,7 @@ export const DM_NOT_ENCRYPTED_ERROR =
 export const DM_NOT_ENCRYPTED_CODE = 'dm_not_encrypted';
 /** A direct conversation is named by its two people; a name typed for one would be words the node can read. */
 export const DM_NAME_REFUSED_ERROR =
-    'A direct conversation has no name. Send the words as a message: it is locked so only the two of you can read it.';
+    word('A direct conversation has no name. Send the words as a message: it is locked so only the two of you can read it.');
 
 /** The nonce prefix of an end-to-end encrypted DM (apps/pwa/src/lib/e2e-crypto.ts, apps/native/utils/e2e-crypto.ts). */
 export const DM_ENCRYPTED_NONCE_PREFIX = 'x25519-xc20p-v2:';
@@ -854,15 +854,15 @@ function toggledReactions(stored: string | null | undefined, author: string, emo
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 /** What an id nobody has is answered with — and, word for word, what a message in a group chat the caller
  *  may not see is answered with, so the two cannot be told apart (the #828 rule). */
-export const MESSAGE_NOT_FOUND_ERROR = 'Message not found';
-export const MESSAGE_REMOVED_EDIT_ERROR = 'A removed message cannot be edited';
-export const MESSAGE_REMOVED_REACT_ERROR = 'A removed message cannot be reacted to';
-export const MESSAGE_DELETE_NOT_AUTHOR_ERROR = 'Only the author can delete a message';
-export const SYSTEM_MESSAGE_DELETE_ERROR = 'System messages cannot be deleted';
-export const THREAD_MESSAGE_DELETE_ERROR = 'Messages in an enterprise discussion thread cannot be deleted';
-export const EVENT_THREAD_DELETE_ERROR = 'Messages in an event chat cannot be deleted';
-export const THREAD_MESSAGE_EDIT_ERROR = 'Messages in an enterprise discussion thread cannot be edited';
-export const EVENT_THREAD_EDIT_ERROR = 'Messages in an event chat cannot be edited';
+export const MESSAGE_NOT_FOUND_ERROR = word('Message not found');
+export const MESSAGE_REMOVED_EDIT_ERROR = word('A removed message cannot be edited');
+export const MESSAGE_REMOVED_REACT_ERROR = word('A removed message cannot be reacted to');
+export const MESSAGE_DELETE_NOT_AUTHOR_ERROR = word('Only the author can delete a message');
+export const SYSTEM_MESSAGE_DELETE_ERROR = word('System messages cannot be deleted');
+export const THREAD_MESSAGE_DELETE_ERROR = word('Messages in an enterprise discussion thread cannot be deleted');
+export const EVENT_THREAD_DELETE_ERROR = word('Messages in an event chat cannot be deleted');
+export const THREAD_MESSAGE_EDIT_ERROR = word('Messages in an enterprise discussion thread cannot be edited');
+export const EVENT_THREAD_EDIT_ERROR = word('Messages in an event chat cannot be edited');
 export const EVENT_THREAD_SEND_ERROR = 'Post to an event chat through the event, not this route';
 export const EVENT_THREAD_REACT_ERROR = 'Reactions are not part of an event chat';
 export const ENTERPRISE_THREAD_SEND_ERROR = "Post to an enterprise's discussion through the enterprise, not this route";
@@ -926,7 +926,7 @@ export function editMessage(
     // and knows nothing of thread moderation or a wound-up enterprise's read-only thread.
     // Fails closed: a message whose conversation row is missing cannot be shown to be outside a thread.
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
-    if (!conv) throw new MessagingError('Conversation not found', 404);
+    if (!conv) throw new MessagingError(word('Conversation not found'), 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_EDIT_ERROR, 403);
     // An event chat is moderated by its host and goes read-only when the event ends; this route knows
     // neither, so it refuses (docs/events-on-the-map.md §2.2). Someone the event isn't there for (a hidden group's
@@ -1078,7 +1078,7 @@ export function deleteOwnMessage(
     // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be
     // outside a thread this route may not write to.
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
-    if (!conv) throw new MessagingError('Conversation not found', 404);
+    if (!conv) throw new MessagingError(word('Conversation not found'), 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_DELETE_ERROR, 403);
     // An event chat's line: first answered as an id nobody has for someone the event isn't there for, as the edit is.
     if (conv.type === 'event_thread') {

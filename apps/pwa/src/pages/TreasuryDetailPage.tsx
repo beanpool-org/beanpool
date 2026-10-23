@@ -1028,8 +1028,32 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // Its face and shelf change while it is open; a closed or wound-up one keeps them as they are (the node refuses).
     const faceOpen = !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
 
+    // An action's words, drawn where `feedbackAt` puts them.
+    const feedbackAlert = actionFeedback && (
+        <div className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between border ${
+            actionFeedback.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                : 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 border-red-300 dark:border-red-800'
+        }`}>
+            <span>{actionFeedback.message}</span>
+            <button
+                onClick={() => setActionFeedback(null)}
+                className="text-xs opacity-70 hover:opacity-100 font-bold ml-2"
+            >
+                {t('Dismiss')}
+            </button>
+        </div>
+    );
+    // A Manage action can end the reader's Manage (stepping down, a finalised wind-up): its words then top the page they are
+    // left on, scrolled back up to them from where the action's button was.
+    const manageWordsOnPage = feedbackAt('manage') && !canManage;
+    const overlayRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (manageWordsOnPage) overlayRef.current?.scrollTo?.({ top: 0 });
+    }, [manageWordsOnPage]);
+
     return (
-        <div className="page-overlay z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
+        <div ref={overlayRef} className="page-overlay z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
             {/* z-[110]: above the mobile app header (App.tsx, zIndex 100). This page carries its own Back bar,
                 and at z-50 that bar sat under the header where Back could not be tapped.
                 .page-overlay (index.css) is the fixed layer itself: full bleed on a phone, starting past the
@@ -1110,21 +1134,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                         {canManage && tab === 'manage' ? (
                             <div role="tabpanel" id="enterprise-panel-manage" aria-labelledby="enterprise-tab-manage" data-testid="manage-panel" className="space-y-6">
-                                {actionFeedback && feedbackAt('manage') && (
-                                    <div className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between border ${
-                                        actionFeedback.type === 'success'
-                                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                                            : 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 border-red-300 dark:border-red-800'
-                                    }`}>
-                                        <span>{actionFeedback.message}</span>
-                                        <button
-                                            onClick={() => setActionFeedback(null)}
-                                            className="text-xs opacity-70 hover:opacity-100 font-bold ml-2"
-                                        >
-                                            {t('Dismiss')}
-                                        </button>
-                                    </div>
-                                )}
+                                {feedbackAt('manage') && feedbackAlert}
 
                                 {/* Pending Keeper Requests (for Lead Keeper / Sole Keeper / Admin) */}
                                 {!isEffectivePreview && isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
@@ -1909,6 +1919,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             </div>
                         ) : (
                             <div {...(canManage ? { role: 'tabpanel', id: 'enterprise-panel-page', 'aria-labelledby': 'enterprise-tab-page' } : {})} className="space-y-6">
+                                {manageWordsOnPage && feedbackAlert}
+
                                 {/* The shopfront (DESIGN-shops-round3-enterprise-shopfront-fable.md §3, S8; the phone's S5 order): its banner (a quiet
                                     block in its kind's emoji), its logo (its avatar), its name, its kind and since when, and what kind of group it is. */}
                                 <ShopfrontHeader
@@ -2118,21 +2130,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     );
                                 })()}
 
-                                {actionFeedback && feedbackAt('pledge') && (
-                                    <div className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between border ${
-                                        actionFeedback.type === 'success'
-                                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                                            : 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 border-red-300 dark:border-red-800'
-                                    }`}>
-                                        <span>{actionFeedback.message}</span>
-                                        <button
-                                            onClick={() => setActionFeedback(null)}
-                                            className="text-xs opacity-70 hover:opacity-100 font-bold ml-2"
-                                        >
-                                            {t('Dismiss')}
-                                        </button>
-                                    </div>
-                                )}
+                                {feedbackAt('pledge') && feedbackAlert}
 
 
                                 {/* About, in its keepers' words (members.bio, round 3 §0 row 5) */}
@@ -2161,21 +2159,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <ShopfrontMessage label={messageLabel(leadKeeper.callsign, project ? 'project' : 'enterprise')} onClick={() => onMessage(leadKeeper.publicKey)} />
                                 )}
 
-                                {actionFeedback && feedbackAt('join') && (
-                                    <div className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between border ${
-                                        actionFeedback.type === 'success'
-                                            ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                                            : 'bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 border-red-300 dark:border-red-800'
-                                    }`}>
-                                        <span>{actionFeedback.message}</span>
-                                        <button
-                                            onClick={() => setActionFeedback(null)}
-                                            className="text-xs opacity-70 hover:opacity-100 font-bold ml-2"
-                                        >
-                                            {t('Dismiss')}
-                                        </button>
-                                    </div>
-                                )}
+                                {feedbackAt('join') && feedbackAlert}
 
                                 {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
                                 {isEffectivePreview ? (

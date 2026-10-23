@@ -498,6 +498,52 @@ describe("the keepers' Manage tab", () => {
         expect(await axeProblems(container)).toEqual([]);
     });
 
+    it("an action that ends the reader's Manage says so at the top of the page they are left on", async () => {
+        const wordsOnTop = async (words: string) => {
+            expect(await screen.findByText(words)).toBeInTheDocument();
+            expect(byId('manage-panel')).toBeNull();
+            expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+            before(screen.getByText(words), byId('shopfront-name'), `"${words}", then the page`);
+        };
+
+        // Stepping down is at once ("You stop being a keeper"): the read after it lists them no more.
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        await open({
+            write: (method, path, body) => {
+                if (path !== `/api/enterprise/${ENT}/keepers/step-down`) return okWrites(method, path, body);
+                node.detail = leadsView({ isLeadOrSoleKeeperOrAdmin: false, keepers: (leadsView().keepers as Array<{ publicKey: string }>).filter((k) => k.publicKey !== ME) });
+                node.keeperOf = [];
+                return { status: 200, body: { success: true, promoted: KOFI, paused: false, releasedBacking: 0 } };
+            },
+        });
+        let panel = await manage();
+        let scrollTo = vi.fn();
+        (screen.getByTestId('page-overlay') as any).scrollTo = scrollTo;
+        fireEvent.click(within(panel).getByRole('button', { name: 'Step down as a keeper' }));
+        await wordsOnTop('You have stepped down as a keeper.');
+        // Step down sits far down Manage: the page goes back up to the words.
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+        cleanup();
+
+        // Finalising a wind-up releases every keeper (the node deletes them all), so it ends the lead's Manage too.
+        await open({
+            detail: VIEWS.windingUp(),
+            write: (method, path, body) => {
+                if (path !== `/api/enterprise/${ENT}/wind-up/finalise`) return okWrites(method, path, body);
+                node.detail = leadsView({ status: 'completed', windUpFinalisedAt: iso(now), balance: 0, isLeadOrSoleKeeperOrAdmin: false, keepers: [] });
+                node.keeperOf = [];
+                return { status: 200, body: { success: true, status: 'completed', finalisedAt: iso(now), sweptAmount: 40 } };
+            },
+        });
+        panel = await manage();
+        scrollTo = vi.fn();
+        (screen.getByTestId('page-overlay') as any).scrollTo = scrollTo;
+        fireEvent.click(found(ACTIONS.find((a) => a.what === 'finalise the wind-up')!, panel) as HTMLElement);
+        fireEvent.click(within(panel).getByRole('button', { name: 'Finalise Wind-Up' }));
+        await wordsOnTop('Wind-up finalised. Swept 40 🫘 to Commons and released keepers.');
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+    });
+
     describe('its face, with one Save', () => {
         it('the lead changes its name and kind: one Save sends each field that changed, to its own route, and says it is saved', async () => {
             await open();

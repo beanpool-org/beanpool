@@ -45,6 +45,18 @@ const removalInGrace: nodeClient.AdminDecisionItem = {
     tally: { totalVoters: 8, electorate: 20, quorumRequired: 5, quorumMet: true, yesWeight: 7, noWeight: 1, supportRatio: 0.875, thresholdRequired: 0.66 },
 };
 
+/** A pause's own vote (removal by vote S2): the node's vote on removing the member it paused. */
+const pauseVote: nodeClient.AdminDecisionItem = {
+    ...keepVote,
+    id: 'dec-pause-1',
+    authorPubkey: 'SYSTEM',
+    title: 'Remove Troll?',
+    description: 'An admin paused Troll on 2026-09-19. Yes removes Troll after 7 days; No brings Troll back as soon as the vote closes. Reason given: threats',
+    effect: 'remove_member',
+    params: { memberName: 'Troll', rule: 2, pausedAt: '2026-09-19T00:00:00.000Z' },
+    tally: { totalVoters: 2, electorate: 20, quorumRequired: 5, quorumMet: false, yesWeight: 1, noWeight: 1, supportRatio: 0.5, thresholdRequired: 0.66 },
+};
+
 const until = (iso: string) => new Date(iso).toLocaleDateString();
 const VOTE_WORDS = /votes? needed|Keep suspension\?|Open votes|Halt this Decision|Halting this vote/;
 
@@ -94,6 +106,30 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.click(confirm);
 
         await waitFor(() => expect(halt).toHaveBeenCalledWith('https://test-node.local', 'dec-keep-1', 'Suspended the wrong account', 'pw', undefined));
+    });
+
+    it('a pause\'s own vote: halting it lifts the suspension, said as for a keep vote; a removal a member proposed is not one', async () => {
+        const proposed: nodeClient.AdminDecisionItem = { ...pauseVote, id: 'dec-proposed-1', authorPubkey: 'a'.repeat(64), title: 'Remove Someone' };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseVote, proposed]);
+        render(<DecisionsAdminPanel activeNode={node} />);
+        expect(await screen.findByText('Remove Troll?')).toBeInTheDocument();
+        expect(screen.getAllByText('2 of 5 votes needed · Yes 1 · No 1')).toHaveLength(2);
+        fireEvent.click(screen.getAllByText('Halt this Decision')[0]);
+        expect(screen.getByText('Halting this vote lifts the suspension straight away.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        fireEvent.click(screen.getAllByText('Halt this Decision')[1]);
+        expect(screen.getByText('Halting closes the vote; nothing it proposed will happen.')).toBeInTheDocument();
+    });
+
+    it('with Decisions off, a pause\'s own vote is a suspension that lifts by itself, lifted now by its button', async () => {
+        vi.mocked(nodeClient.fetchNodeDecisionsOn).mockResolvedValue(false);
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseVote]);
+        render(<DecisionsAdminPanel activeNode={node} />);
+        expect(await screen.findByText('Troll is suspended')).toBeInTheDocument();
+        expect(screen.getByText('No vote. It lifts by itself on that day, or sooner if you lift it.')).toBeInTheDocument();
+        expect(screen.getByText('Suspensions (1)')).toBeInTheDocument();
+        fireEvent.click(screen.getByText('Lift suspension now'));
+        expect(screen.getByText('Lifting ends the suspension straight away, before its 7 days are up.')).toBeInTheDocument();
     });
 
     it('keeps the vote words for a vote on a node with Decisions on', async () => {

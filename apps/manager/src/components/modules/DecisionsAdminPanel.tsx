@@ -19,12 +19,21 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 /**
+ * A pause's own vote (removal by vote S2): the community's vote on removing a member, which the node opened when an
+ * admin paused them (its author is the node, its params carry `rule: 2`). Halting it while it is open lifts the pause,
+ * as halting a "Keep …'s suspension?" vote does (apps/server decisions-engine.ts isPauseVote and adminHaltDecision).
+ */
+function isPauseVote(d: AdminDecisionItem): boolean {
+    return d.effect === 'remove_member' && d.authorPubkey === 'SYSTEM' && d.params?.rule === 2;
+}
+
+/**
  * An emergency suspension nobody votes on: one made while formal Decisions were off (`params.noVote`), or any one on a
- * node where they are off now. Either way it lifts by itself at `closesAt`, whatever votes it holds, and halting it
- * lifts it now (apps/server decisions-engine.ts, madeWithoutVote and executeDecision).
+ * node where they are off now, a pause's own vote included. Either way it lifts by itself at `closesAt`, whatever votes
+ * it holds, and halting it lifts it now (apps/server decisions-engine.ts, madeWithoutVote and executeDecision).
  */
 function isNoVoteSuspension(d: AdminDecisionItem, decisionsOn: boolean): boolean {
-    return d.effect === 'keep_suspension' && (!decisionsOn || d.params?.noVote === true);
+    return (d.effect === 'keep_suspension' && (!decisionsOn || d.params?.noVote === true)) || (!decisionsOn && d.status === 'open' && isPauseVote(d));
 }
 
 function suspendedName(d: AdminDecisionItem): string {
@@ -199,7 +208,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                         <p className="text-xs text-nature-400 m-0">
                             {haltIsLift
                                 ? 'Lifting ends the suspension straight away, before its 7 days are up.'
-                                : haltTarget.effect === 'keep_suspension'
+                                : haltTarget.effect === 'keep_suspension' || (haltTarget.status === 'open' && isPauseVote(haltTarget))
                                 ? 'Halting this vote lifts the suspension straight away.'
                                 : haltTarget.status === 'execution_pending_grace'
                                     ? 'Halting stops the removal and restores the member.'

@@ -2812,6 +2812,8 @@ export async function writeOffStrandedEscrow(
 
 export interface AdminDecisionItem {
     id: string;
+    /** 'SYSTEM' for one the node opened itself (an emergency suspension's vote, since removal by vote S2 a pause's own vote). */
+    authorPubkey?: string;
     title: string;
     description: string;
     effect: string;

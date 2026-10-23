@@ -17,7 +17,10 @@ import {
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
-import { DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
+import {
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker,
+    turnoutLine, voiceCreditsLine,
+} from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
 import { signedRequestWords } from './signed-request-lines';
@@ -798,6 +801,18 @@ export function DecideSection({
                                             </Text>
                                             <Text style={styles.keepBody}>
                                                 {t("Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.")}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {/* A pause's own vote: the node opened it when an admin paused someone (removal by vote S2) */}
+                                    {isPauseVote(item) && (
+                                        <View style={styles.keepBox} testID="pause-vote-box">
+                                            <Text style={styles.keepHeadline}>
+                                                {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                            </Text>
+                                            <Text style={styles.keepBody}>
+                                                {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                             </Text>
                                         </View>
                                     )}

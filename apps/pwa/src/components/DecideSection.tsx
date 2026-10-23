@@ -8,7 +8,8 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker,
+    turnoutLine, voiceCreditsLine,
 } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
@@ -328,6 +329,18 @@ export function DecideSection({
                                                 </div>
                                                 <div className="text-xs text-nature-300">
                                                     {t("Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.")}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* A pause's own vote: the node opened it when an admin paused someone (removal by vote S2) */}
+                                        {isPauseVote(item) && (
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 my-2 space-y-1" data-testid="pause-vote-box">
+                                                <div className="text-sm font-bold text-amber-200">
+                                                    {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                                </div>
+                                                <div className="text-xs text-nature-300">
+                                                    {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                                 </div>
                                             </div>
                                         )}

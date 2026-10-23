@@ -295,6 +295,15 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         return 'removed';
     }, [store.remove, copyOf, owner, manifest, nodeMax]);
 
+    /**
+     * A panel from the … menu. Settings opens without the last round trip's line, as on the phone: a too-big one counted
+     * what to delete then, and the member may since have deleted it.
+     */
+    const pick = useCallback((p: Panel) => {
+        if (p === 'settings') setCopy((c) => (c.busy ? c : { ...c, failed: null, max: undefined }));
+        setPanel(p);
+    }, []);
+
     const step = stack[stack.length - 1];
     /** The tool's own back (a Save, a Delete that lands): its screens', even under a panel, which stays where it is. */
     const toolBack = useCallback(() => {
@@ -343,7 +352,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     return (
         <>
             <PageBar onBack={back} title={t(manifest.name)} icon={manifest.icon} line={lineText(row)}
-                end={<ToolMenu name={t(manifest.name)} onPick={(p) => setPanel(p)} />} />
+                end={<ToolMenu name={t(manifest.name)} onPick={pick} />} />
             <div className="max-w-xl mx-auto px-4 py-4 min-w-0">
                 {panel === 'settings' && (
                     <ToolSettings manifest={manifest} copy={copy} onCopy={(on) => { void switchCopy(on); }} onRemove={remove}

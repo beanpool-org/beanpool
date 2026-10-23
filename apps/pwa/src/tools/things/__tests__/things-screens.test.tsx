@@ -697,6 +697,39 @@ describe('Edit', () => {
         expect(toolDocBytes(server.puts[0])).toBeLessThanOrEqual(65_536);
     });
 
+    it("the too-big line, then those things deleted in the same visit: Settings opened again says it no more, and the switch is taken", async () => {
+        await patchToolSettings(OWNER, 'things', { nodeCopy: false });
+        const over: Thing[] = [];
+        while (toolDocBytes(shed(...over)) <= TOOL_LIMITS.docBytes + 6_000) over.push(atCaps(over.length));
+        await keep(shed(...over));
+        server.max = 65_536;
+        await open('main');
+        await click('tool-menu');
+        await click('tool-menu-settings');
+        await click('tool-node-copy');
+        await waitFor(() => expect(byTestId('tool-node-copy-too-big')).not.toBeNull());
+        const n = shedToDelete(shed(...over), 65_536);
+
+        // Back to the shed in the same visit (nothing drawn again), and that many deleted there, one at a time.
+        await click('tools-back');
+        for (const t of over.slice(0, n)) {
+            await click(`thing-row-${t.id}`);
+            await click('thing-delete');
+            await click('thing-delete-yes');
+        }
+        expect(shedThings(await kept())).toHaveLength(over.length - n);
+        expect(toolDocBytes(await kept())).toBeLessThanOrEqual(65_536);
+        await click('tool-menu');
+        await click('tool-menu-settings');
+        expect(byTestId('tool-node-copy-too-big')).toBeNull();
+        expect(byTestId('tool-node-copy-failed')).toBeNull();
+        await click('tool-node-copy');
+        await waitFor(async () => expect((await readToolSettings(OWNER, 'things')).nodeCopy).toBe(true));
+        expect(byTestId('tool-node-copy-too-big')).toBeNull();
+        expect(server.puts).toHaveLength(1);
+        expect(toolDocBytes(server.puts[0])).toBeLessThanOrEqual(65_536);
+    });
+
     it("a refusal on Save is announced as it shows, from a polite region there before Save; never read out twice", async () => {
         await keep(shed(...filledTo(THINGS_DOC_BYTES)));
         await open('edit');

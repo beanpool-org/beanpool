@@ -14,7 +14,8 @@
  *
  * Never marked: a sentence an app matches on (`includes('already a member')`, `/set a profile photo/i`) or one that
  * starts with a code the apps read (`FLOOR_LOCKED: …`, `UNAUTHORIZED: …`). Translated, the app's branch would stop
- * matching; those move to a `code` first (test-member-words.ts holds the list).
+ * matching; those move to a `code` first (test-member-words.ts holds the list, and reads the apps' sources for any match
+ * on a marked sentence).
  *
  * The catalogs: apps/server/words/<lang>.json (the server's sentences and @beanpool/engine's) and core's
  * packages/beanpool-core/words/<lang>.json (the push sentences live in core). Read once per language, and the language's

@@ -18,7 +18,9 @@
  *   4. Pushes: POST /api/push-tokens keeps the phone's `lang` (one BeanPool writes; anything else, or none, is English)
  *      and follows it when the phone registers again; a push goes to each phone in its language ("BeanPool" and the kind's
  *      sentence), the same notice data either way; the standby's copy never carries `lang`.
- *   5. Nothing marked for translation is a sentence an app matches on, or starts with a code the apps read.
+ *   5. Nothing marked for translation is a sentence an app matches on, or starts with a code the apps read: the hand-kept
+ *      list (APP_MATCHES), and every match the apps' sources hold today, found where it is written (appMatchers), so a
+ *      new `e.message.includes('…')` on a marked sentence fails here.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-words.ts
  */
@@ -29,10 +31,12 @@ delete process.env.NODE_PROFILE;
 delete process.env.EXPO_ACCESS_TOKEN;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Koa from 'koa';
+import ts from 'typescript';
 import { setMemberPhoto } from '@beanpool/engine';
 import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, wordKey } from '@beanpool/core';
 import { memberWordsOnTheWayOut, requestLanguage, useCatalogsForTests, wordsIn } from './member-words.js';
@@ -337,6 +341,75 @@ const APP_MATCHES: { phrase: RegExp; where: string }[] = [
     { phrase: /try again in |^Too many attempts|Your key stays/i, where: 'apps/pwa lib/web-join.ts, components/key-lines.ts' },
 ];
 
+/**
+ * Every place the apps (and core, which they run) test a node's words, read from their sources: a literal looked for in
+ * an error or a message (`e.message.includes('not found')`, `why.startsWith('Top-up refused')`, `msg === '…'`) and a
+ * regex with a word in it tested on one (`/set a profile photo/i.test(msg)`, `reason.match(/^Quorum not met/)`). What
+ * counts as an error or a message is its name (ERRORISH), so a match on something else (a search term, a URL) is not
+ * one; the few on an error that never holds a node's words are in NEVER_A_NODES_WORDS.
+ */
+const APP_SOURCE_DIRS = ['apps/native/app', 'apps/native/components', 'apps/native/utils', 'apps/native/services', 'apps/native/constants',
+    'apps/native/tools', 'apps/pwa/src', 'packages/beanpool-core/src'];
+const ERRORISH = /message|msg|err|why|reason|text|detail|sentence|said|body|str\b|^e$|^String\(e\)$/i;
+const NEVER_A_NODES_WORDS: { file: string; looksFor: string; why: string }[] = [
+    { file: 'apps/native/app/(tabs)/market.tsx', looksFor: 'closed', why: "the phone's own database closing under a wipe or a restore (one more try)" },
+    { file: 'apps/native/utils/db.ts', looksFor: 'closed', why: "the phone's own database closing under a wipe or a restore (one more try)" },
+    { file: 'apps/native/utils/pulse-oauth.ts', looksFor: 'cancel', why: "a sign-in provider's own error in its redirect" },
+];
+
+interface AppMatcher { at: string; file: string; looksFor: string; shown: string; test: (s: string) => boolean }
+
+function appMatchers(root: string, words: any): AppMatcher[] {
+    const found: AppMatcher[] = [];
+    for (const file of words.sourceFiles(root, APP_SOURCE_DIRS) as string[]) {
+        const sf = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true,
+            file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+        const at = (n: ts.Node) => `${file}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
+        const lit = (n: ts.Node | undefined) => (n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null);
+        const add = (n: ts.Node, looksFor: string, shown: string, test: (s: string) => boolean) => found.push({ at: at(n), file, looksFor, shown, test });
+        /** What a regex literal is tested on: `x` in /re/.test(x), x.match(/re/), x.replace(/re/, …). */
+        const testedOn = (n: ts.Node): ts.Node | undefined => {
+            const up = n.parent;
+            if (ts.isPropertyAccessExpression(up) && up.expression === n && ['test', 'exec'].includes(up.name.text) && ts.isCallExpression(up.parent)) {
+                return up.parent.arguments[0];
+            }
+            if (ts.isCallExpression(up) && up.arguments[0] === n && ts.isPropertyAccessExpression(up.expression)
+                && ['match', 'matchAll', 'search', 'replace', 'split'].includes(up.expression.name.text)) return up.expression.expression;
+            return undefined;
+        };
+        const visit = (node: ts.Node): void => {
+            if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+                const how = node.expression.name.text;
+                const looksFor = lit(node.arguments[0]);
+                if (looksFor !== null && ['includes', 'startsWith', 'endsWith', 'indexOf', 'lastIndexOf'].includes(how)
+                    && ERRORISH.test(node.expression.expression.getText(sf))) {
+                    add(node, looksFor, `${node.expression.getText(sf)}(${JSON.stringify(looksFor)})`,
+                        how === 'startsWith' ? s => s.startsWith(looksFor) : how === 'endsWith' ? s => s.endsWith(looksFor) : s => s.includes(looksFor));
+                }
+            }
+            if (ts.isBinaryExpression(node) && (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken || node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken)) {
+                const looksFor = lit(node.left) ?? lit(node.right);
+                const other = lit(node.left) !== null ? node.right : node.left;
+                if (looksFor !== null && /\s/.test(looksFor) && ERRORISH.test(other.getText(sf))) add(node, looksFor, node.getText(sf), s => s === looksFor);
+            }
+            if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+                const on = testedOn(node);
+                const text = node.getText(sf);
+                const source = text.slice(1, text.lastIndexOf('/'));
+                // A word of three letters or more outside an escape or a character class: /set a profile photo/i, not /^\s+$/.
+                const hasWord = /[A-Za-z]{3,}/.test(source.replace(/\\u[0-9a-fA-F]{4}|\\./g, ' ').replace(/\[[^\]]*\]/g, ' '));
+                if (on && ERRORISH.test(on.getText(sf)) && hasWord) {
+                    const re = new RegExp(source, text.slice(text.lastIndexOf('/') + 1).replace(/[gy]/g, ''));
+                    add(node, source, text, s => re.test(s));
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(sf);
+    }
+    return found;
+}
+
 async function testNothingMatchedIsMarked(): Promise<void> {
     console.log('\n--- 5. Nothing an app matches on is marked for translation ---');
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -348,6 +421,19 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     assert(marked.length >= 100, `the server and the engine mark their members' refusals (${marked.length} marks)`);
     assert(matched.length === 0, `no marked sentence is one an app matches on${matched.length ? `: ${matched.join('; ')}` : ''}`);
     assert(prefixed.length === 0, `no marked sentence starts with a code the apps read (UNAUTHORIZED: …)${prefixed.length ? `: ${prefixed.join('; ')}` : ''}`);
+
+    // The apps' sources as they are now: every match on an error or a message, against every marked sentence (a value
+    // in it written as a word, as the member would read it).
+    const matchers = appMatchers(root, words);
+    const known = (m: AppMatcher) => NEVER_A_NODES_WORDS.some(n => n.file === m.file && n.looksFor === m.looksFor);
+    const listed = ['set a profile photo', 'nonce already used', '^Quorum not met', 'already a member', 'not found'];
+    assert(listed.every(l => matchers.some(m => m.looksFor === l)) && matchers.length >= 40,
+        `the apps' matches are found where they are written (${matchers.length}, the hand-kept list's among them)`);
+    const filled = (s: string) => s.replace(/\{[A-Za-z0-9_]+\}/g, 'Ann');
+    const caught = marked.flatMap((c: any) => matchers.filter(m => !known(m) && m.test(filled(c.text))).map(m => `${c.at} "${c.text}" (${m.at} ${m.shown})`));
+    assert(caught.length === 0, `no marked sentence is one an app's source matches on${caught.length ? `: ${caught.join('; ')}` : ''}`);
+    assert(NEVER_A_NODES_WORDS.every(n => matchers.some(m => m.file === n.file && m.looksFor === n.looksFor)),
+        "each match set aside as never a node's words is still in its file (else it comes off the list)");
     // The push sentences are core's keys, so the drafting lane finds them where the apps' own are.
     const core = words.extractRepo(root, words.PACKAGES.filter((p: any) => p.name === 'core'))[0];
     const coreKeys = new Set(core.calls.filter((c: any) => c.fn === 'word').map((c: any) => wordKey(c.text)));

@@ -49,7 +49,13 @@ export function NodeIdentityPanel({
         return () => { mounted = false; };
     }, [activeNode.url]);
 
-    // Coordinates & Service radius
+    // Coordinates & Service radius. The area comes from the node config read, and only from an answer that says it (a node
+    // always does, null for none): the diagnostics carry no place, so until then the pin is unset, and a Save sent
+    // serviceRadius: null, which clears the node's. Until it loads, or if it can't, the pin, the search and the radius are
+    // closed and Save leaves the area out. The Leaflet handlers, set once, read it through the ref.
+    const [area, setArea] = useState<'loading' | 'loaded' | 'failed'>('loading');
+    const areaRef = useRef(area);
+    areaRef.current = area;
     const [lat, setLat] = useState<number | null>(() => (diag as any)?.location?.lat ?? null);
     const [lng, setLng] = useState<number | null>(() => (diag as any)?.location?.lng ?? null);
     const [radiusKm, setRadiusKm] = useState<number>(0);
@@ -133,17 +139,19 @@ export function NodeIdentityPanel({
                 }).catch(() => null);
                 if (configRes && configRes.ok && mounted) {
                     const cfg = await configRes.json().catch(() => ({}));
-                    if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {
+                    if (cfg.serviceRadius === null) {
+                        setArea('loaded');
+                    } else if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {
                         const km = Number(cfg.serviceRadius.radiusKm);
                         setRadiusKm(!isNaN(km) && km >= 0 ? km : 0);
-                        if (cfg.serviceRadius.lat != null) {
-                            const parsedLat = Number(cfg.serviceRadius.lat);
-                            if (!isNaN(parsedLat)) setLat(parsedLat);
-                        }
-                        if (cfg.serviceRadius.lng != null) {
-                            const parsedLng = Number(cfg.serviceRadius.lng);
-                            if (!isNaN(parsedLng)) setLng(parsedLng);
-                        }
+                        const parsedLat = cfg.serviceRadius.lat != null ? Number(cfg.serviceRadius.lat) : NaN;
+                        const parsedLng = cfg.serviceRadius.lng != null ? Number(cfg.serviceRadius.lng) : NaN;
+                        if (!isNaN(parsedLat)) setLat(parsedLat);
+                        if (!isNaN(parsedLng)) setLng(parsedLng);
+                        // An area with no centre it can read is not the node's to write back.
+                        setArea(!isNaN(parsedLat) && !isNaN(parsedLng) ? 'loaded' : 'failed');
+                    } else {
+                        setArea('failed');
                     }
                     if (cfg.publishLocation !== undefined) {
                         setPublishLocation(Boolean(cfg.publishLocation));
@@ -177,6 +185,7 @@ export function NodeIdentityPanel({
                     }
                 } else if (mounted) {
                     setDirectory('failed');
+                    setArea('failed');
                 }
             } catch (err) {
                 console.warn('Failed to load initial node identity config:', err);
@@ -239,6 +248,7 @@ export function NodeIdentityPanel({
             }).addTo(map);
 
             map.on('click', (e: L.LeafletMouseEvent) => {
+                if (areaRef.current !== 'loaded') return;
                 const newLat = parseFloat(e.latlng.lat.toFixed(6));
                 const newLng = parseFloat(e.latlng.lng.toFixed(6));
                 setLat(newLat);
@@ -279,6 +289,8 @@ export function NodeIdentityPanel({
                     map.setView(pos, 10);
                 } catch {}
             }
+            if (area === 'loaded') markerRef.current?.dragging?.enable();
+            else markerRef.current?.dragging?.disable();
 
             if (radiusKm > 0) {
                 if (circleRef.current) {
@@ -311,7 +323,7 @@ export function NodeIdentityPanel({
                 circleRef.current = null;
             }
         }
-    }, [lat, lng, radiusKm, nodeIcon]);
+    }, [lat, lng, radiusKm, nodeIcon, area]);
 
     // The shared Nominatim lookup (debounce, abort, 1 req/s floor, cache); disposed on unmount so no timer or
     // request outlives the panel. A failed search just stops the spinner and keeps the last list, as before.
@@ -365,6 +377,7 @@ export function NodeIdentityPanel({
     };
 
     const handleSelectLocation = (item: AddressResult) => {
+        if (area !== 'loaded') return;
         const itemLat = item.lat;
         const itemLng = item.lng;
         setLat(itemLat);
@@ -449,9 +462,14 @@ export function NodeIdentityPanel({
                     ...(directory === 'loaded'
                         ? { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, directoryPushIntervalHours }
                         : {}),
-                    serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
-                        ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
-                        : null,
+                    // Only an area the node gave: null clears the node's, and an unset pin that never loaded would send it.
+                    ...(area === 'loaded'
+                        ? {
+                            serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
+                                ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
+                                : null,
+                        }
+                        : {}),
                     // Only to a node that has the setting; it keeps what it had when this is left out.
                     ...(acceptKnocks === null ? {} : { acceptKnocks }),
                 }),
@@ -545,6 +563,11 @@ export function NodeIdentityPanel({
                     <label htmlFor="location-search" className="block text-xs font-bold text-nature-300 mb-1">
                         Operating Region
                     </label>
+                    {area === 'failed' && (
+                        <p id="area-not-loaded" role="status" className="text-[11px] text-amber-300 m-0 leading-normal">
+                            Couldn&apos;t load the service area from the node, so Save leaves it as it is. Reload to change it.
+                        </p>
+                    )}
                     <div ref={searchWrapperRef} className="relative search-wrapper">
                         <div className="relative">
                             <input
@@ -580,7 +603,8 @@ export function NodeIdentityPanel({
                                 }}
                                 placeholder="Search for a location..."
                                 autoComplete="off"
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 pr-10"
+                                disabled={area !== 'loaded'}
+                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 pr-10 disabled:opacity-50"
                             />
                             {searching && (
                                 <span className="absolute right-3 top-2.5 text-nature-400 text-xs animate-spin">
@@ -655,7 +679,8 @@ export function NodeIdentityPanel({
                             value={radiusKm}
                             aria-label="Service radius slider in kilometers"
                             onChange={(e) => setRadiusKm(Number(e.target.value))}
-                            className="flex-1 accent-terra-500 cursor-pointer h-2 bg-nature-950 rounded-lg appearance-none"
+                            disabled={area !== 'loaded'}
+                            className="flex-1 accent-terra-500 cursor-pointer h-2 bg-nature-950 rounded-lg appearance-none disabled:opacity-50"
                         />
                         <div className="flex items-center gap-2 shrink-0">
                             <input
@@ -671,7 +696,8 @@ export function NodeIdentityPanel({
                                     setRadiusKm(v);
                                 }}
                                 placeholder="km"
-                                className="w-20 bg-nature-950 border border-nature-700 rounded-xl px-2.5 py-1.5 text-center text-xs text-white font-mono focus:outline-none focus:border-terra-500"
+                                disabled={area !== 'loaded'}
+                                className="w-20 bg-nature-950 border border-nature-700 rounded-xl px-2.5 py-1.5 text-center text-xs text-white font-mono focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             />
                             <span className="text-xs text-nature-400">km</span>
                         </div>

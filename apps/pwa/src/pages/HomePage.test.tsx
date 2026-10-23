@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { HomeAnswer, HomeLayout } from '../lib/home-cards';
+import type { HomeAnswer, HomeLayout, HomeLayoutV2 } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
@@ -2989,9 +2989,9 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         },
         market: {
             items: [
-                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: 'http://example.com/m1.jpg', distanceKm: 2 },
+                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: 'https://example.com/m1.jpg', distanceKm: 2 },
                 { id: 'm2', type: 'need', title: 'Ride to Lismore', category: 'rides', credits: 0, photoUrl: null, distanceKm: 5 },
-                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', credits: 6, photoUrl: 'http://example.com/m3.jpg', distanceKm: 1 },
+                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', credits: 6, photoUrl: 'https://example.com/m3.jpg', distanceKm: 1 },
                 { id: 'm4', type: 'offer', title: 'Mend clothes', category: 'skills', credits: 20, photoUrl: null, distanceKm: 3 },
             ],
             total14d: 4,
@@ -3027,7 +3027,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(decide).toHaveTextContent('Compost bay');
         expect(decide).toHaveTextContent('Not yet');
         expect(decide).toHaveTextContent('Poll: Market on Sundays?');
-        expect(within(decide).getByRole('button', { name: /Decide/ })).toBeInTheDocument();
+        expect(within(decide).getByRole('button', { name: /^Decide/ })).toBeInTheDocument();
 
         // Groups
         const groups = screen.getByTestId('home-card-groups');
@@ -3205,12 +3205,12 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
                 category: null,
                 km: null,
                 items: [
-                    { id: 's1', type: 'offer', title: 'Bike 1', category: 'transport', photoUrl: 'http://example.com/s1.jpg' },
-                    { id: 's2', type: 'offer', title: 'Bike 2', category: 'transport', photoUrl: 'http://example.com/s2.jpg' },
-                    { id: 's3', type: 'offer', title: 'Bike 3', category: 'transport', photoUrl: 'http://example.com/s3.jpg' },
-                    { id: 's4', type: 'offer', title: 'Bike 4', category: 'transport', photoUrl: 'http://example.com/s4.jpg' },
-                    { id: 's5', type: 'offer', title: 'Bike 5', category: 'transport', photoUrl: 'http://example.com/s5.jpg' },
-                    { id: 's6', type: 'offer', title: 'Bike 6', category: 'transport', photoUrl: 'http://example.com/s6.jpg' },
+                    { id: 's1', type: 'offer', title: 'Bike 1', category: 'transport', photoUrl: 'https://example.com/s1.jpg' },
+                    { id: 's2', type: 'offer', title: 'Bike 2', category: 'transport', photoUrl: 'https://example.com/s2.jpg' },
+                    { id: 's3', type: 'offer', title: 'Bike 3', category: 'transport', photoUrl: 'https://example.com/s3.jpg' },
+                    { id: 's4', type: 'offer', title: 'Bike 4', category: 'transport', photoUrl: 'https://example.com/s4.jpg' },
+                    { id: 's5', type: 'offer', title: 'Bike 5', category: 'transport', photoUrl: 'https://example.com/s5.jpg' },
+                    { id: 's6', type: 'offer', title: 'Bike 6', category: 'transport', photoUrl: 'https://example.com/s6.jpg' },
                 ],
                 more: false,
             },

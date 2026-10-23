@@ -27,7 +27,8 @@
  *      shows once she lifts the block, or by her own act (her Accept, her asking for the chat) or a trade's, and a removal
  *      ignores it; a trade that shows an acceptance hidden from either of them rings the one it was hidden from
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
- *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
+ *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12), but
+ *      not while the person blocks him: it stays as she left it until she lifts the block, and his next line is the request
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
  *  10. pushes: one per request, "wants to message you", folded to one an hour per person (R14)
  *  11. a removed sender's request goes; a deleted sender's line is blanked and their request goes (R15); neither becomes a
@@ -44,7 +45,8 @@
  *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7)
  *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's (one that had lapsed
  *      too), stays out of her chats and her unread count until one of them writes in it again or she opens it herself; so
- *      does one she ignored and then blocked its opener, accepted by his own act while on, or written in by him while off
+ *      does one she ignored and then blocked its opener, accepted by his own act while on, or written in by him while off,
+ *      or after its 30 days while on
  *  19. on again: what Ann did while off (her line, a friend add, her own open) accepted what waited for her, so each chat
  *      stays in her chats
  *
@@ -866,6 +868,44 @@ async function globalRun(): Promise<void> {
     assert(fyLate === 'expired' && giLate === 'expired' && f2.status === 200 && g2.status === 200,
         `at 30 days Fy's ignored request reads as Gi's expired one, and each may try again (${fyLate}, ${giLate}; ${f2.status}, ${g2.status})`);
     assert(inRequests(await listOf(ann), fConv) && rowOf(fConv)?.state === 'pending', 'Fy\'s new line is a new request she sees');
+    // Not while Ann blocks the opener (PR #2410 review 4356319500): his line after the 30 days is kept for him alone, so it
+    // makes no new request of hers. It moves only the request's time, and his next line waits as any request's does. Zed's,
+    // which Ann ignored, and Nev's, which lapsed, each after his line and her block, stay as she left them. Once she lifts
+    // the block, his next line is the new request she sees.
+    const [zed, nev] = [member('Zed'), member('Nev')];
+    const zedConv: string = (await open(zed, ann)).body?.conversation?.id;
+    const nevConv: string = (await open(nev, ann)).body?.conversation?.id;
+    for (const [c, s] of [[zedConv, zed], [nevConv, nev]] as [string, Id][]) await send(c, s);
+    const ignoreZed = await decide(ann, zedConv, 'ignore');
+    const blocksLate = [await call('POST', ann, '/api/blocks', { targetPubkey: zed.pk }), await call('POST', ann, '/api/blocks', { targetPubkey: nev.pk })];
+    ageRequest(zedConv, 31);
+    ageRequest(nevConv, 31);
+    attempt(() => requestsEngine.expireOldRequests(Date.now()));
+    const leftLate = [rowOf(zedConv)?.state, rowOf(nevConv)?.state];
+    const lateLines = [await send(zedConv, zed), await send(nevConv, nev)];
+    const lateAgain = [await send(zedConv, zed), await send(nevConv, nev)];
+    await sleep(100);
+    const annLate = await listOf(ann);
+    const annReadsLate = [
+        (await call('GET', ann, `/api/messages/${zedConv}`)).body?.conversation?.request?.state,
+        (await call('GET', ann, `/api/messages/${nevConv}`)).body?.conversation?.request?.state,
+    ];
+    const countsLate = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [zedConv]: 1, [nevConv]: 1 };
+    assert(ignoreZed.status === 200 && blocksLate.every(r => r.status === 200) && JSON.stringify(leftLate) === '["ignored","expired"]'
+        && lateLines.every(r => r.status === 200) && lateAgain.every(r => r.status === 403 && r.body?.code === 'dm_request_pending'),
+        `blocked, each writes once after the 30 days, and the line after it waits (${lateLines.map(show).join('; ')}; ${lateAgain.map(r => r.status)})`);
+    assert(rowOf(zedConv)?.state === 'ignored' && rowOf(nevConv)?.state === 'expired' && JSON.stringify(annReadsLate) === '["ignored","expired"]'
+        && ![zedConv, nevConv].some(c => inChats(annLate, c) || inRequests(annLate, c) || c in countsLate),
+        `each stays as Ann left it, in none of her lists, her unread count or her badge (${rowOf(zedConv)?.state}, ${rowOf(nevConv)?.state}; she reads ${annReadsLate})`);
+    const unblocksLate = [await call('POST', ann, '/api/blocks/remove', { targetPubkey: zed.pk }), await call('POST', ann, '/api/blocks/remove', { targetPubkey: nev.pk })];
+    const lateNext = [await send(zedConv, zed), await send(nevConv, nev)];
+    await sleep(100);
+    const annLate2 = await listOf(ann);
+    const lateWaits = [await send(zedConv, zed), await send(nevConv, nev)];
+    assert(unblocksLate.every(r => r.status === 200) && lateNext.every(r => r.status === 200)
+        && [zedConv, nevConv].every(c => rowOf(c)?.state === 'pending' && inRequests(annLate2, c) && !inChats(annLate2, c) && entryOf(annLate2, c)?.request?.state === 'pending')
+        && lateWaits.every(r => r.status === 403 && r.body?.code === 'dm_request_pending'),
+        `once Ann lifts the block, each one's next line is a new request she sees, and the line after it waits (${[zedConv, nevConv].map(c => rowOf(c)?.state)}; ${lateNext.map(show).join('; ')})`);
 
     // ── 9. probation ────────────────────────────────────────────────────────────────────────────
     console.log('── 9. a newcomer\'s requests count as new people ──');
@@ -1167,6 +1207,16 @@ async function localRun(): Promise<void> {
     const blocksPiaRos = [await call('POST', ann, '/api/blocks', { targetPubkey: pia.pk }), await call('POST', ann, '/api/blocks', { targetPubkey: ros.pk })];
     grantNodeRole(pia.pk, 'moderator', owner.pk);
     const pi2 = await send(piaConv, pia);
+    // And Dov's, which Ann ignored and then blocked him, and whose 30 days are over: his line while on is kept for him alone,
+    // so it makes no new request of hers, and the one Ann ignored stays ignored (PR #2410 review 4356319500).
+    const dov = member('Dov');
+    const dovConv: string = (await open(dov, ann)).body?.conversation?.id;
+    await send(dovConv, dov);
+    const ignoreDov = await decide(ann, dovConv, 'ignore');
+    const blockDov = await call('POST', ann, '/api/blocks', { targetPubkey: dov.pk });
+    ageRequest(dovConv, 31);
+    const dovLate = [await send(dovConv, dov), await send(dovConv, dov)];
+    const annReadsDov = (await call('GET', ann, `/api/messages/${dovConv}`)).body?.conversation?.request?.state;
     const unreadOn = (await listOf(ann))?.totalUnread;
     const off = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
     const c3 = await send(cyConv, cy);
@@ -1185,6 +1235,10 @@ async function localRun(): Promise<void> {
     assert(ignorePiaRos.every(r => r.status === 200) && blocksPiaRos.every(r => r.status === 200) && pi2.status === 200 && ro2.status === 200
         && rowOf(piaConv)?.state === 'accepted' && rowOf(rosConv)?.state === 'ignored' && ![piaConv, rosConv].some(c => inChats(annOff, c) || c in countsOff),
         `nor does Pia's, accepted by her own line while Ann blocks her, nor Ros's, whose line while off is kept for him alone (${rowOf(piaConv)?.state}, ${rowOf(rosConv)?.state})`);
+    assert(ignoreDov.status === 200 && blockDov.status === 200 && dovLate[0].status === 200 && dovLate[1].status === 403
+        && dovLate[1].body?.code === 'dm_request_pending' && annReadsDov === 'ignored' && rowOf(dovConv)?.state === 'ignored'
+        && !inChats(annOff, dovConv) && !(dovConv in countsOff),
+        `nor Dov's, whose line after the 30 days while on is kept for him alone: still ignored, to Ann too (${dovLate.map(r => r.status)}; she read ${annReadsDov}; row ${rowOf(dovConv)?.state})`);
     // Either of them writing again, or Ann asking for the chat herself, brings it back as an ordinary chat, so nothing is
     // stored or pushed into a chat she can't find.
     const pushedOff = noticesTo(ann).length;

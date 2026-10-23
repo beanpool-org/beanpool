@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestModeOf, requestAfterRead, requestAfterOwnLine, decisionFailureWords, requestPendingRefusal } from './dm-requests';
+import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, decisionFailureWords, requestPendingRefusal } from './dm-requests';
 
 // The rules lib/dm-requests.ts reads from the node's answers (PR #2392 at 7d20c62d; shapes as its routes give them).
 
@@ -72,6 +72,14 @@ describe('requestAfterRead', () => {
         // Another request (another time): the node's.
         const fresh = { state: 'pending' as const, from: PEER, at: '2026-11-30T00:00:00.000Z' };
         expect(requestAfterRead(accepted, { request: fresh })).toEqual(fresh);
+    });
+});
+
+describe('requestTakesPhoto', () => {
+    it('a photo (📎, paste, drop) only where a line may go now', () => {
+        expect(requestTakesPhoto('none')).toBe(true);
+        expect(requestTakesPhoto('mine-unsent')).toBe(true);
+        for (const mode of ['to-me', 'mine-waiting', 'mine-loading'] as const) expect(requestTakesPhoto(mode)).toBe(false);
     });
 });
 

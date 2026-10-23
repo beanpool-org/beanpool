@@ -14,7 +14,7 @@ import {
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry, type DmRequestEntry,
 } from '../lib/api';
-import { requestModeOf, requestAfterRead, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
+import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords } from '../components/MessageRequests';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
@@ -342,6 +342,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (isGroupChat && !openGroup) return [];
         return messages;
     }, [messages, isDmThread, isGroupChat, openGroup]);
+    // The open chat's message request mode (lib/dm-requests.ts): read from the node's `request` and, for the opener, the
+    // loaded lines of this chat only (never the last chat's, still in `messages` until this one's arrive): until they do,
+    // the opener's is not known, rather than taken for one with no line in it yet.
+    const requestMode = requestModeOf(activeConv, identity.publicKey, activeConv && loadedDmId === activeConv.id ? shownMessages : null);
     // Each line of a locked group chat as drawn (lib/group-chat-lines.ts groupLineShown): a sealed line under the name of
     // the key that signed it, a node line in the app's words, anything else nobody's. Null for every other chat.
     const groupShown = useMemo(() => {
@@ -1004,6 +1008,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         await loadMessages(conv.id);
     }
 
+    /**
+     * The node took a new line of this member's in `convId`: where it said their next line was their request's, that was
+     * it, so the chat waits now, before the read after it lands or if it never does (lib/dm-requests.ts requestAfterOwnLine).
+     */
+    function ownLineTaken(convId: string) {
+        setActiveConv(prev => {
+            if (!prev || prev.id !== convId) return prev;
+            const request = requestAfterOwnLine(prev.request, identity.publicKey);
+            return request === prev.request ? prev : { ...prev, request };
+        });
+    }
+
     async function handleSend() {
         if (!draft.trim() || !activeConv) return;
         setSending(true);
@@ -1060,6 +1076,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 }
                 // 1. Store locally (Server will handle Libp2p federation relay automatically)
                 await sendMessageApi(activeConv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.messageId);
+                ownLineTaken(activeConv.id);
 
                 setDraft('');
                 setReplyToMessage(null);
@@ -1103,6 +1120,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
+            ownLineTaken(activeConv.id);
             setReplyToMessage(null);
             setChatRefusal(null);
             await loadMessages(activeConv.id);
@@ -1141,6 +1159,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (activeConv.type !== 'dm') {
             clearPendingImage();
             setImageNotice(t('Photos can only be sent in direct messages'));
+            return;
+        }
+
+        // Nor while a message request waits for this member, or for the other to accept, or while the opener's chat is still
+        // being read (lib/dm-requests.ts): a paste goes nowhere then, as a drop does, and the 📎 is hidden.
+        if (!requestTakesPhoto(requestMode)) {
+            clearPendingImage();
             return;
         }
 
@@ -1209,6 +1234,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         dragDepthRef.current = 0;
         setActiveEditNoticeId(null);
     }, [activeConv?.id]);
+
+    // A picture waiting for Send goes once the chat takes none: the opener's line found in it when its read lands, or a
+    // request waiting for this member. Its Send would only be refused under the sentence saying they can't yet.
+    useEffect(() => {
+        if (!requestTakesPhoto(requestMode)) clearPendingImage();
+    }, [requestMode]);
 
     // What decryptMessage() puts in place of a body it could not read. A photo's
     // body is its caption, so these must never be shown as one.
@@ -1528,17 +1559,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             ? (activeConv.participants?.find(p => p !== identity.publicKey) || '')
             : '';
         const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
-        // A message request (lib/dm-requests.ts): read from the node's `request` and, for the opener, the loaded lines of
-        // this chat only (never the last chat's, still in `messages` until this one's arrive): until they do, the opener's
-        // is not known, rather than taken for one with no line in it yet.
-        const requestMode = requestModeOf(activeConv, identity.publicKey, loadedDmId === activeConv.id ? shownMessages : null);
         const inRequest = requestMode !== 'none';
 
         // Dropping onto a blocked conversation would only produce a message the
         // person cannot send, so the chat takes no drops at all while blocked; nor
         // while a request waits for this member to decide, or for the other to accept,
         // or while the opener's chat is still being read (its 📎 is hidden then too).
-        const acceptsDrop = !isPeerBlocked && requestMode !== 'to-me' && requestMode !== 'mine-waiting' && requestMode !== 'mine-loading';
+        const acceptsDrop = !isPeerBlocked && requestTakesPhoto(requestMode);
 
         return (
             <div
@@ -2640,7 +2667,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         borderTop: '1px solid var(--border-primary)',
                         background: 'var(--bg-secondary)',
                     }}>
-                        {activeConv.type === 'dm' && requestMode !== 'mine-waiting' && requestMode !== 'mine-loading' && (
+                        {activeConv.type === 'dm' && requestTakesPhoto(requestMode) && (
                             <label title={t('Send photo')} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: '40px', height: '40px', borderRadius: '50%',

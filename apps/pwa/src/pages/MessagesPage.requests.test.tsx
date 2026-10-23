@@ -87,7 +87,10 @@ const REQUESTED_AT = '2026-10-23T01:31:26.627Z';   // the request is made by Bo'
 const LINE_AT = '2026-10-23T01:31:26.628Z';
 const chat = { id: CONV, type: 'dm', participants: [ann.publicKey, bo.publicKey] };
 const pending = (from = bo.publicKey) => ({ state: 'pending', from, at: REQUESTED_AT });
-/** Bo's own view of his request: the node says whether his next line is its line, by its own count (PR #2404 review 4356625513). */
+/**
+ * Bo's own view of his request: the node says whether his next line is its line, by its own count (PR #2404 review 4356625513).
+ * His view as pending() alone, without it, is a node that doesn't say: the page counts his lines, as before.
+ */
 const mine = (nextLineIsRequest: boolean) => ({ ...pending(), nextLineIsRequest });
 const picture = () => new File([new Uint8Array(1)], 'shot.png', { type: 'image/png' });
 const clipboardWith = (file: File) => ({ files: [file], items: [{ kind: 'file', type: file.type, getAsFile: () => file }], types: ['Files'] });

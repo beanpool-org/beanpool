@@ -881,6 +881,11 @@ export interface DmRequest {
     state: 'pending' | 'accepted' | 'ignored' | 'expired';
     from: string;
     at: string;
+    /**
+     * In the opener's own view of one not accepted only: whether their next line is the request's line, as the node counts
+     * their lines (PR #2404 review 4356625513). Absent from the other person's view.
+     */
+    nextLineIsRequest?: boolean;
 }
 
 /** A request waiting for the reader, as their conversation list gives it apart from their chats. */

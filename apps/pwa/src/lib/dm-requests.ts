@@ -37,9 +37,10 @@ export const IGNORE_ALL_FROM = 6;
 const at = (iso: string | null | undefined) => (typeof iso === 'string' ? Date.parse(iso) : NaN);
 
 /**
- * The opener's lines in the chat since the request was made: the node stamps the request at its line, so a line of
- * theirs at or after `request.at` is the request's (the server's OPENER_WROTE). Their own lines kept for them alone are
- * among the lines the node gives them, and count the same, as the node counts them.
+ * The opener's lines in the chat since the request was made, for a node that doesn't say whether their next line is the
+ * request (`nextLineIsRequest`): the node stamps the request at its line, so a line of theirs at or after `request.at` is
+ * the request's (the server's OPENER_WROTE). Their own lines kept for them alone are among the lines the node gives them,
+ * and count the same, as the node counts them while the block holds.
  */
 function openerLinesSince(conv: Pick<Conversation, 'request'>, lines: ReadonlyArray<Pick<ApiMessage, 'authorPubkey' | 'timestamp' | 'type'>>): number {
     const r = conv.request;
@@ -51,8 +52,8 @@ function openerLinesSince(conv: Pick<Conversation, 'request'>, lines: ReadonlyAr
 /**
  * What request mode a direct chat is in for `me`, from the node's `request` on it and the lines loaded (null until this
  * chat's have been read: no lines is not the same as none read). A request that isn't accepted is the person's to decide,
- * whatever state the node names to them. The opener's own: waiting once their line is in it, not known before their
- * lines are read; `expired` (30 days) makes their next line a new request.
+ * whatever state the node names to them. The opener's own: waiting once their line is in it, by the node's count where it
+ * gives one, not known before their lines are read; `expired` (30 days) makes their next line a new request.
  */
 export function requestModeOf(
     conv: Pick<Conversation, 'type' | 'request'> | null | undefined,
@@ -64,7 +65,29 @@ export function requestModeOf(
     if (r.from !== me) return 'to-me';
     if (r.state === 'expired') return 'mine-unsent';
     if (!lines) return 'mine-loading';
+    // The node's count, not the page's (PR #2404 review 4356625513): a line kept for the opener while they were blocked is
+    // among their lines here, and once the block is lifted it is no request's line. The page can't tell it apart, and
+    // mustn't, so it reads the node's word.
+    if (typeof r.nextLineIsRequest === 'boolean') return r.nextLineIsRequest ? 'mine-unsent' : 'mine-waiting';
     return openerLinesSince(conv!, lines) > 0 ? 'mine-waiting' : 'mine-unsent';
+}
+
+/**
+ * Whether the chat takes a photo now (📎, a paste or a drop): not while a request waits for the reader to decide, nor
+ * while theirs waits for the other to accept, nor while the opener's chat is still being read.
+ */
+export function requestTakesPhoto(mode: RequestMode): boolean {
+    return mode !== 'to-me' && mode !== 'mine-waiting' && mode !== 'mine-loading';
+}
+
+/**
+ * The open chat's request once the node has taken a new line of the reader's (200): where the node said their next line
+ * was the request's, that line was it, so the one after waits, whether or not the read after it comes back. The next read
+ * replaces it with the node's word (requestAfterRead). Anything else is as it was.
+ */
+export function requestAfterOwnLine(r: DmRequest | null | undefined, me: string): DmRequest | null | undefined {
+    if (!r || r.from !== me || r.state !== 'pending' || r.nextLineIsRequest !== true) return r;
+    return { ...r, nextLineIsRequest: false };
 }
 
 /**

@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind, word } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -46,8 +46,12 @@ import {
     publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
     type MarketplacePost,
-    type EventRsvpStatus
+    type EventRsvpStatus,
+    unauthorized,
 } from '@beanpool/engine';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { listingParties?: string[] }) => void;
 
@@ -291,7 +295,7 @@ function cleanPlaceName(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('Place name must be text');
     const v = raw.trim();
-    if (v.length > EVENT_PLACE_NAME_MAX) throw new Error(`Place name must be ${EVENT_PLACE_NAME_MAX} characters or fewer`);
+    if (v.length > EVENT_PLACE_NAME_MAX) throw new Error(tr('Place name must be {n} characters or fewer', { n: EVENT_PLACE_NAME_MAX }));
     return v || null;
 }
 
@@ -304,7 +308,7 @@ function cleanPrivateNote(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw !== 'string') throw new Error('The note for people going must be text');
     const v = raw.trim();
-    if (v.length > EVENT_PRIVATE_NOTE_MAX) throw new Error(`The note for people going must be ${EVENT_PRIVATE_NOTE_MAX} characters or fewer`);
+    if (v.length > EVENT_PRIVATE_NOTE_MAX) throw new Error(tr('The note for people going must be {n} characters or fewer', { n: EVENT_PRIVATE_NOTE_MAX }));
     return v || null;
 }
 
@@ -345,12 +349,12 @@ function cleanEventLink(raw: unknown): string | null {
     if (typeof raw !== 'string') throw new Error('The link to join must be text');
     const v = raw.trim();
     if (!v) return null;
-    if (v.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
+    if (v.length > EVENT_LINK_MAX) throw new Error(tr('The link to join must be {n} characters or fewer', { n: EVENT_LINK_MAX }));
     let url: URL | null = null;
     try { url = new URL(v); } catch { url = null; }
     if (!url || !/^https?:$/.test(url.protocol) || !/^https?:\/\//i.test(v)) throw new Error(word('The link to join must start with https:// or http://'));
     if (url.username || url.password) throw new Error(word('The link to join must not hold a user name or password'));
-    if (url.href.length > EVENT_LINK_MAX) throw new Error(`The link to join must be ${EVENT_LINK_MAX} characters or fewer`);
+    if (url.href.length > EVENT_LINK_MAX) throw new Error(tr('The link to join must be {n} characters or fewer', { n: EVENT_LINK_MAX }));
     return url.href;
 }
 
@@ -555,7 +559,7 @@ export function createPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(options.targetGroupId, authorPublicKey);
         if (!isMem) {
-            throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
+            throw new Error(unauthorized(word('Must be an active convenor or member to post to a group')));
         }
         // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
         if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
@@ -749,7 +753,7 @@ export function createPost(
                 : db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
                               AND author_pubkey = ? AND (audience_scope IS NULL OR audience_scope != 'group')`).get(createdAt, authorPublicKey) as any;
             if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
-                throw new Error(`Limit reached: ${EVENT_UPCOMING_CAP} upcoming events at a time`);
+                throw new Error(tr('Limit reached: {n} upcoming events at a time', { n: EVENT_UPCOMING_CAP }));
             }
         }
 
@@ -970,7 +974,7 @@ export function announceClosedGroupPosts(broadcast: BroadcastFn, cancelled: Arra
     for (const { row, dealSides } of cancelled) announcePostCancelled(broadcast, row, dealSides, push, 'SYSTEM');
 }
 
-export const PRICE_FROZEN_ERROR = 'This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.';
+export const PRICE_FROZEN_ERROR = word('This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.');
 
 /**
  * A listing's price holds while any deal on it is open: asked for and waiting ('requested'), or with the Beans held
@@ -1544,7 +1548,7 @@ export function rsvpEvent(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(row.target_group_id, memberPublicKey);
         if (!isMem && row.author_pubkey !== memberPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to RSVP to this event');
+            throw new Error(unauthorized(word('Must be an active convenor or member of the group to RSVP to this event')));
         }
     }
 
@@ -1901,12 +1905,12 @@ export function votePoll(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(post.targetGroupId, voterPublicKey);
         if (!isMem && post.authorPublicKey !== voterPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to vote in this poll');
+            throw new Error(unauthorized(word('Must be an active convenor or member of the group to vote in this poll')));
         }
     } else if (post.audienceScope === 'direct') {
         const isTarget = post.targetPubkey === voterPublicKey || post.assignedTo === voterPublicKey || post.authorPublicKey === voterPublicKey;
         if (!isTarget) {
-            throw new Error('UNAUTHORIZED: This direct poll is not addressed to you');
+            throw new Error(unauthorized(word('This direct poll is not addressed to you')));
         }
     }
     const nowIso = new Date().toISOString();

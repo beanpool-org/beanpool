@@ -44,7 +44,7 @@ import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
     rotateGroupEpoch, storeGroupTopUp,
 } from '../engine/group-keys.js';
-import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
+import { CONVENOR_POWERS_PAUSED, unauthorized } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
@@ -307,7 +307,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             // A suspended member starts no group until it ends (engine createGroup): 403, as /join answers.
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to create group') };
+            ctx.body = { error: memberErrorText(e, word('Failed to create group')) };
         }
     });
 
@@ -327,7 +327,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondGroupKeyError(ctx, e)) return;
             // A suspended member joins nothing until it ends (engine joinGroup): 403, like every refusal of who they are.
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to join group') };
+            ctx.body = { error: memberErrorText(e, word('Failed to join group')) };
         }
     });
 
@@ -363,7 +363,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (!isConvenor) {
                 const paused = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
                 ctx.status = 403;
-                ctx.body = { error: paused ? `UNAUTHORIZED: ${CONVENOR_POWERS_PAUSED}` : 'Only convenors can view pending or invited members' };
+                ctx.body = { error: paused ? unauthorized(CONVENOR_POWERS_PAUSED) : word('Only convenors can view pending or invited members') };
                 return;
             }
         }
@@ -446,7 +446,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: memberErrorText(e, 'Failed to update member') };
+            ctx.body = { error: memberErrorText(e, word('Failed to update member')) };
         }
     });
 
@@ -472,7 +472,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: memberErrorText(e, 'Failed to change member role') };
+            ctx.body = { error: memberErrorText(e, word('Failed to change member role')) };
         }
     });
 
@@ -492,7 +492,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondGroupKeyError(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: memberErrorText(e, 'Failed to remove member') };
+            ctx.body = { error: memberErrorText(e, word('Failed to remove member')) };
         }
     });
 
@@ -518,7 +518,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, member };
         } catch (e: any) {
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: memberErrorText(e, 'Failed to hand the lead over') };
+            ctx.body = { error: memberErrorText(e, word('Failed to hand the lead over')) };
         }
     });
 
@@ -555,7 +555,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: memberErrorText(e, 'Failed to update group') };
+            ctx.body = { error: memberErrorText(e, word('Failed to update group')) };
         }
     });
 
@@ -815,7 +815,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: memberErrorText(e, 'Failed to delete group post') };
+            ctx.body = { error: memberErrorText(e, word('Failed to delete group post')) };
         }
     });
 

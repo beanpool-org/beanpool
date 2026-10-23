@@ -30,7 +30,10 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight } from './post-sight.js';
 import type { MessagingCallbacks } from './messaging.js';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
-import { avatarUrlOf, word } from '@beanpool/core';
+import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';
@@ -459,7 +462,7 @@ export function postEventThreadMessage(
     const cleanText = (text || '').trim();
     if (!cleanText) throw new Error(word('Message text cannot be empty'));
     if (cleanText.length > EVENT_THREAD_MESSAGE_MAX) {
-        throw new Error(`Message is too long (maximum ${EVENT_THREAD_MESSAGE_MAX} characters)`);
+        throw new Error(tr('Message is too long (maximum {n} characters)', { n: EVENT_THREAD_MESSAGE_MAX }));
     }
 
     ensureEventThread(postId);

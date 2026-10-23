@@ -83,7 +83,7 @@ export function createMarketplaceRoutes(deps: RouteDeps): Router {
         }
         ctx.status = 403;
         ctx.body = { error: isTreasury(targetPubkey)
-            ? 'You are not an authorized keeper of this enterprise'
+            ? word('You are not an authorized keeper of this enterprise')
             : 'Not authorized to act on behalf of this identity'
         };
         return false;
@@ -766,7 +766,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         if (respondProfileRefusal(ctx, e)) return;
         if (respondShopRefusal(ctx, e)) return;
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to create post') };
+        ctx.body = { error: memberErrorText(e, word('Failed to create post')) };
     }
 });
 
@@ -817,7 +817,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         if (!entitled) {
             ctx.status = 403;
             ctx.body = { error: isTreasury(postRow.author_pubkey)
-                ? 'You are not an authorized keeper of this enterprise'
+                ? word('You are not an authorized keeper of this enterprise')
                 : 'Not authorized to act on behalf of this identity'
             };
             return;
@@ -831,7 +831,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
     } catch (e: any) {
         // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to remove post') };
+        ctx.body = { error: memberErrorText(e, word('Failed to remove post')) };
     }
 });
 
@@ -875,7 +875,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         if (respondShopRefusal(ctx, e)) return;
         // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to update post') };
+        ctx.body = { error: memberErrorText(e, word('Failed to update post')) };
     }
 });
 
@@ -907,7 +907,7 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
+        ctx.body = { error: memberErrorText(e, word('Failed to record vote')) };
     }
 });
 
@@ -937,7 +937,7 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
+        ctx.body = { error: memberErrorText(e, word('Failed to record vote')) };
     }
 });
 
@@ -970,7 +970,7 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to close poll') };
+        ctx.body = { error: memberErrorText(e, word('Failed to close poll')) };
     }
 });
 
@@ -1003,7 +1003,7 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to close poll') };
+        ctx.body = { error: memberErrorText(e, word('Failed to close poll')) };
     }
 });
 
@@ -1035,7 +1035,7 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
         ctx.body = rsvpEvent(id, actor, status, body.signature);
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to record RSVP') };
+        ctx.body = { error: memberErrorText(e, word('Failed to record RSVP')) };
     }
 });
 
@@ -1333,7 +1333,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ? rawCode
             : 400;
         ctx.status = statusCode;
-        ctx.body = { error: memberErrorText(e, 'Escrow release failed') };
+        ctx.body = { error: memberErrorText(e, word('Escrow release failed')) };
     }
 });
 
@@ -1380,7 +1380,7 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         ctx.body = { success: false, error: 'Post not found, not active, or not owned by author' };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to pause post') };
+        ctx.body = { error: memberErrorText(e, word('Failed to pause post')) };
     }
 });
 
@@ -1410,7 +1410,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         // One of a shop's Offers while the shop is closed for now: 409 shop_paused (engine/shops.ts).
         if (respondShopRefusal(ctx, e)) return;
         ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to resume post') };
+        ctx.body = { error: memberErrorText(e, word('Failed to resume post')) };
     }
 });
 
@@ -1436,7 +1436,7 @@ router.get('/api/marketplace/transactions', async (ctx) => {
         ctx.status = 403;
         ctx.body = { error: isTreasury(publicKey)
             ? 'You are not authorized to view transactions for this enterprise'
-            : 'You may only view your own marketplace transactions'
+            : word('You may only view your own marketplace transactions')
         };
         return;
     }

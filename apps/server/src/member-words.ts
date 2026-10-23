@@ -177,17 +177,33 @@ function translatedSentence(text: string, words: Words, templates: SentenceTempl
 const BETWEEN_SENTENCES = /(?<=[.!?])(\s+)(?=[A-Z])/;
 
 /**
- * A text of one sentence, or of several each written on its own (`tr('This enterprise is {n} beans in debt.') + ' ' + …`),
- * in `words`' language: several only when every one of them is the catalog's, else the whole stays as it came.
+ * A text of one sentence, or of several written apart (`${tr('This enterprise is {n} beans in debt.')} ${…}`, a sentence
+ * of two with another after it), in `words`' language: each run of sentences the longest the catalog has, and only when
+ * every run is the catalog's; else the whole stays as it came, never half translated.
  */
 function translatedText(text: string, words: Words, templates: SentenceTemplate[]): string {
     const whole = translatedSentence(text, words, templates);
     if (whole !== text) return whole;
+    // split() with a group: the sentences at the even places, the space between them at the odd ones.
     const pieces = text.split(BETWEEN_SENTENCES);
     if (pieces.length < 3) return text;
-    // split() with a group: the sentences at the even places, the space between them at the odd ones.
-    const translated = pieces.map((piece, i) => (i % 2 === 1 ? piece : translatedSentence(piece, words, templates)));
-    return translated.every((piece, i) => i % 2 === 1 || piece !== pieces[i]) ? translated.join('') : text;
+    const sentences = pieces.filter((_, i) => i % 2 === 0);
+    const run = (from: number, to: number) => pieces.slice(from * 2, to * 2 + 1).join('');
+    let said = '';
+    for (let from = 0; from < sentences.length;) {
+        let to = sentences.length - 1;
+        let translated = text;
+        for (; to >= from; to--) {
+            if (from === 0 && to === sentences.length - 1) continue; // the whole: tried above
+            const english = run(from, to);
+            translated = translatedSentence(english, words, templates);
+            if (translated !== english) break;
+        }
+        if (to < from) return text;
+        said += (from > 0 ? pieces[from * 2 - 1] : '') + translated;
+        from = to + 1;
+    }
+    return said;
 }
 
 /** A code the apps read before a sentence: `UNAUTHORIZED: `, `FLOOR_LOCKED:1:2:200:500: `. */

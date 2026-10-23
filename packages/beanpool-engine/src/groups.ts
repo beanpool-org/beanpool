@@ -25,6 +25,7 @@
 // suspension never moves a group's lead (docs/the-commons.md, "A suspended lead is still the lead").
 // Every route goes through this file, so there is one place the rules live.
 
+import { unauthorized } from './refusal-code.js';
 import type Database from 'better-sqlite3';
 import {
     type Group,
@@ -206,7 +207,7 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     }
     // A suspended account starts no group: its creator would be the lead convenor of a group listed to every member,
     // and no route deletes a group. Same refusal as joining one.
-    if (isSuspendedAccount(db, params.createdBy)) throw new Error(`UNAUTHORIZED: ${GROUP_START_PAUSED}`);
+    if (isSuspendedAccount(db, params.createdBy)) throw new Error(unauthorized(GROUP_START_PAUSED));
 
     assertGroupPictureFits(params.avatarUrl);
 
@@ -659,7 +660,7 @@ function otherActiveMemberCount(db: Db, groupId: string, memberPubkey: string): 
 }
 
 export const HAND_OVER_FIRST =
-    'You are this group\'s lead convenor. Hand the lead over to someone else first.';
+    word('You are this group\'s lead convenor. Hand the lead over to someone else first.');
 
 /**
  * What a convenor refused by the lead rules can actually do. The hand-over comes first, because it is immediate
@@ -671,7 +672,7 @@ export const HAND_OVER_FIRST =
  * (packages/beanpool-guide/content/about/rules.md, "A quiet lead convenor").
  */
 export const LEAD_SILENCE_VOTE =
-    'If the lead has done nothing for 30 days, the group can vote a new lead in from the group\'s screen.';
+    word('If the lead has done nothing for 30 days, the group can vote a new lead in from the group\'s screen.');
 
 /**
  * The lead hands the lead on: to another active convenor, or to an active member, who becomes a convenor in the
@@ -681,7 +682,7 @@ export function handOverGroupLead(db: Db, groupId: string, leadPubkey: string, t
     const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(groupId) as any;
     if (!group) throw new Error('Group not found');
     if (!isGroupLead(db, groupId, leadPubkey)) {
-        throw new Error('UNAUTHORIZED: Only the lead convenor can hand the lead over');
+        throw new Error(unauthorized(word('Only the lead convenor can hand the lead over')));
     }
     assertConvenorPowersActive(db, leadPubkey);
     if (leadPubkey === targetPubkey) throw new Error(word('You already lead this group'));
@@ -717,11 +718,11 @@ export function isGroupConvenor(db: Db, groupId: string, memberPubkey: string): 
 
 /** What a suspended convenor is told when they reach for a convenor power. */
 export const CONVENOR_POWERS_PAUSED =
-    'Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.';
+    word('Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.');
 
 /** What a suspended member is told when they try to join a group or accept an invitation. */
-export const GROUP_START_PAUSED = 'Your account is suspended. You can start groups again when your suspension ends.';
-export const GROUP_JOIN_PAUSED = 'Your account is suspended. You can join groups again when the suspension ends.';
+export const GROUP_START_PAUSED = word('Your account is suspended. You can start groups again when your suspension ends.');
+export const GROUP_JOIN_PAUSED = word('Your account is suspended. You can join groups again when the suspension ends.');
 
 /** What a convenor is told when the person they would let in is suspended: the request waits. */
 export const GROUP_ADMIT_PAUSED = "This member's account is suspended. Their request can be approved when the suspension ends.";
@@ -732,7 +733,7 @@ export const GROUP_ADMIT_PAUSED = "This member's account is suspended. Their req
  * answer 403 for.
  */
 export function assertConvenorPowersActive(db: Db, actorPubkey: string): void {
-    if (isSuspendedAccount(db, actorPubkey)) throw new Error(`UNAUTHORIZED: ${CONVENOR_POWERS_PAUSED}`);
+    if (isSuspendedAccount(db, actorPubkey)) throw new Error(unauthorized(CONVENOR_POWERS_PAUSED));
 }
 
 /**
@@ -797,7 +798,7 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
     // write in a chat they may not write in. Already in it, they stay; the suspension ends, they can join. Asked at each
     // write below, so the refusals that come first (already asked, removed, invite only) keep their own words.
     const refuseWhileSuspended = () => {
-        if (isSuspendedAccount(db, memberPubkey)) throw new Error(`UNAUTHORIZED: ${GROUP_JOIN_PAUSED}`);
+        if (isSuspendedAccount(db, memberPubkey)) throw new Error(unauthorized(GROUP_JOIN_PAUSED));
     };
 
     const now = membershipWriteAt(db, groupId, memberPubkey);
@@ -852,7 +853,7 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
 
 export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can change member roles');
+        throw new Error(unauthorized(word('Only a group convenor can change member roles')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
     if (!isGroupRole(newRole)) {
@@ -871,13 +872,13 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
     const isSelf = convenorPubkey === targetPubkey;
     if (lead && targetPubkey === lead && newRole !== 'convenor') {
         throw new Error(isSelf
-            ? `UNAUTHORIZED: ${HAND_OVER_FIRST}`
-            : `UNAUTHORIZED: The group's lead convenor cannot be demoted. The lead can hand the lead over. ${LEAD_SILENCE_VOTE}`);
+            ? unauthorized(HAND_OVER_FIRST)
+            : unauthorized(word("The group's lead convenor cannot be demoted. The lead can hand the lead over."), LEAD_SILENCE_VOTE));
     }
     // Only the lead may touch another convenor. A convenor may still step down from convenor themselves.
     if (target.role === 'convenor' && target.status === 'active' && newRole !== 'convenor'
         && !isSelf && convenorPubkey !== lead) {
-        throw new Error("UNAUTHORIZED: Only this group's lead convenor can change another convenor's role");
+        throw new Error(unauthorized(word("Only this group's lead convenor can change another convenor's role")));
     }
 
     // Safety: Cannot demote the last convenor
@@ -910,7 +911,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     const isSelf = actorPubkey === targetPubkey;
 
     if (!isConvenor && !isSelf) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can remove members, or a member may leave themselves');
+        throw new Error(unauthorized(word('Only a group convenor can remove members, or a member may leave themselves')));
     }
     // Leaving is the member's own business, suspended or not; removing someone else is a convenor's power.
     if (!isSelf) assertConvenorPowersActive(db, actorPubkey);
@@ -925,14 +926,14 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
         // The lead leaves by handing over first; until then there is no route out of the group for them, and no
         // route by which anyone else can push them out. That is the point of the lead.
         if (!isSelf) {
-            throw new Error(`UNAUTHORIZED: The group's lead convenor cannot be removed. The lead can hand the lead over and leave. ${LEAD_SILENCE_VOTE}`);
+            throw new Error(unauthorized(word("The group's lead convenor cannot be removed. The lead can hand the lead over and leave."), LEAD_SILENCE_VOTE));
         }
         if (otherActiveMemberCount(db, groupId, targetPubkey) > 0) {
             throw new Error(HAND_OVER_FIRST);
         }
         // Last one out: nobody is left to hand the lead to, so the lead may simply go.
     } else if (!isSelf && target.role === 'convenor' && target.status === 'active' && actorPubkey !== lead) {
-        throw new Error("UNAUTHORIZED: Only this group's lead convenor can remove another convenor");
+        throw new Error(unauthorized(word("Only this group's lead convenor can remove another convenor")));
     }
 
     // Safety: Cannot remove the last active convenor if other active members exist
@@ -984,7 +985,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
 
 export function updateGroupPolicy(db: Db, groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can change the group join policy');
+        throw new Error(unauthorized(word('Only a group convenor can change the group join policy')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
     if (!isJoinPolicy(joinPolicy)) {
@@ -1001,7 +1002,7 @@ export function updateGroupPolicy(db: Db, groupId: string, convenorPubkey: strin
 
 export function updateGroup(db: Db, groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can update group details');
+        throw new Error(unauthorized(word('Only a group convenor can update group details')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
 
@@ -1070,7 +1071,7 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
  */
 export function approveGroupMember(db: Db, groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can approve member join requests');
+        throw new Error(unauthorized(word('Only a group convenor can approve member join requests')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
 
@@ -1095,7 +1096,7 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
 
 export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can invite members to this group');
+        throw new Error(unauthorized(word('Only a group convenor can invite members to this group')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
     if (!isGroupRole(role)) {
@@ -1146,7 +1147,7 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
 
 export function deleteGroupPost(db: Db, groupId: string, convenorPubkey: string, postId: string): boolean {
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
-        throw new Error('UNAUTHORIZED: Only a group convenor can moderate posts in this group');
+        throw new Error(unauthorized(word('Only a group convenor can moderate posts in this group')));
     }
     assertConvenorPowersActive(db, convenorPubkey);
 

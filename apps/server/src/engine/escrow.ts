@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind, word } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -21,8 +21,12 @@ import {
     hasListedOffer,
     getMarketplaceTransaction,
     CONTRIBUTION_REQUIRED_ERROR,
-    type MarketplaceTransaction
+    type MarketplaceTransaction,
+    unauthorized,
 } from '@beanpool/engine';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
@@ -191,12 +195,12 @@ function postHiddenNoNewDeal(): Error {
 // and the refund ruling put every listing back already.
 
 /** The refusal to anyone who asks for a lendable Offer while it is out. */
-export const LOAN_OUT_ERROR = "It's out on loan right now. Ask again when it's back.";
+export const LOAN_OUT_ERROR = word("It's out on loan right now. Ask again when it's back.");
 /** The refusal to a one-step accept of a lendable Offer, from any app or the API: it is asked for, never taken. */
-export const LEND_ASK_FIRST_ERROR = 'Ask to borrow it: the lender says yes first.';
+export const LEND_ASK_FIRST_ERROR = word('Ask to borrow it: the lender says yes first.');
 export const LEND_ASK_FIRST_CODE = 'lend_ask_first';
 /** A loan's length (its deal's quantity, @beanpool/core loanDays) below a day. */
-export const LOAN_TOO_SHORT_ERROR = 'A loan is for at least 1 day.';
+export const LOAN_TOO_SHORT_ERROR = word('A loan is for at least 1 day.');
 /** A loan longer than its lender's longest (posts.lend_max_days). */
 export function loanTooLongError(maxDays: number): string {
     return `This can be borrowed for up to ${maxDays} day${maxDays === 1 ? '' : 's'}.`;
@@ -358,13 +362,13 @@ export function requestPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(targetGroupId, requesterPublicKey);
         if (!isMem && authorPubkey !== requesterPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active member of the group to request this post');
+            throw new Error(unauthorized(word('Must be an active member of the group to request this post')));
         }
     }
     if (audienceScope === 'direct') {
         const isTarget = targetPubkey === requesterPublicKey || assignedTo === requesterPublicKey || authorPubkey === requesterPublicKey;
         if (!isTarget) {
-            throw new Error('UNAUTHORIZED: This direct post is not addressed to you');
+            throw new Error(unauthorized(word('This direct post is not addressed to you')));
         }
     }
 
@@ -480,7 +484,7 @@ export function approvePostRequest(
     const isEnterpriseNeed = !isOffer && Boolean(buyerMember?.is_treasury);
     if (isEnterpriseNeed && opts?.authSigner && opts.authSigner === row.seller_pubkey) {
         const name = buyerMember?.callsign?.trim() || 'this enterprise';
-        const err: any = new Error(`Another keeper of ${name} needs to approve this — you cannot approve a job you are being paid for.`);
+        const err: any = new Error(tr('Another keeper of {name} needs to approve this — you cannot approve a job you are being paid for.', { name }));
         err.status = 403;
         err.statusCode = 403;
         err.code = 'TWO_PERSON_RULE';
@@ -769,13 +773,13 @@ export function acceptPost(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(targetGroupId, buyerPublicKey);
         if (!isMem) {
-            throw new Error('UNAUTHORIZED: Must be an active member of the group to accept this offer');
+            throw new Error(unauthorized(word('Must be an active member of the group to accept this offer')));
         }
     }
     if (audienceScope === 'direct') {
         const isTarget = targetPubkey === buyerPublicKey || assignedTo === buyerPublicKey;
         if (!isTarget) {
-            throw new Error('UNAUTHORIZED: This direct offer is not addressed to you');
+            throw new Error(unauthorized(word('This direct offer is not addressed to you')));
         }
     }
     if (post.authorPublicKey === buyerPublicKey) throw new Error(word('Cannot accept your own post'));
@@ -818,7 +822,7 @@ export function acceptPost(
     // When an enterprise accepts an Offer, the acting keeper cannot accept their own personal offer on behalf of the enterprise.
     if (isEnterprisePayer && opts?.authSigner && opts.authSigner === post.authorPublicKey) {
         const name = buyerMember?.callsign?.trim() || 'this enterprise';
-        const err: any = new Error(`Another keeper of ${name} needs to approve this — you cannot approve a job you are being paid for.`);
+        const err: any = new Error(tr('Another keeper of {name} needs to approve this — you cannot approve a job you are being paid for.', { name }));
         err.status = 403;
         err.statusCode = 403;
         err.code = 'TWO_PERSON_RULE';
@@ -987,7 +991,7 @@ export function completePostTransaction(
         }
         if (opts.authSigner === row.seller_pubkey) {
             const name = buyerMember?.callsign?.trim() || 'this enterprise';
-            const err: any = new Error(`Another keeper of ${name} needs to complete this — you cannot complete a job you are being paid for.`);
+            const err: any = new Error(tr('Another keeper of {name} needs to complete this — you cannot complete a job you are being paid for.', { name }));
             err.status = 403;
             err.statusCode = 403;
             err.code = 'TWO_PERSON_RULE';

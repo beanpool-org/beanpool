@@ -62,6 +62,8 @@ const FR: Record<string, unknown> = {
     'Only {who} can remove this': 'Seul {who} peut retirer ceci',
     'Only a convenor can do that': 'Seul un animateur peut faire cela',
     'Post another Offer to spend deeper.': 'Publiez une autre Offre pour aller plus loin.',
+    'The lead cannot be removed. The lead can hand the lead over.': 'Le responsable ne peut pas être retiré. Il peut passer la main.',
+    'Or the group can vote.': 'Ou le groupe peut voter.',
     'Your {n} active Offer unlock a −{cap} credit line.|Your {n} active Offers unlock a −{cap} credit line.': { one: 'Votre Offre active ouvre un crédit de −{cap}.', other: 'Vos {n} Offres actives ouvrent un crédit de −{cap}.' },
     [SERVER_FAULT_TEXT]: "Une erreur s'est produite sur le serveur. Veuillez réessayer.",
     'You may only read your own conversations': 'Vous ne pouvez lire que vos propres conversations',
@@ -112,6 +114,7 @@ async function testWayOut(): Promise<void> {
             '/api/coded-unknown': [403, { error: 'UNAUTHORIZED: A sentence no catalog has' }],
             '/api/two': [400, { error: 'FLOOR_LOCKED:2:3:500:1000: Your 2 active Offers unlock a −500 credit line. Post another Offer to spend deeper.' }],
             '/api/two-half-known': [400, { error: 'Your 2 active Offers unlock a −500 credit line. A sentence no catalog has.' }],
+            '/api/runs': [403, { error: 'UNAUTHORIZED: The lead cannot be removed. The lead can hand the lead over. Or the group can vote.' }],
         };
         const [status, body] = answers[ctx.path] ?? [404, { error: 'Not found' }];
         ctx.status = status;
@@ -211,6 +214,9 @@ async function testWayOut(): Promise<void> {
         const halfKnown = await get('/api/two-half-known', 'fr');
         assert(two.body?.error === 'FLOOR_LOCKED:2:3:500:1000: Vos 2 Offres actives ouvrent un crédit de −500. Publiez une autre Offre pour aller plus loin.',
             `two sentences each written on its own come in French, each with its own values (${two.body?.error})`);
+        const runs = await get('/api/runs', 'fr');
+        assert(runs.body?.error === 'UNAUTHORIZED: Le responsable ne peut pas être retiré. Il peut passer la main. Ou le groupe peut voter.',
+            `a sentence of two with another after it: each the catalog's, the longest first (${runs.body?.error})`);
         assert(halfKnown.body?.error === 'Your 2 active Offers unlock a −500 credit line. A sentence no catalog has.',
             'and when one of them is not the catalog\'s, the whole stays English, never half translated');
         const valuedEn = await get('/api/valued');
@@ -241,7 +247,7 @@ const tokenOf = (name: string) => `ExponentPushToken[${name}-${crypto.randomByte
 
 let BASE = '';
 interface Res { status: number; text: string; body: any }
-async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?: unknown, lang?: string): Promise<Res> {
+async function call(method: 'GET' | 'POST' | 'PATCH', id: Id | null, route: string, body?: unknown, lang?: string): Promise<Res> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
@@ -456,6 +462,16 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
     await family('recovery, no account named', 'Which account are you recovering?', 'POST', asker, '/api/recovery/collect', {});
     await family('groups, a vote with nobody to vote with', 'Nobody else in this group can vote, so there is nobody to vote with.',
         'POST', ann, `/api/groups/${tools.id}/decisions`, { effect: 'close_group', title: 'Close it', description: 'We have finished with the library' });
+
+    // A code the apps read before the sentence (UNAUTHORIZED: …, engine groups.ts): the code as it came, the sentence after
+    // it in French, the status the route chose from the English.
+    const joined = await call('POST', bob, `/api/groups/${tools.id}/join`, {});
+    const editEn = await call('PATCH', bob, `/api/groups/${tools.id}`, { name: 'Bob\'s library' });
+    const editFr = await call('PATCH', bob, `/api/groups/${tools.id}`, { name: 'Bob\'s library' }, 'fr');
+    assert(joined.status === 200 && editEn.status === 403 && editEn.body?.error === 'UNAUTHORIZED: Only a group convenor can update group details',
+        `groups, a member who is no convenor: in English as before (${editEn.status} ${editEn.text})`);
+    assert(editFr.status === 403 && editFr.body?.error === `UNAUTHORIZED: ${FR_SIGN}Only a group convenor can update group details`,
+        `and in French after the code, the code and the status as they were (${editFr.status} ${editFr.text})`);
 }
 
 // ── 5 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────

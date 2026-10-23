@@ -350,7 +350,7 @@ import {
     type ListGroupsFilter,
     exactPlaceReaders,
     neighbourhoodOf,
-    placeForOthers,
+    placeForOthers, unauthorized,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -10362,7 +10362,7 @@ export function isGroupLead(groupId: string, memberPubkey: string): boolean {
  * already asks for members.status = 'active', engine/group-succession.ts.)
  */
 function assertGroupActorIsMember(actorPubkey: string): void {
-    if (!isNodeMember(actorPubkey)) throw new Error(`UNAUTHORIZED: ${NOT_A_MEMBER_ERROR}`);
+    if (!isNodeMember(actorPubkey)) throw new Error(unauthorized(NOT_A_MEMBER_ERROR));
 }
 
 export function handOverGroupLead(groupId: string, leadPubkey: string, targetPubkey: string): GroupMember {

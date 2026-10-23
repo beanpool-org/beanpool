@@ -447,7 +447,7 @@ for (const dark of [false, true]) {
                 await render('console');
                 await click(byId('manage-face-logo'), 'Change the logo');
                 await click(byId('picker-pick'), 'a picture');
-                expect(byId('manage-face-logo-image')?.getAttribute('data-src')).toBe(PICKED);
+                expect(byId('manage-face-logo-image')?.querySelector('[data-avatar="56"]')?.getAttribute('data-src')).toBe(PICKED);
                 await click(byId('manage-face-save'), 'Save');
                 expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } }]);
             });

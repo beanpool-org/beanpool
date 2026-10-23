@@ -30,8 +30,9 @@ export type NeedsYouTarget =
     /** Talk → Groups (groups slice 2): group, enterprise and event chats are listed there, not under Messages. */
     | { to: 'your-groups' }
     /**
-     * An enterprise's own screen, for its keepers' vote (DESIGN-group-decisions §2.8). The node sends it only to an app
-     * that asks with `lands=enterprise` (utils/home-store.ts homePath); the two ship together.
+     * An enterprise's keepers' console, for its keepers' vote (DESIGN-group-decisions §2.8; its Decisions block is there
+     * since slice S7). The node sends it only to an app that asks with `lands=enterprise` (utils/home-store.ts homePath);
+     * the two ship together.
      */
     | { to: 'enterprise'; id: string }
     /**
@@ -66,8 +67,8 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         case 'unread-messages': return { pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } };
         // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
         case 'your-groups': return { pathname: '/(tabs)/chats', params: { view: 'groups' } };
-        // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
-        case 'enterprise': return { pathname: '/treasury-detail', params: { publicKey: target.id } };
+        // A keepers' vote is never in Commons → Decide: it lands in the enterprise's console (S7), whose Decisions block lists it.
+        case 'enterprise': return { pathname: '/treasury-manage', params: { publicKey: target.id } };
         // A group's vote: the group itself (its chat, the info sheet open on its Decisions block), never Talk's list.
         case 'group': return groupVoteHref(target.id);
     }

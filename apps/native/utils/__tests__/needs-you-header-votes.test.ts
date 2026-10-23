@@ -180,7 +180,7 @@ describe('the header reading the node itself (Home\'s answer not fresh): one rul
 
 describe("the header reading the node itself: a keepers' vote (review opus-1767 N3)", () => {
     for (const beans of [true, false]) {
-        it(`shown and opening the enterprise, as Home's line does (Beans ${beans ? 'on' : 'off'})`, async () => {
+        it(`shown and opening the enterprise's keepers' console, as Home's line does (Beans ${beans ? 'on' : 'off'})`, async () => {
             profile.features = { beans, decisions: true };
             node.votes = [voteLine({ to: 'enterprise', id: ENT })];
             await renderHeader();
@@ -189,7 +189,7 @@ describe("the header reading the node itself: a keepers' vote (review opus-1767 
             expect(mergeNeeds(node.votes as never, null, Date.now(), profile.features).map(e => e.kind)).toEqual(['vote']);
             expect(voteIcon()).not.toBeNull();
             await act(async () => { (voteIcon()!.closest('button') as HTMLElement).click(); });
-            expect(nav.push).toHaveBeenCalledWith({ pathname: '/treasury-detail', params: { publicKey: ENT } });
+            expect(nav.push).toHaveBeenCalledWith({ pathname: '/treasury-manage', params: { publicKey: ENT } });
         });
     }
 

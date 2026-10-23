@@ -14,9 +14,11 @@ interface AvatarPickerSheetProps {
     onSelectImage: (uri: string) => void;
     /** The dark theme's colours. Settings, welcome and profile setup pass them in dark; light passes none. */
     colors?: AppColors;
+    /** Its heading: "Profile Photo" unless the picture is another's (an enterprise's logo, from its console). */
+    title?: string;
 }
 
-export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: AvatarPickerSheetProps) {
+export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, title }: AvatarPickerSheetProps) {
     const styles = useMemo(() => (colors ? makeStyles(tonesFor(colors)) : LIGHT_STYLES), [colors]);
     const [loading, setLoading] = useState(false);
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
@@ -118,7 +120,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: A
                 <Pressable style={[styles.sheet, { maxHeight: layout.maxHeight }]} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
                     {/* Header */}
                     <View style={styles.header}>
-                        <Text style={styles.title}>{t('Profile Photo')}</Text>
+                        <Text style={styles.title}>{title ?? t('Profile Photo')}</Text>
                         <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.closeButton}>
                             <Text style={styles.closeText}>✕</Text>
                         </Pressable>

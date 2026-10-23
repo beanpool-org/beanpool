@@ -11,7 +11,9 @@
  *   screen says why: open deals (409 shop_deals_open), a shop closed for now (409 shop_paused), a muted member (403).
  * - A shop's name is the member's own words, shown as written; with none, "<their name>'s shop" in their language.
  *
- * Only the member's own shop: an enterprise's shopfront is a later slice (S7), and the Market side is S5.
+ * And an enterprise's (slice S7, its keepers' Manage console: app/treasury-manage.tsx), through the same routes with the
+ * enterprise as the owner, signed as the keeper: its shop, its Offers put in it, Featured on one of them, and its face
+ * (PUT /api/treasury/:t/profile, DESIGN-shops-round3-enterprise-shopfront-fable.md §4). The Market side is S5.
  */
 import { SHOP_KINDS, formatCount, formatDate, isShopKind, t, tn, word, type ShopCounts, type ShopKind, type WordKey } from '@beanpool/core';
 import { signedGet, signedRequestWithMethod } from './db';
@@ -188,6 +190,8 @@ export interface ShopListing {
     originNode: string | null;
     /** Its first photo as the node gives it (a path on the node), or null. */
     photo: string | null;
+    /** When it was put on its shop's shelf (Featured), or null. */
+    featuredAt: string | null;
 }
 
 function readListing(raw: unknown): ShopListing | null {
@@ -204,6 +208,7 @@ function readListing(raw: unknown): ShopListing | null {
         audienceScope: typeof p.audienceScope === 'string' ? p.audienceScope : 'public',
         originNode: typeof p.originNode === 'string' && p.originNode ? p.originNode : null,
         photo: typeof photos[0] === 'string' ? photos[0] : null,
+        featuredAt: typeof p.featuredAt === 'string' && p.featuredAt ? p.featuredAt : null,
     };
 }
 
@@ -241,6 +246,48 @@ export async function readListingShopId(postId: string): Promise<string | null |
     const rows = await readListings(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`);
     const row = rows?.find((l) => l.id === postId);
     return row ? row.shopId : undefined;
+}
+
+// ── an enterprise's shopfront (S7) ──────────────────────────────────────────────────────────────
+
+const enterprisePath = (treasury: string) => `/api/treasury/${encodeURIComponent(treasury)}`;
+
+/** Opens the enterprise's shop if need be ({} opens it as it is), then changes what `changes` names, as its keeper. */
+export async function changeEnterpriseShop(treasury: string, changes: MyShopChanges): Promise<{ shop: MyShop; paused: number; resumed: number }> {
+    const json = await write('PUT', `${enterprisePath(treasury)}/shop`, changes);
+    const shop = readShop(json.shop);
+    if (!shop) throw UNREADABLE();
+    return { shop, paused: movedCount(json.paused), resumed: movedCount(json.resumed) };
+}
+
+/** Puts these of the enterprise's Offers in its shop, all or none; how many went in. */
+export async function addOffersToEnterpriseShop(treasury: string, postIds: string[]): Promise<number> {
+    const json = await write('POST', `${enterprisePath(treasury)}/shop/offers`, { postIds });
+    return movedCount(json.added);
+}
+
+/** The enterprise's Offers as its keeper reads them, for Featured and "put them in its shop"; null with no answer. */
+export function readEnterpriseOffers(treasury: string): Promise<ShopListing[] | null> {
+    return readListings(`/api/marketplace/posts?author=${encodeURIComponent(treasury)}&type=offer&limit=200`);
+}
+
+/** One Offer on its shop's shelf, or off it (PUT /api/marketplace/posts/:id/feature): when it was featured, or null. */
+export async function featureOffer(postId: string, featured: boolean): Promise<string | null> {
+    const json = await write('PUT', `/api/marketplace/posts/${encodeURIComponent(postId)}/feature`, { featured });
+    return typeof json.featuredAt === 'string' && json.featuredAt ? json.featuredAt : null;
+}
+
+/** What a change of an enterprise's face names: each optional; a new picture is the phone's own small copy (a data URI). */
+export interface EnterpriseFaceChanges {
+    name?: string;
+    purpose?: string;
+    about?: string;
+    avatar?: string;
+}
+
+/** Changes the enterprise's face (any keeper its About and logo; the lead its name and purpose: the node says who). */
+export async function changeEnterpriseFace(treasury: string, changes: EnterpriseFaceChanges): Promise<void> {
+    await write('PUT', `${enterprisePath(treasury)}/profile`, changes);
 }
 
 // ── words ───────────────────────────────────────────────────────────────────────────────────────

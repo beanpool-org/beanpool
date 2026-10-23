@@ -204,7 +204,7 @@ router.get('/api/commons/decisions', async (ctx) => {
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
         myPoolVoting: myPoolVoting(actor),
-        // Whether the signer may propose (earned standing, or a node admin). The one-open-Decision limit is
+        // Whether the signer may propose (a completed trade, or a node admin). The one-open-Decision limit is
         // left to the apps, which already know the signer's open Decisions.
         canPropose: actor && votes ? checkProposalStanding(actor).ok : false,
     };

@@ -472,7 +472,7 @@ export function ProposeDecisionModal({
                         <span className="text-emerald-400 text-sm" aria-hidden="true">🛡️</span>
                         <div>
                             <Sentence
-                                text={t('{bond} Open to members with a completed trade or earned standing, and to node admins. Open for 7 days, executing automatically on pass.')}
+                                text={t('{bond} Open to members who have completed a trade, and to node admins. Open for 7 days, executing automatically on pass.')}
                                 parts={{ bond: <span className="font-bold text-white">{t('No bond required.')}</span> }}
                             />
                         </div>

@@ -2056,7 +2056,7 @@ export interface MyPoolVoting {
     hasCompletedTrade: boolean;
 }
 
-/** canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule. */
+/** canPropose: whether the signer may propose (a completed trade, or a node admin), per the node's own rule. */
 export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose?: boolean | null }> {
     return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
 }

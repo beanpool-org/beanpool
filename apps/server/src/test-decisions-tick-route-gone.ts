@@ -110,6 +110,10 @@ async function main(): Promise<void> {
 
     const author = makeMember('TickTina');
     const subject = makeMember('TickTom');
+    // Tina's standing to propose is a completed trade (the earned_credit badge makeMember gives is none).
+    const tradedAt = new Date().toISOString();
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), author.pubKeyHex, subject.pubKeyHex, tradedAt, tradedAt);
 
     // A Decision past its close time: the tick has work to do, so "nothing happened" below is a real result.
     const decision = createDecision({

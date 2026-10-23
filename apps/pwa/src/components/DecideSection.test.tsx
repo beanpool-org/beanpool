@@ -56,9 +56,11 @@ describe('DecideSection wording', () => {
     it('says who can propose in plain words, without the developer term earnedCredit', () => {
         const { container } = renderDecide(false);
 
-        expect(screen.getByText(/Open to members with a completed trade or earned standing, and to node admins\./)).toBeInTheDocument();
+        expect(screen.getByText(/Open to members who have completed a trade, and to node admins\./)).toBeInTheDocument();
         expect(screen.getByText(/You can propose once you have completed a trade\./)).toBeInTheDocument();
         expect(container.textContent).not.toMatch(/earnedCredit/);
+        // Badges unlock nothing (Marty, 23 Oct): a trust badge is no way in, so no second route is offered.
+        expect(container.textContent).not.toMatch(/earned standing|badge/i);
     });
 });
 

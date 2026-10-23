@@ -42,9 +42,6 @@ import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
-// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
-// again in the member's language (member-words.ts).
-const { t: tr } = wordsFor('en');
 import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -96,6 +93,9 @@ import {
     closeGroupByVote,
     afterGroupVote,
 } from './state-engine.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 /** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
 export type DecisionTouch = 'member' | 'pool' | 'scope';

@@ -68,13 +68,13 @@ import {
     isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
     readNamesCopy, NAMES_COPY_MAX_BYTES, word, wordsFor,
 } from '@beanpool/core';
-// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
-// again in the member's language (member-words.ts).
-const { t: tr } = wordsFor('en');
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
 import { recordDepartedDebt, openDebtOfEntry, debtRecord, startWorkOff, workOffGoesLive, endWorkOff } from './names-debts.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr } = wordsFor('en');
 
 export const NAMES_TWO_ADMINS_KEY = 'names_two_admins';
 

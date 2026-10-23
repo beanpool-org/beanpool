@@ -232,9 +232,6 @@ import {
 } from './engine/invites.js';
 import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
 import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
-// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
-// again in the member's language (member-words.ts).
-const { t: tr, tn: trn } = wordsFor('en');
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -1417,6 +1414,9 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
+// A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
+// again in the member's language (member-words.ts).
+const { t: tr, tn: trn } = wordsFor('en');
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).

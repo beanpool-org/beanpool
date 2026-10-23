@@ -108,7 +108,7 @@ The contact email and phone are not sent unless you turn each on here: **Share E
 
 **Message Requests** decides what happens to a member's first message to someone who hasn't added them as a friend, written to them, or traded with them. On, it is held as a request until that person accepts it: they can read it, and the sender can write nothing more until they accept. The sender is never told whether it was ignored or whether they were blocked. Messages from owners, admins and moderators, and the chat that comes with a deal, always arrive straight away. A request nobody accepts lapses after 30 days, and the sender's next message is a new request.
 
-It is on by default on a global community, where anyone can join with 12 words, and off on a local community, where everyone was let in by someone. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat. One a member ignored stays out of their chats until one of the two writes in it again. Like every profile switch, it travels with backups and to standbys.
+It is on by default on a global community, where anyone can join with 12 words, and off on a local community, where everyone was let in by someone. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat. One a member ignored stays out of their chats until one of the two writes in it again. Turned on again, a chat the member replied in, or whose sender they added, while it was off stays an ordinary chat; one they never answered is a request again. Like every profile switch, it travels with backups and to standbys.
 
 ### When the directory doesn't list your community
 

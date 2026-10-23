@@ -45,9 +45,10 @@
  * Where requests were on and are turned off, nothing waits: every line goes through, and a request still waiting, or one
  * that lapsed, is an ordinary chat. One the person ignored, or a removal ignored (dropRequestsOf), stays out of their
  * lists, their unread count and their badge: that was their decision, or the removal's (PR #2392 review 4354581049). Their
- * own act brings it back as an ordinary chat, as it accepts one when on ({@link acceptable}), and so does the opener's next
- * line, which makes it a new request from then, an ordinary chat while off (lineWhileOff), as one after its 30 days is:
- * nothing is stored or pushed into a chat the person can't find.
+ * own act accepts any of them, as when on ({@link acceptable}): one ignored comes back as an ordinary chat, and one waiting
+ * or lapsed stays in their chats when the switch goes on again (review 4354806252). The opener's next line in one ignored
+ * makes it a new request from then, an ordinary chat while off (lineWhileOff), as one after its 30 days is: nothing is
+ * stored or pushed into a chat the person can't find.
  *
  * ## Pushes
  *
@@ -162,11 +163,12 @@ export function requestNeeded(from: string, to: string): boolean {
 
 /**
  * Whether an act of the person a request is for accepts it (their line, their own open of the chat, adding the opener, a
- * trade between the two): any request not accepted yet, where requests are on. Where they were turned off since, only one
- * they ignored, the one kind still kept out of their lists then (sortRequestsOut), so their act brings it back.
+ * trade between the two): any request not accepted yet, whatever the switch says. Where requests were turned off since,
+ * one they ignored is still kept out of their lists (sortRequestsOut), so their act brings it back; and one waiting or
+ * lapsed, an ordinary chat while off, stays where they put it when the switch goes on again (PR #2392 review 4354806252).
  */
 function acceptable(row: RequestRow | undefined): row is RequestRow {
-    return !!row && row.state !== 'accepted' && (requestsOn() || row.state === 'ignored');
+    return !!row && row.state !== 'accepted';
 }
 
 /**
@@ -204,10 +206,14 @@ export function openRequest(conversationId: string, from: string, to: string, at
 /**
  * `who` asks for a conversation they are in (engine/messaging.ts createConversation finding the one the two have): when it
  * is a request waiting for them, asking for it themselves is reaching out to its opener, as writing is, and accepts it.
+ * Where requests are on, a standby refuses that open (409 `standby`) rather than leave it waiting; where they are off,
+ * nothing waits, and a standby, which writes no request, leaves it, as for a line (lineWhileOff).
  */
 export function acceptOnOpen(conversationId: string, who: string, now: number = Date.now()): void {
     const row = rowOf(conversationId);
-    if (acceptable(row) && row.to_pubkey === who) accept(row, now, who);
+    if (!acceptable(row) || row.to_pubkey !== who) return;
+    if (!requestsOn() && standbyWritesNothing()) return;
+    accept(row, now, who);
 }
 
 /**
@@ -301,15 +307,16 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
 }
 
 /**
- * A line where requests were turned off since: it goes through, but a request the person ignored is still kept out of
- * their lists, and the line would be stored where they never look. Their own line accepts it, as when on; the opener's
- * makes it a new request from then, which is an ordinary chat while off (the header's "The switch turned off"). A
- * standby, which writes no request, leaves it.
+ * A line where requests were turned off since, in a request not accepted: it goes through. The person's own line accepts
+ * it, as when on, so it stays in their chats when the switch goes on again (PR #2392 review 4354806252). The opener's
+ * leaves one waiting or lapsed as it is (an ordinary chat while off), but one the person ignored is still kept out of their
+ * lists, and the line would be stored where they never look: it makes that one a new request from then, an ordinary chat
+ * while off (the header's "The switch turned off"). A standby, which writes no request, leaves it.
  */
 function lineWhileOff(row: RequestRow, author: string, now: number): void {
-    if (row.state !== 'ignored' || standbyWritesNothing()) return;
+    if (standbyWritesNothing()) return;
     if (author === row.to_pubkey) accept(row, now, author);
-    else if (author === row.from_pubkey) {
+    else if (author === row.from_pubkey && row.state === 'ignored') {
         db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
             .run(iso(now), row.conversation_id);
     }

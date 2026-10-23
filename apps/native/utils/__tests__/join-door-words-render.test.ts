@@ -146,7 +146,7 @@ import { DOOR_MESSAGES, PRIVATE_PREVIEW_MESSAGE, WORK_MESSAGES, nameCheckMessage
 import { ACCOUNT_DOOR_MESSAGES, joinedGlobalNotice } from '../global-join-existing';
 import { DOOR_WORK_MESSAGES } from '../door-work';
 import { GLOBAL_DOOR_MESSAGES } from '../node-profile';
-import { doorKeeperWords, doorNameCheckWords, doorRefusalWords, globalPlace, phoneDoorLineWords } from '../open-door-words';
+import { doorKeeperWords, doorNameCheckWords, doorRefusalWords, globalPlace, joinedGlobalBodyWords, phoneDoorLineWords } from '../open-door-words';
 
 const GLOBAL = 'https://global.beanpool.org';
 const SELF = 'https://open.riverbend.example';
@@ -404,5 +404,42 @@ describe('the global door\'s sentences from the files that sign the join: each o
         for (const copiesAt of ['vault', 'community'] as const) {
             for (const line of Object.values(doorKeeperWords(place, copiesAt))) expect(line, copiesAt).toMatch(/^\[.*\]$/s);
         }
+    });
+});
+
+describe('"You\'re in" after a sign-in was linked: each paragraph of joinedGlobalNotice through the door\'s words', () => {
+    const linked = { enrolledSso: ['google'], replaced: true } as unknown as Parameters<typeof joinedGlobalNotice>[0];
+    const CAME = 'Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.';
+    const PT = {
+        [CAME]: 'A sua chave e as suas 12 palavras são as mesmas de antes, e nada mudou nas suas outras comunidades: as suas publicações, conversas e trocas ficam em cada uma.',
+        'Your {name} sign-in is now also a way back into your account, in every community.': 'O seu início de sessão {name} agora também é um caminho de volta à sua conta, em todas as comunidades.',
+        'Your {name} sign-in is now also a way back into your account here.': 'O seu início de sessão {name} agora também é um caminho de volta à sua conta aqui.',
+        'This {provider} account used to protect a different BeanPool account. It protects this one now, and that one has only its 12 words.': 'Esta conta {provider} protegia outra conta BeanPool. Agora protege esta, e a outra tem só as suas 12 palavras.',
+    };
+
+    it('in English exactly as global-join-existing.ts writes it, in Portuguese where the words have it, the sign-in\'s name as written', () => {
+        const { body } = joinedGlobalNotice(linked);
+        const paragraphs = body.split('\n\n');
+        expect(paragraphs).toHaveLength(3);
+        expect(joinedGlobalBodyWords(body)).toBe(body);
+        setLanguage('pt', [PT]);
+        const pt = joinedGlobalBodyWords(body).split('\n\n');
+        expect(pt[0]).toBe(PT[CAME]);
+        expect(pt[1]).toMatch(/^O seu início de sessão Google agora também é um caminho de volta à sua conta/);
+        expect(pt[2]).toBe('Esta conta Google protegia outra conta BeanPool. Agora protege esta, e a outra tem só as suas 12 palavras.');
+        setLanguage('xx');
+        for (const p of joinedGlobalBodyWords(body).split('\n\n')) expect(p).toMatch(/^\[.*\]$/s);
+    });
+
+    it('both ways a sign-in comes back are read, and a paragraph it can\'t read is shown as given', () => {
+        const source = fs.readFileSync(path.resolve(__dirname, '../global-join-existing.ts'), 'utf8');
+        const everywhere = 'Your ${name} sign-in is now also a way back into your account, in every community.';
+        const here = 'Your ${name} sign-in is now also a way back into your account here.';
+        expect(source).toContain(everywhere);
+        expect(source).toContain(here);
+        setLanguage('pt', [PT]);
+        expect(joinedGlobalBodyWords(everywhere.replace('${name}', 'Apple'))).toBe('O seu início de sessão Apple agora também é um caminho de volta à sua conta, em todas as comunidades.');
+        expect(joinedGlobalBodyWords(here.replace('${name}', 'Apple'))).toBe('O seu início de sessão Apple agora também é um caminho de volta à sua conta aqui.');
+        expect(joinedGlobalBodyWords('Riverbend is closed for the winter.')).toBe('Riverbend is closed for the winter.');
     });
 });

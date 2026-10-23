@@ -10,14 +10,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createAddressLookup, t, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
 
-/** The event form's words: it has a map to tap and a pin to drop. A match is read by its own text. */
-const EVENT_WORDS: AddressSearchWords = {
-    label: 'Find an address',
-    placeholder: 'Street and town, or a place',
-    unavailable: "Address search isn't working right now. Tap the map or use My location.",
-    noMatches: 'No matches. Try a street and town, or drop a pin.',
-    source: 'Addresses from OpenStreetMap. What you type here is sent to them.',
-};
+/** The event form's words: it has a map to tap and a pin to drop. A match is read by its own text. Made where drawn, in the member's language. */
+const eventWords = (): AddressSearchWords => ({
+    label: t('Find an address'),
+    placeholder: t('Street and town, or a place'),
+    unavailable: t("Address search isn't working right now. Tap the map or use My location."),
+    noMatches: t('No matches. Try a street and town, or drop a pin.'),
+    source: t('Addresses from OpenStreetMap. What you type here is sent to them.'),
+});
 
 interface AddressSearchProps {
     onPick: (result: AddressResult) => void;
@@ -25,7 +25,7 @@ interface AddressSearchProps {
     words?: AddressSearchWords;
 }
 
-export function AddressSearch({ onPick, words = EVENT_WORDS }: AddressSearchProps) {
+export function AddressSearch({ onPick, words = eventWords() }: AddressSearchProps) {
     const [query, setQuery] = useState('');
     const [state, setState] = useState<AddressLookupState>({ status: 'idle', query: '', results: [] });
     const [open, setOpen] = useState(false);

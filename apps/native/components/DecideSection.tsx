@@ -20,6 +20,7 @@ import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, w
 import { DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
+import { signedRequestWords } from './signed-request-lines';
 
 /**
  * What a Decision does, what it touches and where it ended, as the node names them: word() keys, shown through t(). A
@@ -139,7 +140,7 @@ export function DecideSection({
                 Alert.alert(t('Voting Error'), refusal === NO_TRADE_POOL_VOTE_MESSAGE ? t(DECISION_CARD_WORDS.noTradePoolVote) : refusal || t('Failed to record vote'));
             }
         } catch (err: any) {
-            Alert.alert(t('Error'), err.message || t('Failed to cast vote'));
+            Alert.alert(t('Error'), err.message ? signedRequestWords(err.message) : t('Failed to cast vote'));
         } finally {
             setVotingId(null);
         }

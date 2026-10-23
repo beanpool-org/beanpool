@@ -16,6 +16,7 @@ import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys, groupKeyring, memoryGroupLockStore } from '../lib/group-chat-keys';
 import { sealLine } from '../lib/group-chat-crypto';
 import { fakeGroupNode, person, type FakeGroupNode } from '../lib/group-chat-fake-node.test-support';
+import { backToEnglish, showIn } from '../words-xx.test-support';
 
 if (typeof window !== 'undefined' && window.HTMLElement) window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -37,6 +38,10 @@ let chatLocked = true;
 let nodeType = 'group_thread';
 /** Rows the node serves beside the sealed lines it stored. */
 let extraRows: any[] = [];
+/** Ben's callsign, as the directory and the group's roster give it. */
+let benName = 'Ben';
+/** The key Ben sealed his first line under, and that line's id. */
+let benSealed: { epoch: number; key: Uint8Array; id: string };
 
 const served = () => [
     ...node.lines.map((l, i) => ({
@@ -49,7 +54,7 @@ const served = () => [
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [conv()], totalUnread: 0 })),
     getConversationMessages: vi.fn(async () => ({ conversation: conv(), messages: [] })),
-    getMembers: vi.fn(async () => [{ publicKey: ben.publicKey, callsign: 'Ben' }]),
+    getMembers: vi.fn(async () => [{ publicKey: ben.publicKey, callsign: benName }]),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     markConversationReadApi: vi.fn(async () => ({ success: true })),
     createConversationApi: vi.fn(), getEventChat: vi.fn(), sendMessageApi: vi.fn(), editMessageApi: vi.fn(),
@@ -58,7 +63,7 @@ vi.mock('../lib/api', () => ({
         conversation: conv(), messages: served(), canPost: true,
         ...(chatLocked ? { encryption: { current: node.current(), stale: false, fromEpoch: 1 } } : {}),
     })),
-    getGroupMembers: vi.fn(async () => node.shown.map((pk) => ({ groupId: G, memberPubkey: pk, callsign: pk === ana.publicKey ? 'Ana' : 'Ben', role: 'member', status: 'active', joinedAt: '' }))),
+    getGroupMembers: vi.fn(async () => node.shown.map((pk) => ({ groupId: G, memberPubkey: pk, callsign: pk === ana.publicKey ? 'Ana' : benName, role: 'member', status: 'active', joinedAt: '' }))),
     groupKeysNet: {
         get: (p: string) => node.as(ana.publicKey).get(p),
         post: (p: string, b: unknown) => node.as(ana.publicKey).post(p, b),
@@ -80,14 +85,16 @@ beforeEach(async () => {
     chatLocked = true;
     nodeType = 'group_thread';
     extraRows = [];
+    benName = 'Ben';
     // Ben opened the chat first: epoch 1 for both of them, and one line of his.
     const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
     const id = crypto.randomUUID();
     const sealed = sealLine('Working bee Saturday 9am', { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch, messageId: id });
     node.lines.push({ id, author: ben.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch, sender: ben.publicKey } });
+    benSealed = { epoch, key, id };
     forgetGroupKeys();
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); backToEnglish(); vi.unstubAllGlobals(); });
 
 async function openChat() {
     render(<MessagesPage identity={me} openConversationId={G} />);
@@ -150,6 +157,20 @@ describe('a locked group chat on the web', () => {
         await waitFor(() => expect(node.lines).toHaveLength(2));
         expect(node.lines[1].nonce.startsWith('group-xc20p-v1:')).toBe(true);
         expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('a member named like one of the app\'s lines ("Notice") keeps that name over a line and a quote, in any language', async () => {
+        benName = 'Notice';
+        // Ben answers his own line, so the quote is drawn under his name too.
+        const { epoch, key, id: first } = benSealed;
+        const id = crypto.randomUUID();
+        const sealed = sealLine('Bring a spade', { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch, messageId: id, replyToId: first });
+        node.lines.push({ id, author: ben.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch, sender: ben.publicKey, replyToId: first } });
+        await showIn('xx');
+        render(<MessagesPage identity={me} openConversationId={G} />);
+        await screen.findByText('Bring a spade', {}, { timeout: 5000 });
+        expect(screen.getAllByTestId('group-line-author').map((e) => e.textContent)).toEqual(['Notice', 'Notice']);
+        expect(screen.getByTestId('dm-quote').firstElementChild?.textContent).toBe('Notice');
     });
 
     it('searches the loaded thread by its opened words', async () => {

@@ -7,6 +7,7 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { signedRequestWords } from './signed-request-lines';
 
 interface ReviewModalProps {
     visible: boolean;
@@ -76,7 +77,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
             await submitRating(identity.publicKey, targetPubkey, stars, comment, txId);
             onSuccess();
         } catch (e: any) {
-            Alert.alert(t('Error'), e.message || t('Failed to submit review'));
+            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to submit review'));
         } finally {
             setSubmitting(false);
         }

@@ -4,13 +4,14 @@
  * least 48dp, no fixed width or height anywhere (the line wraps and the card grows at 320dp and 1.3× text), nothing
  * cut to a number of lines, and readable text in every theme.
  */
+import { word } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 
 /** The space the card keeps from each side of the screen, and below the status bar. */
 export const PUSH_NOTICE_WARNING_INSET = 16;
 
-/** The button's label. */
-export const PUSH_NOTICE_WARNING_OK = 'OK';
+/** The button's label (a word() key: the component t()s it). */
+export const PUSH_NOTICE_WARNING_OK = word('OK');
 
 /** Which entries are things you press. Each has minHeight ≥ 48. */
 export const PUSH_NOTICE_WARNING_TOUCH_TARGETS = ['okBtn'] as const;

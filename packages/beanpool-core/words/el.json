@@ -762,11 +762,11 @@
     "other": "{n} πράγματα · όλα στην αποθήκη σας"
   },
   "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
-    "one": "{n} πράγμα · {listed} στο κατάστημά σας · {out} δανεισμένα",
-    "other": "{n} πράγματα · {listed} στο κατάστημά σας · {out} δανεισμένα"
+    "one": "{n} πράγμα · {listed} στο κατάστημά σας · {out} σε δανεισμό",
+    "other": "{n} πράγματα · {listed} στο κατάστημά σας · {out} σε δανεισμό"
   },
   "{n} thing · {out} out|{n} things · {out} out": {
-    "one": "{n} πράγμα · {out} δανεισμένο",
-    "other": "{n} πράγματα · {out} δανεισμένα"
+    "one": "{n} πράγμα · {out} σε δανεισμό",
+    "other": "{n} πράγματα · {out} σε δανεισμό"
   }
 }

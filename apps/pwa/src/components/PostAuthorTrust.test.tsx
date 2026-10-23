@@ -48,4 +48,16 @@ describe('PostAuthorTrust tier', () => {
         render(<PostAuthorTrust callsign="Rowan" energyCycled={0} mode={mode} />);
         expect(screen.getByTestId('author-tier')).toHaveTextContent('🌱');
     });
+
+    it('the tier\'s name and the profile button\'s label in the member\'s language; the callsign as written', async () => {
+        const { setLanguage } = await import('@beanpool/core');
+        try {
+            setLanguage('pt', [{ 'Steward\u0004trust tier': 'Guardião', "View {name}'s profile": 'Ver o perfil de {name}' }]);
+            render(<PostAuthorTrust callsign="Rowan" energyCycled={600} publicKey={'b'.repeat(64)} onOpenProfile={() => {}} />);
+            expect(screen.getByTestId('author-tier')).toHaveTextContent('Guardião');
+            expect(screen.getByRole('button', { name: 'Ver o perfil de Rowan' })).toBeInTheDocument();
+        } finally {
+            setLanguage('en');
+        }
+    });
 });

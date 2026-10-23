@@ -374,24 +374,25 @@ export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2
     return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
 }
 
-export const FEWER_CARDS_LINE = 'Home now starts with fewer cards. Add a card brings the rest back.';
+/** These three are word() keys: Home shows them through t(). */
+export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = 'This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.';
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
-export const SEARCH_OFFLINE_LINE = 'Shows when your community answers';
-
-/** "within 5 km", or nothing where the node had no point (it ignored the distance). */
-const within = (km: number | null): string => (km ? `within ${km} km` : '');
+export const SEARCH_OFFLINE_LINE = word('Shows when your community answers');
 
 /** A saved search's first line: the words and the distance ("eggs · within 5 km"); just the words with no point. */
 export function searchFirstLine(q: string, km: number | null): string {
-    return [q.trim().replace(/\s+/g, ' ') || 'Every listing', within(km)].filter(Boolean).join(' · ');
+    const words = q.trim().replace(/\s+/g, ' ') || t('Every listing');
+    // "within 5 km", or nothing where the node had no point (it ignored the distance). The phone's sentences.
+    return km ? t('{words} · within {km} km', { words, km }) : words;
 }
 
 /** A search that finds nothing says so in its own words: "No eggs within 5 km right now". */
 export function searchEmptyLine(q: string, km: number | null): string {
     const words = q.trim().replace(/\s+/g, ' ');
-    return ['No', words || 'listings', within(km), 'right now'].filter(Boolean).join(' ');
+    if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
+    return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
 /** Edit home's line while a node before the frame can't keep the member's cards (§2.3). A word() key: shown through t(). */
 export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");

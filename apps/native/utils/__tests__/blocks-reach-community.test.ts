@@ -648,6 +648,86 @@ describe('a community that has the account as no member yet (403 not_a_member, r
     });
 });
 
+describe('a community that lost the member\'s list (review 4354749552)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-23T08:00:00Z'));
+    });
+
+    /**
+     * The community removes Ana: her list goes with the account (server adminPruneUser, dropBlocksOf), and her key signs
+     * nothing there now (403 account_closed, https-server.ts), nor joins again with an invite (engine/invites.ts).
+     */
+    const removeAna = () => {
+        listAt(NODE, ana.publicKey).clear();
+        net.refuse.set(NODE, { status: 403, code: 'account_closed' });
+    };
+    /** A vote brings her back (decisions-engine.ts reinstate_member): the same key and account, with no list. */
+    const reinstateAna = () => net.refuse.delete(NODE);
+    const fiveMinutesOn = () => vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+
+    it('removed, then brought back by a vote: once the phone has heard she was removed, the next sync puts her blocks back', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+
+        removeAna();
+        // The phone's own check of its community hears it (NodeStatusContext: 403 account_closed is 'closed'), naming the
+        // community as the phone is set to it, here with a trailing slash.
+        await app.communityKeepsNoBlocks(ana.publicKey, `${NODE}/`);
+        await app.syncBlocks();
+        reinstateAna();
+        fiveMinutesOn();
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([]);
+    });
+
+    it('removed, a block made meanwhile is refused (403 account_closed): nothing waits a day, and once she is back the next sync puts every block back', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        removeAna();
+        net.sent = [];
+        await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } }]);
+
+        reinstateAna();
+        fiveMinutesOn();
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [HARASSER, SPAMMER] } }]);
+        expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
+    });
+
+    it('a community set up again at the same address: she joins there again with an invite, and the next sync puts her blocks back', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        // A new node at the address: no account, so no list.
+        listAt(NODE, ana.publicKey).clear();
+        const { redeemInvite } = await import('../db');
+        expect(await redeemInvite('INV-ABCD-1234', 'Ana', ana)).toEqual({ success: true, alreadyMember: false, nodeHasPhoto: false });
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+    });
+});
+
 describe('the blocks the phone held before this build', () => {
     it('go to the community once, in one request; a key it has no row for goes on its own, and the next sync sends nothing', async () => {
         mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));

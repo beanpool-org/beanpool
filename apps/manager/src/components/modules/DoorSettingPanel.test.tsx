@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DoorSettingPanel, DOOR_PRESETS, doorChangeConsequence, readDoor, unpauseConsequence } from './DoorSettingPanel';
+import { DoorSettingPanel, DOOR_PRESETS, doorChangeConsequence, readDoor, readJoinLock, unpauseConsequence } from './DoorSettingPanel';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -12,6 +12,8 @@ import type { RolesViewer } from './NodeRolesPanel';
  * this community works' `join` (POST /api/local/admin/community-shape) by an owner. A node older than the door shows nothing; the global node's open door is shown, not offered.
  * Whether new members are paused is read from the shape (GET /api/local/admin/community-shape `join`): saving a door takes
  * them again, so a paused node says so first, and a node that won't say is offered no save (#2415 review r4360287590).
+ * Where who can join is locked (the private preview, a shut open door), the lock is said first and nothing is offered, and
+ * a save says every member was told only when the node says it told them (#2415 review r4360594247).
  */
 
 const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
@@ -25,15 +27,25 @@ const ADMIN_ROW = { member_pubkey: 'a'.repeat(64), role: 'admin', granted_at: '2
 
 type Join = 'members' | 'admins' | 'paused' | 'open';
 
+/** The shape's lock on who can join, as the server words it (apps/server config/community-shape.ts LOCK_WORDS). */
+const PREVIEW_LOCK = {
+    code: 'private_preview',
+    why: 'While the private preview is on, only owners and admins invite, and nobody can ask to join.',
+    unlock: 'Turn the private preview off on the server (PRIVATE_PREVIEW).',
+};
+
 /** How this community works as the node reads it: only `join` matters here. 'fail': the node won't say. */
-function shapeAnswer(join: Join | 'fail') {
+function shapeAnswer(join: Join | 'fail', lock: unknown = null) {
     return join === 'fail'
         ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'Internal Server Error' }) })
-        : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ kind: 'local', standby: false, settings: { join: { value: join, configured: join, source: 'default', lock: null } } }) });
+        : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ kind: 'local', standby: false, settings: { join: { value: join, configured: join, source: 'default', lock } } }) });
 }
 
-function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, body: { success: true } }, roles: unknown[] | 'fail' = [ADMIN_ROW],
-    join: Join | 'fail' = readDoor(config.door) ?? 'members') {
+/** What the route answers when who can join changed: the shape, and that every member was told. */
+const CHANGED: Answer = { ok: true, body: { shape: {}, told: 'members' } };
+
+function mockNode(config: Record<string, unknown>, save: Answer = CHANGED, roles: unknown[] | 'fail' = [ADMIN_ROW],
+    join: Join | 'fail' = readDoor(config.door) ?? 'members', lock: unknown = null) {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         if (url.includes('/api/local/admin/node-roles')) {
             return roles === 'fail'
@@ -41,7 +53,7 @@ function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, bo
                 : Promise.resolve({ ok: true, json: () => Promise.resolve({ roles }) });
         }
         if (url.includes('/api/local/admin/community-shape')) {
-            if (init?.method !== 'POST') return shapeAnswer(join);
+            if (init?.method !== 'POST') return shapeAnswer(join, lock);
             return Promise.resolve({ ok: save.ok, status: save.status ?? (save.ok ? 200 : 403), json: () => Promise.resolve(save.body) });
         }
         if (url.includes('/api/local/admin/node/config')) {
@@ -212,6 +224,84 @@ describe('Who may invite, while no new members are being taken', () => {
         await waitFor(() => expect(radio(/Known: only admins invite/)).toBeChecked());
         expect(screen.queryByText(PAUSED_NOTE)).toBeNull();
         expect(screen.queryByText(/Couldn't check whether new members are being taken here/)).toBeNull();
+    });
+});
+
+describe('Who may invite, where the node locks it', () => {
+    const NOTHING_CHANGED = 'Nothing changed: the node already had this, so nobody was told.';
+
+    it('the lock in its own words, with what would unlock it', () => {
+        expect(readJoinLock(null)).toBeNull();
+        expect(readJoinLock(undefined)).toBeNull();
+        expect(readJoinLock(PREVIEW_LOCK)).toEqual({ why: PREVIEW_LOCK.why, unlock: PREVIEW_LOCK.unlock });
+        // A lock the node names without a reason still refuses: never read as no lock.
+        expect(readJoinLock({ code: 'private_preview' })?.why).toMatch(/takes no change to who may invite/);
+    });
+
+    it('a private preview with the row at members: the lock is said first, no door is offered, and nothing is sent', async () => {
+        // The door as it works is admins under the preview (doorFor); the row still says members.
+        const fetchMock = mockNode({ door: 'admins' }, CHANGED, [ADMIN_ROW], 'members', PREVIEW_LOCK);
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(screen.getByTestId('door-locked')).toHaveTextContent(PREVIEW_LOCK.why));
+        expect(screen.getByTestId('door-locked')).toHaveTextContent(PREVIEW_LOCK.unlock);
+        const lockLine = screen.getByTestId('door-locked');
+        const heading = screen.getByRole('heading', { name: /Who may invite/ });
+        expect(heading.compareDocumentPosition(lockLine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(lockLine.compareDocumentPosition(radio(/Invite: any member invites/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // Gated, pointing at the lock's words, as a control that is not the viewer's.
+        expect(radio(/Invite: any member invites/)).toHaveAttribute('aria-disabled', 'true');
+        expect(radio(/Invite: any member invites/).getAttribute('aria-describedby')).toContain(lockLine.id);
+        expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+
+        await act(async () => { fireEvent.click(radio(/Invite: any member invites/)); });
+        expect(radio(/Invite: any member invites/)).not.toBeChecked();
+        expect(screen.queryByText(doorChangeConsequence('admins', 'members'))).toBeNull();
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(0);
+        expect(screen.queryByText(/every member is told/)).toBeNull();
+    });
+
+    it('paused under the preview: the pause is said, but not that saving takes new members again', async () => {
+        const fetchMock = mockNode({ door: 'admins' }, CHANGED, [ADMIN_ROW], 'paused', PREVIEW_LOCK);
+        await renderPanel(PASSWORD);
+        await waitFor(() => expect(screen.getByTestId('door-locked')).toHaveTextContent(PREVIEW_LOCK.why));
+        expect(screen.getByTestId('door-paused')).toHaveTextContent(/no new members are being taken for now/);
+        expect(screen.getByTestId('door-paused')).not.toHaveTextContent(/Saving a choice here/);
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(0);
+    });
+
+    it('an admin on a locked node reads both reasons', async () => {
+        mockNode({ door: 'admins' }, CHANGED, [ADMIN_ROW], 'members', PREVIEW_LOCK);
+        await renderPanel(ADMIN_KEY);
+        await waitFor(() => expect(screen.getByTestId('door-locked')).toBeInTheDocument());
+        const described = saveButton().getAttribute('aria-describedby') ?? '';
+        expect(described.split(' ')).toHaveLength(2);
+        expect(described).toContain(screen.getByTestId('door-locked').id);
+        expect(described).toContain(screen.getByText('Only an owner of this community can change who may invite.').id);
+    });
+
+    it('a 200 that told nobody changed nothing: never "every member is told", and the door stays as the node has it', async () => {
+        const fetchMock = mockNode({ door: 'members' }, { ok: true, body: { shape: {}, told: 'nobody' } });
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(radio(/Invite: any member invites/)).toBeChecked());
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(1);
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(NOTHING_CHANGED));
+        expect(screen.queryByText(/every member is told/)).toBeNull();
+        expect(screen.getByText(/\(now\)/).closest('label')).toHaveTextContent(/Invite: any member invites/);
+    });
+
+    it('a 200 that does not say who was told claims nobody was', async () => {
+        mockNode({ door: 'members' }, { ok: true, body: { success: true } });
+        await renderPanel(PASSWORD);
+        await waitFor(() => expect(radio(/Invite: any member invites/)).toBeChecked());
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(NOTHING_CHANGED));
+        expect(screen.queryByText(/every member is told/)).toBeNull();
     });
 });
 

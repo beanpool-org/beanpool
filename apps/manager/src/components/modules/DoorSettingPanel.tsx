@@ -26,6 +26,12 @@ import { passwordField } from '../../lib/node-client';
  * from the shape (GET /api/local/admin/community-shape): a paused community says so, marks no door as the one in use and
  * says before the save that saving takes new members again. A node that won't say is offered no save: never on a guess.
  *
+ * Where who can join is locked (the shape's `join.lock`: the private preview makes the door admins whatever the row says,
+ * and a door set open that the ledger keeps shut), the node refuses any change, and under the preview `door` reads admins
+ * while the row may say members, so a pick equal to the row would answer 200 with nothing changed (#2415 review
+ * r4360594247). So a lock is said first, in the server's own words with what would unlock it, and no save is offered. And a
+ * save says members were told only when the node says it told them (`told`).
+ *
  * Operator manual text for this screen: packages/beanpool-guide/operators/people/members-and-invites.md.
  */
 
@@ -69,18 +75,32 @@ export function doorChangeConsequence(from: CommunityDoor, to: CommunityDoor): s
 
 type Status = { kind: 'saved' | 'error'; text: string };
 
+/** The shape's lock on who can join, in the server's words; none where it says none. */
+export type JoinLock = { why: string; unlock?: string };
+
+export function readJoinLock(v: unknown): JoinLock | null {
+    if (v === null || v === undefined) return null;
+    const l = (typeof v === 'object' ? v : {}) as { why?: unknown; unlock?: unknown };
+    // A lock the node names but doesn't explain still refuses: say so in plain words, never offer the save.
+    const why = typeof l.why === 'string' && l.why.trim() ? l.why : 'This node takes no change to who may invite right now.';
+    return typeof l.unlock === 'string' && l.unlock.trim() ? { why, unlock: l.unlock } : { why };
+}
+
 export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Door | null>(null);
     // The owner's pick; until they pick, the door in use (none while paused: nobody comes in by it).
     const [picked, setPicked] = useState<CommunityDoor | null>(null);
     // Whether no new members are being taken: null = not read yet, 'unread' = the node would not say.
     const [paused, setPaused] = useState<boolean | 'unread' | null>(null);
+    // Why who can join can't be changed here now, if it can't (read with `paused`, from the shape).
+    const [lock, setLock] = useState<JoinLock | null>(null);
     const [saving, setSaving] = useState(false);
     // null = not known (not loaded, or the node would not say): never warn on a guess.
     const [nobodyCanAct, setNobodyCanAct] = useState<boolean | null>(null);
     const [status, setStatus] = useState<Status | null>(null);
     const ids = useId();
     const ownerOnlyId = `${ids}-owner-only`;
+    const lockedId = `${ids}-locked`;
 
     // The password is an owner's (NodeRolesPanel); a key session is whatever role it holds.
     const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
@@ -91,6 +111,7 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         setSaved(null);
         setPicked(null);
         setPaused(null);
+        setLock(null);
         setStatus(null);
         setNobodyCanAct(null);
         (async () => {
@@ -109,14 +130,20 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         })();
         (async () => {
             let join: unknown;
+            let joinLock: unknown;
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-shape'), {
                     headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 });
-                if (res.ok) join = ((await res.json()) as { settings?: { join?: { configured?: unknown } } })?.settings?.join?.configured;
+                if (res.ok) {
+                    const shapeJoin = ((await res.json()) as { settings?: { join?: { configured?: unknown; lock?: unknown } } })?.settings?.join;
+                    join = shapeJoin?.configured;
+                    joinLock = shapeJoin?.lock;
+                }
             } catch { /* read as 'unread' below */ }
             if (!mounted) return;
             setPaused(join === 'paused' ? true : join === 'members' || join === 'admins' || join === 'open' ? false : 'unread');
+            setLock(readJoinLock(joinLock));
         })();
         return () => { mounted = false; };
     }, [activeNode.url, activeNode.id]);
@@ -124,11 +151,14 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
     if (!saved) return null;
 
     const choice: CommunityDoor | null = picked ?? (saved === 'open' || paused === true ? null : saved);
-    // Saving takes new members again while paused, the door it had included; unread, nothing is saved.
-    const canSave = !!choice && saved !== 'open' && typeof paused === 'boolean' && (paused || choice !== saved);
+    // Saving takes new members again while paused, the door it had included; unread or locked, nothing is saved.
+    const canSave = !!choice && saved !== 'open' && typeof paused === 'boolean' && !lock && (paused || choice !== saved);
+    // Not the owner's, or locked: gated the same way, pointing at whichever reasons hold (lib/gated-control.ts).
+    const gated = blocked || !!lock;
+    const gatedWhy = [lock ? lockedId : '', blocked ? ownerOnlyId : ''].filter(Boolean).join(' ');
 
     const save = async () => {
-        if (!choice || blocked || !canSave) return;
+        if (!choice || gated || !canSave) return;
         const wasPaused = paused === true;
         setSaving(true);
         setStatus(null);
@@ -138,8 +168,12 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), changes: { join: choice } }),
             });
-            const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown };
-            if (res.ok) {
+            const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown; told?: unknown };
+            if (res.ok && body.told !== 'members') {
+                // Who can join always tells every member when it changes, so nobody told is nothing changed.
+                setPicked(null);
+                setStatus({ kind: 'error', text: 'Nothing changed: the node already had this, so nobody was told.' });
+            } else if (res.ok) {
                 setSaved(choice);
                 setPicked(null);
                 setPaused(false);
@@ -180,10 +214,16 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                 </p>
             ) : (
                 <>
+                    {lock && (
+                        <p id={lockedId} data-testid="door-locked" className="text-sm text-amber-200 m-0 leading-relaxed break-words">
+                            <span aria-hidden="true">🔒 </span>{lock.why}
+                            {lock.unlock && <span className="block text-xs text-nature-300 mt-1">{lock.unlock}</span>}
+                        </p>
+                    )}
                     {paused === true && (
                         <p id={`${ids}-paused`} data-testid="door-paused" className="text-sm text-amber-200 m-0 leading-relaxed break-words">
                             <strong className="text-white">Paused:</strong> no new members are being taken for now, so nobody invites and nobody can ask to join.
-                            {' '}Saving a choice here takes new members again, and every member is told.
+                            {!lock && ' Saving a choice here takes new members again, and every member is told.'}
                         </p>
                     )}
                     <fieldset className="space-y-3 m-0 p-0 border-0 min-w-0">
@@ -197,7 +237,7 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                                     htmlFor={optionId}
                                     className={`flex items-start gap-3 rounded-xl border p-3 min-h-[48px] cursor-pointer ${
                                         selected ? 'border-terra-500/60 bg-terra-500/10' : 'border-nature-800 bg-nature-950'
-                                    } ${blocked ? 'cursor-not-allowed' : ''}`}
+                                    } ${gated ? 'cursor-not-allowed' : ''}`}
                                 >
                                     <input
                                         id={optionId}
@@ -205,10 +245,10 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                                         name={`${ids}-door`}
                                         value={p.door}
                                         checked={selected}
-                                        {...gatedProps(blocked, ownerOnlyId)}
-                                        onClick={guardGated(blocked)}
-                                        onChange={guardGated(blocked, () => { setPicked(p.door); setStatus(null); })}
-                                        className={`mt-1 accent-terra-500 shrink-0 ${blocked ? GATED_LOOK : ''}`}
+                                        {...gatedProps(gated, gatedWhy)}
+                                        onClick={guardGated(gated)}
+                                        onChange={guardGated(gated, () => { setPicked(p.door); setStatus(null); })}
+                                        className={`mt-1 accent-terra-500 shrink-0 ${gated ? GATED_LOOK : ''}`}
                                     />
                                     <span className="min-w-0">
                                         <span className="block text-sm font-bold text-white break-words">
@@ -253,11 +293,11 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                     <div className="flex flex-wrap items-center gap-3">
                         <button
                             type="button"
-                            {...gatedProps(blocked, ownerOnlyId)}
-                            onClick={guardGated(blocked, () => { void save(); })}
-                            disabled={!blocked && (saving || !canSave)}
+                            {...gatedProps(gated, gatedWhy)}
+                            onClick={guardGated(gated, () => { void save(); })}
+                            disabled={!gated && (saving || !canSave)}
                             aria-busy={saving}
-                            className={`min-h-[48px] px-5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-bold transition-all disabled:opacity-50 ${blocked ? GATED_LOOK : ''}`}
+                            className={`min-h-[48px] px-5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-bold transition-all disabled:opacity-50 ${gated ? GATED_LOOK : ''}`}
                         >
                             {saving ? 'Saving…' : 'Save who may invite'}
                         </button>

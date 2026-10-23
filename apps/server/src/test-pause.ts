@@ -21,7 +21,10 @@
  *     it tells nobody she is paused, and a code she made before is refused (the check says so, the redeem in words that
  *     don't say she left), unused. She still can't answer a knock (403 not_active). She answers in the conversation she is in, and gets
  *     it again when her app asks, but starts no new one (403 `paused`), as §3.1 has it: an admin's suspension refused her
- *     every line before, a report's let her open any. She takes a line of her own down in it; her group's chat still
+ *     every line before, a report's let her open any. The one she opened with Bob, who had blocked her, kept for her alone
+ *     (engine/withheld-lines.ts), she gets again as she gets Olive's, and it stays kept for her: refusing it would tell her of
+ *     the block. One she doesn't have is refused alike, whoever has blocked whom: Cleo, who blocked her, or Wes, whom she
+ *     blocked, whose own with her is kept for him. She takes a line of her own down in it; her group's chat still
  *     refuses her taking hers down there (403), as it did before her pause, and the line stays. She CAN close the deals
  *     she has open: Bea completes hers and Pia is paid, Pia completes one she bought, and cancels another; and she can
  *     take her own listing down.
@@ -35,6 +38,10 @@
  *     when nobody keeps it (his admin role back, his listings back).
  *  4. With formal Decisions off (the operator's switch), a report's pause opens the record nobody votes on, and the tick
  *     lifts it when its 7 days end.
+ *  5. A visitor's row (someone a member wrote to, who never joined) paused by an admin, or through a report, answers nobody:
+ *     its line is refused as an admin's suspension refused it before the one pause (400, 'Account is disabled'), and so is
+ *     asking for the conversation again. A paused member answers in the conversations they are in (§3.1); a visitor's row
+ *     can only ever answer, so a pause that let it would take nothing from it.
  *
  * The re-key's interplay with a report's pause is test-rekey-cancel's (sections H to J); a standby's copy of a pause is
  * test-standby-board-standing's; what a paused member reads is test-suspended-and-visitor-reads'.
@@ -285,6 +292,9 @@ async function main() {
     const vic = seedMember('BuyerVic');         // has another, which Pia cancels
     const olive = seedMember('SellerOlive');    // sells Pia something
     const rita = seedMember('ReaderRita');      // reads the board, with no deal on anything
+    const bob = seedMember('BlockingBob');      // has blocked Pia, who opens a DM with him all the same
+    const cleo = seedMember('BlockingCleo');    // has blocked Pia, who has no DM with her
+    const wes = seedMember('BlockedWes');       // Pia has blocked him, and he opens a DM with her all the same
     const ownerSession = ownerSessionHeaders(gen.pubKeyHex);
     const adaSession = (() => {
         const { handshakeToken } = mintHandshakeToken(ada.pubKeyHex, 'admin');
@@ -339,6 +349,20 @@ async function main() {
     const kayKnock = (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(kay.pubKeyHex) as { id: string } | undefined)?.id ?? '';
     assert(knocked.status === 201 && !!kayKnock, `setup: Kay asks to join (${knocked.status})`);
     assert((await board(rita)).has(piaApples), 'setup: Rita reads Pia\'s apples on the board');
+    // Bob and Cleo have blocked Pia, and she has blocked Wes. The DM she opens with Bob is kept for her alone
+    // (engine/withheld-lines.ts), as the one Wes opens with her is for him: neither is a chat the other has.
+    for (const [blocker, blocked] of [[bob, pia], [cleo, pia], [pia, wes]] as const) {
+        const blocking = await post('/api/blocks', { targetPubkey: blocked.pubKeyHex }, blocker);
+        if (blocking.status !== 200) throw new Error(`${blocker.callsign} could not block ${blocked.callsign}: ${blocking.status} ${blocking.text}`);
+    }
+    const openDm = (by: Id, other: Id) =>
+        post('/api/messages/conversation', { type: 'dm', participants: [by.pubKeyHex, other.pubKeyHex], createdBy: by.pubKeyHex }, by);
+    const keptFor = (id: string) => (db.prepare('SELECT owner_pubkey FROM withheld_conversations WHERE id = ?').get(id) as { owner_pubkey: string } | undefined)?.owner_pubkey;
+    const isChat = (id: string) => !!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(id);
+    const bobDm = String((await openDm(pia, bob)).body?.conversation?.id ?? '');
+    const wesDm = String((await openDm(wes, pia)).body?.conversation?.id ?? '');
+    assert(keptFor(bobDm) === pia.pubKeyHex && !isChat(bobDm) && keptFor(wesDm) === wes.pubKeyHex && !isChat(wesDm),
+        'setup: the DM Pia opens with Bob, who blocked her, is kept for her alone, and the one Wes opens with her, whom she blocked, for him');
 
     const beforePause = new Date(Date.now() - 1).toISOString();
     await sleep(5);
@@ -408,6 +432,21 @@ async function main() {
                                  WHERE a.public_key = ? AND b.public_key = ?`).get(pia.pubKeyHex, rita.pubKeyHex) as { n: number }).n;
     assert(piaOpens.status === 403 && piaOpens.body?.code === 'paused' && PAUSED_INVITE.test(piaOpens.body?.error ?? '') && ritaDms === 0,
         `but starts no new one, told why, and none is made (${piaOpens.status} ${piaOpens.text.slice(0, 120)})`);
+    // The one kept for her alone (Bob blocked her before she opened it) answers as Olive's does: the same conversation, in
+    // the same shape. Refused, it would tell her of the block, which the node keeps from her (engine/withheld-lines.ts).
+    const shape = (a: Answer) => `${a.status} ${Object.keys(a.body?.conversation ?? {}).sort().join(',')}`;
+    const bobAgain = await openDm(pia, bob);
+    assert(shape(bobAgain) === shape(piaAsksAgain) && bobAgain.body?.conversation?.id === bobDm,
+        `she gets the one she opened with Bob, who had blocked her, again, as she gets Olive's (${shape(bobAgain)} | ${shape(piaAsksAgain)})`);
+    assert(keptFor(bobDm) === pia.pubKeyHex && !isChat(bobDm), 'and it is still kept for her alone: Bob has no chat with her');
+    const refusal = (a: Answer) => `${a.status} ${a.body?.code} ${a.body?.error}`;
+    const cleoAsked = await openDm(pia, cleo), wesAsked = await openDm(pia, wes);
+    const anyWithCleo = db.prepare(`SELECT 1 FROM withheld_conversations WHERE (owner_pubkey = @a AND other_pubkey = @b) OR (owner_pubkey = @b AND other_pubkey = @a)
+                                    UNION ALL SELECT 1 FROM conversation_participants x JOIN conversation_participants y ON x.conversation_id = y.conversation_id
+                                    WHERE x.public_key = @a AND y.public_key = @b`).get({ a: pia.pubKeyHex, b: cleo.pubKeyHex });
+    assert(refusal(cleoAsked) === refusal(piaOpens) && refusal(wesAsked) === refusal(piaOpens) && !anyWithCleo,
+        `one with Cleo, who blocked her, or with Wes, whom she blocked, is refused as Rita's is, and none is made (${refusal(cleoAsked)} | ${refusal(wesAsked)})`);
+    assert(keptFor(wesDm) === wes.pubKeyHex && !isChat(wesDm), 'and the one Wes opened with her is still kept for him alone');
     const piaTakesDmLineDown = await post('/api/messages/delete', { messageId: piaDmLine }, pia);
     assert(piaTakesDmLineDown.status === 200 && lineType(piaDmLine) === 'removed',
         `she takes a line of her own down in it (${piaTakesDmLineDown.status} ${lineType(piaDmLine)} ${piaTakesDmLineDown.text.slice(0, 100)})`);
@@ -514,6 +553,31 @@ async function main() {
     } finally {
         db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
     }
+
+    // ── 5. A visitor's row ───────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n── 5. a visitor\'s row ──');
+    // Vee and Wren never joined: Mia wrote to each, which made each a visitor's row, and each answers her.
+    const mia = seedMember('MessagingMia');
+    const vee = keypair('VisitingVee'), wren = keypair('VisitingWren');
+    const veeDm = se.createConversation('dm', [mia.pubKeyHex, vee.pubKeyHex], mia.pubKeyHex)!.id;
+    const wrenDm = se.createConversation('dm', [mia.pubKeyHex, wren.pubKeyHex], mia.pubKeyHex)!.id;
+    const answers = (visitor: Id, conversationId: string) =>
+        post('/api/messages/send', { conversationId, authorPubkey: visitor.pubKeyHex, ...lockedDm() }, visitor);
+    const linesBy = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE author_pubkey = ?').get(id.pubKeyHex) as { n: number }).n;
+    const veeAnswers = await answers(vee, veeDm), wrenAnswers = await answers(wren, wrenDm);
+    assert(row(vee.pubKeyHex)?.is_visitor === 1 && row(wren.pubKeyHex)?.is_visitor === 1 && veeAnswers.status === 200 && wrenAnswers.status === 200,
+        `setup: Vee and Wren, visitors' rows Mia wrote to, each answer her (${veeAnswers.status}, ${wrenAnswers.status})`);
+    const veePaused = await asAdmin(ownerSession, `/api/local/admin/users/${vee.pubKeyHex}/suspend`, { reason: 'Threats to a member in a direct message' });
+    const wrenPaused = await asAdmin(adaSession, `/api/local/admin/reports/${reportOn(wren, 'Threats in a direct message')}/action`, { suspendUser: true });
+    assert(veePaused.status === 200 && statusOf(vee) === 'disabled' && wrenPaused.status === 200 && statusOf(wren) === 'disabled',
+        `an owner pauses Vee's row, and an admin Wren's through a report, as a member's are (${veePaused.status} ${statusOf(vee)}, ${wrenPaused.status} ${statusOf(wren)})`);
+    const linesBefore = linesBy(vee) + linesBy(wren);
+    const veeAgain = await answers(vee, veeDm), wrenAgain = await answers(wren, wrenDm);
+    assert(veeAgain.status === 400 && veeAgain.body?.error === 'Account is disabled' && refusal(wrenAgain) === refusal(veeAgain)
+        && linesBy(vee) + linesBy(wren) === linesBefore,
+        `then neither answers: each line is refused as an admin's suspension refused it before the one pause, and none is stored (${refusal(veeAgain)} | ${refusal(wrenAgain)})`);
+    const veeAsks = await post('/api/messages/conversation', { type: 'dm', participants: [vee.pubKeyHex, mia.pubKeyHex], createdBy: vee.pubKeyHex }, vee);
+    assert(veeAsks.status === 400 && veeAsks.body?.error === 'Account is disabled', `nor does Vee get the conversation again (${refusal(veeAsks)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

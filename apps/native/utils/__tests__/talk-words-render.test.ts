@@ -233,6 +233,8 @@ const ASKED: Array<{ url: string; name: string; answer: 'unreachable' | { status
     { url: 'https://shut.example', name: 'Shut Gate', answer: { status: 404, body: { error: 'We take no requests here' } } },
 ];
 const CLOSED_WORDS = 'We take no requests here';
+/** The node's answer to a new conversation from a member whose account is paused (403 `paused`, removal by vote S1). */
+const PAUSED_OPEN_WORDS = 'Your account here is paused for now, so you can’t start a new conversation. You can still answer the ones you’re in.';
 
 /** Everything members and the community wrote: shown as written, in every language. */
 const OTHERS = [
@@ -241,7 +243,7 @@ const OTHERS = [
     ...YOUR_GROUPS.flatMap((g: any) => [g.name, g.lastMessage?.text, g.lastMessage?.authorCallsign]),
     ...FRIENDS.map((f) => f.callsign), ...MEMBERS.map((m) => m.callsign), ...ADDED_YOU.map((a) => a.callsign),
     ...INVITES.flatMap((i) => [i.code, i.intendedFor]), ...KNOCKS.flatMap((k) => [k.callsign, k.message, k.fromNode]),
-    ...ASKED.map((a) => a.name), CLOSED_WORDS,
+    ...ASKED.map((a) => a.name), CLOSED_WORDS, PAUSED_OPEN_WORDS,
     NODE, ME.callsign,
 ].filter((s): s is string => typeof s === 'string' && /\p{L}/u.test(s)).sort((a, b) => b.length - a.length);
 
@@ -490,6 +492,23 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         await renderIn('xx', createElement(NewMessageScreen));
         expect(host.textContent).toContain('Kofi');
         expect(host.textContent).toContain(pseudoLocalise('💬 Recently Chatted'));
+        expect(bypassing()).toEqual([]);
+    });
+
+    it("the New message picker, a conversation the node won't open (a paused account): its words, never nothing", async () => {
+        net.answer = community({ createConversationApi: new Error(PAUSED_OPEN_WORDS) });
+        await renderIn('xx', createElement(NewMessageScreen));
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
+        expect(net.calls).toContain('db.createConversationApi');
+        expect(alerts.said).toEqual([pseudoLocalise('Error'), PAUSED_OPEN_WORDS]);
+        expect(bypassing()).toEqual([]);
+    });
+
+    it('the New message picker, offline: the phone says to connect, in the member\'s language', async () => {
+        net.answer = community({ createConversationApi: new Error('You are off-grid. Please connect to a node first.') });
+        await renderIn('xx', createElement(NewMessageScreen));
+        await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Zoe')) ?? null, "Zoe's row");
+        expect(alerts.said).toEqual([pseudoLocalise('Error'), pseudoLocalise('Connect to your community to start a chat.')]);
         expect(bypassing()).toEqual([]);
     });
 

@@ -287,7 +287,10 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
 
     it("a visitor's page ends after How we deal, with a sentence; no listings are asked for", async () => {
         await open({ detail: visitorsView(), keeperOf: [] }, { isMember: false });
-        expect(byId('shopfront-how')).not.toBeNull();
+        // The node sends a visitor its shop's kind and counts only (engine/shops.ts visitorShop): no How we deal to show.
+        expect(byId('shopfront-line-0')?.textContent).toBe('🍞 Cooked food and baking · since Sep 2026');
+        expect(byId('shopfront-how')).toBeNull();
+        before(byId('shopfront-about'), byId('shopfront-visitor'), 'the note where the page ends');
         expect(byId('shopfront-visitor')?.textContent).toBe("Members of this community see what it offers, its keepers' badges and its accounts.");
         for (const gone of ['shopfront-featured', 'shopfront-together', 'shopfront-sections', 'shopfront-message', 'shopfront-money', 'enterprise-thread', `shopfront-badges-${KOFI}`]) {
             expect(byId(gone), gone).toBeNull();

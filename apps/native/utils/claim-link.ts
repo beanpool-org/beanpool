@@ -121,7 +121,7 @@ export function claimRouteFromSystemPath(path: unknown): string | null {
 }
 
 /** The in-app route a claim link opens (app/claim-community.tsx), with only the checked fields. */
-export function claimRouteFor(link: ClaimLink): string {
+export function claimRouteFor(link: ClaimLink): `/claim-community${string}` {
     const q: string[] = [];
     if (link.node) q.push(`node=${encodeURIComponent(link.node)}`);
     if (link.nodeRefused) q.push('refused=1');

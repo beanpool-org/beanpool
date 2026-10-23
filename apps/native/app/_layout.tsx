@@ -21,9 +21,9 @@ import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
-import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
+import { getPendingClaim, getPendingOnboarding, pendingClaimLanding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
-import { guestRedirect, memberRedirect } from '../utils/member-landing';
+import { guestRedirect, landOnClaim, memberRedirect } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { DrawnInLanguage, LanguageProvider, useWords, whenLanguagePicked } from '../components/LanguageProvider';
@@ -198,11 +198,17 @@ function RootLayoutNav() {
     // keypair was created but before the invite was redeemed. While true, the
     // identity is a stranger to every node BY DESIGN — route back into the
     // wizard, never to node-mismatch (see utils/onboarding-state.ts).
+    // A claim waiting for the phone's account (the claim screen's "Make my account") is read with it, and handed to the
+    // landing before the flag is set: the guard waits for the flag, so its landing from welcome already knows of the claim.
     const [pendingOnboarding, setPendingOnboardingFlag] = useState<boolean | null>(null);
     useEffect(() => {
         let mounted = true;
         const refresh = () => {
-            getPendingOnboarding().then(p => { if (mounted) setPendingOnboardingFlag(!!p); });
+            Promise.all([getPendingOnboarding(), getPendingClaim()]).then(([p, claim]) => {
+                if (!mounted) return;
+                landOnClaim(pendingClaimLanding(claim));
+                setPendingOnboardingFlag(!!p);
+            });
         };
         refresh();
         const unsubscribe = subscribePendingOnboarding(refresh);
@@ -613,8 +619,9 @@ function RootLayoutNav() {
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
         // on a fresh device that holds no local identity yet — the screen mints
         // the new identity itself at the "Submit Request" step — so it must be
-        // reachable without one. Any other route → back to welcome
-        // (utils/auth-return.ts, `setupRedirect`).
+        // reachable without one. So is the claim screen, which keeps a claim
+        // for the account the phone makes first. Any other route → back to
+        // welcome (utils/auth-return.ts, `setupRedirect`).
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {

@@ -6,8 +6,9 @@
  * (REGISTRAR_URL), never the live one. The check that https://<name>.beanpool.org reaches the node is the one fetch
  * pointed at the node itself (BEANPOOL_CLAIM_CHECK_ORIGIN, NODE_ENV=test only): no DNS here.
  *   1. A taken name: the registrar's reason, exit 1, nothing changed (no address, the code still waits).
- *   2. A live name: the node claimed it with its own key within ~10 s; the QR carries the https name. The steps for the
- *      phone name its own labels, each still in the phone's source (find-community.tsx, claim-community.tsx).
+ *   2. A live name: the node claimed it with its own key within ~10 s; the QR carries the https name. The next steps,
+ *      numbered (install the app from its store, make an account, scan), name the phone's own labels, each still in the
+ *      phone's source (find-community.tsx, claim-community.tsx, WelcomeDoors.tsx).
  *   3. --name on a node that holds an address is refused.
  *   4. The code is never in the node's log.
  *   5. --key --callsign: owner granted with a break-glass code; the burn as the HTTP claim's (file gone, K and salt gone,
@@ -225,17 +226,33 @@ async function main(): Promise<void> {
         check(claimedIn < 10_000, `the node claimed cairns with its own key within ~10 s (${claimedIn} ms after the command started)`);
         check(live.out.includes(await qrOf(`beanpool://claim?node=${encodeURIComponent('https://cairns.beanpool.org')}&id=${id}&code=${code}`)), 'the QR carries the https name, the code id and the code');
         check(live.out.includes(`The one-time claim code: ${code}`), 'the code is printed');
-        check(live.out.includes('On your phone, scan this QR code. BeanPool opens "Claim ‹name›" with the code filled in: fill in "Your name here" and tap "Claim and become owner".')
-            && live.out.includes('Or open BeanPool → Find a community ("Communities near you" on Home), type https://cairns.beanpool.org in the search box, tap "Claim ‹name›", type the code under "Claim code", fill in "Your name here" and tap "Claim and become owner".')
-            && live.out.includes('That phone becomes the owner. The code works once.'), 'the steps for the phone, label for label');
+        // What to do next, in order (Dax, 23 Oct: "the start seed prompt doesn't specify exactly where to go"): the app from
+        // its store, an account on it, then the QR, or Find a community by hand. The last lines the command prints.
+        const steps = live.out.trimEnd().split('\n').slice(-7).join('\n');
+        const nextSteps = [
+            'Next, on your phone (with BeanPool and your account on it already, go to 3):',
+            '  1. Install BeanPool: Google Play https://play.google.com/store/apps/details?id=org.beanpool.pillar',
+            '     or the App Store https://apps.apple.com/app/id6761870086',
+            '  2. Open BeanPool and make your account (no invite? tap "Explore BeanPool worldwide"). It shows you 12 words: write them on paper.',
+            '  3. Scan this QR code with the phone\'s camera. BeanPool opens "Claim ‹name›" with the code filled in: fill in "Your name here" and tap "Claim and become owner".',
+            '  4. Or open BeanPool → Find a community ("Communities near you" on Home), type https://cairns.beanpool.org in the search box, tap "Claim ‹name›", type the code under "Claim code", fill in "Your name here" and tap "Claim and become owner".',
+            'That phone becomes the owner. The code works once.',
+        ].join('\n');
+        check(steps === nextSteps, `the next steps, numbered: install, make an account, scan, or Find a community; label for label${steps === nextSteps ? '' : `\n${steps}`}`);
         check(!live.out.includes('Claim a community'), 'no "Claim a community" to open: the phone has no such menu, only that screen from a link');
+        // The stores' own pages for the app the website offers (apps/website/index.html), not look-alikes.
+        const website = fs.readFileSync(path.join(SRC, '../../website/index.html'), 'utf8');
+        check(website.includes('https://play.google.com/store/apps/details?id=org.beanpool.pillar') && /https:\/\/apps\.apple\.com\/[a-z/-]*\/id6761870086/.test(website),
+            'the store links name the app the website links to');
         // Each label the steps name, where the phone draws it: renamed there, this fails until the terminal says the same.
         const nativeApp = path.join(SRC, '../../native');
         const claimScreen = fs.readFileSync(path.join(nativeApp, 'app/claim-community.tsx'), 'utf8');
         const findScreen = fs.readFileSync(path.join(nativeApp, 'app/find-community.tsx'), 'utf8');
         const homeCard = fs.readFileSync(path.join(nativeApp, 'components/home/FindCommunityBody.tsx'), 'utf8');
+        const doors = fs.readFileSync(path.join(nativeApp, 'components/WelcomeDoors.tsx'), 'utf8');
         check(["t('Claim {name}'", "t('Claim code')", "t('Your name here')", "t('Claim and become owner')", "t('Claim a community')", "t('Server address')", "t('Check this server')"].every(l => claimScreen.includes(l))
-            && ["t('FIND A COMMUNITY')", "t('Claim {name}', { name: claimable.name })"].every(l => findScreen.includes(l)) && homeCard.includes("text={t('Communities near you')}"),
+            && ["t('FIND A COMMUNITY')", "t('Claim {name}', { name: claimable.name })"].every(l => findScreen.includes(l)) && homeCard.includes("text={t('Communities near you')}")
+            && doors.includes("accessibilityLabel={t('Explore BeanPool worldwide')}"),
             'every label the steps name is still on the phone');
         check(readConfig(a).addressRequest === null, 'the request is cleared once the registrar holds the name');
 
@@ -292,9 +309,13 @@ async function main(): Promise<void> {
         check(down.code === 0 && /No answer within/.test(down.out) && down.out.includes('Address: http://192.168.1.20:8080'), `--name with the registrar down falls back to --direct (${down.code})`);
         const nothing = await cli(c, ['--no-name']);
         check(nothing.code === 0 && /phone will ask/.test(nothing.out), 'with no address at all, the QR carries none and says the phone will ask');
-        check(nothing.out.includes('On your phone, scan this QR code. BeanPool opens "Claim a community" with the code filled in: type this server\'s address under "Server address", tap "Check this server", fill in "Your name here" and tap "Claim and become owner".')
-            && nothing.out.includes('Or open BeanPool → Find a community ("Communities near you" on Home), type this server\'s address in the search box, tap "Claim ‹name›",'),
-            'with no address, the phone\'s steps ask for the address where the phone does');
+        // The same first two steps; then the phone asks for the address where it does.
+        const noAddressSteps = nothing.out.trimEnd().split('\n').slice(-7);
+        check(noAddressSteps.slice(0, 4).join('\n') === nextSteps.split('\n').slice(0, 4).join('\n')
+            && noAddressSteps[4] === '  3. Scan this QR code with the phone\'s camera. BeanPool opens "Claim a community" with the code filled in: type this server\'s address under "Server address", tap "Check this server", fill in "Your name here" and tap "Claim and become owner".'
+            && noAddressSteps[5].startsWith('  4. Or open BeanPool → Find a community ("Communities near you" on Home), type this server\'s address in the search box, tap "Claim ‹name›",')
+            && noAddressSteps[6] === 'That phone becomes the owner. The code works once.',
+            'with no address, the same steps, and the phone\'s step asks for the address where the phone does');
 
         console.log('\n8. Never in a backup or a standby\'s copy');
         const { redactLocalConfig } = await import('./config/local-config.js');

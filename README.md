@@ -72,7 +72,7 @@ docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/
 docker compose exec beanpool-node beanpool claim
 ```
 
-The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose. Scan the QR code with your phone, or open BeanPool → **Find a community**, type the server's address in the search box and tap **Claim ‹name›**. That phone becomes the community's owner.
+The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose, and what to do next. First, on the phone that will own the community, install BeanPool from [Google Play](https://play.google.com/store/apps/details?id=org.beanpool.pillar) or the [App Store](https://apps.apple.com/app/id6761870086) and make your account: with no invite, tap **Explore BeanPool worldwide**. It shows you 12 words: write them on paper. Then scan the QR code with your phone's camera, or open BeanPool → **Find a community**, type the server's address in the search box and tap **Claim ‹name›**. That phone becomes the community's owner.
 
 Phones reach a community on the internet only over https. The choices for the last line:
 

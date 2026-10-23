@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import { offeredProviders } from './sso-providers';
+import { CLAIM_CODE_ID, claimNodeOrigin, claimRouteFor, isClaimCode } from './claim-link';
 
 /**
  * Mid-wizard onboarding state.
@@ -252,6 +253,101 @@ function savedJoinEnrolment(saved: KeeperEnrolmentResult | null | undefined): Ke
     if (enrolledSso.length === saved.enrolledSso.length) return saved;
     if (enrolledSso.length === 0) return null;
     return { ...saved, enrolledSso, enrolled: enrolledSso.map(() => 'sso' as const), available: enrolledSso.length };
+}
+
+/**
+ * A claim waiting for this phone's account (app/claim-community.tsx, Dax's report of 23 Oct 2026): the `beanpool claim` QR
+ * scanned on a phone with no account yet, whose "Make my account" keeps the claim here and opens the first screen. Once an
+ * account is on the phone the root guard's landing from welcome goes back to the claim screen with it
+ * (utils/member-landing.ts `landOnClaim`), whichever door made the account and however many restarts that took.
+ *
+ * Its own key beside the wizard's record, not a field of it: the record means a join half done, which the guard holds on
+ * welcome, and the wizard writes it whole and clears it at the end, just before the claim is wanted. Nothing in it is a key;
+ * the code is the one-time claim code the server printed, kept no longer than {@link PENDING_CLAIM_TTL_MS} and taken off by
+ * the claim screen once it is up with an account ({@link handOverPendingClaim}), spent, refused or left (Back), by a wipe,
+ * and by the next read after it runs out. Never
+ * logged. Every field is checked again when read back, as the link's were (utils/claim-link.ts).
+ */
+export interface PendingClaim {
+    /** The server's origin, or null when the QR named none (the claim screen then asks for the address). */
+    node: string | null;
+    codeId: string | null;
+    code: string | null;
+    /** When "Make my account" kept it, in ms. */
+    savedAt: number;
+}
+
+const CLAIM_KEY = 'beanpool_pending_claim';
+/** How long a claim waits for the account: a day, plenty for a store install and an account, then the QR again. */
+export const PENDING_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** The claim as it was read from the link, its fields checked as the link's are; a field that fails is left out. */
+function checkedClaim(raw: { node?: unknown; codeId?: unknown; code?: unknown }): Omit<PendingClaim, 'savedAt'> {
+    const node = typeof raw.node === 'string' ? claimNodeOrigin(raw.node) : null;
+    const codeId = typeof raw.codeId === 'string' && CLAIM_CODE_ID.test(raw.codeId) ? raw.codeId : null;
+    const code = isClaimCode(raw.code) ? raw.code.trim().toLowerCase() : null;
+    return { node, codeId, code };
+}
+
+export async function setPendingClaim(claim: { node: string | null; codeId: string | null; code: string | null }, now: number = Date.now()): Promise<void> {
+    try {
+        await AsyncStorage.setItem(CLAIM_KEY, JSON.stringify({ ...checkedClaim(claim), savedAt: now }));
+    } catch {
+        // Not kept: the claim screen still opens from the QR again once the account is made.
+    }
+    notify();
+}
+
+/** The waiting claim, or null: none, unreadable, or out of time (then it is taken off). */
+export async function getPendingClaim(now: number = Date.now()): Promise<PendingClaim | null> {
+    let raw: string | null;
+    try {
+        raw = await AsyncStorage.getItem(CLAIM_KEY);
+    } catch {
+        return null;
+    }
+    if (!raw) return null;
+    let saved: any;
+    try {
+        saved = JSON.parse(raw);
+    } catch {
+        saved = null;
+    }
+    const savedAt = typeof saved?.savedAt === 'number' ? saved.savedAt : NaN;
+    // Out of time, from the future (a clock set back), or not a claim at all: taken off.
+    if (!(now - savedAt >= 0 && now - savedAt < PENDING_CLAIM_TTL_MS)) {
+        await clearPendingClaim();
+        return null;
+    }
+    return { ...checkedClaim(saved), savedAt };
+}
+
+export async function clearPendingClaim(): Promise<void> {
+    try {
+        await AsyncStorage.removeItem(CLAIM_KEY);
+    } catch {}
+    notify();
+}
+
+/**
+ * The claim screen is up with an account on the phone: the claim travels in that screen's route from here, so the one kept
+ * for the account is taken off the phone. Left by the system back, a closed app, a notification or a community switch,
+ * the screen is never the guard's landing again (PR #2412 review: it was, for a day, unless the member found the header's
+ * arrow). Kept while a join is half done: the guard sends the screen back to welcome then, and the claim is wanted once
+ * the join ends.
+ */
+export async function handOverPendingClaim(): Promise<void> {
+    if (await getPendingOnboarding()) return;
+    await clearPendingClaim();
+}
+
+/** Where the root guard lands for a waiting claim, and until when (utils/member-landing.ts `landOnClaim`); null for none. */
+export function pendingClaimLanding(claim: PendingClaim | null): { route: ReturnType<typeof claimRouteFor>; until: number } | null {
+    if (!claim) return null;
+    return {
+        route: claimRouteFor({ node: claim.node, nodeRefused: false, codeId: claim.codeId, code: claim.code }),
+        until: claim.savedAt + PENDING_CLAIM_TTL_MS,
+    };
 }
 
 /** Subscribe to changes made through this module (used by the root gatekeeper). */

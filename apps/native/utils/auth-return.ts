@@ -19,9 +19,9 @@ export interface SetupState {
 
 /**
  * The first two checks of the root guard in app/_layout.tsx: while the member has no identity yet or a join wizard
- * pending, every root except welcome (and guardian recovery, which runs without an identity) is replaced with
- * welcome. Null means leave the screen where it is. Once the member is set up this is always null, and the guard's
- * node-recognition checks decide as before.
+ * pending, every root except welcome (and, with no identity, guardian recovery, a re-key code and a claim, which run
+ * without one) is replaced with welcome. Null means leave the screen where it is. Once the member is set up this is
+ * always null, and the guard's node-recognition checks decide as before.
  *
  * A sign-in return screen (app/auth/*) gets no exemption. On a phone it never mounts, because the return link does
  * not navigate. Anywhere it does mount (the web preview), the guard replaces it before its own 300 ms timer can open
@@ -31,7 +31,10 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     const root = segments[0];
     // `rekey-code`: a new phone taking over an account with an admin's re-key code (app/rekey-code.tsx) holds no identity
     // until the admin binds it (utils/rekey-redeem.ts).
-    if (!hasIdentity) return root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' ? null : '/welcome';
+    // `claim-community`: the `beanpool claim` QR scanned on a phone with no account yet. Sent to welcome, the claim was
+    // lost and the operator left on the first screen with no idea where to go (Dax, 23 Oct 2026); the screen itself now
+    // says an account comes first and keeps the claim for it ("Make my account"). It claims nothing without one.
+    if (!hasIdentity) return root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' ? null : '/welcome';
     if (pendingOnboarding) return root === 'welcome' ? null : '/welcome';
     return null;
 }

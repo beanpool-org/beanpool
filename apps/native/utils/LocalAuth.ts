@@ -2,6 +2,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { KEY_ITEM_OPTIONS } from './identity';
 import { appLockNow, clockReadFailures } from './app-lock-clock';
 
 const APP_LOCK_KEY = 'beanpool_app_lock_enabled';
@@ -338,7 +339,7 @@ async function readAppLockSetting(): Promise<boolean> {
         if (isWeb) {
             localStorage.setItem(APP_LOCK_KEY, legacyVal);
         } else {
-            await SecureStore.setItemAsync(APP_LOCK_KEY, legacyVal, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+            await SecureStore.setItemAsync(APP_LOCK_KEY, legacyVal, KEY_ITEM_OPTIONS);
         }
         await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
     } catch (e) {
@@ -392,7 +393,7 @@ export async function setAppLockEnabled(enabled: boolean): Promise<void> {
         if (isWeb) {
             localStorage.setItem(APP_LOCK_KEY, strVal);
         } else {
-            await SecureStore.setItemAsync(APP_LOCK_KEY, strVal, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+            await SecureStore.setItemAsync(APP_LOCK_KEY, strVal, KEY_ITEM_OPTIONS);
         }
         appLockLastKnown = enabled;
         await AsyncStorage.removeItem(APP_LOCK_KEY).catch(() => {});
@@ -420,7 +421,7 @@ export async function turnAppLockOnForRole(): Promise<RoleAppLockResult> {
         const on = await readAppLockSetting();
         const markDone = () => isWeb
             ? Promise.resolve(localStorage.setItem(APP_LOCK_ROLE_DEFAULT_KEY, 'true'))
-            : SecureStore.setItemAsync(APP_LOCK_ROLE_DEFAULT_KEY, 'true', { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+            : SecureStore.setItemAsync(APP_LOCK_ROLE_DEFAULT_KEY, 'true', KEY_ITEM_OPTIONS);
         if (on) {
             if (done !== 'true') await markDone();
             return 'already-on';
@@ -431,7 +432,7 @@ export async function turnAppLockOnForRole(): Promise<RoleAppLockResult> {
         if (isWeb) {
             localStorage.setItem(APP_LOCK_KEY, 'true');
         } else {
-            await SecureStore.setItemAsync(APP_LOCK_KEY, 'true', { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+            await SecureStore.setItemAsync(APP_LOCK_KEY, 'true', KEY_ITEM_OPTIONS);
         }
         appLockLastKnown = true;
         await markDone();

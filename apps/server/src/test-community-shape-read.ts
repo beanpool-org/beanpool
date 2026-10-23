@@ -628,6 +628,25 @@ async function main(): Promise<void> {
     const standbyHttp = await call('GET', null, PATH, undefined, owner);
     assert(standbyHttp.status === 200 && standbyHttp.body?.standby === true && standbyHttp.body?.settings?.join?.value === 'admins',
         `over HTTPS the standby answers the same (${show(standbyHttp)})`);
+    // A standby can't know that its main server publishes (here the copy's schedule is Never, so it doesn't), and where
+    // the switch is off it says what the main server's shape says: off, nothing locked.
+    const standbyWhy = fromCopy.settings.listed.lock?.why ?? '';
+    assert(!/main server/i.test(standbyWhy), `the standby's reason claims nothing of the main server, whose copied schedule is Never (${standbyWhy})`);
+    const SWITCH_OFF: [string, () => void][] = [
+        ['the global kind', () => { process.env.NODE_PROFILE = 'global'; }],
+        ['its nodeProfile.publishToDirectory override', () => setOverrideRow('publishToDirectory', false)],
+    ];
+    for (const [label, switchOff] of SWITCH_OFF) {
+        switchOff();
+        const asStandby = readShape().settings.listed;
+        setNodeRole('primary');
+        const asMain = readShape().settings.listed;
+        setNodeRole('backup');
+        assert(asStandby.value === false && asStandby.lock === null && isDeepStrictEqual(asStandby, asMain),
+            `a standby whose switch is off (${label}): Listed is off with nothing locked, as the main server's (${JSON.stringify(asStandby)}; main ${JSON.stringify(asMain)})`);
+        process.env.NODE_PROFILE = '';
+        setRow(OVERRIDE_PREFIX + 'publishToDirectory', null);
+    }
     setNodeRole('primary');
     const mainAgain = readShape();
     assert(mainAgain.standby === false && mainAgain.copiedAt === undefined && mainAgain.settings.join.value === 'members',

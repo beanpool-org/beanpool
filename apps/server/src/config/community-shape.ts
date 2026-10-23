@@ -43,7 +43,8 @@
  * (config/community-settings.ts), so the shape reads the copy: each row the copy names, over its own, as a take-over would
  * install them. The profile overrides are already the main server's (a standby keeps them as copied), and the env is this
  * server's. `copiedAt` says when the copy is from; null, there is none yet, and the rows are its own, which is what a
- * promotion would run with. Listed says a standby never publishes.
+ * promotion would run with. Listed says a standby never publishes, wherever the switch is on; with it off, it says what
+ * the main server's shape says.
  *
  * Not here yet: the members' `knownFloor` in `features` (design §6.2), which waits on Marty's answer to the design's Q7.
  */
@@ -203,7 +204,7 @@ const LOCK_WORDS = {
         + '. Whoever runs the server changes it.',
     onTheServer: (env: string) => `Set on the server (${env}). ${ASK_THE_SERVER}`,
     scheduleNever: 'Set to be listed, but the directory update schedule is Never, so nothing is sent. Choose a schedule under Node Identity.',
-    standbyListed: 'This server is a standby: it never publishes to the directory. The main server does.',
+    standbyListed: 'This server is a standby: it never publishes to the directory.',
     openMembership: 'On while nobody can read the whole member directory (openMembership): the apps find people on demand.',
     hatchOpen: (flags: string[]) => `This server's settings open ${flags.map((f) => `${HATCH_WORDS[f] ?? f} (${f}=false)`).join(' and ')} to anyone. `
         + 'Nothing here can close that: ask whoever runs the server.',
@@ -429,12 +430,15 @@ export function readShape(): Shape {
 
 /**
  * Listed: whether the directory is sent this community's entry, as the publisher decides at each push (and its timer, at
- * the schedule): the switch, then DIRECTORY_UNLISTED, the schedule's Never, and the hold-backs (directoryHeldBack).
+ * the schedule): the switch, then DIRECTORY_UNLISTED, the schedule's Never, and the hold-backs (directoryHeldBack). A
+ * standby sends nothing (the publisher asks that first); it is named only where the switch is on, so a standby whose
+ * switch is off says what its main server's shape says. It never says the main server publishes: that server's env and
+ * hold-backs are its own.
  */
 function listed(standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, directory: Directory, source: ShapeSource): ShapeSetting<boolean> {
     const base = { configured: cfg.publishToDirectory, source };
-    if (standby) return { ...base, value: false, lock: lock('standby', LOCK_WORDS.standbyListed) };
     if (!s.publishToDirectory) return { ...base, value: false, lock: null };
+    if (standby) return { ...base, value: false, lock: lock('standby', LOCK_WORDS.standbyListed) };
     if (directoryUnlistedByEnv()) return { ...base, value: false, lock: lock('server_env', HELD_BACK_UNLISTED_MESSAGE) };
     if (directory.directoryPushIntervalHours === 0) return { ...base, value: false, lock: lock('schedule_never', LOCK_WORDS.scheduleNever) };
     const held = directoryHeldBack();

@@ -42,7 +42,12 @@
  * A block lifted is one exception, as lifting it is meant to be: the line kept for the opener during it never reaches the
  * other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince). Until
  * that line makes a conversation kept for them the real one, it is still theirs alone: an acceptance in it rings only them
- * ({@link accept}, PR #2392 review 4355143120).
+ * ({@link accept}, PR #2392 review 4355143120). The opener's own view says so (`nextLineIsRequest`, by that same count), as
+ * their apps can't tell from the lines: the kept one is among those they read, and must not be told apart (PR #2404 review
+ * 4356625513). It shows a lifted block no more than their next line going through does, which Marty accepted on 23 Oct
+ * 2026; while the block holds it reads as any waiting request's, after the 30 days too, and nothing in it says which line
+ * was kept. Nor does it tell an opener of an acceptance they read as not made (the next part): their line is answered
+ * as a waiting request's, and their view says what that answer is.
  *
  * A block the opener made is the other. What a blocked member does never reaches the person who blocked them
  * (engine/member-blocks.ts), and an acceptance would, by the composer coming back. So while the opener blocks the person
@@ -132,6 +137,11 @@ export interface RequestView {
     state: RequestState;
     from: string;
     at: string;
+    /**
+     * The opener's own view of one not accepted only: whether their next line is the request's line, as the node counts
+     * their lines (openerLinesSince), and not refused (the header's "What the opener reads"). Never in the other's view.
+     */
+    nextLineIsRequest?: boolean;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -160,9 +170,10 @@ function over(row: RequestRow, now: number): boolean {
 
 /**
  * The request as `viewer` reads it. The opener reads only its age and its acceptance (the header's "same, whatever became of
- * it"), and not an acceptance made while they block the one who made it (acceptanceHiddenFrom); the person it is for reads
- * what they did with it, and 'expired' for one that waited 30 days, and one whose acceptance is hidden from them as they
- * left it (`state_before`).
+ * it"), and not an acceptance made while they block the one who made it (acceptanceHiddenFrom), and, while it isn't
+ * accepted, whether their next line is its line, by the count their line is judged by (lineThroughRequest); the person it is
+ * for reads what they did with it, and 'expired' for one that waited 30 days, and one whose acceptance is hidden from them as
+ * they left it (`state_before`).
  */
 function viewOf(row: RequestRow, viewer: string, now: number): RequestView {
     let state: RequestState;
@@ -173,7 +184,9 @@ function viewOf(row: RequestRow, viewer: string, now: number): RequestView {
         const was = hidden ? row.state_before ?? 'pending' : row.state;
         state = was === 'pending' && over(row, now) ? 'expired' : was;
     }
-    return { state, from: row.from_pubkey, at: row.requested_at };
+    const view: RequestView = { state, from: row.from_pubkey, at: row.requested_at };
+    if (viewer === row.from_pubkey && state !== 'accepted') view.nextLineIsRequest = state === 'expired' || openerLinesSince(row) === 0;
+    return view;
 }
 
 /**

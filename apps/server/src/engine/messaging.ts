@@ -80,7 +80,9 @@ export class MessagingError extends Error {
  * A member whose account is paused ('disabled': decisions-engine.ts pauseMember, or a suspension the community voted)
  * answers in the conversations they are already in and edits and deletes their own lines, as a report's suspension let
  * them before it was a pause (removal by vote S1, DESIGN-removal-by-vote-fable.md §3.1); they open no new one
- * (assertMayOpenConversation). A group's, an event's and an enterprise's chat each refuse them under their own rule.
+ * (assertMayOpenConversation). A group's chat refuses them a line, an edit and a reaction under its write rule
+ * (assertCanWriteInGroupChat) and taking their own line down (deleteOwnMessage), as before; an event's and an
+ * enterprise's chat each refuse them under their own rule.
  */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
@@ -1036,6 +1038,13 @@ export function deleteOwnMessage(
         if (refusal) throw refusal.status === 404
             ? new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404)
             : new MessagingError(refusal.error, refusal.status);
+        // A paused account ('disabled') takes none of its lines down in a group's chat, where it writes and edits none
+        // (assertCanWriteInGroupChat): the refusal assertMemberActive made here before a pause could answer in its direct
+        // conversations (removal by vote S1), answered as an edit is. A report's suspension from before it was a pause
+        // ('suspended') still takes its own line down, as it always could.
+        if ((db.prepare('SELECT status FROM members WHERE public_key = ?').get(authorPubkey) as { status: string | null } | undefined)?.status === 'disabled') {
+            throw new MessagingError('Account is disabled', 403);
+        }
     } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
         .get(row.conversation_id, authorPubkey)) {
         throw new MessagingError('You are not a participant in this conversation', 403);

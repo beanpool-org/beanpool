@@ -20,8 +20,10 @@
  *     admits nobody, and a code she made before is refused (the check says so, the redeem in words that don't say she
  *     left), unused. She still can't answer a knock (403 not_active). She answers in the conversation she is in, and gets
  *     it again when her app asks, but starts no new one (403 `paused`), as §3.1 has it: an admin's suspension refused her
- *     every line before, a report's let her open any. She CAN close the deals she has open: Bea completes hers and Pia
- *     is paid, Pia completes one she bought, and cancels another; and she can take her own listing down.
+ *     every line before, a report's let her open any. She takes a line of her own down in it; her group's chat still
+ *     refuses her taking hers down there (403), as it did before her pause, and the line stays. She CAN close the deals
+ *     she has open: Bea completes hers and Pia is paid, Pia completes one she bought, and cancels another; and she can
+ *     take her own listing down.
  *  2. A report actioned with suspendUser (POST /api/local/admin/reports/:id/action) is the same pause: Al, an admin,
  *     reported and paused by an owner, is 'disabled', not 'suspended'; the report opens the record (a default reason that
  *     names no reporter, or the admin's own); his admin role is held aside, not dropped; the report says it paused him;
@@ -53,6 +55,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -317,6 +320,13 @@ async function main() {
     const piaCode = madeBefore.body?.invite?.code as string;
     assert(madeBefore.status === 200 && !!piaCode, `setup: Pia makes an invite before her pause (${madeBefore.status})`);
     const oliveDm = se.createConversation('dm', [olive.pubKeyHex, pia.pubKeyHex], olive.pubKeyHex)!.id;
+    const piaDmLine = (() => { const p = lockedDm(); return se.sendMessage(oliveDm, pia.pubKeyHex, p.ciphertext, p.nonce)!.id; })();
+    // A group Olive runs, with Pia in it and a line of hers in its chat (sealed, as a member's app sends one).
+    const crew = se.createGroup({ name: 'Market Crew', joinPolicy: 'request_to_join', createdBy: olive.pubKeyHex });
+    se.joinGroup(crew.id, pia.pubKeyHex);
+    se.approveGroupMember(crew.id, olive.pubKeyHex, pia.pubKeyHex);
+    const piaGroupLine = se.postGroupThreadMessage(crew.id, pia.pubKeyHex, lockedGroupLine(db, crew.id)).id;
+    const lineType = (id: string) => (db.prepare('SELECT type FROM messages WHERE id = ?').get(id) as { type: string } | undefined)?.type;
     const kay = keypair('KnockingKay');
     const knocked = await post('/api/join/knock', { callsign: kay.callsign, message: 'Hello, I live nearby and grow beans.', fromNode: 'https://global.beanpool.org/' }, kay);
     const kayKnock = (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(kay.pubKeyHex) as { id: string } | undefined)?.id ?? '';
@@ -371,6 +381,12 @@ async function main() {
                                  WHERE a.public_key = ? AND b.public_key = ?`).get(pia.pubKeyHex, rita.pubKeyHex) as { n: number }).n;
     assert(piaOpens.status === 403 && piaOpens.body?.code === 'paused' && PAUSED_INVITE.test(piaOpens.body?.error ?? '') && ritaDms === 0,
         `but starts no new one, told why, and none is made (${piaOpens.status} ${piaOpens.text.slice(0, 120)})`);
+    const piaTakesDmLineDown = await post('/api/messages/delete', { messageId: piaDmLine }, pia);
+    assert(piaTakesDmLineDown.status === 200 && lineType(piaDmLine) === 'removed',
+        `she takes a line of her own down in it (${piaTakesDmLineDown.status} ${lineType(piaDmLine)} ${piaTakesDmLineDown.text.slice(0, 100)})`);
+    const piaTakesGroupLineDown = await post('/api/messages/delete', { messageId: piaGroupLine }, pia);
+    assert(piaTakesGroupLineDown.status === 403 && piaTakesGroupLineDown.body?.error === 'Account is disabled' && lineType(piaGroupLine) === 'text',
+        `but not one in her group's chat, which refuses her as it did before her pause, and the line stays (${piaTakesGroupLineDown.status} ${lineType(piaGroupLine)} ${piaTakesGroupLineDown.text.slice(0, 100)})`);
 
     const piaBefore = balanceOf(pia);
     const beaCompletes = await post('/api/marketplace/transactions/complete', { transactionId: beaDeal, confirmerPublicKey: bea.pubKeyHex }, bea);

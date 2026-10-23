@@ -60,6 +60,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Photos can only be sent in direct messages.': word('Photos can only be sent in direct messages.'),
     'Could not open this group chat.': word('Could not open this group chat.'),
     'Could not open this enterprise chat.': word('Could not open this enterprise chat.'),
+    'Could not open this event chat.': word('Could not open this event chat.'),
     'This phone has switched community since this chat was opened.': word('This phone has switched community since this chat was opened.'),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),
     // utils/group-line-display.ts: a sealed line that names nobody, or names someone no longer in the group.

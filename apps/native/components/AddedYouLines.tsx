@@ -15,6 +15,7 @@ import { addFriendLocal, fetchAddedYou, type AddedYou } from '../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { signedRequestWords } from './signed-request-lines';
 
 export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBack: () => void }) {
     const styles = useStyles(({ colors }) => ({
@@ -75,7 +76,7 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
                                 setLines(prev => prev.filter(x => x.publicKey !== l.publicKey));
                                 onAddedBack();
                             } catch (e: any) {
-                                Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                Alert.alert(t('Not added'), e?.message ? signedRequestWords(e.message) : t('Your community did not add them.'));
                             } finally {
                                 setBusy(null);
                             }

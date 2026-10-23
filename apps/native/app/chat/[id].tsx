@@ -47,6 +47,7 @@ import { chatLineWords } from '../../utils/chat-line-words';
 import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
 import { Sentence } from '../../components/Sentence';
+import { signedRequestWords } from '../../components/signed-request-lines';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
 // the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
@@ -791,7 +792,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message || t('Could not release credits.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release credits.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -825,7 +826,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message || t('Could not cancel escrow.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel escrow.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -906,7 +907,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert(t('Failed'), e.message || t('Could not release credits.'));
+                    Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release credits.'));
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -927,7 +928,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert(t('Failed'), e.message || t('Could not cancel.'));
+                    Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel.'));
                 } finally { setActionLoading(false); }
             }}
         ]);

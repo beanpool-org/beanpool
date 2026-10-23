@@ -35,6 +35,7 @@ import { votePoll, closePoll } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
+import { signedRequestWords } from './signed-request-lines';
 
 export interface PollOption {
     id: string;
@@ -133,7 +134,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
             }
             onVoteSuccess?.();
         } catch (err: any) {
-            Alert.alert(t('Voting Error'), err.message || t('Could not record your vote.'));
+            Alert.alert(t('Voting Error'), err.message ? signedRequestWords(err.message) : t('Could not record your vote.'));
         } finally {
             setVotingOptionId(null);
         }
@@ -159,7 +160,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                             }
                             onVoteSuccess?.();
                         } catch (err: any) {
-                            Alert.alert(t('Error'), err.message || t('Failed to close poll'));
+                            Alert.alert(t('Error'), err.message ? signedRequestWords(err.message) : t('Failed to close poll'));
                         } finally {
                             setIsClosing(false);
                         }

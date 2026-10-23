@@ -22,6 +22,7 @@ import {
 } from '../utils/db';
 import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { signedRequestWords } from './signed-request-lines';
 
 interface Props {
     isOpen: boolean;
@@ -405,7 +406,7 @@ export function ProposeDecisionModal({
                 Alert.alert(t('Error'), (res as any).error || t('Failed to propose decision'));
             }
         } catch (err: any) {
-            Alert.alert(t('Error'), err.message || t('Failed to propose decision'));
+            Alert.alert(t('Error'), err.message ? signedRequestWords(err.message) : t('Failed to propose decision'));
         } finally {
             setSubmitting(false);
         }

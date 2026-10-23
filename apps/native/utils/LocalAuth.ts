@@ -2,11 +2,13 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { KEY_ITEM_OPTIONS } from './identity';
 import { appLockNow, clockReadFailures } from './app-lock-clock';
 
 const APP_LOCK_KEY = 'beanpool_app_lock_enabled';
 const isWeb = Platform.OS === 'web';
+const KEY_ITEM_OPTIONS: SecureStore.SecureStoreOptions = {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+};
 
 export type ScreenLock = 'none' | 'set' | 'unknown';
 

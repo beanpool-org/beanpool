@@ -9,7 +9,8 @@ import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
-    MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings, fewerCardsNews, layoutPrint, layoutV1Of,
+    HOME_COLUMN_GAP, HOME_COLUMN_MIN, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
+    columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
     moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2,
 } from './home-layout';
@@ -322,5 +323,28 @@ describe('sun and moon in the picker and the list (CARD-FRAME §4, slice F5)', (
         expect(added.ok && added.layout.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
         expect(added.ok && pickerGroups(LOCAL, added.layout, null).groups.flatMap(g => g.rows).find(r => r.type === 'sky')!.state).toBe('on-home');
         expect(added.ok && cardsToAsk(added.layout, [], LOCAL)).not.toContain('sky');
+    });
+});
+
+describe('the columns on a wide screen (DESIGN-home-wide-and-content-fable.md D1, slice W2)', () => {
+    it('as many 320–576 px columns as fit the page, up to three: two from 656 px, three from 992 px', () => {
+        expect([320, 480, 655, 656, 991, 992, 1312, 2400].map(w => columnsFor(w))).toEqual([1, 1, 1, 2, 2, 3, 3, 3]);
+        // Never a column under the phone's floor: two at 656 px are 320 px each with the 16 px gap between them.
+        expect(HOME_COLUMN_MIN * 2 + HOME_COLUMN_GAP).toBe(656);
+        expect(HOME_COLUMN_MIN * 3 + HOME_COLUMN_GAP * 2).toBe(992);
+    });
+
+    it('one column for a page not measured yet, or measured as nothing', () => {
+        for (const w of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) expect(columnsFor(w), String(w)).toBe(1);
+    });
+
+    it('fewer columns asked for are kept where more would fit, and never more than fit', () => {
+        expect(columnsFor(1312, 2)).toBe(2);
+        expect(columnsFor(1312, 1)).toBe(1);
+        expect(columnsFor(700, 3)).toBe(2);
+    });
+
+    it('the grid is never wider than its columns at 576 px and the gaps between them', () => {
+        expect([1, 2, 3].map(gridWidth)).toEqual([576, 1168, 1760]);
     });
 });

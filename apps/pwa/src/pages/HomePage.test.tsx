@@ -2458,3 +2458,151 @@ describe("the Distance setting's centre goes to /api/home only as precisely as H
         expect(api.getHome).toHaveBeenCalledTimes(2);
     });
 });
+
+describe('on a wide screen the cards stand in two or three columns, in the saved order (DESIGN-home-wide-and-content-fable.md D1, slice W2)', () => {
+    /** The page's width inside its gutters, as a browser lays it out (jsdom lays nothing out): what Home counts its columns from. */
+    let width = 0;
+    let resized: Array<() => void> = [];
+    let measured: { mockRestore(): void } | null = null;
+    beforeEach(() => {
+        width = 0;
+        resized = [];
+        measured = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+            return this.getAttribute('data-testid') === 'home-page' ? width : 0;
+        });
+        vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { resized.push(cb); } observe() {} disconnect() {} });
+    });
+    afterEach(() => { measured?.mockRestore(); });
+
+    const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
+    const grid = () => screen.getByTestId('home-grid');
+    const columns = () => grid().style.gridTemplateColumns;
+    const span = (id: string) => screen.getByTestId(`home-card-${id}`).style.gridColumn;
+    async function landAt(w: number) {
+        width = w;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { needs: NEEDS })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+    }
+
+    it('a page 1400 px wide: three columns of at most 576 px with 16 px between, centred, tops aligned; still one request', async () => {
+        await landAt(1400);
+        expect(screen.getByTestId('home-page')).toHaveAttribute('data-columns', '3');
+        expect(columns()).toBe('repeat(3, minmax(0, 576px))');
+        expect(grid().style.columnGap).toBe('16px');
+        expect(grid().style.justifyContent).toBe('center');
+        expect(grid().style.alignItems).toBe('start');
+        // Never wider than three columns and their gaps: the notes and the Join card above line up with the cards.
+        expect(grid().parentElement!.style.maxWidth).toBe('1760px');
+        expect(api.getHome).toHaveBeenCalledTimes(1);
+    });
+
+    it('a page 800 px wide: two columns', async () => {
+        await landAt(800);
+        expect(screen.getByTestId('home-page')).toHaveAttribute('data-columns', '2');
+        expect(columns()).toBe('repeat(2, minmax(0, 576px))');
+        expect(grid().parentElement!.style.maxWidth).toBe('1168px');
+    });
+
+    it('a page 360 px wide (a phone): one column, as before', async () => {
+        await landAt(360);
+        expect(screen.getByTestId('home-page')).toHaveAttribute('data-columns', '1');
+        expect(columns()).toBe('repeat(1, minmax(0, 576px))');
+        expect(grid().parentElement!.style.maxWidth).toBe('576px');
+    });
+
+    it('the saved order at every count; Needs you first and the community card last span the row; every other card is one cell of its own', async () => {
+        const orders: string[][] = [];
+        for (const w of [360, 800, 1400]) {
+            await landAt(w);
+            orders.push(cardIds());
+            expect(span('needs'), String(w)).toBe('1 / -1');
+            expect(span('community'), String(w)).toBe('1 / -1');
+            for (const id of cardIds().filter(id => id !== 'needs' && id !== 'community')) expect(span(id), `${id} at ${w}`).toBe('');
+            // Each card is the grid's own child: no wrapper that a card with nothing to say would leave behind as an empty cell.
+            for (const id of cardIds()) expect(screen.getByTestId(`home-card-${id}`).parentElement, `${id} at ${w}`).toBe(grid());
+            cleanup();
+        }
+        expect(orders[0][0]).toBe('needs');
+        expect(orders[0].at(-1)).toBe('community');
+        expect(orders[0]).toEqual(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+        expect(orders[1]).toEqual(orders[0]);
+        expect(orders[2]).toEqual(orders[0]);
+    });
+
+    it('the one-time hint under the first card spans the row, straight after it in the reading order', async () => {
+        await landAt(1400);
+        const hint = await screen.findByTestId('home-hint');
+        expect(hint.parentElement).toBe(grid());
+        expect(hint.style.gridColumn).toBe('1 / -1');
+        expect(hint.previousElementSibling).toBe(screen.getByTestId('home-card-needs'));
+    });
+
+    it('side by side, the "…" says Move earlier · Move later (up can be left), and moves the card in the saved list', async () => {
+        width = 1400;
+        nodeV2(answer(), v2(['market', 'events', 'pulse']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
+        expect(screen.queryByText('Move up')).toBeNull();
+        expect(screen.queryByText('Move down')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
+        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market', 'pulse']));
+        expect(cardIds().indexOf('events')).toBeLessThan(cardIds().indexOf('market'));
+    });
+
+    it('in one column the "…" still says Move up · Move down', async () => {
+        width = 360;
+        nodeV2(answer(), v2(['market', 'events', 'pulse']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
+        expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled();
+        expect(screen.queryByText('Move later')).toBeNull();
+    });
+
+    it('the columns follow the page as it changes width (the window, the sidebar), with no new request', async () => {
+        await landAt(1400);
+        expect(columns()).toBe('repeat(3, minmax(0, 576px))');
+        width = 700;
+        act(() => { for (const r of resized) r(); });
+        expect(columns()).toBe('repeat(2, minmax(0, 576px))');
+        width = 500;
+        act(() => { for (const r of resized) r(); });
+        expect(columns()).toBe('repeat(1, minmax(0, 576px))');
+        expect(api.getHome).toHaveBeenCalledTimes(1);
+    });
+
+    it('a browser without ResizeObserver follows the window instead', async () => {
+        vi.stubGlobal('ResizeObserver', undefined);
+        await landAt(1400);
+        expect(columns()).toBe('repeat(3, minmax(0, 576px))');
+        width = 800;
+        act(() => { window.dispatchEvent(new Event('resize')); });
+        expect(columns()).toBe('repeat(2, minmax(0, 576px))');
+    });
+
+    it("the visitor's lobby: the Join card above the grid and as wide as it, while loading and after", async () => {
+        width = 1400;
+        let answerNode!: (r: HomeRead) => void;
+        vi.mocked(api.getHome).mockReturnValue(new Promise(r => { answerNode = r; }));
+        const visitor = {
+            generatedAt: NOW, profile: 'global', welcome: true, me: null, layout: null,
+            features: { beans: false, guestListingsOnly: true, exampleListings: true, invites: false },
+            cards: {
+                market: { items: [{ id: 'p1', type: 'offer', title: 'Seedlings to give away', category: 'garden', photoUrl: null }], total14d: 1, more: false },
+                community: { name: null, members: 2310, communities: 38 },
+            },
+        } as HomeAnswer;
+        render(<HomePage identity={null} visitor={{ joinCard: <section data-testid="lobby-join-card">Join BeanPool</section>, beans: false }} onNavigate={vi.fn()} />);
+        expect(screen.getByTestId('lobby-join-card').parentElement!.style.maxWidth).toBe('1760px');
+        await act(async () => { answerNode(fresh(visitor)); });
+        await screen.findByTestId('home-card-community');
+        const join = screen.getByTestId('lobby-join-card');
+        expect(grid().contains(join)).toBe(false);
+        expect(join.parentElement).toBe(grid().parentElement);
+        expect(span('community')).toBe('1 / -1');
+        expect(span('market')).toBe('');
+    });
+});

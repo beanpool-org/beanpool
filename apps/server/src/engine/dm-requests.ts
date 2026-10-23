@@ -75,14 +75,16 @@
  * nobody accepted, in a real conversation, which is ignored so it never becomes an ordinary chat (dropRequestsOf); a re-key
  * moves them (engine/key-move.ts).
  */
-import { wordsFor } from '@beanpool/core';
+import { word, wordsFor } from '@beanpool/core';
 import { db, deletePlainRows, afterTransactionCommit } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { nodeRoleOf } from './node-roles.js';
 import { hasBlocked } from './member-blocks.js';
 
-// The words layer in English: a node never writes in the device language (core words.test N11).
+// The words layer in English: a node never writes in the device language (core words.test N11). A refusal a member reads
+// is marked with word() instead, and member-words.ts translates it on the way out; one with a {name} in it is written here in
+// English, as the server's other templated refusals still are (PR #2400, part 2 item 3).
 const { t } = wordsFor('en');
 
 /** A request nobody accepted is over this many days after it was made (Marty's answer 10). */
@@ -307,11 +309,11 @@ function waitingFor(to: string, what: 'write' | 'react'): string {
     if (what === 'write') {
         return name
             ? t('Your first message is waiting for {name}. You can write more once they accept it.', { name })
-            : t('Your first message is waiting. You can write more once it is accepted.');
+            : word('Your first message is waiting. You can write more once it is accepted.');
     }
     return name
         ? t('Your first message is waiting for {name}. You can react once they accept it.', { name })
-        : t('Your first message is waiting. You can react once it is accepted.');
+        : word('Your first message is waiting. You can react once it is accepted.');
 }
 
 /**
@@ -547,19 +549,19 @@ export class RequestDecisionError extends Error {
 export function decideRequest(conversationId: string, actor: string, decision: 'accept' | 'ignore', now: number = Date.now()): RequestView {
     const row = typeof conversationId === 'string' && requestsOn() ? rowOf(conversationId) : undefined;
     if (row && row.from_pubkey === actor) {
-        throw new RequestDecisionError(403, 'not_request_recipient', t('Only the person a message request was sent to can accept or ignore it.'));
+        throw new RequestDecisionError(403, 'not_request_recipient', word('Only the person a message request was sent to can accept or ignore it.'));
     }
     const real = !!row && !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(row.conversation_id, actor);
     // An open with nothing written in it yet asks nothing (OPENER_WROTE): ignoring it would swallow the line after it.
     const asked = !!row && (row.state === 'accepted'
         || !!db.prepare(`SELECT 1 FROM dm_requests r WHERE r.conversation_id = ? AND ${OPENER_WROTE}`).get(row.conversation_id));
     if (!row || row.to_pubkey !== actor || !real || !asked) {
-        throw new RequestDecisionError(404, 'request_not_found', t('There is no message request for you in this chat.'));
+        throw new RequestDecisionError(404, 'request_not_found', word('There is no message request for you in this chat.'));
     }
     if (decision === 'accept') {
         accept(row, now, actor);
     } else if (row.state === 'accepted') {
-        throw new RequestDecisionError(409, 'request_accepted', t('You have accepted this chat already, so it is no longer a request.'));
+        throw new RequestDecisionError(409, 'request_accepted', word('You have accepted this chat already, so it is no longer a request.'));
     } else if (row.state !== 'ignored') {
         assertPlainTablesWritable();
         db.prepare("UPDATE dm_requests SET state = 'ignored', decided_at = ? WHERE conversation_id = ?").run(iso(now), row.conversation_id);

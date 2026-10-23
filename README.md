@@ -11,252 +11,55 @@
 
 BeanPool is a free app a community runs for itself. Members post what they can offer or need (a lift to town, eggs, fixing a bike, an hour of gardening), message each other, and settle trades in **Beans**, the community's own credit: you earn Beans by helping someone and spend them with anyone in your community, and your balance can go a little below zero on a credit line you earn by trading. There is no interest, no ads and no bank or lender in the middle.
 
-Each community runs its own server (a **node**) on a spare computer or a small rented server, so its listings, messages and balances stay with it. A small monthly circulation charge on the part of a balance above 200 Beans, and a small charge on trades, go into the community's **Commons Pool**, which members vote to spend. The **global community** at global.beanpool.org, which BeanPool runs, shows newcomers around and leads them to a community near them; it has no Beans, and today it is a private preview. iPhone, Android and web. The website says more: [beanpool.org](https://beanpool.org), and why we built it this way: [post-extraction](https://beanpool.org/post-extraction.html).
+Each community runs its own server (a **node**) on a spare computer or a small rented server, so its listings, messages and balances stay with it. A small monthly circulation charge on the part of a balance above 200 Beans, and a small charge on trades, go into the community's **Commons Pool**, which members vote to spend. Members use the phone app (iPhone and Android) or a web browser. The **global community** at global.beanpool.org, which BeanPool runs, shows newcomers around and leads them to a community near them; it has no Beans, and today it is a private preview. The website says more: [beanpool.org](https://beanpool.org), and why we built it this way: [post-extraction](https://beanpool.org/post-extraction.html).
 <!-- OPEN-GLOBAL: "it has no Beans, and today it is a private preview." becomes "it has no Beans, and anyone can join it, no invite needed, in the browser or the app." -->
 
 **Communities running today:** see [the map on beanpool.org](https://beanpool.org/#find-or-start). Two communities can link so their members can trade with each other; Beans never leave home. Linking is built, has been tried only between two of our own test communities, never between live ones, and is off unless both operators switch it on.
 
----
+BeanPool is part of the wider [Technomutualism](https://technomutualism.org) movement. It is in beta, so expect rough edges. Your **12 words** are the way back into your account that depends on nobody: write them on paper, keep them safe, and never give them to anyone, including us.
 
-## Features
+**New here?** Read the [members' guide](https://beanpool.org/guide/). **Questions?** See [SUPPORT.md](SUPPORT.md) or ask in [Discussions](https://github.com/beanpool-org/beanpool/discussions).
 
-### 💚 Community Status Indicator
-Tap the header logo/title in the PWA to reveal a health popover:
-- **Online/Offline** status (green/red pulse) fetched from `/api/community/health`
-- **Node hostname**, member count, post count
-- **Membership status** — Guest or Member badge
+### What it is
 
-### 🗺️ Community Map
-Full-screen Leaflet/OSM map as the landing page:
-- **Light mode** (default) using a beautiful slate-blue dusk theme with CartoDB Positron 🌙
-- **GPS crosshair** with pulse-animated purple user marker
-- **Marketplace pins** — category emoji icons, colour-coded offers (blue) / needs (orange)
-- **Tap pin → popup → "View in Market →"** navigates directly to the post detail view
-- **Pin-drop posting** — tap the map to choose a location when creating a new post
+- One server per community, run by people that community chose.
+- A phone app and a web app for members.
+- Beans as mutual credit. A small monthly circulation fee on balances above 200 Beans goes to the community's Commons.
+- Open source (MIT), and free to run yourself with Docker.
+- Optional: a free `name.beanpool.org` address, and links between communities.
 
-### 🤝 Marketplace
-13-category peer-to-peer bazaar:
-- Create posts (offer/need, category, title, description, Beans pricing, location pin, up to 3 photos)
-- **Branching Escrow Handshake** — Atomic smart-contract style settlement:
-  - **Needs (3-step):** Requesters bid on jobs → Author approves → Escrow locks → Author releases funds on completion.
-  - **Offers (1-step):** Requesters accept → Escrow immediately locks → Requester releases funds on completion.
-- Filter by type, category dropdown, and **"My Market"** segment controls for inbound requests and active deals.
-- **Post photos** — up to 3 photos per post, auto-resized to 400px, primary photo on tiles
-- **Post validation** — all fields required, red glow on empty fields, location must be set
-- **Post detail view** — Deals Hub UI parsing Payer/Payee roles for Escrow Settlement
-- **💬 Message** — opens a DM with the author directly from the post (a message to a member of a linked community goes over the link between the two nodes: a libp2p stream, see `apps/server/src/federation-protocol.ts`)
-- **🫘 Rate** — rate the author 1-5 beans with optional comment
-- **🚩 Report** — report abuse with reason dropdown
+### What it isn't
 
-### 🫘 Bean Reputation System
-Community trust through bean ratings:
-- **5-bean rating** with optional comment (one rating per rater-per-target, updatable)
-- **Review Editing**: Option to edit reviews directly from the profile's Given tab or My Deals card, with pre-populated stars and comments inside `ReviewModal`.
-- **Bean display** on marketplace tiles (`🫘🫘🫘○○`) and post detail view
-- **Always visible** — shows `○○○○○ No ratings yet` for unrated members
-- **Rate button** in post detail — "🫘 Rate {name}" opens picker + comment form
-
-### 🚩 Abuse Reporting
-Flag bad actors for admin review:
-- **Report button** in post detail view
-- **Reason dropdown**: Spam/scam, Offensive content, Misleading info, Harassment, Other
-- **Admin panel** in Settings → "🚩 Abuse Reports" — view all reports with reporter, target, reason, date
-
-### 💬 E2E Messaging & Smart CRM Inbox
-DMs and group chats with real E2E encryption and transaction context:
-- **Smart CRM Inbox** — Message threads automatically link to their parent Marketplace post, displaying the active title and Object Status (Active/Escrow/Completed). 
-- **Unified Inbox** — Drop redundant tab filters to provide a single, streamlined conversations list.
-- **Direct messages** — tap any member or use "Message" from a post detail (a DM to a linked community travels over the two nodes' libp2p link, encrypted with Noise and tied to each node's PeerId)
-- **Group chats** — create named groups with multiple members
-- **E2E Encryption**: Real end-to-end encryption for direct messages (Noise/X25519/AES-GCM) protecting chat content from server visibility (NAT-1).
-- **Sent/Read Receipts**: Sent and read receipt indicators on direct messages.
-- **Encrypted Photo Attachments**: Support for encrypted camera/photo attachments in direct messages, lazy-loaded on the client.
-
-### 💾 SQLite Post Context Caching
-Preserve conversation and transaction contexts on restoration:
-- **Local SQLite Caching**: Metadata (titles, status, cover photos, credits) is cached directly in client-side `conversations` and `marketplace_transactions` tables.
-- **Phone Change Recovery**: Ensures active thread contexts and deals history show correct titles and photos when restoring an identity, even when completed posts are no longer sent in active sync payloads.
-
-### 🎟️ Invite Tree
-Invite-only membership with hierarchical accountability:
-- **Node genesis** — the server admin is the root of the tree, generating seed invite codes from Settings
-- **Admin's personal identity** — admin uses a seed code on their own phone, then invites organically
-- **Single-use invite codes** — each code works once, creating a branch in the tree
-- **QR + share** — copy invite code or share via QR
-- **Online check** — notifies user if offline when generating codes
-- **Invite tree** — full hierarchy of who invited whom
-
-### 👥 People & Friends
-Community connections:
-- **Friends** — add/remove friends from the community browser, with avatar circles and 💬 message button
-- **Community** — browse all node members with **search filter**, avatar circles, and relative date formatting ("3d ago")
-- **Invites** — generate and share invite codes (moved from standalone tab)
-
-### 🔑 12-Word Seed Phrase
-Deterministic identity from a BIP-39 mnemonic:
-- **New signups** generate a 12-word recovery phrase (128-bit entropy)
-- **Deterministic Ed25519** — same words always regenerate the same keypair
-- **One-time display** — words shown after creation with "I've written these down" confirmation
-- **Recovery mode** — enter 12 words + callsign to restore identity on any device
-- **WebCrypto SHA-256 + PKCS8** — no external crypto dependencies
-
-### 🛡️ Sign-In Recovery
-An optional second way back onto a new device:
-- **Link an account** — Apple, Google or Facebook, from Settings on the phone app. Joining the global community with a sign-in (phone or web) links that one too. GitHub is no longer offered.
-- **One locked copy, held by your node** — your key, and your 12 words if the device had them, locked so that the linked sign-in's id opens it. The node checks that sign-in itself, so it learns the id: **the people who run the node can open the copy**. The node locks the stored copy again with `data/recovery-seal.key`, so a copy of its database alone opens none. SSO is a convenience, custodial by design, not a second custodian.
-- **Only while your community node is running.** The 12 words are the way back that depends on nobody.
-- **BeanPool's key vault** (`apps/vault`, not live yet) is to keep these copies instead, one for every community. The vault can open the copies it keeps. Its keys open only when 2 of 3 custodians unlock it (until the reshare, one person holds all three shares). Every restore through it waits 24 hours, unless another of the member's own devices approves it. It tells the member's devices, and can be stopped from them.
-
-> **Keeper (social) recovery was removed in September 2026.** Enrolling friends as recovery
-> keepers is no longer offered on either client. See
-> [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md) for why, and for what is
-> still present server-side.
-
-### 🏠 Landing Page (Welcome Hub)
-Port 80 serves a community welcome hub:
-- **Three clear paths**: New member (invite code), Add another device (transfer link), Lost device (recovery)
-- **App Store Badges**: Quick links to download the native iOS and Android apps
-- **Newsletter Signup**: Supabase Auth integration to capture early interest and email subscriptions
-- **Dynamic content** — pulls community name, admin email/phone from node config
-- **FAQ accordion** — common questions with expandable answers
-- **Contact section** — configurable admin contact info
-
-### 👤 Member Profiles
-- **Avatar** with separate Camera / Gallery upload buttons
-- **Editable callsign** — change your display name anytime (blue highlighted field with ✏️ icon)
-- **Bio and contact details** with 3-tier visibility (hidden / trade partners / community)
-- **Online check** — alerts user to connect before saving profile changes
-- Profile shown in post detail views and messaging
-
-### 📊 Ledger
-Mutual credit balance and transaction history:
-- **Send credits** to other members with member picker
-- **Balance gauge** with dynamic credit floor (see [Protocol Rules](docs/protocol-rules.md))
-- **Commons Pool** display (funds from progressive circulation)
-- **Transaction history** with sent/received indicators
-- **Solvency Transparency**: Interactive modals showing community-wide ledger solvency statistics.
-- **Tax/Fee Notices & Green Zone**: Detailed 1.5% circulation fee notices and a 0% circulation fee "Green Zone" on balances between 0 and 200 Beans.
-- **Transaction Fee Renames**: Renaming of "transaction tax" references to "transaction fee" across ledger components.
-
-### 💚 Community Health Dashboard
-Admin insights in Settings page:
-- **Stats grid** — members, tree depth, 7/30-day transactions, active/inactive counts, commons balance
-- **Widest branch** — who has the largest invite tree
-- **Flags** — automated health alerts (wash trading detection, rapid circulation, zero-balance)
-- **Refreshable** with one click
-
-### 🛡️ Moderation Centre
-Comprehensive admin dashboard for node safety:
-- **Reported Posts** — review abuse reports with author profiles, reason, and one-click navigation
-- **Health-Flagged Posts** — automated wash-trading detection (self-dealing, circular trading, rapid reciprocation)
-- **Batch Operations** — select multiple posts and bulk-remove with escrow-safe refunds
-- **Member Audit** — search and browse all community members with post counts and join dates
-- **Client-side pagination** — 25 posts per page for nodes with thousands of listings
-- **Inbox member cap** — "Show all members" toggle capped at 50 to prevent DOM overflow
-
-### 🔄 Software Update Notifications
-Docker Desktop-style update detection built into each node:
-- **Header badge** — pulsing blue "v1.0.38 available" link next to version number
-- **Update panel** — version comparison, release notes, "How to Update" code block with copy button
-- **Auto-check** — configurable interval (Hourly / Every 6 hours / Daily / Weekly)
-- **Server-side polling** — background timer checks GitHub Releases API every 6 hours
-- **Notification-only** — admin runs `docker compose pull && docker compose up -d` manually
-
-### 🔗 Independent Connectors + Federation
-Built, with its screens in the web app, and tried only between two of our own test communities, never between live ones. It is off unless both operators switch it on. Beans never cross the border: each pair of linked nodes keeps a bridge ledger of what one community owes the other, and each side sets its own limit (`apps/server/src/federation-bridge.ts`). A node connects only to the nodes its operator adds as connectors; there is no automatic discovery (`apps/server/src/p2p.ts`).
-
-Node-to-node trust relationships with 3 levels:
-- **`peer`** — cross-community federation: browse remote marketplace, trade across nodes
-- **`mirror`** — complete data replication (backup/disaster recovery)
-- **`blocked`** — deny API access from this node
-
-### 🌐 Cross-Community Federation
-Nodes connected as **peers** enable:
-- **Remote marketplace browsing** — PWA queries remote node's API directly
-- **Connected Communities UI** — pill bar to switch between 🏠 Home and 🌐 peer marketplaces
-- **Session cache** — 5-minute cache for instant toggling between communities
-- **Node badges** — 🌐 badges on remote posts to show their origin
-
-### 🔄 Mirror State Sync (live backup)
-One way only: a backup node (`NODE_ROLE=backup`) copies its primary; the primary imports state from nobody (`apps/server/src/services/backup-puller.ts`):
-- **Pull over HTTPS** — the backup pulls a signed snapshot from the primary (`GET /api/local/admin/sync-snapshot`) every 60 seconds by default (`BACKUP_PULL_INTERVAL_MS`)
-- **Cryptographic Signatures** — each snapshot is signed with the primary's node key (Ed25519, kept in `data/libp2p_key`; `signSyncBody` in `apps/server/src/engine/sync.ts`); the backup checks the signature, that the signer is its trusted `mirror` connector, and that the snapshot creates no Beans, before it writes anything
-- **Merkle hash comparison** — only syncs full payloads when state differs
-- **15-minute Safety Reconcile** — every 15 minutes the backup re-compares the whole state, catching anything a quick pull missed
-- **24-hour Tombstone GC** — automatic garbage collection prunes deletion tombstones older than 30 days relative to downstream peer cursors
-- **Origin tracking** — posts carry their source node ID
-
-### 🔒 Privacy (4-Tier Location Model)
-| Tier | Emoji | GPS Usage | What's Shared |
-|------|-------|-----------|---------------|
-| Ghost *(default)* | 👻 | None | Nothing — manual pin drop |
-| Post-Only | 📍 | Once per post | Location at posting time |
-| Zone | 🔵 | On app open | Fuzzed ±2km, session-stable |
-| Live | 🔴 | Real-time | Exact, foreground only |
-
-### 📲 PWA Install
-Install banner with device-specific instructions:
-- **Android Chrome** → native `beforeinstallprompt` one-tap install
-- **iPhone Safari** → Share → Add to Home Screen steps
-- Bean icon on home screen, full-screen standalone mode
-
-### 🛡️ Gateway Configuration & Self-Protection
-Node-enforced security controls in `local-config.json`:
-- **CORS Allowed Origins**: Restrict API calls to explicit frontend domain whitelists for detached PWA / desktop clients.
-- **Admin IP Allowlist**: Restrict `/settings` and `/api/local/admin/*` access to specified client IPs/CIDRs.
-- **Rate Limiting**: Sliding window per-IP request throttles for API endpoints.
-- **Subsystem Feature Toggles**: Dynamic 503/530 interceptors for `servePwa`, `marketplace`, `messaging`, `federation`, and `invites`.
-
-### 🌐 Detached PWA & Sovereign Node Connection
-- **Configurable API Target**: PWA can be hosted on any static server or CDN (e.g., `https://app.example.org`) while targeting any sovereign node API (`getNodeApiUrl()`).
-- **Dynamic WebSockets**: Automatic `wss://` / `ws://` endpoint derivation (`getNodeWsUrl()`).
-- **Connection Manager**: Interactive node tester & target selector in PWA Settings → Advanced.
-
-### 🎮 Fleet Manager (`apps/manager`)
-Multi-node control plane for community operators:
-- **Stateless Architecture**: Operates strictly as a client over node REST/WS APIs (`/api/local/admin/*`, `/ws/logs`).
-- **Shared Engine Integration**: Reuses `@beanpool/engine` on the frontend for Merkle state hash calculations, trust scores, and audit parsing.
-- **Multi-Node Switching**: Connect and monitor multiple sovereign nodes from a single dashboard.
-- **Hardware Telemetry & Live Logs**: Real-time CPU, RAM, SQLite DB/WAL sizes, libp2p peer counts, and log streaming.
+- Not a bank, and not a cryptocurrency. The app has no way to buy or sell Beans for money.
+- Not one big network owned by one company. Each community holds its own data.
+- Not tied to beanpool.org. A community does not need our address service or our global community to run.
+- Not finished. It is beta software from a small project.
 
 ---
 
-## Monorepo Structure
+## How it works
 
-```
-beanpool/
-├── apps/
-│   ├── server/        # Sovereign Node Appliance — Koa REST API, gateway, PWA host, libp2p links to connected nodes (routes/, services/, config/, engine/)
-│   ├── pwa/           # PWA — map, marketplace (13 categories), messaging, ledger (Vite + React + Leaflet)
-│   ├── native/        # Native App — 7-tab mobile client (Expo + React Native), SQLite, background sync
-│   ├── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)
-│   └── vault/         # Key vault — keeps sign-in recovery copies (vault-keyholder + vault-api); not in the node's image
-├── packages/
-│   ├── beanpool-engine/# Shared node engine: DB-backed business logic (members, trust, escrow, posts, messaging, sync, audit)
-│   ├── beanpool-signin/# Sign-in checks (Google/Apple/Facebook id_tokens), shared by the node and the key vault
-│   └── beanpool-core/  # Shared protocol constants: Ledger, Merkle, Passport, Governance
-├── scripts/           # Utility and verification scripts (incl. verify-auth-boundary.mjs)
-├── branding/          # Bean icon assets (16x16 → 512x512)
-├── docs/              # Architecture vision, assessment, and setup guides
-├── Dockerfile         # Multi-stage build (accepts APP_VERSION build arg from CI)
-├── docker-compose.yml # Docker orchestration
-└── deploy.sh          # Deploy script — updates a node over SSH (local build, or the pre-built GHCR image)
-```
+- **Joining.** A local community lets you in with an invite from one of its members, and some let anyone join. Your phone makes your key and shows you your 12 words.
+- **Offers and Needs.** Members post what they can offer or need on a shared map and market. In a community with Beans, you post an Offer of your own before you ask for something.
+- **A trade.** When a trade is agreed, the buyer's Beans are held. When the buyer confirms the job is done, they go to the seller. If a trade gets stuck, an admin of the community can step in.
+- **Beans and credit.** Everyone starts at zero. About 40 Beans is an hour of someone's time, and the two of you agree the real price. Your credit line, how far below zero you may go, opens with your first trade and grows as you trade with different people.
+- **The Commons.** A fee of 1.5% on market payments, and the monthly circulation fee on Beans above 200, go into the community's Commons Pool. Members decide together how it is spent. Balances below zero never pay the circulation fee.
+- **Messages.** Direct messages and group chats are locked in the members' apps. The server stores them but cannot read them. Event chats and enterprise chats are not locked.
+- **The server.** It keeps the community's members, posts, trades and Beans in one `data` folder. Its owners and admins look after it, make backups, and can keep a standby copy to take over if the main server fails. The operator manual says what the server can and cannot see.
+- **An address.** Phones reach a community over https. It can use a free `name.beanpool.org` name, its own domain, or its server's IP address.
+- **Linking communities.** Two communities can link so their members trade with each other. It is optional, off unless both operators switch it on, and has been tried only between two of our own test communities.
+
+The members' guide explains each of these step by step.
 
 ---
 
-## Quick Start
+## Run a community
 
-### Run a BeanPool Node (Docker)
+The software is free. A community runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system) or on a small rented server, about US$6 a month. You need Docker installed first; a freshly rented server has none. The published image runs on Intel/AMD and ARM64.
 
-BeanPool is distributed as a **Universal Docker Container** via the GitHub Container Registry. It natively supports:
-- **Intel/AMD** (Standard servers, Mini PCs)
-- **ARM64** (Raspberry Pi, Apple Silicon, ARM NAS drives)
-- **TrueNAS Scale / Kubernetes** (runs smoothly as a non-root user via `PUID`/`PGID` variables)
+On that machine, paste this one block. It fetches the compose file, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
 
-The same one block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node): fetch, create the network the compose file
-expects (`beanpool-shared`, declared `external`), pull, start, wait for the one-time claim code, then claim the community with your
-phone. The folder is `beanpool`, so Compose's project name is `beanpool` without `-p`.
+**Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
 
 ```bash
 git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
@@ -269,314 +72,71 @@ docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/
 docker compose exec beanpool-node beanpool claim
 ```
 
-`beanpool claim` asks for a `.beanpool.org` name (or `--address https://your.domain`, or `--no-name` with
-`--direct http://IP:PORT`), then shows the claim code and a QR code: scan it with your phone, or open BeanPool → **Find a community**, type the
-server's address in the search box and tap **Claim ‹name›**. The
-operator manual's [First-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest.
+The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose. Scan the QR code with your phone, or open BeanPool → **Find a community**, type the server's address in the search box and tap **Claim ‹name›**. That phone becomes the community's owner.
 
-Your community needs an address phones can reach: the phone talks to a server on the internet only over https. Take the free
-name the claim offers (a tunnel: no ports to open, no DNS to set up) or give your own domain with https; either works as well.
-A bare `http://IP` address works only on a home network, and `beanpool claim` warns before it shows a QR code the phone will refuse.
+Phones reach a community on the internet only over https. The choices for the last line:
 
-#### Install with an AI assistant
+- **A rented server** with a public IP address and ports 80 and 443 open: `beanpool claim --ip 203.0.113.7`. The server gets its own certificate for that address.
+- **A computer at home**, or no open ports: `beanpool claim --name yourtown`. It asks for `yourtown.beanpool.org`, through a tunnel the server runs itself. This is the only choice that uses a BeanPool service.
+- **Your own domain**, pointed at the server: `beanpool claim --address https://your.domain`.
 
-An AI assistant that can run commands on a server (Claude Code, for example) can do the install for you. Give it this, with
-your server's address and a way in that you can take back:
+A plain `http://` address works only on a home network, and `beanpool claim` warns you before it shows a QR code that a phone will refuse.
 
-```text
-Set up a BeanPool community server for me.
-- If I have no server yet, help me rent a small one: Ubuntu 24.04 with at least 1 GB of memory, about US$6 a month.
-  I sign up and pay myself.
-- Install Docker and Docker Compose from the system's own packages (on Ubuntu 24.04: docker.io and docker-compose-v2).
-- On a server with 1 GB of memory, first add 2 GB of swap and keep it on after a restart.
-- Install BeanPool with the one block under Start a community on beanpool.org, which is also in the README at
-  github.com/beanpool-org/beanpool. It pulls the published image of the latest release. Never build BeanPool from
-  source, and change nothing in docker-compose.yml.
-- For the block's last line, take a name for the community's address:
-  docker compose exec beanpool-node beanpool claim --name NAME
-  If I have my own domain with https, use --address https://my.domain instead. Never give the phone a plain http://
-  address on the internet: phones refuse it.
-- Stop when it shows the one-time claim code and the QR code, and show me both. Never claim the community yourself,
-  and never run beanpool claim --key.
-- Tell me what you ran, and anything you decided on your own.
-```
+Then open your address followed by `/settings`. The setup wizard names your community and asks you to add a second owner. Everything the server keeps is in the `data` folder next to `docker-compose.yml`, so back that folder up.
 
-Three things stay yours:
+**To update**, back up `data`, then run `docker compose pull` and `docker compose up -d` in the same folder.
 
-- **The claim.** Your phone claims the community and becomes its owner. The code works once, for the first phone that uses
-  it: claim straight away, and never let the assistant claim it.
-- **Your 12 words.** Write them on paper. Never type them into an assistant, a chat or a server.
-- **Your keys and secrets.** Give the assistant nothing more than a token you can revoke (an SSH key made for the job, removed
-  afterwards, or a cloud token you can revoke), never your cloud account's password, and change anything secret it saw.
+**More:** the operator manual's [first-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest. An AI assistant can do the install for you while you keep the claim, your 12 words and your keys: see [Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md).
 
-The operator manual's page [Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md)
-has what the assistant does and what comes next.
+The server listens on 443 (https) and 80 (plain http). Port 80 is where Let's Encrypt checks a server's IP address or domain before it issues a certificate, so keep it open on a rented server, and it serves plain http to a home network. The server also publishes 8443 and 8080. Ports 4001 and 4002 are for links between communities and are opt-in: open them only if a linked community needs to dial your server.
 
-#### Updating an Existing Node
+---
 
-```bash
-cd ~/beanpool
-docker compose pull
-docker compose up -d
-```
+## Contribute
 
-> Your data is preserved in `./data/` — only the application container is replaced.
+- **Start with [CONTRIBUTING.md](CONTRIBUTING.md).** It explains the values, what help is needed, and how to propose a change. Open an issue before you write code.
+- **Something isn't working?** [Open a bug report](https://github.com/beanpool-org/beanpool/issues/new/choose).
+- **An idea?** Start a thread in [Discussions → Ideas](https://github.com/beanpool-org/beanpool/discussions/categories/ideas).
+- **A security problem?** Report it privately, never in public. See [SECURITY.md](SECURITY.md).
+- **How we behave:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- **What is planned:** [ROADMAP.md](ROADMAP.md). The rules the ledger follows are in [docs/protocol-rules.md](docs/protocol-rules.md); that page describes the target design, and some parts are not built yet.
 
-- **PWA:** `https://localhost:8443/` — community map, marketplace, messaging, ledger
-- **Landing Page:** `http://localhost:8080/` — community welcome hub (3 paths: join, transfer, recover)
-- **Fleet Manager:** `http://localhost:5173/` — multi-node control plane & operator dashboard (`pnpm manager`)
-- **Node-to-node links (libp2p, federation peers only):** TCP `:4001` / WS `:4002` — opt-in: only needed to let linked nodes dial this node.
+### Build from source
 
-> 📖 For detailed setup instructions (including Let's Encrypt, no-domain options, and High-Availability mirrors), see [apps/server/README.md](apps/server/README.md).
-
-### Development & Fleet Management
+CI uses Node 22 and pnpm 9. Build in this order, as the `Dockerfile` does, then start the server:
 
 ```bash
 pnpm install
-pnpm manager                               # Launch Fleet Manager Dashboard (http://localhost:5173)
-cd packages/beanpool-core && pnpm build   # Build shared core first
-cd packages/beanpool-signin && pnpm build # Build the sign-in checks (the server imports them)
-cd apps/pwa && pnpm build                 # Build PWA → apps/server/public/
-cd apps/server && pnpm dev                # Start BeanPool Node with hot reload
+cd packages/beanpool-core && pnpm run build && cd ../..
+cd packages/beanpool-engine && pnpm run build && cd ../..
+cd packages/beanpool-signin && pnpm run build && cd ../..
+cd apps/pwa && pnpm run build && cd ../..       # the web app, into apps/server/public/
+cd apps/manager && pnpm run build && cd ../..   # Settings, into apps/server/public/settings/
+cd apps/server && pnpm dev                      # the server, with hot reload
 ```
 
-Or build everything at once:
+`pnpm lint` and `pnpm test` run at the repo root. `pnpm test-all` runs every check in `scripts/test-all.sh`.
 
-```bash
-pnpm build   # Builds all packages via Turborepo
-```
+### What's in this repo
 
----
-
-## REST API
-
-All endpoints are served on port 8443 (HTTPS):
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/community/info` | GET | Community stats (members, posts, transactions) |
-| `/api/community/register` | POST | Register new member (publicKey + callsign) |
-| `/api/community/members` | GET | List all members |
-| `/api/community/health` | GET | Community health dashboard data |
-| `/api/invite/generate` | POST | Generate a single-use invite code |
-| `/api/invite/redeem` | POST | Redeem an invite code to join |
-| `/api/invite/tree` | GET | Full invite hierarchy |
-| `/api/profile/update` | POST | Update member profile (avatar, bio, contact) |
-| `/api/profile/:publicKey` | GET | Get a member's profile |
-| `/api/ledger/balance/:publicKey` | GET | Get balance, floor, commons |
-| `/api/ledger/transfer` | POST | Send credits (from, to, amount, memo) |
-| `/api/ledger/transactions` | GET | Transaction history |
-| `/api/marketplace/posts` | GET | List marketplace posts (filterable) |
-| `/api/marketplace/posts` | POST | Create a new post (with optional photos) |
-| `/api/marketplace/posts/update` | POST | Edit a marketplace post |
-| `/api/marketplace/posts/remove` | POST | Remove a post (safely refunds atomic escrow) |
-| `/api/marketplace/posts/request` | POST | Request to buy a need-type post (3-step escrow) |
-| `/api/marketplace/posts/accept` | POST | Accept an offer-type post (1-step escrow) |
-| `/api/marketplace/posts/pause` | POST | Pause active marketplace post |
-| `/api/marketplace/posts/resume` | POST | Resume paused marketplace post |
-| `/api/marketplace/transactions` | GET | List marketplace deal transactions for a member |
-| `/api/marketplace/transactions/approve` | POST | Approve a pending transaction request |
-| `/api/marketplace/transactions/reject` | POST | Reject a pending transaction request |
-| `/api/marketplace/transactions/cancel-request` | POST | Cancel a submitted transaction request |
-| `/api/marketplace/transactions/complete` | POST | Confirm delivery and release escrow |
-| `/api/marketplace/transactions/cancel` | POST | Cancel an active transaction and refund escrow |
-| `/api/crowdfund/projects` | GET/POST | List or create community crowdfund projects |
-| `/api/crowdfund/projects/update` | POST | Edit a live crowdfund project |
-| `/api/crowdfund/projects/delete` | POST | Destructive rollback + atomic escrow refund |
-| `/api/ratings` | POST | Submit or update a bean rating |
-| `/api/ratings/:publicKey` | GET | Get ratings and average for a member |
-| `/api/reports` | POST | Submit an abuse report |
-| `/api/admin/reports` | POST | List all abuse reports (admin auth required) |
-| `/api/local/admin/backup` | POST | Stream a complete `state.db` snapshot and config as `.tar.gz` |
-| `/api/local/admin/restore` | POST | Restore system state from an uploaded `.tar.gz` backup archive (uses `X-Admin-Password` header) |
-| `/api/messages/conversation` | POST | Create a DM or group conversation |
-| `/api/messages/send` | POST | Send a message |
-| `/api/messages/conversations/:pubkey` | GET | List conversations for a member |
-| `/api/messages/messages/:conversationId` | GET | Get messages in a conversation |
-| `/api/messages/mark-read` | POST | Mark a conversation as read |
-| `/api/friends/:publicKey` | GET | List your own friends (signed by that key; any other key is refused) |
-| `/api/friends/add` | POST | Add a friend |
-| `/api/friends/remove` | POST | Remove a friend |
-| `/api/members` | GET | List all community members |
-| `/api/community/membership/:publicKey` | GET | Probe whether a public key is a member of this node |
-| `/api/push-tokens` | POST | Register an Expo push notification token |
-| `/api/members/preferences` | GET/POST | Get or set notification preferences per member |
-| `/api/invite/mine/:publicKey` | GET | List invite codes generated by a specific member |
-| `/api/invite/redeem-offline` | POST | Redeem a cryptographic offline invite ticket |
-| `/api/ledger/export` | GET | Export full transaction ledger as CSV |
-| `/api/local/community-info` | GET | Community name, admin email/phone (public) |
-| `/api/version` | GET | Current version, build info, cached update status |
-| `/api/admin/check-update` | POST | Check GitHub for newer releases (admin auth) |
-| `/api/admin/thresholds` | POST | Update protocol thresholds (admin auth) |
-| `/api/admin/thresholds/get` | POST | Read current thresholds (admin auth) |
-| `/api/commons/balance` | GET | Get the current Commons pool balance |
-| `/api/commons/projects` | GET/POST | List or propose Commons projects |
-| `/api/commons/projects/update` | POST | Edit a proposed project |
-| `/api/commons/projects/delete` | POST | Delete a proposed project |
-| `/api/commons/decisions` | GET/POST | List or propose Community Decisions |
-| `/api/commons/decisions/:id/vote` | POST | Vote on an open Decision |
-| `/ws` | WebSocket | Real-time state feed |
+| Path | What it is |
+|------|------------|
+| `apps/server` | The community's server: REST API, live updates, and the host for the web app and Settings |
+| `apps/pwa` | The web app (React, Vite) |
+| `apps/native` | The phone app (Expo, React Native) |
+| `apps/manager` | Settings, for owners and admins, at `/settings` on every server. It holds the operator manual |
+| `apps/vault` | The key vault: a small server that keeps members' locked sign-in recovery copies. See its README |
+| `apps/registrar` | The Cloudflare Worker that leases `name.beanpool.org` addresses |
+| `apps/feedback` | The Cloudflare Worker behind "Suggest a change to BeanPool" |
+| `apps/website`, `apps/website-src` | The beanpool.org website, and its translations |
+| `packages/beanpool-core` | Code shared by every app: the ledger rules, keys, message locks, the app's words |
+| `packages/beanpool-engine` | Server logic that works on the database (escrow, audit and more) |
+| `packages/beanpool-signin` | The checks for Google, Apple and Facebook sign-ins, shared by the server and the vault |
+| `packages/beanpool-guide` | The members' guide and the operator manual |
+| `docs/`, `scripts/` | Design notes, and the tests and tools |
 
 ---
 
-## Port Architecture
-
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| **4001** | TCP | libp2p link to connected nodes (federation peers); no automatic discovery. Opt-in: only needed to let linked nodes dial this node. |
-| **4002** | WS | libp2p WebSocket transport for the same links. Opt-in: only needed to let linked nodes dial this node. |
-| **8080** | HTTP | HTTP → HTTPS redirect (LAN: QR trust bootstrap) |
-| **8443** | HTTPS | Landing page (`/`), PWA (`/app`), Settings, REST API, WebSocket |
-
----
-
-## The Protocol
-
-> 📖 Full specification: **[Protocol Rules](docs/protocol-rules.md)** — the complete rule book for the BeanPool Social Capital Ledger.
-
-- **Mutual Credit** — participants can go negative, backed by community trust. No money supply — the network sum is always zero.
-- **Earned Credit Line** — your floor opens after your first real trade and grows with completed marketplace trades (never gifts), from 0 down to −2000 Beans on most communities; trade with any one partner counts up to 500 Beans (`PER_COUNTERPARTY_VOLUME_CAP` in `packages/beanpool-core/src/protocol.ts`). The old count-based formula (trades×8 + partners×40 + age×2) is no longer used at runtime. See [The Rules §3](https://beanpool.org/rules.html).
-
-- **Reference Rate** — 40 Beans = 1 hour of community time. Hour equivalents shown throughout the app for value intuition.
-- **Trust Badges** — Newcomer 🌱 → Resident → Steward → Elder (`TIER_LEVELS` in `packages/beanpool-core/src/protocol.ts`). Badges are recognition and gate nothing: a deeper credit line comes from real trading.
-- **Anti-Sybil (KYH)** — Know Your History, not KYC: credit line comes only from completed marketplace trades, never gifts, with a cap per partner, and automated health flags catch self-dealing and circular trading.
-- **Community Circulation (Progressive Brackets)** — monthly, only on the part of a positive balance above 200 Beans: 1% on 200–500, 1.5% on 500–1000, 2% on 1000–2000, 2.5% above 2000 (`applyDecay` in `packages/beanpool-core/src/ledger.ts`). It goes to the Commons Pool; negative balances are never charged.
-- **No gossip mesh** — a node talks over libp2p (TCP/WebSockets) only to the nodes its operator adds as connectors
-- **Federation Protocol** — linked communities clear trades over a libp2p stream between the two nodes (`/beanpool/federation/1.0.0`); Beans never leave home, each side caps what the other may owe; off unless both operators switch it on, tried only between two test communities
-- **Mirror Sync** — a backup node pulls a signed snapshot from its primary over HTTPS every 60 seconds, with a full re-compare every 15 minutes (backup nodes only)
-- **Self-Managed Identity** — Ed25519 keypairs from 12-word BIP-39 mnemonic (deterministic, recoverable)
-- **Invite Tree** — hierarchical membership: node genesis → seed codes → admin identity → organic invites
-- **Handshake Protocol** — mutual trust verification + latency measurement between connected nodes via yamux streams (`/beanpool/handshake/1.0.0`)
-- **Trade ratings** — after a completed trade, each side can give the other 1–5 stars and a comment; the four tiers (Newcomer, Resident, Steward, Elder) are badges and gate nothing
-- **Abuse Reporting** — flagging system with admin review panel
-
----
-
-## Project Documentation
-
-| Document | Description |
-|----------|-------------|
-| [README.md](README.md) | Project overview, features, API table |
-| [Protocol Rules](docs/protocol-rules.md) | **The Social Capital Ledger rule book** — credit formula, tiers, anti-Sybil, progressive circulation, reference rate |
-| [HANDOVER.md](HANDOVER.md) | Agent handover: current state, LE rate limits, architecture |
-| [ROADMAP.md](ROADMAP.md) | Planned features and future work |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guidelines, code of conduct, governance model |
-
-### App & Package Documentation
-
-| App / Package | Directory | What It Does |
-|---------------|-----------|-------------|
-| **Server Node** | `apps/server/` | Gateway — genesis, admin, REST APIs, WebSocket, connectors, libp2p. Includes full [network topology setup guide](apps/server/README.md). |
-| **PWA** | `apps/pwa/` | Web UI — map, marketplace (13 categories), messaging, people/friends, ledger. See [PWA Docs](apps/pwa/README.md). |
-| **Native App** | `apps/native/` | 7-tab Expo + React Native mobile client. Contains all native deferred deep-linking. See [Native Docs](apps/native/README.md). |
-| **Core Protocol**| `packages/beanpool-core/` | Shared Library — Identity, Mutual Credit economics, Ed25519 cryptography. See [Core Docs](packages/beanpool-core/README.md). |
-
-### Config Files
-
-| File | Purpose |
-|------|---------|
-| `docker-compose.yml` | Port mappings, env vars, volume mounts |
-| `.env` | Cloudflare + admin secrets (**gitignored**) |
-| `Dockerfile` | Multi-stage build: core → PWA → BeanPool Node (accepts `APP_VERSION` build arg) |
-| `deploy.sh` | Deploy script — updates a node over SSH, from a local build or the pre-built GHCR image |
-| `turbo.json` | Turborepo build pipeline |
-| `pnpm-workspace.yaml` | Monorepo workspace config |
-
----
-
-## Status
-
-BeanPool is in active development. The PWA is **fully functional** and a **React Native / Expo companion app** has near-complete parity with 7 tabs (Map, Projects, Market, Chat, People, Ledger, Settings), SQLite persistence, and background Merkle sync. The communities running today are on [the map on beanpool.org](https://beanpool.org/#find-or-start). Linking communities for cross-community trading is built and has been tried only between two of our own test communities.
-
-**What's working** (a release log, kept for the record; lines marked ⛔ no longer describe today):
-- ✅ **Alternative Palettes, Light Mode Map, and Chat Upgrades (v1.1.40)** — Shipped color tokenization across the native app (the Earth and Slate palettes have since been removed), defaulted maps to Light Mode with CartoDB Positron and a custom slate-blue dusk theme, generated transparent logos/icons, consolidated inbox tabs into a single list, added tap-to-enlarge chat images, lazy caches, 15-minute edit windows, node status mismatch checks, and Ed25519 PKCS8 signing fixes.
-- ✅ **Active/Passive Collision & Deadlock HUD (v1.0.87 / v1.0.88)** — Resolves P2P Yamux concurrent dial-racing and silent listener deadlocks. Configures Active Dialer (`enabled: true`) and Passive Listener (`enabled: false`) roles that exchange enabled states on handshake, automatically rendering red `⚠️ Collision` and yellow `⚠️ Deadlock` warning badges with custom inline warning instructions.
-- ⛔ **Push-on-Write Real-Time Replication (v1.0.87 / v1.0.88)** — replaced: a backup now pulls a signed snapshot from its primary over HTTPS (`apps/server/src/services/backup-puller.ts`). Originally: — Real-time event delta broadcasts using `/beanpool/sync/delta/2.0.0` secure WebSockets. Instantly signs delta event payloads with the node's libp2p Ed25519 private key upon any SQLite write, verified cryptographically by target mirrors.
-- ✅ **15-Min Reconcile & 24h Tombstone Pruning** — Shipped a robust 15-minute background full Merkle-tree state comparison safety net to repair dropped delta frames, paired with a 24-hour database garbage collector that prunes soft-deleted tombstones older than 30 days once downstream peers' cursors have synced past them.
-- ✅ **P2P WebSockets & Self-Healing (v1.0.85 / v1.0.86)** — libp2p links between nodes can run over WebSockets (`:4002`) as well as TCP (`:4001`). Automatic periodic Yamux handshake checks prune stale socket references forcefully using `p2pNode.hangUp` and trigger clean recovery dials within 30 seconds of a node restart.
-- ✅ **SQLite Diagnostics & Health Gates (v1.0.83 / v1.0.84)** — Active `PRAGMA integrity_check` scans and multi-table counters (Members, Posts, DMs, Txns) displaying database health indicators in Settings. Includes Koa health check `minAppVersion` gates matched dynamically on client boot to overlay updates.
-- ✅ Dynamic Node-Centered Mapping — Leaflet map bounds are dynamically tethered to the node's configured radius, and GPS pin-drop race conditions have been resolved
-- ✅ Invite-only membership with single-use codes + hierarchical invite tree
-- ✅ 12-word BIP-39 seed phrase — deterministic Ed25519 key derivation + recovery
-- ✅ People tab — Friends, Community browser, Invites (Guardians were removed with keeper recovery in September 2026)
-- ✅ Landing page welcome hub (HTTPS `/`) — 3 paths (join, transfer, recover) + admin contact info
-- ✅ Admin community config — name, email, phone in Settings → Community tab
-- ✅ Member profiles (avatar via camera/gallery, editable callsign, bio, contact visibility)
-- ✅ 🫘 Bean reputation system — 5-bean ratings with comments on marketplace tiles + detail
-- ✅ Abuse reporting with reason dropdown + admin panel
-- ✅ Marketplace with 13 categories, photos (up to 3), post validation, "My Posts" view
-- ✅ E2E messaging — DMs and group chats
-- ✅ PWA with map, marketplace, messaging, people, ledger
-- ✅ Post detail view with author profile, photos, bean rating, Message/Rate/Report actions
-- ✅ Community health dashboard (admin settings)
-- ✅ Moderation Centre — reported posts, health-flagged wash trading, batch operations, member audit
-- ✅ Software update notifications — Docker Desktop-style header badge, auto-check with configurable interval
-- ✅ REST APIs (67+ endpoints) including friends, ratings, reports, admin thresholds, version check, push tokens, escrow lifecycle, and quadratic voting.
-- ✅ WebSocket real-time state feed
-- ✅ Federation protocol — peer/mirror/blocked trust levels (cross-community trading tried only between two test communities, off unless both operators switch it on)
-- ✅ Cross-community marketplace browsing (Connected Communities UI)
-- ✅ Mirror state sync — a backup pulls a signed snapshot from its primary every 60 seconds, with a full re-compare every 15 minutes
-- ✅ Handshake protocol (~570ms latency between continents)
-- ✅ Let's Encrypt auto-TLS via DNS-01 challenge (Cloudflare API)
-- ⛔ Earlier five-node test fleet (no longer how BeanPool runs; see the map on beanpool.org).
-- ✅ Node admin setup guide with LE and no-domain instructions
-- ✅ Database (SQLite) — `better-sqlite3` with WAL mode, self-healing schema migrations
-- ✅ FTS5 full-text search — marketplace search with synonym mapping
-- ✅ Cryptographically signed APIs — Ed25519 client-side signatures on all POST requests to prevent spoofing
-- ✅ CI/CD pipeline — GitHub Actions auto-builds Docker image, auto-creates Releases from git tags
-- ✅ **Directory Publisher (Decentralized)** — nodes push metadata to beanpool.org Supabase global directory using Libp2p Ed25519 cryptographic signatures to prevent spoofing and replay attacks.
-- ✅ Push Notifications — Expo push tokens, DM/marketplace alerts, per-member notification preferences
-- ✅ Native Background Sync — SQLite `dbSyncLock` Mutex Queue safely handling parallel `applyDelta` and foreground Map/Inbox requests without `database is locked` panics.
-- ✅ Offline Outbox — Draft and queue marketplace posts while offline, syncs automatically when connection restores.
-- ✅ Live Inbox Parity — Base64 E2E plaintext message decryption, real-time polling, and global unread notification tab badges.
-- ✅ Native Identity Flow — self-managed identity creation and 12-word recovery via Expo SecureStore
-- ✅ Community Projects Tab — native-only crowdfunding feature with progress bars and proposal creation
-- ✅ Neon-Vine Tab Bar — branded tab navigation with artwork background and dark overlay
-- ✅ Guest Mode — multi-node onboarding with membership probe, guest UI indicators in header and sync status
-- ✅ Native App (Expo) — 7-tab React Native companion app: Map, Projects, Market (14 cats), Chat, People, Ledger, Settings
-- ✅ Native SQLite + SecureStore — local persistence and self-managed identity on device
-- ✅ Map Phase 6 — pin clustering, modern markers, elder glow effects (both PWA + Native)
-- ✅ Map Clustering Stabilization — custom patching to prevent marker disappearance on iOS scroll/zoom.
-- ✅ Marketplace UX Modernization — horizontal category chips, trust badges, MyDeals sheet/modal, post author trust display
-- ✅ Community Projects — native-only crowdfunding tab with progress tracking
-- ✅ Escrow Demurrage Exemption — escrow wallets exempt from circulation decay
-- ✅ **Sanitized Syncing** — Synthetic "Visitor" and escrow accounts automatically filtered from local member directories and map views.
-- ✅ **Admin Node Restore** — Supports offline restoration of system states via `.tar.gz` database upload.
-- ⛔ **Social Recovery (3-of-N)** — shipped, then **removed in September 2026**. Client entry points are gone; see [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md).
-- ✅ **Identity Spoofing Security** — Hardened identity endpoints against impersonation attacks.
-- ✅ **A11y & Stability** — Fixed P2P yamux stream crash loops and applied accessibility enhancements across the frontend.
-- ✅ **Security Hardening (Sentinel)** — Mitigated Stored XSS vulnerabilities across the Admin Dashboard and fixed Command Injection in server backup routines. Established automated security auditing via `.jules/sentinel.md`.
-- ✅ **Performance & Accessibility** — Fixed an O(N^2) array filtering bottleneck for relational data and added ARIA labels to the PWA WelcomePage.
-- ✅ **PWA Parity Phase 1-4** — Community status indicator, avatar trust badges with profile navigation, People page search/avatars/relative dates/message button, synonym-expanded marketplace search (417-entry map), localStorage-based blocked user filtering, Settings security section (backup reminder, private key viewer, wipe identity).
-- ✅ **Native Invite Fix** — Updated invite share text to include Node URL for manual code entry.
-- ✅ **Cross-platform Avatar Sync** — Implemented `bundled://` protocol for avatars, fixing missing pin icons and broken clustering on Android.
-- ✅ **Native Quadratic Voting** — Restored native QV governance engine, CommonsInfoModal, voting stepper, and dual progress bars.
-- ✅ **Sybil Hardening v3** — Implemented funnel detection, ghost velocity gate, and interactive audit filters.
-- ✅ **Profile Completeness Enforcement** — Added server-side enforcement for profile completeness.
-- ✅ **Onboarding UX Overhaul** — Refined into a friendly 3-step onboarding flow.
-- ✅ **Haptic Feedback** — Phase 1 essentials implemented for native app interactions.
-- ✅ **Admin Dashboard Reorganization** — Redistributed System tab settings to contextual tabs; fixed login ReferenceError.
-- ✅ **Continuous Health Ping** — Added offline red dot indicator and continuous health ping to mobile app header, mapped using unique public keys to prevent UI collisions.
-- ✅ **Author Request Review Flow** — Enhanced deals management allowing sellers to review buyer requests with integrated messaging and standardized decline reasons.
-- ✅ **Ledger UI Enhancements** — Corrected credit slider visual representation for negative balances and improved feedback for locked 'Send Credits' functionality.
-- ✅ **Sentinel Security Hardening & Deny-by-Default (Sentinel)** — Inverted the Koa server `requireSignature` auth filter to deny-by-default on all mutating endpoints (`POST`, `PUT`, `DELETE` under `/api/*`), eliminating opt-in security drift. Binds verified request keys to `ctx.state.actor` as the authenticated source of truth, and enforces dynamic body spoof protection.
-- ✅ **Auth Boundary Verification** — Shipped `scripts/verify-auth-boundary.mjs` which dynamically asserts all 38 mutating endpoints across 114 test vectors (unsigned, wrong-key, spoofed-body) against the live server.
-- ✅ **Cryptographic Sync Signatures** — Replication payloads are signed with the node's Ed25519 key (`data/libp2p_key`) and verified before database writes; replication is now one-way, primary → backup. Includes a dedicated `test-sync-signature.ts` integration suite.
-- ✅ **Native Identity SecureStore & Clipboard Privacy** — Eliminated plaintext fallback storage for identity private keys in favor of hardware-backed Expo `SecureStore`, and resolved OS spyware notifications by replacing background clipboard sniffing with user-initiated pasting.
-- ✅ Monorepo ESLint Flat Config — Configured monorepo-wide flat linting rules via `eslint.config.mjs` to maintain code health standards.
-- ✅ Release v1.0.76 Settings Lockout Fix — Resolved Admin Settings CSP lockouts by explicitly permitting Leaflet, OpenStreetMap, and geocoding API domains (`https://unpkg.com`, `https://*.tile.openstreetmap.org`, `https://nominatim.openstreetmap.org`).
-- ✅ Release v1.0.76 Password Complexity Engine — Enforced high-entropy complexity rules (minimum 8 chars, requiring uppercase, lowercase, digit, and special character check) dynamically evaluated at system boot, settings inputs, and API boundaries.
-- ✅ Release v1.0.77 "Never" Sync Schedule — Added a "Never (Disabled)" option to Directory settings, allowing admins to completely bypass periodic directory pushes.
-- ✅ Production EAS Native Builds (v1.0.76-b97) — Successfully generated production iOS ipa bundle and Android aab bundle, distributing them to local and desktop build stores.
-- ⛔ Deployment of v1.1.40 to the earlier five-node test fleet, with Let's Encrypt TLS (June 2026; superseded).
-
-**Coming next:**
-- Native App Polish & App Store Submission (federation parity)
-
----
-
-## License
+## Licence
 
 [MIT](LICENSE)
-
-_Last updated: 2026-10-15_

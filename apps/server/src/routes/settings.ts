@@ -13,6 +13,7 @@ import {
     getNodeRole, getMemberStats, isNodeMember, type NodeConfig,
 } from '../state-engine.js';
 import { isPrivatePreview } from '../config/private-preview.js';
+import { placeAs, placeShownTo, type PlaceShown } from '../config/community-place.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
@@ -232,14 +233,14 @@ router.get('/', async (ctx) => {
 //   - acceptKnocks and door (withKnockSetting, below): the manager's Node Identity screen and People & Safety → Invites
 // The operator's public address is read from the admin route /api/local/admin/public-address/status.
 // The service area's centre is the manager's one map pin, which is also the node's place, and an operator may have set it
-// at home: anyone but an owner or admin gets it to two decimals (~1 km), as /api/local/status and /api/local/dashboard give
-// the place (public-routes audit NEW-1: it was served to ~1 m, even with "publish location" off). The manager's Node
-// Identity screen reads it exact, with its admin credential, so a save never writes the rounded pin back.
-function publicNodeConfig(config: NodeConfig, exactPlace: boolean) {
-    const r = config.serviceRadius;
-    const place = (n: number) => (exactPlace || typeof n !== 'number' ? n : Math.round(n * 100) / 100);
+// at home: config/community-place.ts says who gets it (public-routes audit NEW-1: it was served to ~1 m). An owner or admin
+// gets it exact, as the manager's Node Identity screen reads it with its admin credential, so a save never writes a
+// rounded pin back; a member who reads as one (not suspended or disabled) to two decimals (~1 km); anyone else to two
+// decimals with "Share Location & Radius" on, and null with it off. The web app and the phone sign this read when they
+// hold a key, so a member's map still centres.
+function publicNodeConfig(config: NodeConfig, shown: PlaceShown) {
     return {
-        serviceRadius: r && typeof r === 'object' ? { lat: place(r.lat), lng: place(r.lng), radiusKm: r.radiusKm } : r,
+        serviceRadius: placeAs(config.serviceRadius, shown),
         publishLocation: config.publishLocation,
         publishMembers: config.publishMembers,
         publishContactEmail: config.publishContactEmail,
@@ -275,11 +276,15 @@ async function ownerOrAdminAsking(ctx: any): Promise<boolean> {
 
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    const config = publicNodeConfig(getNodeConfig(), await ownerOrAdminAsking(ctx));
+    const ownerOrAdmin = await ownerOrAdminAsking(ctx);
+    // Read after checkAdminAuth: a key session (the manager's, which isn't a signed request) names its member there.
+    const signer = ctx.state.actor as string | undefined;
+    const config = publicNodeConfig(getNodeConfig(), placeShownTo({ ownerOrAdmin, signer }));
     // A private preview (config/private-preview.ts): the phone map reads this unsigned for the community's service area
     // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
-    // is) gets the area alone: the place the community serves, no member's anything, and none of the other settings.
-    if (isPrivatePreview() && !isNodeMember(ctx.state.actor as string | undefined)) {
+    // is) gets the area alone: the place the community serves (null with "Share Location & Radius" off), no member's
+    // anything, and none of the other settings.
+    if (isPrivatePreview() && !isNodeMember(signer)) {
         ctx.body = { serviceRadius: config.serviceRadius ?? null };
         return;
     }
@@ -431,7 +436,7 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         .filter(([, v]) => v !== undefined));
     // The public fields only, as GET /api/node/config answers: the stored config also holds the tunnel token, and an admin
     // (who may save these switches) must never read it. No caller reads more from this answer than ok or error.
-    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent), true));
+    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent), 'exact'));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {

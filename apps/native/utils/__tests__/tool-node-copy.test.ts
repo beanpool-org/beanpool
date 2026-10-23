@@ -98,6 +98,8 @@ class FakeNode {
      * `tool_copy_off`, nothing written; the member's switch-on writes.
      */
     refusesOff = false;
+    /** The `max` each GET and PUT answers: 65536, every tool's on a node from before a tool could name more. */
+    max = 65536;
     /** Runs once as the next PUT arrives, before the node reads it (another phone's request landing first). */
     beforePut: (() => void) | null = null;
     mode: 'up' | 'down' | 'refusing' | 'older' = 'up';
@@ -126,11 +128,12 @@ class FakeNode {
         const now = (this.clock += 1000);
         const row = this.rows.get(key);
         if (method === 'GET') {
-            return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, bytes: 0, max: 65536, ...(this.sendsDeletedAt || this.refusesOff ? { deletedAt: row ? null : this.tombs.get(key) ?? null } : {}) } };
+            return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, bytes: 0, max: this.max, ...(this.sendsDeletedAt || this.refusesOff ? { deletedAt: row ? null : this.tombs.get(key) ?? null } : {}) } };
         }
         if (method === 'PUT') {
             const doc = (body as { doc?: unknown } | null)?.doc;
             if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { status: 400, json: { error: "Send the tool's document as doc, a JSON object." } };
+            if (JSON.stringify(doc).length > this.max) return { status: 413, json: { error: "This tool's copy is too big.", code: 'tool_doc_too_large' } };
             const tomb = this.tombs.get(key);
             if (this.refusesOff && (body as { turnOn?: unknown }).turnOn !== true && !row && tomb) {
                 return { status: 410, json: { error: "This tool's copy was switched off, so nothing was kept. Switch it on again in Settings to keep one.", code: 'tool_copy_off', deletedAt: tomb } };
@@ -138,7 +141,7 @@ class FakeNode {
             let at = now;
             for (const t of [row?.updatedAt, this.tombs.get(key)]) if (t && Date.parse(t) >= at) at = Date.parse(t) + 1;
             this.rows.set(key, { doc: doc as Record<string, unknown>, updatedAt: iso(at) });
-            return { status: 200, json: { success: true, tool, updatedAt: iso(at), bytes: 0, max: 65536 } };
+            return { status: 200, json: { success: true, tool, updatedAt: iso(at), bytes: 0, max: this.max } };
         }
         if (method === 'DELETE') {
             if (row || this.refusesOff) {
@@ -236,6 +239,44 @@ function holdNextGet() {
     net.hold = { asked, gate };
     return { asked: arrived, release };
 }
+
+describe("the most the server keeps of a tool's document (its answers' `max`)", () => {
+    /** A tool that names 128 KB, as the Tool shed does. */
+    const BIG: ToolManifest<Doc> = { ...KIT, doc: { ...KIT.doc, maxBytes: 131_072 } };
+    const bigCopy = (p: Phone): PhoneToolCopy => ({ manifest: BIG, owner: { kind: 'member', publicKey: p.signer }, url: URL_A });
+    const sized = (bytes: number): Doc => ({ v: 2, items: ['x'.repeat(bytes - '{"v":2,"items":[""]}'.length)] });
+
+    it("kept beside the setting once heard, and the phone's store holds to it: an older server's 64 KB, then a newer one's 128 KB", async () => {
+        use(A);
+        // Nothing heard yet: the tool's own bound.
+        await writeToolDoc(ME, BIG, sized(70_000), t0);
+        expect((await readToolSettings(ME, 'kit', URL_A)).nodeMax).toBeUndefined();
+        await writeToolDoc(ME, BIG, sized(1_000), t0 + 1);
+        expect(await openToolCopy(bigCopy(A))).toBe('put');
+        expect((await readToolSettings(ME, 'kit', URL_A)).nodeMax).toBe(65536);
+        await expect(writeToolDoc(ME, BIG, sized(70_000), t0 + 2)).rejects.toMatchObject({ name: 'ToolDocTooBigError', max: 65536 });
+        expect((await held(A)).items[0].length).toBe(1_000 - '{"v":2,"items":[""]}'.length);
+        // The server is updated: its next answer says 128 KB, and the phone takes that.
+        node.max = 131_072;
+        expect(await openToolCopy(bigCopy(A))).toBe('nothing');
+        expect((await readToolSettings(ME, 'kit', URL_A)).nodeMax).toBe(131_072);
+        await writeToolDoc(ME, BIG, sized(70_000), t0 + 3);
+        expect(await openToolCopy(bigCopy(A))).toBe('put');
+        expect(JSON.stringify(node.doc(ME, 'kit')).length).toBe(70_000);
+    });
+
+    it("a phone that holds more than an older server keeps sends none of it: switching on there fails, and nothing is written over", async () => {
+        use(A);
+        await writeToolSettings(ME, 'kit', { nodeCopy: false }, URL_A);
+        await writeToolDoc(ME, BIG, sized(70_000), t0);
+        node.log.length = 0;
+        expect(await switchToolCopy(bigCopy(A), true)).toBe('failed');
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        expect(await setting(A)).toBe(false);
+        expect((await readToolSettings(ME, 'kit', URL_A)).nodeMax).toBe(65536);
+        expect(JSON.stringify(await held(A)).length).toBe(70_000);
+    });
+});
 
 describe('two phones, one server: the open rule', () => {
     it('only a tool that asks for node-copy keeps a copy at all', () => {
@@ -691,7 +732,8 @@ describe('the delete rule: what the node is told and when', () => {
         node.log.length = 0;
         expect(await open(A)).toBe('off');
         expect(node.log).toEqual([]);
-        expect(await readToolSettings(ME, 'kit', URL_A)).toEqual({ nodeCopyMarks: OLD, nodeCopy: false });
+        // The server's `max` is kept beside the setting (heardMax), the one other field the copy writes.
+        expect(await readToolSettings(ME, 'kit', URL_A)).toEqual({ nodeCopyMarks: OLD, nodeCopy: false, nodeMax: 65536 });
         const REPO = path.resolve(__dirname, '../../../..');
         for (const f of ['apps/native/tools/node-copy.ts', 'apps/native/tools/store.ts', 'apps/native/app/tool/[id].tsx', 'apps/pwa/src/tools/node-copy.ts', 'apps/pwa/src/tools/store.ts', 'apps/pwa/src/pages/ToolsPage.tsx']) {
             expect(fs.readFileSync(path.join(REPO, f), 'utf8'), f).not.toMatch(/nodeCopyMarks|ToolCopyMarks|\.mark\(/);
@@ -730,10 +772,11 @@ describe('the delete rule: what the node is told and when', () => {
             .filter((d) => fs.existsSync(path.join(REPO, d)));
         const callers = clients.flatMap(walk).filter((f) => /\/api\/tools\/|\/tools\/\$\{|toolCopyPath\(/.test(read(f)));
         expect(callers.sort()).toEqual(['apps/native/tools/node-copy.ts', 'apps/pwa/src/tools/node-copy.ts', 'packages/beanpool-core/src/tools/node-copy.ts']);
-        // No sync page, Home answer, pooled count or admin screen reads it.
+        // No sync page, Home answer, pooled count or admin screen reads it. db.ts names it for its one rebuild (a CHECK raised
+        // to 128 KB, rows copied across unread).
         const server = walk('apps/server/src').filter((f) => /member_tool_state|tool-state\.js|routes\/tools\.js/.test(read(f)));
         expect(server.sort()).toEqual([
-            'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+            'apps/server/src/db/db.ts', 'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
             'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts', 'apps/server/src/https-server.ts',
             'apps/server/src/routes/tools.ts', 'apps/server/src/state-engine.ts',
         ]);
@@ -772,7 +815,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(put.aborted).toBe(true);
         expect(net.signals.map(([m, s]) => [m, s instanceof AbortSignal])).toEqual([['GET', true], ['PUT', true], ['DELETE', true]]);
         expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
-        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false });
+        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         // Off: the next open asks nothing at all.
         await vi.advanceTimersByTimeAsync(60_000);
         node.log.length = 0;
@@ -797,7 +840,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             node.log.length = 0;
             expect(await open(A)).toBe('off');
             expect(node.log).toEqual([]);
-            expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false });
+            expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         }
     });
 
@@ -809,7 +852,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await off).toBe('off');
         expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT', 'DELETE']);
         expect(node.rows.size).toBe(0);
-        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false });
+        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         node.log.length = 0;
         expect(await open(A)).toBe('off');
         expect(node.log).toEqual([]);
@@ -829,7 +872,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         node.mode = 'up';
         expect(await removeToolCopyFirst(member(A))).toBe(true);
         expect(node.rows.size).toBe(0);
-        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false });
+        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
     });
 
     describe("keeper 1's late PUT never undoes keeper 2's switch-on, and no mark is kept (the reviews at 8a48f318 and after)", () => {
@@ -850,7 +893,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
             expect(await sync).toBe('later');
             expect(await switchToolCopy(ent, false)).toBe('off');
-            expect(await entSettings(k1)).toEqual({ nodeCopy: false });
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false, nodeMax: 65536 });
             // Keeper 2 switches it on again, with the enterprise's document as keeper 2's phone holds it.
             use(k2);
             await writeToolDoc('ent-key', KIT, doc('Cash tin'), t0 + 120_000);
@@ -887,7 +930,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             node.log.length = 0;
             expect(await openToolCopy(ent)).toBe('off');
             expect(node.log).toEqual([]);
-            expect(await readToolSettings('ent-key', 'kit', URL_A)).toEqual({ nodeCopy: false });
+            expect(await readToolSettings('ent-key', 'kit', URL_A)).toEqual({ nodeCopy: false, nodeMax: 65536 });
         });
     });
 });

@@ -11,7 +11,7 @@
  * reminders and settings. An account leaving the phone takes all of it (wipeToolDataOnThisPhone).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TOOL_LIMITS, toolDocBytes, type ToolLocalCopy, type ToolManifest } from '@beanpool/core';
+import { toolDocBytes, toolDocMaxBytes, type ToolLocalCopy, type ToolManifest } from '@beanpool/core';
 import { getDb } from '../utils/db';
 import { cancelToolReminders, type ToolNotifications } from './reminders';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from './schema';
@@ -27,6 +27,12 @@ export interface ToolSettings {
      * answered (tools/node-copy.ts), never by a whole-settings save.
      */
     nodeCopy?: boolean;
+    /**
+     * The most the community's server said it keeps of this tool's document (its GET's or PUT's `max`), written only by
+     * the node copy (tools/node-copy.ts heardMax). The document's bound is never past it (core toolDocMaxBytes), so a
+     * newer app on an older server says the truth. Absent: never heard, and the tool's own bound.
+     */
+    nodeMax?: number;
     /** Each reminder's switch, by its id; absent is the manifest's `defaultOn`. */
     reminders?: Record<string, boolean>;
     /** Which of the empty state's two doors the member took. */
@@ -121,11 +127,17 @@ export async function readToolCopy(owner: string, tool: string): Promise<ToolLoc
 }
 
 /**
- * The document written whole (§1.6: one writer, last write wins). Over its bound it is refused with
- * {@link ToolDocTooBigError}, never cut. `synced_at` (the node copy's, T0.4) is kept as it was.
+ * The most the tool's document may take on this phone now: its own bound, never past what this community's server said
+ * it keeps (the settings' `nodeMax`; core toolDocMaxBytes). What the host's doc.maxBytes() says, and the write holds to.
+ */
+export const toolDocMaxHere = (manifest: Pick<ToolManifest, 'doc'>, settings: ToolSettings): number => toolDocMaxBytes(manifest, settings.nodeMax);
+
+/**
+ * The document written whole (§1.6: one writer, last write wins). Over its bound (toolDocMaxHere, with this community's
+ * settings) it is refused with {@link ToolDocTooBigError}, never cut. `synced_at` (the node copy's, T0.4) is kept as it was.
  */
 export async function writeToolDoc<D>(owner: string, manifest: ToolManifest<D>, doc: D, now: number = Date.now()): Promise<void> {
-    const max = Math.min(manifest.doc.maxBytes ?? TOOL_LIMITS.docBytes, TOOL_LIMITS.docBytes);
+    const max = toolDocMaxHere(manifest, await readToolSettings(owner, manifest.id));
     const bytes = toolDocBytes(doc);
     if (bytes > max) throw new ToolDocTooBigError(bytes, max);
     const db = await getDb();

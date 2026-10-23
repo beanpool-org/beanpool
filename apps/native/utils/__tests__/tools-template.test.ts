@@ -795,7 +795,7 @@ describe('the route around a tool', () => {
 describe('the host given to a tool has only what its manifest declared', () => {
     const ctx = (manifest: ToolManifest<any>): PhoneHostContext<any> => ({
         manifest, owner: { kind: 'member', publicKey: ME.publicKey, name: ME.callsign }, node: { url: null, profile: 'local', features: null },
-        doc: { get: () => manifest.doc.empty(), set: async () => {} }, navigate: () => {}, back: () => {}, now: () => NOW, openListSheet: () => {},
+        doc: { get: () => manifest.doc.empty(), set: async () => {}, maxBytes: () => 65_536 }, navigate: () => {}, back: () => {}, now: () => NOW, openListSheet: () => {},
     });
 
     it('a tool with no permissions: the base and nothing else; an undeclared call is undefined', () => {

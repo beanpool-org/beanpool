@@ -32,7 +32,8 @@ import { phoneTool } from '../../tools/index';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { openOfferComposer, unfinishedPostHere, type ToolListFee } from '../../tools/doors';
 import {
-    patchToolSettings, readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToolDoc, writeToolSettings, communityKey, type ToolSettings,
+    patchToolSettings, readToolDoc, readToolSettings, reminderOn, removeToolDataHere, toolDocMaxHere, writeToolDoc, writeToolSettings, communityKey,
+    type ToolSettings,
 } from '../../tools/store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
 import { scheduleToolReminders } from '../../tools/reminders';
@@ -165,9 +166,11 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         settingsRef.current = next;
         setSettings(next);
         tellOpenScreens(shareKey, hear, { settings: next });
-        // Everything but the node copy's setting, which only the server's answer moves (tools/node-copy.ts).
+        // Everything but the node copy's setting and the server's bound, which only the server's answers move
+        // (tools/node-copy.ts).
         const rest: ToolSettings = { ...next };
         delete rest.nodeCopy;
+        delete rest.nodeMax;
         await patchToolSettings(owner, manifest.id, rest, url).catch(() => {});
         reschedule(docRef.current, next);
     }, [owner, manifest.id, reschedule, shareKey, hear, url]);
@@ -177,9 +180,13 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     /**
      * What a sync with the server did, told to every open screen of the tool (none open: the store already has it): the
      * server's copy taken (the document drawn again, its reminders from it), the copy switched off elsewhere (the
-     * setting off and the line once), or a server that keeps no copies yet.
+     * setting off and the line once), or a server that keeps no copies yet. And, whatever it did, the most the server
+     * said it keeps of the document, when that is new: the screens' room is counted against it.
      */
     const heardCopy = useCallback((outcome: ToolCopyOutcome) => {
+        void readToolSettings(owner, manifest.id, url).then((s) => {
+            if (s.nodeMax !== settingsRef.current.nodeMax) tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeMax: s.nodeMax } });
+        }).catch(() => {});
         if (outcome === 'taken') {
             void readToolDoc(owner, manifest).then((read) => {
                 tellOpenScreens(shareKey, null, { doc: read.doc, stored: read.stored });
@@ -190,7 +197,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         } else if (outcome === 'older-node') {
             tellOpenScreens(shareKey, null, { copyNote: 'older-node' });
         }
-    }, [owner, manifest, shareKey, reschedule]);
+    }, [owner, manifest, shareKey, reschedule, url]);
 
     // The tool's open: once, from its first screen, after the phone's copy and settings are read.
     useEffect(() => {
@@ -246,6 +253,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 reschedule(next, settingsRef.current);
                 if (copyNoteRef.current !== 'older-node') toolCopyAfterWrite(copy, heardCopy);
             },
+            maxBytes: () => toolDocMaxHere(manifest, settingsRef.current),
         },
         navigate: (screen: string, p?: Record<string, string>) => {
             router.push({ pathname: '/tool/[id]', params: { ...(p ?? {}), id: manifest.id, screen } });
@@ -254,7 +262,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         now: () => Date.now(),
         openListSheet,
         nodeCopy: keepsNodeCopy(manifest) && settings?.nodeCopy !== false && copyNote !== 'older-node',
-    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear, copy, heardCopy, settings?.nodeCopy, copyNote]);
+    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear, copy, heardCopy, settings?.nodeCopy, settings?.nodeMax, copyNote]);
 
     const ungranted = useMemo(() => ungrantedPermissions(manifest, phoneHost(ctx)), [manifest, ctx]);
     const host = useMemo(() => hostFor(manifest, ctx), [manifest, ctx]);
@@ -271,8 +279,10 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                             return;
                         }
                         await removeToolDataHere(owner, manifest.id, url);
-                        // The one setting kept: the copy off, so Settings says what is true.
-                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false } : {};
+                        // The one setting kept: the copy off, so Settings says what is true; and the server's bound,
+                        // which is the server's, not the member's data.
+                        const nodeMax = settingsRef.current.nodeMax;
+                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false, ...(nodeMax !== undefined ? { nodeMax } : {}) } : {};
                         if (keepsNodeCopy(manifest)) await writeToolSettings(owner, manifest.id, left, url);
                         const empty = manifest.doc.empty();
                         docRef.current = empty;

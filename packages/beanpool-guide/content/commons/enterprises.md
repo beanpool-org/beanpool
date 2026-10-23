@@ -37,7 +37,7 @@ An enterprise's page is its shop front. On the phone, every member sees, from th
 - its balance and credit line in one line. Tap **Money and backing** to see its live Offers, surplus and capital ceiling, what its keepers back it with, and **Income & Spend**: every bean in and out. Its keepers see who paid or was paid and the note with it; other members see the amounts, and their own payments in full;
 - **Recent activity** and a **Discussion** you can write in.
 
-Someone who is not a member of the community sees its picture, name and kind, what it is for, its keepers' names and About, and nothing more.
+Where a community lets people who are not members read its pages, they see its picture, name and kind, what it is for, its keepers' names, About and a project's goal, but not its listings, badges or money. Most communities don't: there, only members can open the page.
 
 In the web app the page still shows the balance and its keepers near the top.
 

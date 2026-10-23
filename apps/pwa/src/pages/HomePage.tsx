@@ -1214,9 +1214,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             case 'safety':
                 // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
                 // Its "…" (Move up · Move down · Remove) sits over the card's own ✕. The cell comes with the card: put away
-                // or checked, it has nothing to say and takes no cell (PR #2411 review).
+                // or checked, it has nothing to say and takes no cell (PR #2411 review). `c.safety` is the node's word that the
+                // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
+                // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
-                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} frame={(oneWayBack) => (
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} frame={(oneWayBack) => (
                         <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                             {oneWayBack}

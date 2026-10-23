@@ -6,7 +6,7 @@
  * member and leaves for the one chosen. Never a gate: nothing here blocks anything. The node is stubbed.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as api from '../lib/api';
 import { generateIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { loadPendingLink } from '../lib/link-signin';
@@ -139,6 +139,84 @@ describe('on the landing screen: put away, it comes back twice, then lives in Se
         expect(onSeeWords).toHaveBeenCalledTimes(1);
         expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
         expect(await shown(standing('words', 3, true))).toBe(false);
+    });
+});
+
+// Home's answer already holds the node's word (`cards.safety`), so Home passes it as `known`: the card is drawn with the
+// answer, not when its own request comes back, which moved every card after it on a wide screen (PR #2411 review).
+describe("on Home, the node's word is already in the answer (`known`)", () => {
+    const pending = () => {
+        const answers: Array<(s: api.CommunityStanding) => void> = [];
+        vi.mocked(api.getCommunityMe).mockImplementation(() => new Promise((r) => { answers.push(r); }));
+        return async (s: api.CommunityStanding) => {
+            await waitFor(() => expect(answers.length).toBeGreaterThan(0));
+            await act(async () => { for (const r of answers) r(s); });
+        };
+    };
+    const landing = () => render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} known />);
+    const schedule = () => JSON.parse(localStorage.getItem(`beanpool_one_way_back_${identity.publicKey}`) || 'null');
+
+    it('not yet put away: drawn at once, while its own request is still on its way', async () => {
+        const answer = pending();
+        landing();
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
+        await answer(standing('words'));
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
+    });
+
+    it('✕ before the node answers: put away at once, and kept with the posts the node then counts', async () => {
+        const answer = pending();
+        landing();
+        fireEvent.click(screen.getByRole('button', { name: 'Hide this for now' }));
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        await answer(standing('words', 2));
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        expect(schedule()).toMatchObject({ dismissed: true, keptPostsAtDismissal: 2, postReturnShown: false });
+        // The two posts already up don't bring it back; the next one that stays up does.
+        cleanup();
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 2));
+        landing();
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalledTimes(2));
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        cleanup();
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words', 3));
+        landing();
+        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+    });
+
+    it('put away before: nothing until the node answers, since a return goes by its counts', async () => {
+        localStorage.setItem(`beanpool_one_way_back_${identity.publicKey}`, JSON.stringify({ dismissed: true, keptPostsAtDismissal: 0 }));
+        const answer = pending();
+        landing();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        await answer(standing('words', 1));
+        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+    });
+
+    it('its 12 words already looked at: never, answer or not', async () => {
+        localStorage.setItem(`beanpool_one_way_back_${identity.publicKey}`, JSON.stringify({ checked: true }));
+        const answer = pending();
+        landing();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        await answer(standing('words', 1, true));
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+    });
+
+    it('the node then says the member has a sign-in now: it goes', async () => {
+        const answer = pending();
+        landing();
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
+        await answer(standing('ordinary'));
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+    });
+
+    it("its own request fails (Home is showing what it had): the answer's word keeps it", async () => {
+        vi.mocked(api.getCommunityMe).mockRejectedValue(new Error('offline'));
+        landing();
+        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
+        await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
     });
 });
 

@@ -2572,6 +2572,25 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
+    // The answer's `safety` is the node's word that the member has only their 12 words, so a card not yet put away is
+    // drawn with the answer. Drawn when its own request came back instead, its cell arrived second in the order and
+    // every card after Needs you moved to another cell (PR #2411 review).
+    it('"Your way back in" is in the grid with the answer, before its own request answers, and no card moves when it does', async () => {
+        const answers: Array<(me: unknown) => void> = [];
+        vi.mocked(api.getCommunityMe).mockImplementation(() => new Promise((r) => { answers.push(r); }) as never);
+        await landAt(1400, SAFETY);
+        await waitFor(() => expect(answers.length).toBeGreaterThan(0));
+        const cell = screen.getByTestId('home-card-safety');
+        expect(cell.parentElement).toBe(grid());
+        expect(within(cell).getByTestId('one-way-back-landing')).toBeInTheDocument();
+        const before = cardIds();
+        expect(before).toEqual(['needs', 'safety', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+        await act(async () => { for (const r of answers) r({ probation: { rules: 'words', keptPosts: 0, ageEndsAt: null } }); });
+        await pause();
+        expect(cardIds()).toEqual(before);
+        expect(screen.getByTestId('home-card-safety')).toBe(cell);
+    });
+
     it('the one-time hint under the first card spans the row, straight after it in the reading order', async () => {
         await landAt(1400);
         const hint = await screen.findByTestId('home-hint');

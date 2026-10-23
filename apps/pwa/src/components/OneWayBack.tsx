@@ -10,7 +10,9 @@
  *
  * Who it is for is the node's word, never a guess: `GET /api/community/me` says `rules: 'words'` for a member who came
  * in with 12 words and has added no sign-in. Nothing is drawn while it has not answered, for an older node that does
- * not say, or offline.
+ * not say, or offline. Home's answer says it too (its `safety` card, passed as `known`), so there the card not yet put
+ * away is drawn with the answer, and its cell is there from the first paint; a return after ✕ waits for the node's
+ * counts.
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`).
@@ -114,10 +116,11 @@ function weekReturnDue(s: Schedule, standing: Standing, now: number): boolean {
  * Whether the landing screen shows the card now: until it is first put away; then once after a post that stayed up
  * since, and once when the first week is over, in whichever order they come; then never (Settings keeps it).
  */
-export function landingDue(s: Schedule, standing: Standing, now: number = Date.now()): boolean {
+export function landingDue(s: Schedule, standing: Standing | null, now: number = Date.now()): boolean {
     if (s.checked) return false;
     if (!s.dismissed) return true;
-    return postReturnDue(s, standing) || weekReturnDue(s, standing, now);
+    // A return goes by the node's counts: none until it has answered.
+    return !!standing && (postReturnDue(s, standing) || weekReturnDue(s, standing, now));
 }
 
 /** ✕: put away until the next return is due. Every return due now counts as shown. */
@@ -271,9 +274,11 @@ interface CardProps {
     refreshKey?: unknown;
     /** What the card stands in (Home's cell, with its "…"): drawn only with the card, so a card with nothing to say takes no place. */
     frame?: (card: ReactNode) => ReactNode;
+    /** The node has already said this member has only their 12 words (Home's answer): drawn without waiting for it again. */
+    known?: boolean;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false }: CardProps) {
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
@@ -281,12 +286,21 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     const resultRef = useRef<HTMLParagraphElement | null>(null);
     useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
-    const shown = !!standing?.words && (placement === 'settings' || landingDue(schedule, standing));
+    // ✕ before the node has answered: put away now, and kept once its counts are known (the posts up at that moment).
+    const [away, setAway] = useState(false);
+
+    const shown = !away && (standing?.words ?? known) && (placement === 'settings' || landingDue(schedule, standing));
 
     function update(next: Schedule) {
         setSchedule(next);
         writeSchedule(identity.publicKey, next);
     }
+
+    useEffect(() => {
+        if (!away || !standing) return;
+        setAway(false);
+        update(putAway(schedule, standing));
+    }, [away, standing]);
 
     return (
         <>
@@ -307,7 +321,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                         </h2>
                         {placement === 'landing' && (
                             <button type="button" aria-label={t('Hide this for now')}
-                                onClick={() => { if (standing) update(putAway(schedule, standing)); }}
+                                onClick={() => { if (standing) update(putAway(schedule, standing)); else setAway(true); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>

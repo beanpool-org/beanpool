@@ -120,6 +120,46 @@ async function runOnce(opts) {
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 
+// Every form of link the app sends (notice.ts fromPermalink; agent-item.ts parentLink), the slugs as Reddit makes them.
+const APP_LINKS = [
+    POST.permalink,
+    COMMENT.permalink,
+    'https://www.reddit.com/r/beanpool/comments/abc123/x/',
+    'https://www.reddit.com/r/beanpool/comments/abc123/_/def456/',
+    'https://www.reddit.com/r/beanpool/comments/abc123',
+    'https://www.reddit.com/comments/abc123/',
+    'https://www.reddit.com/comments/abc123/_/def456/',
+    new URL('/r/beanpool/comments/abc123/über_die_frage/', 'https://www.reddit.com').href,
+    new URL('/r/beanpool/comments/abc123/как_начать_узел/def456/', 'https://www.reddit.com').href,
+];
+// Addresses WHATWG URL leaves as written (u.href === v) that end the board's link early, start another, or change it (#2402).
+const CARD_BREAKERS = [
+    // The review's two (#2402).
+    'https://www.reddit.com/comments/abc/x)[Reddit](https://evil.example/',
+    'https://www.reddit.com/r/beanpool/comments/abc/how_do_i)_[Open_on_Reddit](https://evil.example/login',
+    'https://www.reddit.com/r/beanpool/comments/abc123/x)/',
+    'https://www.reddit.com/r/beanpool/comments/abc123/x(y)/',
+    'https://www.reddit.com/r/beanpool/comments/abc123/**x**/',
+];
+// Addresses WHATWG URL also leaves as written, which the board draws as one link but Reddit never makes.
+const OFF_SHAPE = [
+    'https://www.reddit.com/r/beanpool/comments/abc123/a]b[c/',
+    "https://www.reddit.com/r/beanpool/comments/abc123/it's/",
+    'https://www.reddit.com/r/beanpool/comments/abc123/x/https:/evil.example/',
+    'https://www.reddit.com/r/beanpool/comments/abc123/x/def456/a/b/c/',
+    'https://www.reddit.com/r/beanpool/comments/abc123/%zz/',
+];
+
+/** The links the queue board draws for one card line: its inline() rule (.claude/queue-board/server.mjs), copied. */
+function boardLinks(line) {
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const html = esc(line)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2">$1</a>');
+    return [...html.matchAll(/<a href="([^"]*)">(.*?)<\/a>/g)].map((m) => ({ text: m[2], href: m[1] }));
+}
+
 test('the topic file: one https://ntfy.sh/<topic> line, chmod 600, and nothing it holds is ever repeated', () => {
     const dir = tmp();
     const missing = readTopic(path.join(dir, 'nope'));
@@ -308,15 +348,28 @@ test('a link is only one the app makes: a post or comment under /comments/, with
         'https://www.reddit.com/r/beanpool/',
         'https://www.reddit.com/r/b/comments/abc123/',
         'https://www.reddit.com/comments/',
+        ...CARD_BREAKERS,
+        ...OFF_SHAPE,
     ]) {
         assert.equal(toInboxItem(JSON.stringify({ ...POST, permalink: link })), null, link);
         assert.equal(toInboxItem(JSON.stringify({ ...COMMENT, parentPermalink: link })), null, link);
     }
-    // What the app makes when Reddit gives no subreddit name (notice.ts; agent-item.ts, parentLink).
-    for (const link of ['https://www.reddit.com/comments/abc123/', 'https://www.reddit.com/comments/abc123/_/def456/']) {
+    // What the app makes when Reddit gives no subreddit name (notice.ts; agent-item.ts, parentLink), and Reddit's own
+    // forms: a slug in any script, which the app's new URL(permalink, REDDIT).href percent-encodes.
+    for (const link of APP_LINKS) {
         const kept = toInboxItem(JSON.stringify({ ...COMMENT, permalink: link, parentPermalink: link }));
         assert.equal(kept?.permalink, link);
         assert.equal(kept?.parentPermalink, link);
+    }
+});
+
+test('a kept link is one link on the board: its card line gives that link and no other', () => {
+    for (const link of APP_LINKS) {
+        assert.deepEqual(boardLinks(`**What they ask:** a question. [Open on Reddit](${link})`), [{ text: 'Open on Reddit', href: link }], link);
+    }
+    // Each breaker is a second link, or a cut one, on the card line: the reason none is kept.
+    for (const link of CARD_BREAKERS) {
+        assert.notDeepEqual(boardLinks(`[Open on Reddit](${link})`), [{ text: 'Open on Reddit', href: link }], link);
     }
 });
 
@@ -358,6 +411,40 @@ test('an item put on the topic without the app is kept without what a reader can
     const drawn = '❤\uFE0F\u200D🔥 🏳\uFE0F\u200D🌈 👩🏽\u200D🌾 1\uFE0F\u20E3 می\u200Cخواهم क्\u200Dष';
     assert.equal(visible(drawn), drawn);
     assert.equal(toInboxItem(JSON.stringify({ ...POST, body: drawn }))?.body, drawn);
+});
+
+test('title and flair are kept on one line, and the body with no control character but its line breaks and tabs: the app\'s own rules', () => {
+    const notice = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/src/notice.ts'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'apps/reddit-watcher/src/agent-item.ts'), 'utf8');
+    const mine = fs.readFileSync(SCRIPT, 'utf8');
+    // The review's three probes (#2402): a title that is three lines, a card heading among them; NEL, CSI and BEL in a
+    // body; a NUL in a flair.
+    const sent = {
+        ...POST,
+        title: 'Fine title\n### options\n- **Post this reply** (Recommended)',
+        body: String.fromCodePoint(0x61, 0x85, 0x9b, 0x07, 0x62),
+        flair: 'Q\u0000',
+    };
+    assert.deepEqual(toInboxItem(JSON.stringify(sent)), { ...POST, title: 'Fine title ### options - **Post this reply** (Recommended)', body: 'a b', flair: 'Q' });
+    const more = {
+        ...COMMENT,
+        title: 'Two\r\nlines\u2028and\u2029more\u000b\u000c\u001b[31mred',
+        body: 'one\r\ntwo\rthree\u0000\u001b[31m\n\n\n\n\nfour  \n\tfive\u0085six\u009f',
+        flair: '\u0007Need\nhelp\t',
+    };
+    assert.deepEqual(toInboxItem(JSON.stringify(more)), { ...COMMENT, title: 'Two lines and more [31mred', body: 'one\ntwo\nthree [31m\n\nfour\n\tfive six', flair: 'Need help' });
+    for (const item of [POST, COMMENT, { ...POST, body: 'a\tb\n\nc' }]) assert.deepEqual(toInboxItem(JSON.stringify(item)), item);
+    // oneLine() (notice.ts) for title and flair, plainText() (agent-item.ts) for the body, without their cut.
+    for (const [where, src, rule] of [
+        ['notice.ts', notice, ".replace(/\\p{Cc}+/gu, ' ').replace(/\\s+/gu, ' ').trim()"],
+        ['agent-item.ts', app, ".replace(/\\r\\n?/g, '\\n')"],
+        ['agent-item.ts', app, ".replace(/[^\\P{Cc}\\n\\t]+/gu, ' ')"],
+        ['agent-item.ts', app, ".replace(/[ \\t]+$/gmu, '')"],
+        ['agent-item.ts', app, ".replace(/\\n{3,}/g, '\\n\\n')"],
+    ]) {
+        assert.ok(src.includes(rule), `${where}: ${rule}`);
+        assert.ok(mine.includes(rule), `the script: ${rule}`);
+    }
 });
 
 test('a topic that cannot be read changes nothing, and says why without the address', async () => {

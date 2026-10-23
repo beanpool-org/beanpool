@@ -394,9 +394,10 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 aria-checked={data.allowed}
                                 disabled={busy}
                                 onClick={() => void handleSwitch(!data.allowed)}
-                                className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 disabled:opacity-50"
+                                className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {data.allowed ? 'Turn AI assistants off' : 'Allow AI assistants'}
+                                {busy && <span className="animate-spin text-xs">🔄</span>}
+                                <span>{busy ? 'Updating…' : data.allowed ? 'Turn AI assistants off' : 'Allow AI assistants'}</span>
                             </button>
                         ) : (
                             <p className="text-[11px] text-nature-400 m-0 break-words">Only an owner turns this on or off.</p>
@@ -505,9 +506,10 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 type="button"
                                 onClick={() => void handleMake()}
                                 disabled={busy}
-                                className="min-h-[48px] w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
+                                className="min-h-[48px] w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                Connect
+                                {busy && <span className="animate-spin text-xs">🔄</span>}
+                                <span>{busy ? 'Connecting…' : 'Connect'}</span>
                             </button>
                         </div>
                     ) : null}

@@ -58,7 +58,7 @@
  * through) reads to that person as not made ({@link acceptanceHiddenFrom}): as they left it (`state_before`: waiting,
  * lapsed or ignored), in neither of their lists, nor their unread count or badge. They may Ignore it, and read it ignored;
  * the opener, whose own act accepted it, reads nothing new and writes on. Their own act (an Accept, a line, their open of
- * the chat, adding the opener) or a trade's accepts it again, and lifting the block shows it: an Ignore made meanwhile was
+ * the chat) or a trade's accepts it again, and lifting the block shows it: an Ignore made meanwhile was
  * of a request the opener had accepted already, as option b's opener reads one once they lift theirs. Once each of them has
  * accepted it, it shows to both. A removal of the opener ignores it, as one nobody accepted. Where requests are off, one
  * the person ignored stays out of their lists, whether the opener's act accepted it while on or he writes while off: his
@@ -219,8 +219,8 @@ export function requestNeeded(from: string, to: string): boolean {
 }
 
 /**
- * Whether an act of the person a request is for (`actor`: their line, their own open of the chat, adding the opener), or a
- * trade between the two (no actor), accepts it: any request not accepted yet, whatever the switch says, and one whose
+ * Whether an act of the person a request is for (`actor`: their Accept, line or own open of the chat), or a trade between
+ * the two (no actor), accepts it: any request not accepted yet, whatever the switch says, and one whose
  * acceptance reads as not made to the actor, or for a trade to either of them (acceptanceHiddenFrom). Where requests were
  * turned off since, one they ignored is still kept out of their lists (sortRequestsOut), so their act brings it back; and
  * one waiting or lapsed, an ordinary chat while off, stays where they put it when the switch goes on again (PR #2392 review
@@ -443,12 +443,12 @@ export function reactionRefusal(conversationId: string, author: string, now: num
 
 /**
  * `owner` added `friend` (engine/social.ts addFriend): a request from them waiting for `owner` is accepted, as the design's
- * "I chose you", and one whose acceptance `owner` reads as not made. A standby, which adds a friend as the main server
- * does, writes no request of its own: it gets the acceptance with the main server's copy.
+ * "I chose you". A standby, which adds a friend as the main server does, writes no request of its own: it gets the
+ * acceptance with the main server's copy. (No acceptance is hidden from `owner` here: nobody adds someone they block.)
  */
 export function acceptOnFriendAdd(owner: string, friend: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
-    const rows = db.prepare('SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ?').all(friend, owner) as RequestRow[];
+    const rows = db.prepare("SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ? AND state != 'accepted'").all(friend, owner) as RequestRow[];
     for (const row of rows) if (acceptable(row, owner)) accept(row, now, owner);
 }
 

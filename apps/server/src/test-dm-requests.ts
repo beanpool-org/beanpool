@@ -23,8 +23,9 @@
  *      someone who has blocked the one whose act it was, and an opener who blocked Ann reads an acceptance she made after
  *      the block as a request still waiting, until they lift it; and the mirror: while Ann blocks an opener, an acceptance
  *      of his own act after her block (a role's line or reaction) is in none of her lists, her unread count or her badge,
- *      and reads as she left it; she may Ignore it and he reads nothing new; it shows once she lifts the block, or by her
- *      own act or a trade's, and a removal ignores it
+ *      and reads as she left it (an open with no line still asks nothing); she may Ignore it and he reads nothing new; it
+ *      shows once she lifts the block, or by her own act (her Accept, her asking for the chat) or a trade's, and a removal
+ *      ignores it
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
@@ -707,6 +708,23 @@ async function globalRun(): Promise<void> {
     assert(blocksTia.every(r => r.status === 200) && t2.status === 200 && annTiaBefore === 'pending' && tAccept.status === 200
         && tAccept.body?.request?.state === 'accepted' && inChats(annTia, tiaConv) && tiaReads === 'accepted' && t3.status === 200,
         `blocking each other, Tia's line accepts hers (Ann reads ${annTiaBefore}); Ann's Accept shows it to her, and Tia reads it accepted still (${tiaReads}; ${show(t3)})`);
+    // Uli opens, Ann blocks him before he writes, and he is made a moderator: his line, kept for him alone, accepts it. To Ann
+    // it is still an open with no line, which asks nothing, so her Ignore answers as before; her asking for the chat herself
+    // then shows it to her.
+    const uli = member('Uli');
+    const uliConv: string = (await open(uli, ann)).body?.conversation?.id;
+    const blockUli = await call('POST', ann, '/api/blocks', { targetPubkey: uli.pk });
+    const uliIgnoreBefore = await decide(ann, uliConv, 'ignore');
+    grantNodeRole(uli.pk, 'moderator', owner.pk);
+    const u2l = await send(uliConv, uli);
+    const uliIgnoreAfter = await decide(ann, uliConv, 'ignore');
+    assert(blockUli.status === 200 && u2l.status === 200 && rowOf(uliConv)?.state === 'accepted' && uliIgnoreBefore.status === 404
+        && uliIgnoreAfter.status === 404 && JSON.stringify(uliIgnoreAfter.body) === JSON.stringify(uliIgnoreBefore.body),
+        `Uli's line accepts his, and Ann's Ignore answers as for an open with no line, before and after (${show(uliIgnoreAfter)})`);
+    const annAsksUli = await open(ann, uli);
+    const annUli = await listOf(ann);
+    assert(annAsksUli.status === 200 && annAsksUli.body?.conversation?.request?.state === 'accepted' && inChats(annUli, uliConv),
+        `Ann asking for the chat with Uli herself shows his to her (${show(annAsksUli)})`);
     // Nor does it show in what they read (the director's option b on review 4354581168): while Zak blocks Ann, her reply
     // reads to him as a request still waiting, and so does her adding Ora; each one's next line is refused as a waiting
     // request's is. Pip, who blocked Ann too, waits, for the comparison. It shows once the block is lifted.

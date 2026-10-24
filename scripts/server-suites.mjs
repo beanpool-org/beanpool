@@ -447,6 +447,7 @@ export const SUITES = [
     'test-tool-store',
     'test-tool-state-check-migration',
     'test-shops',
+    'test-shop-refusal',
     'test-enterprise-shopfront',
     'test-blocks-on-messaging',
     'test-dm-requests',

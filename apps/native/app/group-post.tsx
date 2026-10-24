@@ -434,6 +434,8 @@ export default function GroupPostScreen() {
                         onPress={handleSubmit}
                         disabled={submitting}
                         accessibilityRole="button"
+                        accessibilityLabel={submitting ? t('Posting...') : t('Post to {name}', { name: groupName })}
+                        accessibilityState={{ disabled: submitting, busy: submitting }}
                     >
                         {submitting ? (
                             <ActivityIndicator color={colors.text.inverse} />

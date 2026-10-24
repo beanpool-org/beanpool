@@ -70,7 +70,14 @@ export function CommunityShapeSection({
     const handleOpenRow = (settingKey: keyof ShapeSettings, currentValue: any) => {
         if (!isOwner || shape?.standby) return;
         const lock = shape?.settings[settingKey]?.lock;
-        if (lock) return;
+        const canOpenWithLock = settingKey === 'listed' && Boolean(
+            lock && (
+                lock.code === 'held_back' ||
+                lock.code === 'schedule_never' ||
+                (lock.code === 'server_env' && shape?.settings.listed.configured)
+            )
+        );
+        if (lock && !canOpenWithLock) return;
 
         if (openSetting === settingKey) {
             setOpenSetting(null);
@@ -589,15 +596,28 @@ export function CommunityShapeSection({
                         lock={settings.listed.lock}
                         isOwner={isOwner && !standby}
                         isOpen={openSetting === 'listed'}
-                        onToggle={() => handleOpenRow('listed', settings.listed.value)}
+                        onToggle={() => handleOpenRow('listed', settings.listed.configured)}
+                        allowExpandWithLock={
+                            isOwner && !standby && Boolean(
+                                settings.listed.lock && (
+                                    settings.listed.lock.code === 'held_back' ||
+                                    settings.listed.lock.code === 'schedule_never' ||
+                                    (settings.listed.lock.code === 'server_env' && settings.listed.configured)
+                                )
+                            )
+                        }
                     >
                         <div className="space-y-3 pt-2">
                             <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
                                 <input
                                     type="checkbox"
                                     checked={Boolean(draftValue)}
-                                    onChange={(e) => setDraftValue(e.target.checked)}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
+                                    onChange={(e) => {
+                                        if (settings.listed.lock?.code === 'server_env' && e.target.checked) return;
+                                        setDraftValue(e.target.checked);
+                                    }}
+                                    disabled={settings.listed.lock?.code === 'server_env' && !draftValue}
+                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500 disabled:opacity-50"
                                 />
                                 <span>{t('Publish to directory')}</span>
                             </label>
@@ -609,7 +629,10 @@ export function CommunityShapeSection({
                                 onNoteChange={setNote}
                                 saving={saving}
                                 error={rowError}
-                                saveDisabled={draftValue === settings.listed.value}
+                                saveDisabled={
+                                    draftValue === settings.listed.configured ||
+                                    (settings.listed.lock?.code === 'server_env' && draftValue === true)
+                                }
                             />
                         </div>
                     </ShapeRow>
@@ -1036,6 +1059,7 @@ interface ShapeRowProps {
     isOpen: boolean;
     onToggle: () => void;
     children?: React.ReactNode;
+    allowExpandWithLock?: boolean;
 }
 
 function ShapeRow({
@@ -1051,9 +1075,10 @@ function ShapeRow({
     isOpen,
     onToggle,
     children,
+    allowExpandWithLock,
 }: ShapeRowProps) {
     const isLocked = Boolean(lock);
-    const canExpand = isOwner && !isLocked && !serverBadge;
+    const canExpand = isOwner && (!isLocked || Boolean(allowExpandWithLock)) && !serverBadge;
 
     return (
         <div

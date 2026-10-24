@@ -386,6 +386,94 @@ describe('CommunityShapeSection — Locks and Refusals (409)', () => {
             expect(screen.getByRole('alert')).toHaveTextContent('Switching Beans off would freeze what members hold.');
         });
     });
+
+    it('Finding 1: Listed row opens under held_back, schedule_never, and server_env (configured: true) so owner can switch OFF', async () => {
+        for (const code of ['held_back', 'schedule_never', 'server_env'] as const) {
+            const shape = makeDefaultShape({
+                listed: {
+                    value: false,
+                    configured: true,
+                    source: 'owner',
+                    lock: { code, why: `Locked by ${code}` },
+                },
+            });
+            const fetchMock = mockShapeApi(shape);
+
+            const { unmount } = render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+            await waitFor(() => expect(screen.getByTestId('shape-lock-listed')).toBeInTheDocument());
+
+            // Lock line is visible
+            expect(screen.getByTestId('shape-lock-listed')).toHaveTextContent(`Locked by ${code}`);
+
+            // Row CAN expand
+            fireEvent.click(screen.getByTestId('shape-expand-listed'));
+            const checkbox = screen.getByRole('checkbox', { name: /Publish to directory/i }) as HTMLInputElement;
+            expect(checkbox).toBeInTheDocument();
+            // Starts checked from configured (true), not value (false)
+            expect(checkbox.checked).toBe(true);
+
+            // Save is disabled initially because draftValue === configured
+            const saveBtn = screen.getByRole('button', { name: 'Save' });
+            expect(saveBtn).toBeDisabled();
+
+            // Clicking unchecks it
+            fireEvent.click(checkbox);
+            expect(checkbox.checked).toBe(false);
+            expect(saveBtn).not.toBeDisabled();
+
+            // If server_env, cannot re-check it to true
+            if (code === 'server_env') {
+                expect(checkbox).toBeDisabled();
+            }
+
+            // Save sends listed: false
+            fireEvent.click(saveBtn);
+            await waitFor(() => {
+                const call = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
+                expect(call).toBeDefined();
+                expect(JSON.parse(call[1].body)).toMatchObject({
+                    changes: { listed: false },
+                });
+            });
+
+            unmount();
+        }
+    });
+
+    it('Finding 1: Listed row does not expand under profile (global) or server_env when configured is false', async () => {
+        // Global kind with profile lock
+        const globalShape = makeDefaultShape({
+            listed: {
+                value: false,
+                configured: true,
+                source: 'server',
+                lock: { code: 'profile', why: "Set by this server's kind (global)" },
+            },
+        }, { kind: 'global' });
+        mockShapeApi(globalShape);
+        const { unmount } = render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-lock-listed')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByTestId('shape-expand-listed'));
+        expect(screen.queryByRole('checkbox', { name: /Publish to directory/i })).toBeNull();
+        unmount();
+
+        // server_env when configured is already false: cannot turn on
+        const envOffShape = makeDefaultShape({
+            listed: {
+                value: false,
+                configured: false,
+                source: 'owner',
+                lock: { code: 'server_env', why: 'Held back by env' },
+            },
+        });
+        mockShapeApi(envOffShape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-lock-listed')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByTestId('shape-expand-listed'));
+        expect(screen.queryByRole('checkbox', { name: /Publish to directory/i })).toBeNull();
+    });
 });
 
 describe('CommunityShapeSection — Folded fixes from PR #2415 review', () => {

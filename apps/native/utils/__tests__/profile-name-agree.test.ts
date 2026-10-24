@@ -596,6 +596,58 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(waitingIn(NODE)).toBeNull();
     });
 
+    it('after an offline rename and a members sync writing the old name back over the row, the next online Save sends the NEW name, not the row\'s (#2461 review r4368471153)', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Marty Renamed' });
+
+        // The members sync writes the name the node still holds over the row, and the screen reads it from there.
+        mockDb.localProfile = { ...mockDb.localProfile, callsign: 'Marty party' };
+        await pull();
+
+        // Back online, the member saves a bio and leaves the name alone.
+        const { updates } = mockNode();
+        await press('✏️ Edit');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+        const sent = updates.at(-1);
+        expect(sent, 'the online Save reached the node').toBeDefined();
+        expect(sent.bio).toBe('Grows tomatoes');
+        expect(sent.callsign).toBe('Marty Renamed');
+        expect(mockDb.remoteCallsign).toBe('Marty Renamed');
+        // The row and the card say the name the node now holds, never the old one the sync wrote.
+        expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
+        expect(host.textContent).toContain('Marty Renamed');
+        expect(waitingIn(NODE)?.callsign).toBeUndefined();
+    });
+
+    it('an offline bio Save over the old name a members sync wrote keeps the waiting rename, and the row says it too', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+
+        mockDb.localProfile = { ...mockDb.localProfile, callsign: 'Marty party' };
+        await pull();
+
+        await press('✏️ Edit');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+        expect(alerts.said.filter((s) => s === 'Offline Mode')).toHaveLength(2);
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Marty Renamed' });
+        // The row is what the retry falls back on: it holds the waiting name, not the one the sync wrote.
+        expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
+        expect(mockDb.localProfile.bio).toBe('Grows tomatoes');
+    });
+
     it('a rename waiting to sync in one community is never sent from a Save in another (#2439 Sonnet note: the flag is device-wide)', async () => {
         mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
         mockDb.remoteCallsign = 'Marty party';

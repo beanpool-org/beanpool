@@ -1188,6 +1188,10 @@ export default function SettingsScreen() {
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
             // What waits for this community from an earlier offline Save (utils/pending-profile-sync.ts): only its own.
             const pending = await pendingProfileChange(url, identity.publicKey);
+            // The name this Save stands for: one typed now, else a rename an earlier offline Save kept for this community.
+            // Not the field's: it starts from the row, which the members sync writes the node's old name over, and sending
+            // that would put the old name back on the node and retire the waiting one with it (#2461 review).
+            const savedCallsign = renames ? newCallsign : (pending?.callsign || newCallsign);
             if (!url) {
                 offline = true;
             } else {
@@ -1200,8 +1204,8 @@ export default function SettingsScreen() {
                 // (retireParkedPickAfterPublish), so it carries the name the member chose, or the node keeps the old one
                 // and the next answer from the community writes it back (#2439 review). `pending` is this community's
                 // own: another community's name is not this one's to send.
-                const pendingRename = !!pending && newCallsign.length >= 2;
-                if (renames || pendingRename) payloadObj.callsign = newCallsign;
+                const pendingRename = !!pending && savedCallsign.length >= 2;
+                if (renames || pendingRename) payloadObj.callsign = savedCallsign;
                 payloadCarriesName = payloadObj.callsign !== undefined;
                 // The one shared rule decides, so this Save cannot disagree with the wizard or
                 // with the pending-sync retry. It sends a photo picked in this session, else a
@@ -1272,7 +1276,7 @@ export default function SettingsScreen() {
 
             // Commit locally now that the node has accepted (or we know we are offline)
             const localUpdate: any = {
-                callsign: newCallsign,
+                callsign: savedCallsign,
                 bio: bio.trim(),
                 contact_value: contact.trim(),
                 contact_visibility: contact.trim() ? contactVisibility : 'hidden',
@@ -1285,8 +1289,8 @@ export default function SettingsScreen() {
             await updateMemberProfile(identity.publicKey, localUpdate);
             // The card renders nodeCallsign, so it would keep showing the pre-edit name
             // until the screen remounted if we didn't move it here too.
-            setNodeCallsign(newCallsign);
-            knownCallsignRef.current = newCallsign;
+            setNodeCallsign(savedCallsign);
+            knownCallsignRef.current = savedCallsign;
             if (renames && newCallsign !== identity.callsign) {
                 const updated = await updateCallsign(newCallsign);
                 if (updated) setIdentity(updated);

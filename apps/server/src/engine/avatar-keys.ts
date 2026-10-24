@@ -32,9 +32,13 @@
  * a members' read everywhere (https-server.ts gates every /api/groups read), so its picture goes only to a URL a group read
  * handed out. Its key is the same HMAC with the same secret over `'group-picture|' + id + '|' + version`, so it can never
  * be a member's key, and a new picture has a new key.
+ *
+ * A SHOP's banner (engine/shops.ts setShopPhoto) is served the same way, at `/api/shops/:id/photo`, and keyed on every
+ * node: only a member's read of a shop hands its URL out (a visitor's view of a shop carries none), with the same HMAC over
+ * `'shop-photo|' + id + '|' + version`.
  */
 import crypto from 'node:crypto';
-import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys } from '@beanpool/core';
+import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys, configureShopPhotoKeys } from '@beanpool/core';
 import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getNodeRole } from '../config/node-role.js';
@@ -116,6 +120,7 @@ export function installAvatarKeysAtBoot(): boolean {
     const s = crypto.createSecretKey(avatarKeySecret());
     groupSecret = s;
     configureGroupPictureKeys((id, version) => keyFor(s, `group-picture|${id}`, version));
+    configureShopPhotoKeys((id, version) => keyFor(s, `shop-photo|${id}`, version));
     const guestListingsOnly = getProfileSwitches().guestListingsOnly;
     // A node that kept faces open until this boot recorded the open shape, so the keyed one is a change: its time goes in
     // avatarKeysSince, and a phone's next members delta is the whole directory, with the keyed URLs (faceUrlsChangedAfter).
@@ -202,6 +207,21 @@ export function groupPictureKeyMatches(groupId: string, k: unknown): boolean {
     const row = db.prepare('SELECT avatar_ref FROM groups WHERE id = ?').get(groupId) as { avatar_ref: string | null } | undefined;
     if (!row || !row.avatar_ref) return false;
     const want = Buffer.from(keyFor(groupSecret, `group-picture|${groupId}`, avatarVersionOfRef(row.avatar_ref)));
+    const got = Buffer.from(k);
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+
+/**
+ * Whether `k` is the key for shop `shopId`'s banner as it is now (the row's photo_ref; engine/shops.ts setShopPhoto). Its
+ * key is the same HMAC with the same secret over `'shop-photo|' + id + '|' + version`, so it can never be a member's or a
+ * group's, and only a member's read of the shop hands it out (engine/shops.ts memberShop). False for anything else, a
+ * photo that isn't there and a server that installed no keys included: the route answers each as no photo.
+ */
+export function shopPhotoKeyMatches(shopId: string, k: unknown): boolean {
+    if (!groupSecret || typeof k !== 'string' || k.length !== KEY_CHARS) return false;
+    const row = db.prepare('SELECT photo_ref FROM shops WHERE id = ?').get(shopId) as { photo_ref: string | null } | undefined;
+    if (!row || !row.photo_ref) return false;
+    const want = Buffer.from(keyFor(groupSecret, `shop-photo|${shopId}`, row.photo_ref));
     const got = Buffer.from(k);
     return got.length === want.length && crypto.timingSafeEqual(got, want);
 }

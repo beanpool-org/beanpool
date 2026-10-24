@@ -507,7 +507,11 @@ export const TABLES: Record<string, TableEntry> = {
     member_tool_state: plain('public_key tool body updated_at'),
     // A shop (engine/shops.ts): a front window on a member's or an enterprise's account, its words, and its pause with the
     // Offers the pause took down. Its listings name it in their own rows (posts.shop_id); a close is a tombstone by its id.
-    shops: plain('id owner_pubkey name kind blurb how_to_deal opened_at paused_at back_on paused_posts updated_at'),
+    shops: plain('id owner_pubkey name kind blurb how_to_deal opened_at paused_at back_on paused_posts updated_at photo_ref'),
+    // A shop's banner, out of its row (schema.sql shop_photos), verbatim: its one writer (engine/shops.ts setShopPhoto)
+    // writes the shop's photo_ref with it, so both travel in the same delta; taking it down, and a close, is a tombstone by
+    // the shop's id.
+    shop_photos: plain('shop_id photo updated_at'),
     // A direct conversation waiting as a message request, and what became of it (engine/dm-requests.ts), so a standby
     // that takes over holds back the same lines and lists the same requests. Only a real conversation's: one kept for a
     // blocked opener alone is never in a copy (withheld_conversations), and its row starts travelling when it becomes real.

@@ -5,8 +5,9 @@
  *   GET  /api/shops?lat=&lng=&radiusKm=   → { shops: [shop + distanceKm] }   the shops near a place, nearest first
  *   GET  /api/shops/:id                   → shop                             one shop, 404 shop_not_found
  *   GET  /api/shops/mine                  → { shop: shop | null }            the signer's own
- *   PUT  /api/shops/mine { name?, kind?, blurb?, howToDeal?, paused?, backOn? }
+ *   PUT  /api/shops/mine { name?, kind?, blurb?, howToDeal?, paused?, backOn?, photo? }
  *                                         → { success, shop, paused, resumed }   opens it if need be, then changes it
+ *   GET  /api/shops/:id/photo?v=&k=       → its banner's bytes, to a URL with its key; 404 for any other
  *   POST /api/shops/mine/close { endOffers? }
  *                                         → { success, shopId, cleared, ended, resumed }
  *   POST /api/shops/mine/offers { postIds }
@@ -15,6 +16,10 @@
  * and the same for an enterprise's shop, by a keeper of it, with the enterprise as the owner:
  *
  *   GET | PUT /api/treasury/:treasury/shop, POST /api/treasury/:treasury/shop/close, POST /api/treasury/:treasury/shop/offers
+ *
+ * A shop's `photo` is its banner (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4; Marty, 24 Oct 2026): a
+ * picture to put up or replace it, its own URL sent back to keep it, null to take it down (engine/shops.ts cleanShopPhoto),
+ * charged to the signer who sends it, a keeper writing for an enterprise included.
  *
  * and one of a shop's Offers featured on its shelf, or taken off it (DESIGN-shops-round3-enterprise-shopfront-fable.md §4),
  * by its author or a keeper of the enterprise that posted it:
@@ -33,15 +38,17 @@
  * and in the near list a whole-km distance worked out from the listings' areas (the listings' own visitors' read,
  * getPosts `coarse`), never its name, owner, blurb or "how I deal": a name a member typed can name them (§4, §9.4). A
  * member gets it whole. Every count is of the shop's listings as that reader may see them (engine/shops.ts
- * shopListingsFor), so no answer says more than `shop=` would list.
+ * shopListingsFor), so no answer says more than `shop=` would list. Its banner's URL is in a member's read alone, with the
+ * key its photo route asks for (engine/avatar-keys.ts): an `<img>` cannot sign, so the route is a public read
+ * (https-server.ts PUBLIC_READ_PATTERNS) that serves the bytes to that key and answers anything else as no photo.
  *
  * ## Only ever the owner's own
  *
  * No route takes the owner from the query or the body: a member is `ctx.state.actor`, verified by the real
  * `requireSignature` middleware, and an enterprise is the path's, which the signer must keep (canOperateTreasury, as for
  * its Offers). An enterprise closed (pruned, disabled, suspended) has no shop to change; one wound up keeps its to read.
- * A change that publishes (its words, its kind, a reopen, Offers put in, a close that puts a pause's Offers back up) is
- * refused to a muted member or enterprise (G3).
+ * A change that publishes (its words, its kind, a new banner, a reopen, Offers put in, a close that puts a pause's Offers
+ * back up) is refused to a muted member or enterprise (G3); taking the banner down is not one.
  *
  * ## The main server only, for a change
  *
@@ -62,12 +69,14 @@ import {
     ShopRefusal, shopOf, shopById, changeShop, closeShop, addOffersToShop, memberShop, visitorShop, featureOffer,
     enterpriseShopRefusal, type ShopChanges, type ShopRow,
 } from '../engine/shops.js';
+import { getAvatarService } from '../engine/avatar.js';
+import { shopPhotoKeyMatches } from '../engine/avatar-keys.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { seesGuestView, VIEW_HEADER } from './viewer.js';
 import type Koa from 'koa';
 import type { RouteDeps } from './types.js';
-import { word } from '@beanpool/core';
+import { shopOfPhotoUrl, word } from '@beanpool/core';
 
 /** How far the shops near a place reach when the read names no radius: the landing card's 50 km. */
 export const SHOPS_NEAR_KM_DEFAULT = 50;
@@ -138,6 +147,11 @@ function assertMayPublish(owner: Owner): void {
     if (owner.enterprise) assertNotMuted(owner.key);
 }
 
+/** Whether a PUT's `photo` puts a new picture up: text that is no photo URL sent back, and not empty (a take-down). */
+function newPhoto(photo: unknown): boolean {
+    return photo !== undefined && photo !== null && (typeof photo !== 'string' || (photo.trim() !== '' && shopOfPhotoUrl(photo) === null));
+}
+
 /** The apps hear each listing a shop's change moved, as a member's own pause or resume tells them. */
 function tellListingsMoved(ids: string[]): void {
     for (const id of ids) broadcast({ type: 'post_updated', id });
@@ -168,9 +182,9 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => Owner | undefined) {
             const body = (ctx.requestBody ?? {}) as ShopChanges;
             try {
                 const publishes = body.name !== undefined || body.kind !== undefined || body.blurb !== undefined
-                    || body.howToDeal !== undefined || body.paused === false || !shopOf(owner.key);
+                    || body.howToDeal !== undefined || body.paused === false || newPhoto(body.photo) || !shopOf(owner.key);
                 if (publishes) assertMayPublish(owner);
-                const done = changeShop(owner.key, body, { enterprise: owner.enterprise });
+                const done = changeShop(owner.key, body, { enterprise: owner.enterprise, actor: owner.actor });
                 tellListingsMoved([...done.paused, ...done.resumed]);
                 answer(ctx, { success: true, shop: memberShop(done.shop, owner.actor), paused: done.paused, resumed: done.resumed });
             } catch (e) {
@@ -228,6 +242,42 @@ async function feature(ctx: Ctx): Promise<void> {
     }
 }
 
+/**
+ * GET /api/shops/:id/photo?v=&k=: a shop's banner, for an `<img>`, which cannot sign: a public read (https-server.ts
+ * PUBLIC_READ_PATTERNS), served only to a URL carrying the key for this photo as it is now (engine/avatar-keys.ts), which
+ * only a member's read of the shop hands out. Any other request, a shop with no photo included, is answered alike. The
+ * bytes as a group's picture's are served (routes/groups.ts): raster only, under the type they are, never kept by a shared
+ * cache.
+ */
+async function getShopPhoto(ctx: Ctx): Promise<void> {
+    const shopId = String(ctx.params.id ?? '');
+    if (!shopPhotoKeyMatches(shopId, ctx.query.k)) {
+        ctx.status = 404;
+        ctx.body = { error: 'Photo not found' };
+        return;
+    }
+    const result = await getAvatarService().getShopPhoto(shopId, { ifNoneMatch: ctx.get('If-None-Match') });
+    if (result.status === 304) {
+        ctx.status = 304;
+        if (result.etag) ctx.set('ETag', result.etag);
+        ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        return;
+    }
+    if (result.status !== 200 || !result.buffer) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error || 'Photo not found' };
+        return;
+    }
+    ctx.status = 200;
+    ctx.type = result.contentType!;
+    ctx.set('Content-Type', result.contentType!);
+    ctx.set('X-Content-Type-Options', 'nosniff');
+    ctx.set('Content-Disposition', 'inline');
+    if (result.etag) ctx.set('ETag', result.etag);
+    ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+    ctx.body = result.buffer;
+}
+
 /** GET /api/shops/:id: one shop, as this reader may see it. */
 async function getShop(ctx: Ctx): Promise<void> {
     const { guest, reader } = readerOf(ctx);
@@ -276,6 +326,7 @@ export function createShopRoutes(_deps: RouteDeps): Router {
     router.post('/api/shops/mine/close', own.close);
     router.post('/api/shops/mine/offers', own.offers);
     router.get('/api/shops', getShopsNear);
+    router.get('/api/shops/:id/photo', getShopPhoto);
     router.get('/api/shops/:id', getShop);
     const enterprise = handlers(enterpriseOwner);
     router.get('/api/treasury/:treasury/shop', enterprise.get);

@@ -224,13 +224,24 @@ describe('checkGlobalDoor: refused unless the node says it is the global communi
 });
 
 describe('the tabs a node hides', () => {
-    it('hides Commons and Ledger where Beans are off', () => {
-        expect(hiddenTabsFor({ beans: false })).toEqual(['projects', 'ledger']);
+    it('Beans off + Decisions on: Commons stays for Decide, Ledger is hidden', () => {
+        expect(hiddenTabsFor({ beans: false, decisions: true })).toEqual(['ledger']);
+        expect(hiddenTabsFor({ beans: false })).toEqual(['ledger']);
         expect(beansOn({ beans: false })).toBe(false);
+    });
+
+    it('Beans off + Decisions off: Commons and Ledger are both hidden', () => {
+        expect(hiddenTabsFor({ beans: false, decisions: false })).toEqual(['projects', 'ledger']);
+    });
+
+    it('showcase on: neither is hidden, even with Beans off and Decisions off', () => {
+        expect(hiddenTabsFor({ beans: false, decisions: false, showcase: true })).toEqual([]);
+        expect(hiddenTabsFor({ beans: false, decisions: true, showcase: true })).toEqual([]);
     });
 
     it('hides nothing where Beans are on, or where the node does not say', () => {
         expect(hiddenTabsFor({ beans: true })).toEqual([]);
+        expect(hiddenTabsFor({ beans: true, decisions: false })).toEqual([]);
         expect(hiddenTabsFor({})).toEqual([]);
         expect(hiddenTabsFor(null)).toEqual([]);
         expect(hiddenTabsFor(undefined)).toEqual([]);

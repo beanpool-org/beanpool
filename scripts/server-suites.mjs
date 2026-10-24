@@ -524,6 +524,7 @@ export const SUITES = [
     'test-photo-metadata',
     'test-snapshot-completeness',
     'test-groups-isolation',
+    'test-group-invite-notify',
     'test-groups-routes',
     'test-groups-invite-only-hidden',
     'test-group-existence-leaks',

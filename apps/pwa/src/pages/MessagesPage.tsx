@@ -1573,7 +1573,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
         return (
             <div
-                className="h-full max-w-4xl mx-auto w-full flex flex-col"
+                className="h-full max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full flex flex-col"
                 style={dragActive ? { outline: '2px dashed var(--accent)', outlineOffset: '-4px' } : undefined}
                 onDragEnter={acceptsDrop ? (e) => {
                     if (!dragCarriesFile(e.dataTransfer)) return;
@@ -2082,9 +2082,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <div
                                 key={msg.id}
                                 id={`msg-${msg.id}`}
+                                className="max-w-[85%] md:max-w-[70%]"
                                 style={{
                                     alignSelf: isMe ? 'flex-end' : 'flex-start',
-                                    maxWidth: '85%',
                                     position: 'relative',
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -2794,7 +2794,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     };
 
     return (
-        <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
+        <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
             {/* Wraps: at 320px with 1.3x text, Groups' two buttons go under the title rather than squeeze it. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.3rem', margin: 0 }}>{t('💬 Messages')}</h2>

@@ -2805,9 +2805,10 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     const q = new URLSearchParams();
     if (params.cards) q.set('cards', params.cards.join(','));
     // This app opens an enterprise's own screen and a chat group's (HomePage needsLine, { to: 'enterprise' | 'group', id }), so
-    // the node may point a keepers' or a group's vote line there and count it (routes/home-answer.ts parseLands). The two
-    // ship together.
-    q.set('lands', 'enterprise,group');
+    // the node may point a keepers' or a group's vote line there and count it, and a group invitation's ({ to: 'invite' },
+    // the group's info with Join), so it sends the line for the member's open invitations (routes/home-answer.ts
+    // parseLands). The two ship together.
+    q.set('lands', 'enterprise,group,invite');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

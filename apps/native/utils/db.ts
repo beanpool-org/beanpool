@@ -24,7 +24,7 @@ import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './node
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
-import { isPlainNodeAddress } from './node-url';
+import { isPlainNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
@@ -1832,20 +1832,33 @@ export async function fetchNodeCallsign(anchorUrl: string, pubkey: string, priva
     try {
         if (!anchorUrl || anchorUrl === 'Detecting...' || !pubkey) return null;
         const cleanUrl = anchorUrl.replace(/\/+$/, '');
+        if (shouldBlockCleartextNodeUrl(cleanUrl)) return null;
+
         const url = `${cleanUrl}/api/community/membership/${pubkey}`;
         let privKey = privateKey;
         if (!privKey) {
             const id = await (await import('./identity')).loadIdentity().catch(() => null);
-            if (id?.publicKey === pubkey) privKey = id.privateKey;
+            if (id?.publicKey && id.publicKey.toLowerCase() === pubkey.toLowerCase()) {
+                privKey = id.privateKey;
+            }
         }
-        const signed = privKey ? await buildSignedHeaders('GET', url, '', privKey, pubkey) : {};
-        const res = await fetch(url, {
-            headers: { ...signed, Accept: 'application/json' },
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        const callsign = data?.callsign;
-        return typeof callsign === 'string' && callsign.trim().length > 0 ? callsign.trim() : null;
+        if (!privKey) return null;
+
+        const signed = await buildSignedHeaders('GET', url, '', privKey, pubkey);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+            const res = await fetch(url, {
+                headers: { ...signed, Accept: 'application/json' },
+                signal: controller.signal,
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            const callsign = data?.callsign;
+            return typeof callsign === 'string' && callsign.trim().length > 0 ? callsign.trim() : null;
+        } finally {
+            clearTimeout(timeout);
+        }
     } catch {
         return null;
     }

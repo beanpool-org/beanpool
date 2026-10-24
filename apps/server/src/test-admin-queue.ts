@@ -138,6 +138,21 @@ function main() {
         'with Decisions switched back on, the suspensions label says the community is voting again');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
 
+    // 4c. A pause opens the community's vote on removing the member (removal by vote S2): that vote is a suspension to
+    // see to as well. A removal a member proposed is not, whatever its params say.
+    db.prepare(`
+        INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, params, franchise, status, closes_at, created_at)
+        VALUES ('dec_pause', 'SYSTEM', 'Remove Someone?', 'desc', 'member', 'remove_member', '{"rule":2,"pausedBy":"owner:password"}', '1m1v', 'open', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    `).run(closesAt);
+    db.prepare(`
+        INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, params, franchise, status, closes_at, created_at)
+        VALUES ('dec_proposed', ?, 'Remove Someone Else', 'desc', 'member', 'remove_member', '{"rule":2}', '1m1v', 'open', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    `).run(buyerPk, closesAt);
+    q = getAdminQueue();
+    assert(q.items.find(i => i.kind === 'suspensions')?.count === 2,
+        `the suspensions item counts a pause's open vote beside the old keep_suspension, and not a member's proposal (got ${q.items.find(i => i.kind === 'suspensions')?.count})`);
+    db.prepare("DELETE FROM decisions WHERE id IN ('dec_pause', 'dec_proposed')").run();
+
     // 5. Unclean shutdown item
     setShutdownStatusForTesting({ uncleanShutdown: true, acknowledged: false });
     q = getAdminQueue();

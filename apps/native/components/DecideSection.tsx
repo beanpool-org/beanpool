@@ -17,7 +17,10 @@ import {
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
-import { DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
+import {
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline,
+    poolVoteBlocker, turnoutLine, voiceCreditsLine,
+} from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
 import { signedRequestWords } from './signed-request-lines';
@@ -802,6 +805,18 @@ export function DecideSection({
                                         </View>
                                     )}
 
+                                    {/* A pause's own vote: the node opened it when an admin paused someone (removal by vote S2) */}
+                                    {isPauseVote(item) && (
+                                        <View style={styles.keepBox} testID="pause-vote-box">
+                                            <Text style={styles.keepHeadline}>
+                                                {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                            </Text>
+                                            <Text style={styles.keepBody}>
+                                                {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                            </Text>
+                                        </View>
+                                    )}
+
                                     {/* §3.8 Removal Ballot debt-write-off line */}
                                     {item.effect === 'remove_member' && (
                                         <View style={styles.debtWarningBox} testID="removal-debt-write-off-box">
@@ -926,6 +941,8 @@ export function DecideSection({
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👍 Vote YES')} />
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👎 Vote NO')} />
                                             </View>
+                                        ) : isOwnRemoval(item, identity?.publicKey) ? (
+                                            <Text style={styles.blockerText} testID="own-removal-note">{t("This vote is about you, so you can't vote on it.")}</Text>
                                         ) : (
                                             <View style={styles.voteButtonsRow}>
                                                 <Pressable

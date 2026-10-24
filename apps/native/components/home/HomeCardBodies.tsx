@@ -8,14 +8,16 @@ import { MemberAvatar } from '../MemberAvatar';
 import { ExampleListings } from '../ExampleListings';
 import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { eventHomeWhen, formatDistance } from '../../utils/events';
-import type { NeedsYouEntry } from '../../utils/needs-you';
+import { closesInWords, type NeedsYouEntry } from '../../utils/needs-you';
 import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
     RSVP_SAID, RSVP_WORDS, beansAmount, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine,
-    groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
+    groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence, DECIDE_HREF, formatBeans,
+    communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TipsView } from '@beanpool/core';
+import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
 
@@ -117,6 +119,42 @@ export function InterestsBody({ interests, colors, onToggle }: { interests: read
 }
 
 export function DealsBody({ card, colors }: { card: NonNullable<HomeCards['deals']>; colors: AppColors }) {
+    if (card.items && card.items.length > 0) {
+        return (
+            <>
+                {card.items.slice(0, 3).map(item => {
+                    const title = item.title?.trim() || t('Deal');
+                    const line = item.with
+                        ? t('{title} · with {name}', { title, name: item.with })
+                        : title;
+                    const waitText = item.waitsOnMe ? t('waiting on you') : t('waiting on them');
+                    const when = timeAgoInWords(item.at);
+                    const sub = when ? `${waitText} · ${when}` : waitText;
+                    const a11y = t('{line} {sub} Opens the deal.', { line: sentence(line), sub: sentence(sub) });
+                    return (
+                        <HomeRow
+                            key={item.txId}
+                            colors={colors}
+                            text={line}
+                            sub={sub}
+                            strong={item.waitsOnMe}
+                            a11y={a11y}
+                            onPress={() => router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.txId } })}
+                            testID={`home-deal-${item.txId}`}
+                        />
+                    );
+                })}
+                <HomeLink
+                    id="deals:all"
+                    colors={colors}
+                    text={t('All deals')}
+                    a11y={t('All deals, in the Market')}
+                    onPress={() => router.push({ pathname: '/(tabs)/market', params: { tab: 'deals' } })}
+                    testID="home-deals-all"
+                />
+            </>
+        );
+    }
     const line = dealsLine(card);
     const w = card.waitingOnMe;
     return (
@@ -134,6 +172,117 @@ export function DealsBody({ card, colors }: { card: NonNullable<HomeCards['deals
 }
 
 export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['enterprise']>; colors: AppColors }) {
+    const s = homeStyles(colors);
+    if (typeof card.keepers === 'number') {
+        const lifecycleWord = card.lifecycle === 'bounded' ? t('project') : t('enterprise');
+        const nameLine = t('{name} · {lifecycle}', { name: card.name, lifecycle: lifecycleWord });
+        const balanceLine = typeof card.balance === 'number'
+            ? t('Balance {balance} · {keepers}', {
+                balance: beansAmount(card.balance),
+                keepers: tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers }),
+            })
+            : tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers });
+        const openTreasury = () => router.push({ pathname: '/treasury-detail', params: { publicKey: card.id, name: card.name } });
+
+        let monthLine: string | null = null;
+        if (card.month) {
+            monthLine = t('This month: {trades} · +{in} in · −{out} out', {
+                trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
+                in: formatBeans(card.month.in),
+                out: formatBeans(card.month.out),
+            });
+        }
+
+        let latestLine: string | null = null;
+        if (card.latest) {
+            const sign = card.latest.amount > 0 ? '+' : '';
+            const amountStr = `${sign}${beansAmount(card.latest.amount)}`;
+            const when = timeAgoInWords(card.latest.at);
+            const who = card.latest.who
+                ?? (card.latest.kind === 'commons' ? t('the Commons')
+                    : card.latest.kind === 'deal' ? t('a deal')
+                    : null);
+            if (card.latest.amount < 0) {
+                if (who && when) {
+                    latestLine = t('Latest: {amount} to {who} · {when}', { amount: amountStr, who, when });
+                } else if (who) {
+                    latestLine = t('Latest: {amount} to {who}', { amount: amountStr, who });
+                } else if (when) {
+                    latestLine = t('Latest: {amount} · {when}', { amount: amountStr, when });
+                } else {
+                    latestLine = t('Latest: {amount}', { amount: amountStr });
+                }
+            } else {
+                if (who && when) {
+                    latestLine = t('Latest: {amount} from {who} · {when}', { amount: amountStr, who, when });
+                } else if (who) {
+                    latestLine = t('Latest: {amount} from {who}', { amount: amountStr, who });
+                } else if (when) {
+                    latestLine = t('Latest: {amount} · {when}', { amount: amountStr, when });
+                } else {
+                    latestLine = t('Latest: {amount}', { amount: amountStr });
+                }
+            }
+        }
+
+        const requestsText = card.requests > 0
+            ? tn(card.requests, '{n} request to approve', '{n} requests to approve', { n: card.requests })
+            : null;
+
+        return (
+            <>
+                <HomeRow
+                    colors={colors}
+                    text={nameLine}
+                    a11y={card.lifecycle === 'bounded' ? t('{name}. Opens the project.', { name: card.name }) : t('{name}. Opens the enterprise.', { name: card.name })}
+                    onPress={openTreasury}
+                    testID="home-enterprise-name"
+                />
+                <HomeRow
+                    colors={colors}
+                    text={balanceLine}
+                    a11y={typeof card.balance === 'number'
+                        ? t('{line}. Opens the enterprise ledger.', { line: balanceLine })
+                        : (card.lifecycle === 'bounded'
+                            ? t('{line}. Opens the project.', { line: balanceLine })
+                            : t('{line}. Opens the enterprise.', { line: balanceLine }))}
+                    onPress={openTreasury}
+                    testID="home-enterprise-balance"
+                />
+                {monthLine && (
+                    <HomeRow
+                        colors={colors}
+                        text={monthLine}
+                        a11y={t('{line}. Opens the enterprise ledger.', { line: monthLine })}
+                        onPress={openTreasury}
+                        testID="home-enterprise-month"
+                    />
+                )}
+                {latestLine && (
+                    <HomeRow
+                        colors={colors}
+                        text={latestLine}
+                        a11y={t('{line}. Opens the enterprise ledger.', { line: latestLine })}
+                        onPress={openTreasury}
+                        testID="home-enterprise-latest"
+                    />
+                )}
+                {requestsText && (
+                    <HomeRow
+                        colors={colors}
+                        text={requestsText}
+                        strong
+                        a11y={t('{requests}. Opens Manage.', { requests: requestsText }, "Manage: an enterprise's keepers' console")}
+                        onPress={() => router.push({ pathname: '/treasury-manage', params: { publicKey: card.id, name: card.name } })}
+                        testID="home-enterprise-requests"
+                    />
+                )}
+                {card.others > 0 && (
+                    <Text style={s.trailing}>{tn(card.others, 'and {n} more you keep', 'and {n} more you keep')}</Text>
+                )}
+            </>
+        );
+    }
     const line = enterpriseLine(card);
     // Its requests are approved in its keepers' console (S7), never on its page: with any waiting, the line opens Manage.
     // The card is only ever a keeper's (home-answer keeperOf).
@@ -240,6 +389,63 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
 
 /** One line per place (utils/home-cards.ts `decideLines`): Decisions open Commons → Decide, polls the Market's Polls. */
 export function DecideBody({ card, features, colors, now }: { card: NonNullable<HomeCards['decide']>; features: HomeAnswer['features']; colors: AppColors; now: number }) {
+    if ((card.items && card.items.length > 0) || card.poll) {
+        const pollsLine = (card.polls > 1 || card.pollsMore || (!card.poll && card.polls > 0))
+            ? decideLines(card, features, now).find(l => l.id === 'polls')
+            : null;
+        return (
+            <>
+                {(card.items || []).slice(0, 3).map(item => {
+                    const closes = closesInWords(item.closesAt, now);
+                    const vote = item.voted ? t('You voted') : t('Not yet');
+                    const sub = `${closes} · ${vote}`;
+                    const subA11y = t('{closes}, {vote}', { closes, vote });
+                    const a11y = t('{title} {sub} Opens Decide.', {
+                        title: sentence(item.title),
+                        sub: sentence(subA11y),
+                    });
+                    return (
+                        <HomeRow
+                            key={item.id}
+                            colors={colors}
+                            text={item.title}
+                            sub={sub}
+                            a11y={a11y}
+                            onPress={() => router.push(DECIDE_HREF)}
+                            testID={`home-decide-${item.id}`}
+                        />
+                    );
+                })}
+                {card.poll && (
+                    <HomeRow
+                        colors={colors}
+                        text={t('Poll: {title}', { title: card.poll.title })}
+                        sub={closesInWords(card.poll.closesAt, now)}
+                        a11y={t('Poll: {title} {closes} Opens the poll.', {
+                            title: sentence(card.poll.title),
+                            closes: sentence(closesInWords(card.poll.closesAt, now)),
+                        })}
+                        onPress={() => router.push({ pathname: '/post/[id]', params: { id: card.poll!.id } })}
+                        testID="home-decide-poll"
+                    />
+                )}
+                {pollsLine && (
+                    <HomeRow
+                        key="polls"
+                        colors={colors}
+                        text={pollsLine.text}
+                        a11y={pollsLine.a11y}
+                        onPress={() => router.push(pollsLine.href)}
+                        testID="home-decide-polls"
+                    />
+                )}
+                {decideOnNode(features) && (card.items?.length ?? 0) > 0 && (
+                    <HomeLink id="decide:all" colors={colors} text={t('Decide')} a11y={t('Open Decide, in Commons')}
+                        onPress={() => router.push(DECIDE_HREF)} testID="home-decide-all" />
+                )}
+            </>
+        );
+    }
     return (
         <>
             {decideLines(card, features, now).map(l => (
@@ -254,13 +460,27 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
         <>
             {card.items.map(g => {
                 const line = groupLine(g);
+                let sub: string | null = null;
+                if (g.last) {
+                    const when = timeAgoInWords(g.last.at);
+                    if (g.last.who && when) {
+                        sub = t('{who}, {when}: {text}', { who: g.last.who, when, text: g.last.text });
+                    } else if (g.last.who) {
+                        sub = t('{who}: {text}', { who: g.last.who, text: g.last.text });
+                    } else {
+                        sub = g.last.text;
+                    }
+                }
                 return (
                     <HomeRow
                         key={g.id}
                         colors={colors}
                         text={line}
+                        sub={sub}
                         strong={g.unread > 0 && !g.muted}
-                        a11y={t('{line} Opens the chat.', { line: sentence(line) })}
+                        a11y={sub
+                            ? t('{line} {sub} Opens the chat.', { line: sentence(line), sub: sentence(sub) })
+                            : t('{line} Opens the chat.', { line: sentence(line) })}
                         onPress={() => router.push(g.kind === 'event'
                             ? { pathname: '/chat/[id]', params: { id: g.id, event: '1' } }
                             : { pathname: '/chat/[id]', params: { id: g.id, [g.kind]: '1' } })}
@@ -308,13 +528,20 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
         <>
             {card.items.map(p => {
                 const title = pulseTitle(p);
+                const when = timeAgoInWords(p.publishedAt);
+                const sub = when
+                    ? t('by {name} · {when}', { name: p.callsign, when })
+                    : t('by {name}', { name: p.callsign });
+                const a11y = when
+                    ? t('{title}, by {name}, {when}. Opens the Pulse.', { title, name: p.callsign, when })
+                    : t('{title}, by {name} Opens the Pulse.', { title, name: sentence(p.callsign) });
                 return (
                     <HomeRow
                         key={p.id}
                         colors={colors}
                         text={title}
-                        sub={t('by {name}', { name: p.callsign })}
-                        a11y={t('{title}, by {name} Opens the Pulse.', { title, name: sentence(p.callsign) })}
+                        sub={sub}
+                        a11y={a11y}
                         onPress={() => router.push('/(tabs)/pulse')}
                         left={<Thumb uri={resolvePulseThumbnailUrl(nodeUrl, p)} emoji="📡" colors={colors} />}
                         testID={`home-pulse-${p.id}`}
@@ -327,7 +554,56 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
 }
 
 export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans']>; colors: AppColors }) {
+    const s = homeStyles(colors);
     const { main, sub } = beansLines(card);
+    if (card.month) {
+        const monthText = card.month.more
+            ? t('This month (partial): {trades} · +{in} in · −{out} out', {
+                trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
+                in: formatBeans(card.month.in),
+                out: formatBeans(card.month.out),
+            })
+            : t('This month: {trades} · +{in} in · −{out} out', {
+                trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
+                in: formatBeans(card.month.in),
+                out: formatBeans(card.month.out),
+            });
+        const tier = card.tier && Object.prototype.hasOwnProperty.call(TIER_WORDS, card.tier) ? t(TIER_WORDS[card.tier as keyof typeof TIER_WORDS]) : card.tier || null;
+        const tierKey = card.tier ? card.tier.toLowerCase() : undefined;
+        const trustToken = tierKey && tierKey !== 'star' && tierKey in colors.trust
+            ? colors.trust[tierKey as 'resident' | 'newcomer' | 'parent' | 'steward' | 'elder' | 'founding']
+            : colors.trust.resident;
+        const badgeNode = tier ? (
+            <View style={[s.badge, { backgroundColor: trustToken.bg, borderColor: trustToken.border, borderWidth: 1 }]}>
+                <Text style={[s.badgeText, { color: trustToken.fg }]} maxFontSizeMultiplier={1.2}>{tier}</Text>
+            </View>
+        ) : undefined;
+        const operationalSub = (card.frozen || !card.activated) ? sub : undefined;
+        return (
+            <>
+                <HomeRow
+                    colors={colors}
+                    text={main}
+                    sub={operationalSub}
+                    strong
+                    a11y={operationalSub
+                        ? t('{main} {sub} Opens your Ledger.', { main: sentence(main), sub: sentence(operationalSub) })
+                        : t('{main} Opens your Ledger.', { main: sentence(main) })}
+                    onPress={() => router.push('/(tabs)/ledger')}
+                    testID="home-beans-line"
+                />
+                <HomeRow
+                    colors={colors}
+                    text={monthText}
+                    lines={3}
+                    right={badgeNode}
+                    a11y={tier ? t('{month}. {tier}. Opens your Ledger.', { month: monthText, tier }) : t('{month}. Opens your Ledger.', { month: monthText })}
+                    onPress={() => router.push('/(tabs)/ledger')}
+                    testID="home-beans-month"
+                />
+            </>
+        );
+    }
     return (
         <HomeRow colors={colors} text={main} sub={sub} strong
             a11y={sub ? t('{main} {sub} Opens your Ledger.', { main: sentence(main), sub: sentence(sub) }) : t('{main} Opens your Ledger.', { main: sentence(main) })}
@@ -367,6 +643,54 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
     onAdd?: () => void;
     onEdit?: () => void;
 }) {
+    const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
+    const hasNarrowSlice = !isFirstMember && card && (card.joined7d !== undefined || card.commonsPot !== undefined || card.eventsSoon !== undefined || (profile === 'global' && card.listings !== undefined));
+    if (hasNarrowSlice) {
+        const membersStr = tn(card.members, '{n} member', '{n} members', { n: formatCount(card.members) });
+        const joinedStr = typeof card.joined7d === 'number'
+            ? tn(card.joined7d, '{n} joined this week', '{n} joined this week', { n: formatCount(card.joined7d) })
+            : null;
+        const row1Text = joinedStr ? t('{members} · {joined}', { members: membersStr, joined: joinedStr }) : membersStr;
+
+        const tradesStr = typeof card.tradesThisMonth === 'number'
+            ? tn(card.tradesThisMonth, '{n} trade this month', '{n} trades this month', { n: formatCount(card.tradesThisMonth) })
+            : null;
+        const potStr = typeof card.commonsPot === 'number'
+            ? t('Commons pot {amount}', { amount: beansAmount(card.commonsPot) })
+            : null;
+        const communitiesStr = typeof card.communities === 'number'
+            ? communitiesListed(card.communities)
+            : null;
+        const row2Text = profile === 'global'
+            ? communitiesStr
+            : (tradesStr && potStr
+                ? t('{trades} · {pot}', { trades: tradesStr, pot: potStr })
+                : (tradesStr || potStr || null));
+
+        const listingsStr = typeof card.listings === 'number'
+            ? tn(card.listings, '{n} listing', '{n} listings', { n: formatCount(card.listings) })
+            : null;
+        const eventsStr = typeof card.eventsSoon === 'number'
+            ? tn(card.eventsSoon, '{n} event coming up', '{n} events coming up', { n: formatCount(card.eventsSoon) })
+            : null;
+        const row3Text = listingsStr && eventsStr
+            ? t('{listings} · {events}', { listings: listingsStr, events: eventsStr })
+            : (listingsStr || eventsStr || null);
+
+        return (
+            <>
+                <HomeRow colors={colors} text={row1Text} a11y={row1Text} lines={2} testID="home-community-row-members" />
+                {row2Text && <HomeRow colors={colors} text={row2Text} a11y={row2Text} lines={2} testID="home-community-row-trades" />}
+                {row3Text && <HomeRow colors={colors} text={row3Text} a11y={row3Text} lines={2} testID="home-community-row-listings" />}
+                {(onAdd || onEdit) && (
+                    <View style={communityLinksStyle}>
+                        {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
+                        {onEdit && <HomeLink id="community:edit" colors={colors} text={t('Edit home')} a11y={t('Edit home: move or remove cards')} onPress={onEdit} testID="home-edit" />}
+                    </View>
+                )}
+            </>
+        );
+    }
     const { line } = communityLines(card, profile, invitesOn);
     return (
         <>

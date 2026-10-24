@@ -245,11 +245,17 @@ const decision = (id: string, over: Record<string, unknown>) => ({
 const OPEN = [
     // The member's own: one open Decision each, so a second is refused.
     decision('11111111', { authorPubkey: KEY, effect: 'remove_member', params: { memberName: 'Dave', debt: -20, commonsPool: 500 } }),
-    decision('22222222', { effect: 'remove_member', params: { memberName: 'Mia' }, closesAt: iso(Date.now() + 30 * 60_000) }),
+    // A member's proposal carrying a pause vote's mark is no pause's vote (removal by vote S2): it gets no pause box.
+    decision('22222222', { effect: 'remove_member', params: { memberName: 'Mia', rule: 2 }, closesAt: iso(Date.now() + 30 * 60_000) }),
     decision('33333333', { effect: 'remove_member', params: { memberName: 'Kofi', balance: 15 }, closesAt: iso(Date.now() + 5 * 3600_000) }),
     decision('44444444', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', myVote: { support: false, voteCount: 3, creditsUsed: 9, updatedAt: iso(Date.now()) }, tally: tally({ quorumMet: true, quorumRequired: 3, electorate: 2 }) }),
     decision('55555555', { effect: 'keep_suspension', params: { memberName: 'Ana', suspendedAt: iso(new Date(2026, 9, 3, 12).getTime()) }, myVote: { support: true, voteCount: 1, creditsUsed: 1, updatedAt: iso(Date.now()) } }),
     decision('66666666', { effect: 'reach_the_moon', touches: 'sky', closesAt: iso(Date.now() - 1000) }),
+    // A pause's own vote (removal by vote S2), and one on an admin, whom no vote removes.
+    decision('18181818', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Ola', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()), reason: 'Threats at the market' } }),
+    decision('19191919', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Abe', rule: 2, serverRole: 'admin', pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) } }),
+    // A vote on removing the member themself: it says they can't vote on it, in place of the buttons.
+    decision('20202020', { authorPubkey: 'SYSTEM', effect: 'remove_member', subject: KEY, params: { memberName: 'Zed', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) } }),
 ];
 const PAST = [
     decision('77777777', { status: 'executed', effect: 'freeze_credit', executionReason: 'Credit floor set to 0', tally: tally({ quorumMet: true, passed: true }) }),
@@ -269,7 +275,7 @@ const OTHERS = [
     ...GROUPS.flatMap((g) => [g.name, g.description]), 'drum circle', 'by vote', 'DRUM_CIRCLE',
     ...TREASURIES.flatMap((e) => [e.name, e.purpose]),
     ...[...OPEN, ...PAST].flatMap((d) => [d.title, d.description]),
-    'Dave', 'Mia', 'Kofi', 'Ana', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
+    'Dave', 'Mia', 'Kofi', 'Ana', 'Ola', 'Abe', 'Zed', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
     'Example Valley', ...SAMPLE_COMMUNITY.decisions.flatMap((d) => [d.question, (d as { body?: string }).body ?? '']),
     ...sampleDecisions().flatMap((d) => [d.title, d.description]), ...sampleEnterprises().flatMap((e) => [e.name ?? '', e.purpose ?? '']),
 ].filter(Boolean).sort((a, b) => b.length - a.length);
@@ -431,6 +437,10 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(host.textContent).toContain(pseudoLocalise('You voted No ({n} votes)').replace('{n}', '3'));
         expect(host.textContent).toContain(pseudoLocalise('You have {credits}: up to {votes} on this Decision.').replace('{credits}', pseudoLocalise('{n} voice credits').replace('{n}', '16')).replace('{votes}', pseudoLocalise('{n} votes').replace('{n}', '4')));
         expect(host.textContent).toContain(pseudoLocalise('An admin suspended {name} on {date}. Keep the suspension?').replace('{name}', 'Ana').split('{date}')[0]);
+        expect(host.textContent).toContain(pseudoLocalise('An admin paused {name} on {date}.').replace('{name}', 'Ola').split('{date}')[0]);
+        expect(host.textContent).toContain(pseudoLocalise('Yes removes {name} after 7 days. No brings {name} back as soon as the vote closes.').split('{name}').join('Ola'));
+        expect(host.textContent).toContain(pseudoLocalise("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.").split('{name}').join('Abe'));
+        expect(host.querySelector('[data-testid="own-removal-note"]')?.textContent).toBe(pseudoLocalise("This vote is about you, so you can't vote on it."));
         expect(bypassing(), 'open').toEqual([]);
         await click(byLabel(pseudoLocalise('Increase votes')), 'Increase votes');
         await click(button('Vote YES'), 'Vote YES');
@@ -538,9 +548,13 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
             '30% of 4 members active in the last 30 days (at least 3)', 'Tally: Yes 3 (75%) · No 1', 'Needs 50%', 'Votes: 3 (Cost: 9 credits)',
             'You have 16 voice credits: up to 4 votes on this Decision.', 'You voted No (3 votes)', 'Change to Yes', 'Voted No', 'You voted Yes',
             'An admin suspended Ana on 3 Oct 2026. Keep the suspension?', '🔒 Secret ballot: members see the totals, never who voted how.', '3 days left', 'Closing now',
-            'Reach The Moon', 'TOUCHES: SKY', 'Keep Suspension?', 'Grant Enterprise', 'Quadratic', '1m1v', 'Vote YES', 'Vote NO']) {
+            'Reach The Moon', 'TOUCHES: SKY', 'Keep Suspension?', 'Grant Enterprise', 'Quadratic', '1m1v', 'Vote YES', 'Vote NO',
+            'An admin paused Ola on 22 Oct 2026.', 'Yes removes Ola after 7 days. No brings Ola back as soon as the vote closes.',
+            "Abe holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Abe is back when it closes.",
+            "This vote is about you, so you can't vote on it."]) {
             expect(host.textContent, english).toContain(english);
         }
+        expect(host.textContent).not.toContain('An admin paused Mia');
         expect(host.textContent).toMatch(/\d+m left/);
         expect(host.textContent).toMatch(/\d+h left/);
         await click(byLabel('Decisions History'), 'History');

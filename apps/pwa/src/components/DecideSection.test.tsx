@@ -172,6 +172,55 @@ describe('DecideSection voting answers', () => {
         expect(box.textContent).toContain("If this vote doesn't pass, the suspension lifts by itself.");
     });
 
+    // Removal by vote S2: an admin's pause opens the community's vote on removing the member, the node's own (rule 2).
+    it('explains a pause\'s own vote: who was paused and when, and what each answer does', () => {
+        const card = decisionCard('p', '1m1v', null);
+        card.authorPubkey = 'SYSTEM';
+        card.effect = 'remove_member';
+        card.title = 'Remove Dave?';
+        card.params = { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, reason: 'Threats in the market chat', commonsPool: 240 };
+        const first = renderDecide(true, [card]);
+        const box = screen.getByTestId('pause-vote-box');
+        expect(box.textContent).toContain('An admin paused Dave on 22 Oct 2026.');
+        expect(box.textContent).toContain('Yes removes Dave after 7 days. No brings Dave back as soon as the vote closes.');
+        expect(screen.queryByTestId('keep-suspension-box')).toBeNull();
+        // It is a removal vote: its debt disclosure is there too.
+        expect(screen.getByTestId('removal-debt-write-off-box')).toBeInTheDocument();
+        first.unmount();
+
+        // An admin paused: no vote removes an owner or admin (§3.8), and the card says so.
+        card.params = { ...card.params, serverRole: 'admin' };
+        const second = renderDecide(true, [card]);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain(
+            "Dave holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Dave is back when it closes.");
+        second.unmount();
+
+        // A removal a member proposed is no pause's vote, whatever its params say.
+        const proposed = decisionCard('q', '1m1v', null);
+        proposed.effect = 'remove_member';
+        proposed.params = { memberName: 'Eve', rule: 2, pausedAt: '2026-10-22T10:00:00.000Z' };
+        renderDecide(true, [proposed]);
+        expect(screen.queryByTestId('pause-vote-box')).toBeNull();
+    });
+
+    // Nobody votes on their own removal (the node refuses it): its subject reads why, and gets no buttons to press.
+    it('a vote on removing the reader says they can\'t vote on it, in place of the buttons; anyone else votes', () => {
+        const mine = decisionCard('o', '1m1v', null);
+        mine.authorPubkey = 'SYSTEM';
+        mine.effect = 'remove_member';
+        mine.subject = 'viewer';
+        mine.params = { memberName: 'Visitor', rule: 2, pausedAt: '2026-10-22T10:00:00.000Z' };
+        const first = renderDecide(true, [mine]);
+        expect(screen.getByTestId('own-removal-note').textContent).toBe("This vote is about you, so you can't vote on it.");
+        expect(screen.queryByText('Vote YES')).toBeNull();
+        expect(screen.queryByText('Vote NO')).toBeNull();
+        first.unmount();
+
+        renderDecide(true, [{ ...mine, subject: 'someone-else' }]);
+        expect(screen.queryByTestId('own-removal-note')).toBeNull();
+        expect(screen.getByText('Vote YES')).toBeInTheDocument();
+    });
+
     // Balances are private (2026-09-28): the node sends a removal vote's record of the member's balance and debt only to
     // those who can vote in it. Anyone else is told so, never shown a made-up −0.
     it('a removal vote: a voter reads the debt the node sent; anyone else reads that it is for voters only', () => {

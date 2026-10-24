@@ -61,6 +61,9 @@ describe('What needs you: which kinds show', () => {
         const noTrade = { voiceCredits: 0, hasCompletedTrade: false };
         expect(only([vote(5 * 24 * H, { franchise: 'quadratic_trade' })], noTrade)).toEqual([]);
         expect(only([vote(5 * 24 * H, { franchise: '1m1v' })], noTrade)).toHaveLength(1);
+        // A vote on removing you asks nothing of you either: nobody votes on their own removal (removal by vote S2).
+        expect(only([vote(5 * 24 * H, { effect: 'remove_member', subject: ME })])).toEqual([]);
+        expect(only([vote(5 * 24 * H, { effect: 'remove_member', subject: 'someone-else' })])).toHaveLength(1);
     });
 
     it('an unsigned Decisions list cannot say which votes are yours, so it shows no vote icon', () => {

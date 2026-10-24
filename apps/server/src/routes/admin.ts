@@ -1776,9 +1776,10 @@ function resolveAdminActor(ctx: any): string | null {
     return 'owner:password';
 }
 
-// Emergency suspension (§3.8, answer L): suspends at once and opens a 7-day "Keep this suspension?"
-// Decision in the same transaction. The reason is shown to members on that Decision. With formal Decisions off (the
-// global node) it opens no vote: it lasts the 7 days and lifts itself (decisions-engine adminEmergencySuspend).
+// Emergency suspension (§3.8, answer L), the pause: suspends at once and opens the community's 7-day vote on removing
+// the member (removal by vote S2, decisions-engine pauseMember) in the same transaction. The reason is shown to members
+// on that Decision. With formal Decisions off (the global node) it opens no vote: it lasts the 7 days and lifts itself
+// (decisions-engine adminEmergencySuspend).
 router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
@@ -1798,7 +1799,7 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     ctx.body = { success: true, decision: result.decision };
 });
 
-// Status: 'active' lifts a suspension (and closes an open "Keep this suspension?" vote about it). Suspending
+// Status: 'active' lifts a suspension (and closes the open vote it opened, on removing them or "Keep this suspension?"). Suspending
 // is only ever the emergency route above — an admin cannot suspend someone with no community review.
 router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;

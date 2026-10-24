@@ -23,7 +23,10 @@ import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, kn
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
+import { formatRelativeTime } from './pulse';
 import { tierWords } from './trust-tier';
+export { tierWords };
+export type { HomeLayoutV2 };
 
 /** The catalogue (§3.1, and Tips: scratch/home/TIPS-DESIGN-fable.md), in the default order. The same 18 ids as the node's. */
 export const HOME_CARD_IDS = [
@@ -122,24 +125,93 @@ export interface HomeEventItem {
     repeat?: RepeatPattern; repeatUntil?: string;
 }
 
+export interface DealItem {
+    txId: string;
+    postId: string;
+    title: string;
+    with: string | null;
+    waitsOnMe: boolean;
+    at: string | null;
+}
+
+export interface EnterpriseLine {
+    amount: number;
+    at: string;
+    kind: 'member' | 'deal' | 'commons' | 'other';
+    who: string | null;
+}
+
+export interface DecideItem {
+    id: string;
+    title: string;
+    closesAt: string;
+    voted: boolean;
+}
+
+export interface GroupLastLine {
+    who: string | null;
+    at: string;
+    text: string;
+    locked?: {
+        ciphertext: string;
+        nonce: string;
+        metadata: string | null;
+    };
+}
+
+export interface MonthFigures {
+    trades: number;
+    in: number;
+    out: number;
+    more?: boolean;
+}
+
 export interface HomeCards {
+    [k: string]: unknown;
     needs?: { items: NeedsItem[] };
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
-    deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
+    deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: DealItem[] };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
-    enterprise?: { id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded' };
+    enterprise?: {
+        id: string;
+        name: string;
+        requests: number;
+        others: number;
+        lifecycle?: 'ongoing' | 'bounded';
+        keepers?: number;
+        balance?: number;
+        month?: MonthFigures;
+        latest?: EnterpriseLine | null;
+    };
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
-    decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
-    groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean }[]; total: number };
+    decide?: {
+        open: number;
+        soonestClosesAt: string | null;
+        polls: number;
+        pollsMore: boolean;
+        items?: DecideItem[];
+        poll?: { id: string; title: string; closesAt: string } | null;
+    };
+    groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last?: GroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
-    pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }[] };
-    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
+    pulse?: { items: { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt?: string | null }[] };
+    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean; month?: MonthFigures & { fees: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
-    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
+    community?: {
+        name: string | null;
+        members: number;
+        listings?: number;
+        tradesThisMonth?: number;
+        communities?: number;
+        place?: { lat: number; lng: number };
+        joined7d?: number;
+        eventsSoon?: number;
+        commonsPot?: number;
+    };
 }
 
 export interface HomeFeatures {
@@ -414,7 +486,7 @@ export function closesWords(closesAt: string, now: number = Date.now()): string 
 }
 
 /** The Decide card's "closes …", in the member's language: the same days as closesWords, the day and date from core's tables. */
-function closesIn(closesAt: string, now: number): string {
+export function closesIn(closesAt: string, now: number): string {
     const at = new Date(closesAt);
     if (!Number.isFinite(at.getTime())) return '';
     const today = new Date(now);
@@ -430,17 +502,18 @@ function closesIn(closesAt: string, now: number): string {
  * A balance's figure: thousands grouped in English as toLocaleString('en') always grouped them, cents and all ("1,234.5",
  * "-0.5"); every other language's digits alone, with its decimal separator (core formatCount and formatNumber).
  */
-function beansFigure(n: number): string {
-    if (Number.isInteger(n)) return formatCount(n);
+export function beansFigure(n: number): string {
     const abs = Math.abs(n);
+    const sign = n < 0 ? '−' : '';
+    if (Number.isInteger(n)) return `${sign}${formatCount(abs)}`;
     const whole = Math.trunc(abs);
     // formatNumber writes the whole part as it writes `whole` alone: what follows it is the separator and the cents.
     const cents = formatNumber(abs).slice(formatNumber(whole).length);
-    return `${n < 0 ? '-' : ''}${formatCount(whole)}${cents}`;
+    return `${sign}${formatCount(whole)}${cents}`;
 }
 
 /** "12 Beans", "1 Bean", "12.5 Beans", "1,234.5 Beans": the member's balance in words. */
-const beansAmount = (n: number) => tn(n, '{n} Bean', '{n} Beans', { n: beansFigure(n) });
+export const beansAmount = (n: number) => tn(n, '{n} Bean', '{n} Beans', { n: beansFigure(n) });
 
 /** "12 Beans · room to spend 200 · Resident"; a new member's "0 Beans · nothing to repay". Their own balance only (§3.1). */
 export function beansLines(b: NonNullable<HomeCards['beans']>): { line: string; note: string | null } {
@@ -607,6 +680,88 @@ export function searchCardFor(answer: HomeAnswer | null | undefined, inst: Pick<
     if (card.q !== s.q || card.kind !== s.kind || card.category !== (s.category ?? null)) return null;
     if (card.km !== null && card.km !== (s.km ?? null)) return null;
     return card;
+}
+
+// ── W4 content lines (DESIGN-home-wide-and-content-fable.md §2, slice W4) ─────────────────────────────────────────────
+
+/** "Sourdough · with Ana" */
+export function dealTitleLine(d: DealItem): string {
+    const title = d.title || t('Deal');
+    return d.with ? t('{title} · with {name}', { title, name: d.with }) : title;
+}
+
+/** "waiting on you · 2h ago" */
+export function dealStatusLine(d: DealItem): string {
+    const status = d.waitsOnMe ? t('waiting on you') : t('waiting on them');
+    const when = d.at ? formatRelativeTime(d.at) : '';
+    return when ? `${status} · ${when}` : status;
+}
+
+/** "This month: 5 trades · +120 in · −60 out" */
+export function monthSummaryLine(m: MonthFigures): string {
+    const trades = tn(m.trades, '{n} trade', '{n} trades');
+    if (m.more) {
+        return t('This month (partial): {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in), out: beansFigure(m.out) });
+    }
+    return t('This month: {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in), out: beansFigure(m.out) });
+}
+
+/** An enterprise's latest line: "Latest: +12 Beans from Ana · 2h ago" */
+export function enterpriseLatestLine(l: EnterpriseLine): string {
+    const sign = l.amount >= 0 ? '+' : '−';
+    const amount = `${sign}${beansFigure(Math.abs(l.amount))}`;
+    const when = l.at ? formatRelativeTime(l.at) : '';
+    const isOut = l.amount < 0;
+    if (l.kind === 'member' && l.who) {
+        if (isOut) {
+            return when
+                ? tn(l.amount, 'Latest: {amount} Bean to {who} · {when}', 'Latest: {amount} Beans to {who} · {when}', { amount, who: l.who, when })
+                : tn(l.amount, 'Latest: {amount} Bean to {who}', 'Latest: {amount} Beans to {who}', { amount, who: l.who });
+        }
+        return when
+            ? tn(l.amount, 'Latest: {amount} Bean from {who} · {when}', 'Latest: {amount} Beans from {who} · {when}', { amount, who: l.who, when })
+            : tn(l.amount, 'Latest: {amount} Bean from {who}', 'Latest: {amount} Beans from {who}', { amount, who: l.who });
+    }
+    if (l.kind === 'deal') {
+        if (isOut) {
+            return when
+                ? tn(l.amount, 'Latest: {amount} Bean to escrow · {when}', 'Latest: {amount} Beans to escrow · {when}', { amount, when })
+                : tn(l.amount, 'Latest: {amount} Bean to escrow', 'Latest: {amount} Beans to escrow', { amount });
+        }
+        return when
+            ? tn(l.amount, 'Latest: {amount} Bean from escrow · {when}', 'Latest: {amount} Beans from escrow · {when}', { amount, when })
+            : tn(l.amount, 'Latest: {amount} Bean from escrow', 'Latest: {amount} Beans from escrow', { amount });
+    }
+    if (l.kind === 'commons') {
+        if (isOut) {
+            return when
+                ? tn(l.amount, 'Latest: {amount} Bean to Commons · {when}', 'Latest: {amount} Beans to Commons · {when}', { amount, when })
+                : tn(l.amount, 'Latest: {amount} Bean to Commons', 'Latest: {amount} Beans to Commons', { amount });
+        }
+        return when
+            ? tn(l.amount, 'Latest: {amount} Bean from Commons · {when}', 'Latest: {amount} Beans from Commons · {when}', { amount, when })
+            : tn(l.amount, 'Latest: {amount} Bean from Commons', 'Latest: {amount} Beans from Commons', { amount });
+    }
+    return when
+        ? tn(l.amount, 'Latest: {amount} Bean · {when}', 'Latest: {amount} Beans · {when}', { amount, when })
+        : tn(l.amount, 'Latest: {amount} Bean', 'Latest: {amount} Beans', { amount });
+}
+
+/** A group's last line: "Ana, 2h ago: Who has a ladder?" */
+export function groupLastLine(last: GroupLastLine): string {
+    const when = last.at ? formatRelativeTime(last.at) : '';
+    if (last.who) {
+        return when
+            ? t('{who}, {when}: {text}', { who: last.who, when, text: last.text })
+            : t('{who}: {text}', { who: last.who, text: last.text });
+    }
+    return when ? `${when}: ${last.text}` : last.text;
+}
+
+/** "by River Folk · 3h ago" */
+export function pulseByLine(p: { callsign: string; publishedAt?: string | null }): string {
+    const when = p.publishedAt ? formatRelativeTime(p.publishedAt) : '';
+    return when ? t('by {name} · {when}', { name: p.callsign, when }) : t('by {name}', { name: p.callsign });
 }
 
 // ── Sun and moon ──────────────────────────────────────────────────────────────────────────────────────────────────────

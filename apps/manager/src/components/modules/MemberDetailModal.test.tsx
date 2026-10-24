@@ -450,6 +450,30 @@ describe('MemberDetailModal', () => {
         expect(onChanged).toHaveBeenCalled();
     });
 
+    // Removal by vote S2: the vote a suspension opens is on removing the member (a node before it answers keep_suspension).
+    it('emergency suspension on a node whose suspension opens the vote on removing the member says so', async () => {
+        vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
+            success: true,
+            decision: { id: 'dec-3', closesAt: '2026-09-26T00:00:00.000Z', effect: 'remove_member' },
+        });
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, status: 'active' }}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
+                adminPassword="pw"
+            />
+        );
+        await userEvent.click(screen.getByText('⏸️ Suspend'));
+        await userEvent.type(screen.getByLabelText('Reason (members will see this)'), 'threats at the market, twice');
+        await userEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
+        expect(await screen.findByText(/^Suspended\. Members now vote until .+ on removing them; if the vote doesn't pass, the suspension lifts by itself\.$/))
+            .toBeInTheDocument();
+        expect(screen.queryByText(/keeping it/)).toBeNull();
+    });
+
     it('on a node with no formal votes (global), the suspension says when it lifts and mentions no vote', async () => {
         vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
             success: true,

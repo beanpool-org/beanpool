@@ -32,7 +32,7 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept". If its author had already taken it down, they are told instead that it "is no longer up".
 - **Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.
 - **Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.
-- To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it.
+- To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on removing them.
 
 ## If you are a moderator
 

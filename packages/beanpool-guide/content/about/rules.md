@@ -39,6 +39,8 @@ Any active member whose credit is not frozen, and who has traded in the market. 
 
 Any active member whose credit is not frozen, and who joined **before** the Decision opened. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.
 
+Nobody votes on a Decision to remove them, and they are not counted in its turnout. A member an admin has suspended still votes on every other Decision while the community votes on removing them, and is counted in their turnout, so suspending someone cannot change a vote (see "Emergency suspension").
+
 ## How votes count
 
 - Decisions about a member: **one member, one vote**. Yes or No.
@@ -87,18 +89,19 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
 - When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.
-- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote someone proposes cannot take that away; the app says so if you try. The one way a vote ends their role is by keeping their emergency suspension (see below). An owner can take an admin's role away first, and after that they are a member like any other.
+- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote someone proposes cannot take that away; the app says so if you try. Nor does the vote that opens when one of them is suspended (see below). An owner can take an admin's role away first, and after that they are a member like any other.
 
 ## Emergency suspension
 
 An admin can suspend a member at once, for example to stop harm. They must give a reason that members can read.
 
-- At the same moment, a 7-day Decision opens: "Keep this suspension?". An admin acting on a report can suspend the same way, and the same Decision opens.
+- At the same moment, a 7-day Decision opens on removing them: "Remove …?". An admin acting on a report can suspend the same way, and the same Decision opens.
 - While it lasts, the member's listings are off the Market and the map, and they can't invite anyone or answer a request to join. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), and finish or cancel deals they already have. It all comes back when the suspension ends.
-- It needs the usual turnout and 60% Yes.
-- If it does not pass, or too few people vote, the suspension lifts by itself.
+- It is decided as any removal is: 25% turnout and 66% Yes. The suspended member cannot vote on it, and still votes on every other Decision.
+- If it passes, they stay suspended for the 7 days of a removal's wait, and are then removed (see "Removing a member").
+- If it does not pass, or too few people vote, the suspension lifts when the vote closes.
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.
-- An admin can suspend another admin. If the community votes to keep the suspension, that admin loses the role.
+- An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the suspension ends when it closes, and they keep their role.
 
 On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
 

@@ -9,8 +9,16 @@
  * "…" afterwards (after Hide, which takes the card and its "…" away, the page moves it to the nearest card left). Each
  * item is a full-width button at least 44 px tall.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { t } from '@beanpool/core';
+
+export interface CardContainerState {
+    width: number;
+    wide: boolean;
+}
+
+export const CardContainerContext = createContext<CardContainerState>({ width: 0, wide: false });
+export const useCardContainer = () => useContext(CardContainerContext);
 
 interface MenuProps {
     title: string;
@@ -79,19 +87,19 @@ export function CardMenu({ title, label, canMoveUp, canMoveDown, onHide, onRemov
         items[next].focus();
     }
 
-    const item = 'w-full min-h-[44px] px-4 text-left text-sm font-semibold bg-transparent border-0 text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 disabled:text-nature-400 dark:disabled:text-nature-500 disabled:cursor-default cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800';
+    const item = 'w-full min-h-[44px] px-4 text-left text-sm font-semibold bg-transparent border-0 text-text-primary hover:bg-bg-hover disabled:text-text-muted disabled:cursor-default cursor-pointer focus-visible:outline-none focus-visible:bg-bg-hover';
 
     return (
         <div className="relative shrink-0">
             <button ref={button} type="button" aria-label={t('Card options for {card}', { card: said })} aria-haspopup="true" aria-expanded={open}
                 aria-controls={open ? menuId : undefined} data-testid="home-card-menu"
                 onClick={() => setOpen(o => !o)}
-                className="min-w-[44px] min-h-[44px] -mr-2 -mt-2 flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 hover:text-nature-800 dark:hover:text-white text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                className="min-w-[44px] min-h-[44px] -mr-2 -mt-2 flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary hover:text-text-primary text-lg font-black cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 <span aria-hidden="true">…</span>
             </button>
             {open && (
                 <div ref={list} id={menuId} role="group" aria-label={t('Options for {card}', { card: said })} onKeyDown={onKeyDown}
-                    className="absolute right-0 top-full z-30 w-48 max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700">
+                    className="absolute right-0 top-full z-30 w-48 max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-bg-card border border-border-primary">
                     {/* The card goes with its "…": the page gives focus to the nearest card left (pages/HomePage.tsx). */}
                     {onSettings && <button type="button" className={item} data-testid="home-menu-settings" onClick={() => { close(false); onSettings(); }}>{t('Settings…')}</button>}
                     {onHide && !onRemove && <button type="button" className={item} onClick={() => { close(false); onHide(); }}>{t('Hide')}</button>}
@@ -120,21 +128,49 @@ interface CardProps {
 
 export function HomeCard({ id, title, titleAside, menu, accent, children, style }: CardProps) {
     const headingId = `home-card-${id}-title`;
+    const sectionRef = useRef<HTMLElement | null>(null);
+    const [width, setWidth] = useState(0);
+
+    useLayoutEffect(() => {
+        const el = sectionRef.current;
+        if (!el) return;
+        const measure = () => setWidth(el.clientWidth);
+        measure();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure);
+            return () => window.removeEventListener('resize', measure);
+        }
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+
+    const wide = width >= 480;
+
     return (
-        <section aria-labelledby={headingId} data-testid={`home-card-${id}`} style={style}
-            className={`bg-white dark:bg-nature-900 rounded-2xl shadow-sm border p-4 mb-3 min-w-0 ${accent ? 'border-amber-300 dark:border-amber-700' : 'border-nature-200 dark:border-nature-800'}`}>
-            <div className="flex items-start justify-between gap-2 mb-1">
-                {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}
-                <h2 id={headingId} tabIndex={-1} className="m-0 min-w-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                    {title}
-                </h2>
-                <div className="flex items-start gap-1 shrink-0">
-                    {titleAside}
-                    {menu && <CardMenu title={title} {...menu} />}
+        <CardContainerContext.Provider value={{ width, wide }}>
+            <section
+                ref={sectionRef}
+                aria-labelledby={headingId}
+                data-testid={`home-card-${id}`}
+                data-card-wide={wide ? 'true' : 'false'}
+                data-container-width={width}
+                style={{ containerType: 'inline-size', ...style }}
+                className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? 'border-amber-300 dark:border-amber-700' : 'border-border-primary'}`}
+            >
+                <div className="flex items-start justify-between gap-2 mb-1 min-w-0">
+                    {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}
+                    <h2 id={headingId} tabIndex={-1} className="m-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider text-text-secondary">
+                        {title}
+                    </h2>
+                    <div className="flex items-start justify-end gap-1 min-w-0">
+                        {titleAside}
+                        {menu && <CardMenu title={title} {...menu} />}
+                    </div>
                 </div>
-            </div>
-            {children}
-        </section>
+                {children}
+            </section>
+        </CardContainerContext.Provider>
     );
 }
 
@@ -148,7 +184,7 @@ export function HomeLine({ children, onClick, href, label, testId, external }: {
     /** A link to another community's own page: a new tab, nothing of this page passed on. */
     external?: boolean;
 }) {
-    const cls = 'w-full min-h-[44px] flex items-center gap-3 py-1.5 text-left text-sm text-nature-900 dark:text-nature-100 bg-transparent border-0 rounded-lg cursor-pointer no-underline hover:bg-nature-50 dark:hover:bg-nature-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-w-0';
+    const cls = 'w-full min-h-[44px] flex items-center gap-3 py-1.5 text-left text-sm text-text-primary bg-transparent border-0 rounded-lg cursor-pointer no-underline hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-w-0';
     if (href) {
         return (
             <a href={href} aria-label={label} data-testid={testId} className={cls}
@@ -169,7 +205,7 @@ export function HomeMore({ children, onClick, label, testId }: { children: React
     return (
         <div className="flex justify-end">
             <button type="button" onClick={onClick} aria-label={label} data-testid={testId}
-                className="min-h-[44px] px-2 -mr-2 bg-transparent border-0 text-sm font-bold text-nature-700 dark:text-nature-200 hover:text-nature-900 dark:hover:text-white cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg">
+                className="min-h-[44px] px-2 -mr-2 bg-transparent border-0 text-sm font-bold text-text-secondary hover:text-text-primary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg">
                 {children}
             </button>
         </div>

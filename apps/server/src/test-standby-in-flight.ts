@@ -601,7 +601,7 @@ async function main(): Promise<void> {
         // Granting owner asks the owner's fresh proof (design case 18, C8): Manage on the phone, pressed just now.
         built('the admin makes Lou an owner', await api(m, 'POST', '/api/local/admin/node-roles', { admin: await main.send('owner-phone-session'), body: { pubkey: lou.pk, role: 'owner' } }));
         // Suspending an owner asks the same fresh proof (#1984 confirmation N-1).
-        const suspended = built('and suspends her: a vote on keeping it opens, her role held aside', await api(m, 'POST', `/api/local/admin/users/${lou.pk}/suspend`, { admin: await main.send('owner-phone-session'), body: { reason: 'An emergency on the street' } }));
+        const suspended = built('and suspends her: the vote on removing her opens, her role held aside', await api(m, 'POST', `/api/local/admin/users/${lou.pk}/suspend`, { admin: await main.send('owner-phone-session'), body: { reason: 'An emergency on the street' } }));
         const suspensionId = suspended.decision?.id as string;
         built('the admin makes Moe a moderator', await A('/api/local/admin/node-roles', { pubkey: moe.pk, role: 'moderator' }));
         built('suspends him', await A(`/api/local/admin/users/${moe.pk}/suspend`, { reason: 'A mistake by the admin' }));

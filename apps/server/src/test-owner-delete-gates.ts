@@ -883,7 +883,8 @@ async function main(): Promise<void> {
         // made them 'suspended', and an emergency suspension may be made over it. Every credential above is refused, and
         // the role stays on their key: nothing held aside, no vote opened. An owner's fresh proof suspends them.
         console.log('  · emergency-suspend an owner whose key waits on a re-key code');
-        const keepVotesOn = (pk: string) => (db.prepare("SELECT COUNT(*) AS c FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(pk) as any).c;
+        // The pause's own vote: the node's Decision about them (the vote on removing them, removal by vote S2).
+        const keepVotesOn = (pk: string) => (db.prepare("SELECT COUNT(*) AS c FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM'").get(pk) as any).c;
         const waitsOnCode = (pk: string) => statusOf(pk) === 'suspended' && keyHeld(pk) && roleRow(pk) === 'owner' && heldAside(pk) === null && keepVotesOn(pk) === 0;
         const rekeyingOwner = async (): Promise<string> => {
             const pk = coOwner('Rekeyee');

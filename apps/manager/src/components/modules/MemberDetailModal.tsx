@@ -157,10 +157,13 @@ export function MemberDetailModal({
             setLocalStatus('disabled');
             setShowSuspend(false);
             setSuspendReason('');
-            // A node with formal Decisions off (global) opens no vote: the server marks the row noVote (#1243).
+            // A node with formal Decisions off (global) opens no vote: the server marks the row noVote (#1243). Since removal
+            // by vote S2 the vote it opens is on removing the member; a node before it opened "Keep this suspension?".
             setSuspendDone(res.decision?.params?.noVote === true
                 ? `Suspended until ${closes}. It lifts by itself then, or sooner if you lift it.`
-                : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
+                : res.decision?.effect === 'remove_member'
+                    ? `Suspended. Members now vote until ${closes} on removing them; if the vote doesn't pass, the suspension lifts by itself.`
+                    : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
             onSuspensionChanged?.();
         } catch (e: unknown) {
             if (suspendProof.checkError(e, (c) => handleSuspend(c), code)) return;

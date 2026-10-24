@@ -31,8 +31,12 @@
  *     - Dead subjects halt permanently at execution_void.
  *     - Reinstatements cancel pending removals.
  *     - Admin brake: adminHaltDecision (requires public signed reason) or adminAccelerateDecision.
- * - Emergency suspension: an admin suspends at once and the node opens a 7-day "Keep this suspension?"
- *   Decision in the same transaction. If it does not pass (or misses quorum) the suspension lifts itself.
+ * - Emergency suspension, the pause (removal by vote S2, scratch/fable-design/DESIGN-removal-by-vote-fable.md §3): an
+ *   admin pauses a member at once and the node opens the community's 7-day vote on removing them ("Remove X?", a
+ *   pause's own vote: isPauseVote) in the same transaction. Yes starts the removal's grace window; No, a tie or a missed
+ *   quorum lift the pause on the tick that closes the vote. A pause never outlives its vote. A paused member keeps their
+ *   vote on every other Decision; nobody votes on removing themselves. A "Keep this suspension?" vote (keep_suspension)
+ *   opened before still ends under its own rule.
  * - A node with formal Decisions switched off (the `decisions` profile switch, off on the global node) opens,
  *   votes on and carries out none: see assertDecisionsOn. Its emergency suspensions open no vote and lift
  *   themselves after the same 7 days.
@@ -132,7 +136,9 @@ export type DecisionEffect =
     | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
-    // Opened only by an admin's emergency suspension, never proposed by a member
+    // Opened only by an admin's emergency suspension before removal by vote S2 (a pause opens remove_member since), never
+    // proposed by a member; one still open ends under its own rule, and the node opens one now only as the record of a
+    // pause where formal Decisions are off (madeWithoutVote)
     | 'keep_suspension'
     // Member destructive
     | 'remove_member'
@@ -317,15 +323,16 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
 }
 
 /**
- * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
- * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
+ * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote, made an
+ * emergency suspension or paused a member is an admin key: members get the public reason on the card, not the key.
  * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
  * Admin routes (/api/local/admin/*) serve decisionForAdmin.
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, ...rest } = decision;
-    if (rest.params && typeof rest.params === 'object' && ('suspendedBy' in rest.params || carriesMemberBalance(rest.params))) {
-        const { suspendedBy: _suspendedBy, balance: _balance, debt: _debt, ...params } = rest.params;
+    if (rest.params && typeof rest.params === 'object'
+        && ('suspendedBy' in rest.params || 'pausedBy' in rest.params || carriesMemberBalance(rest.params))) {
+        const { suspendedBy: _suspendedBy, pausedBy: _pausedBy, balance: _balance, debt: _debt, ...params } = rest.params;
         return { ...rest, params };
     }
     return rest;
@@ -460,6 +467,9 @@ export const NO_VOTE_SUSPENSION_ENDED = 'Community votes are switched off on thi
 export const NO_VOTE_SUSPENSION_MADE_ENDED = 'Community votes were switched off on this node when this suspension was made, '
     + 'so it lasts 7 days and nobody votes to keep it';
 
+/** Why a pause's own vote (isPauseVote) closed without being carried out, on a node whose formal Decisions went off. */
+export const NO_VOTE_PAUSE_ENDED = word('Community votes are switched off on this node, so no vote removes anyone here, and the pause ends with its vote');
+
 /**
  * An emergency suspension made while formal Decisions were off (adminEmergencySuspend's `noVote`). It said it lasts 7
  * days and nobody votes on it, and stays so if the switch goes back on before it ends: no vote is taken on it, members
@@ -467,6 +477,26 @@ export const NO_VOTE_SUSPENSION_MADE_ENDED = 'Community votes were switched off 
  */
 export function madeWithoutVote(decision: Pick<Decision, 'effect' | 'params'>): boolean {
     return decision.effect === 'keep_suspension' && decision.params?.noVote === true;
+}
+
+/**
+ * The `rule` a pause's own vote carries in its params (removal by vote S2, design §7): how a vote the node opened for a
+ * pause is told from a removal a member proposed. A pause made before it opened a "Keep …'s suspension?" vote
+ * (keep_suspension), which keeps its own rule to its end.
+ */
+export const PAUSE_VOTE_RULE = 2;
+
+/** The marks the node gives a pause's own vote (pauseMember): a member's proposal never carries them (createDecision). */
+const PAUSE_VOTE_MARKS = ['rule', 'pausedBy', 'pausedAt'] as const;
+
+/**
+ * A pause's own vote (removal by vote S2, design §3.2): the community's vote on removing a member, which the node opens
+ * the moment an admin pauses them (pauseMember): its author is the node, its params carry `rule: 2` and who paused. It
+ * is decided as any removal is, and its pause never outlives it: one that does not pass, or can't be carried out, lifts
+ * the pause (closeUnkeptSuspension); one that passes starts the removal's grace window, the member still paused.
+ */
+export function isPauseVote(decision: Pick<Decision, 'effect' | 'authorPubkey' | 'params'>): boolean {
+    return decision.effect === 'remove_member' && decision.authorPubkey === SYSTEM_AUTHOR && decision.params?.rule === PAUSE_VOTE_RULE;
 }
 
 function assertEffectAllowedHere(effect: DecisionEffect): void {
@@ -484,6 +514,8 @@ export const SYSTEM_AUTHOR = 'SYSTEM';
 
 export const NO_TRADE_POOL_VOTE_ERROR = word('Voting on community money opens after your first completed trade.');
 export const JOINED_AFTER_OPEN_ERROR = word('Only members who joined before this Decision opened can vote on it.');
+/** Nobody votes on removing themselves (checkVoterEligibility). */
+export const OWN_REMOVAL_VOTE_ERROR = word("You can't vote on a Decision about removing you.");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -528,11 +560,40 @@ export function quorumRatioForEffect(effect: DecisionEffect, _touches?: Decision
 }
 
 /**
+ * SQL: the member row `m` is paused and held by nothing but its open pause vote (removal by vote S2, design §3.3):
+ * 'disabled', with an open pause vote naming them (isPauseVote), and neither a removal of them in its grace window nor a
+ * suspension a vote carried out since that pause began (the holds liftEmergencySuspensionRow leaves in place). Such a
+ * member keeps their vote, and their place in the electorate, on every Decision but the one about them, so pausing
+ * someone can't move a vote. A member a vote suspended, one in a removal's grace window and one paused under a "Keep …'s
+ * suspension?" vote from before votes on nothing.
+ */
+function pausedOnlyByOpenVoteSql(m: string): string {
+    return `(${m}.status = 'disabled' AND EXISTS (
+        SELECT 1 FROM decisions pv
+        WHERE pv.subject = ${m}.public_key AND pv.status = 'open' AND pv.effect = 'remove_member' AND pv.author_pubkey = '${SYSTEM_AUTHOR}'
+          AND (CASE WHEN json_valid(pv.params) THEN json_extract(pv.params, '$.rule') END) = ${PAUSE_VOTE_RULE}
+          AND NOT EXISTS (
+              SELECT 1 FROM decisions o
+              WHERE o.subject = ${m}.public_key AND o.id != pv.id AND (
+                  (o.effect = 'remove_member' AND o.status = 'execution_pending_grace')
+                  OR (o.effect = 'suspend_member' AND o.status = 'executed' AND julianday(o.executed_at) >= julianday(pv.opens_at))
+              )
+          )
+    ))`;
+}
+
+/** Whether this member is paused and held by nothing but its open pause vote (pausedOnlyByOpenVoteSql). */
+function pausedOnlyByOpenVote(pubkey: string): boolean {
+    return !!db.prepare(`SELECT 1 FROM members m WHERE m.public_key = ? AND ${pausedOnlyByOpenVoteSql('m')}`).get(pubkey);
+}
+
+/**
  * The turnout base (§3.4, answer K): members who could vote and were ACTIVE in the 30 days before
  * `asOfTime` — any signed activity, not only trades.
  *
- * "Could vote" is the same test checkVoterEligibility applies: active, unfrozen, not an enterprise, not a visitor's row,
- * and — when `joinedBefore` is given (a Decision's opensAt) — joined before the Decision opened.
+ * "Could vote" is the same test checkVoterEligibility applies: active, or paused and held by nothing but their pause's
+ * own vote (pausedOnlyByOpenVoteSql); unfrozen, not an enterprise, not a visitor's row; when `joinedBefore` is given (a
+ * Decision's opensAt) joined before the Decision opened; and not `notCounting`, a removal's subject, who never votes on it.
  *
  * Activity signal: `members.last_active_at`, stamped from the verified signer of every signed write
  * (https-server requireSignature → recordActivity). It is NOT carried by delta backup (the members touch
@@ -544,14 +605,15 @@ export function quorumRatioForEffect(effect: DecisionEffect, _touches?: Decision
  * Ledger rows count by `auth_signer`, never `from_pubkey`: the node writes rows FROM a member that the member
  * never signed (the daily circulation fee, engine/audit.ts), and those must not make an idle member active.
  */
-export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: string | null): number {
+export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: string | null, notCounting?: string | null): number {
     const asOf = asOfTime ?? Date.now();
     const cutoff = new Date(asOf - 30 * DAY_MS).toISOString();
     const joinedBeforeIso = joinedBefore ? new Date(parseDbTime(joinedBefore)).toISOString() : null;
 
     const row = db.prepare(`
         SELECT COUNT(*) AS count FROM members m
-        WHERE m.status = 'active'
+        WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
+          AND (@notCounting IS NULL OR m.public_key != @notCounting)
           AND COALESCE(m.is_treasury, 0) = 0
           AND COALESCE(m.credit_frozen, 0) = 0
           AND m.is_visitor = 0
@@ -571,7 +633,7 @@ export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: strin
              OR EXISTS (SELECT 1 FROM decision_votes dv
                         WHERE dv.voter_pubkey = m.public_key AND julianday(dv.updated_at) >= julianday(@cutoff))
           )
-    `).get({ cutoff, joinedBefore: joinedBeforeIso }) as any;
+    `).get({ cutoff, joinedBefore: joinedBeforeIso, notCounting: notCounting ?? null }) as any;
 
     return row?.count || 0;
 }
@@ -585,10 +647,12 @@ function electorateAsOf(decision: { closesAt?: string }, asOfTime?: number): num
 
 /**
  * The electorate a Decision's turnout is measured against: members who could vote on it (joined before it
- * opened) and were active in the 30 days before it closes (or now, while it is open).
+ * opened) and were active in the 30 days before it closes (or now, while it is open). A removal's subject is not in
+ * it: nobody votes on removing themselves (design §5 point 2).
  */
-export function getDecisionElectorate(decision: { opensAt?: string; closesAt?: string }, asOfTime?: number): number {
-    return getActiveMembersCount30d(electorateAsOf(decision, asOfTime), decision.opensAt ?? null);
+export function getDecisionElectorate(decision: { opensAt?: string; closesAt?: string; effect?: string; subject?: string | null }, asOfTime?: number): number {
+    const notCounting = decision.effect === 'remove_member' ? decision.subject ?? null : null;
+    return getActiveMembersCount30d(electorateAsOf(decision, asOfTime), decision.opensAt ?? null, notCounting);
 }
 
 /**
@@ -646,18 +710,27 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
 
 /**
  * Check if a member is eligible to vote on decisions (§3.3, answer J):
- * - Account active, not frozen, not an enterprise.
+ * - Account active, not frozen, not an enterprise. Paused, and held by nothing but their pause's own vote, counts as
+ *   active (removal by vote S2, design §3.3): a paused member keeps their vote on every Decision but the one about them,
+ *   so pausing someone can't move a vote (pausedOnlyByOpenVoteSql).
+ * - Never the subject of a vote on removing them, a pause's or one a member proposed (design §5 point 2).
  * - Joined BEFORE the Decision opened (pass the Decision) — a block of members invited mid-vote can't
  *   swing it. No 14-day or vouch rule at launch.
  *
  * joined_at is written once at registration and never overwritten: the backup importer copies it on insert
  * and leaves it alone on update, and a full-file restore carries the row as-is (test-decisions-voting-answers).
  */
-export function checkVoterEligibility(voterPubkey: string, decision?: { opensAt: string } | null): { ok: boolean; error?: string } {
+export function checkVoterEligibility(
+    voterPubkey: string,
+    decision?: { opensAt: string; effect?: string; subject?: string | null } | null,
+): { ok: boolean; error?: string } {
     // A visitor's row votes on nothing, as a key with no row votes on nothing (getActingMember).
     const member = getActingMember(voterPubkey);
     if (!member) return { ok: false, error: word('Member not found') };
-    if (member.status !== 'active') return { ok: false, error: word('Voter account is not active') };
+    if (decision?.effect === 'remove_member' && decision.subject === voterPubkey) return { ok: false, error: OWN_REMOVAL_VOTE_ERROR };
+    if (member.status !== 'active' && !(member.status === 'disabled' && pausedOnlyByOpenVote(voterPubkey))) {
+        return { ok: false, error: word('Voter account is not active') };
+    }
     const row = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen, joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;
     if (row?.credit_frozen === 1) return { ok: false, error: word('Voter credit is frozen') };
     if (member.isTreasury) return { ok: false, error: word('Enterprise accounts cannot vote') };
@@ -820,6 +893,23 @@ function assertGrantWithinCap(params: any): void {
 export const DECISION_TITLE_TOO_LONG = textTooLongMessage("A Decision's title", DECISION_TITLE_LIMIT);
 export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's description", DECISION_DESCRIPTION_LIMIT);
 
+/**
+ * What a vote on removing this member records when it opens (createDecision; pauseMember for a pause's own vote), so its
+ * voters can weigh it: their name, balance and any debt, and what the Commons holds, from the ledger. The balance and the
+ * debt go to those voters and the member only (decisionForReader).
+ */
+function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance: number } {
+    const member = getMember(subjectPubkey);
+    const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance: number } | undefined;
+    const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(subjectPubkey)?.balance ?? 0);
+    return {
+        memberName: member?.callsign || nameGiven || subjectPubkey.slice(0, 8),
+        debt: memberBalance < 0 ? Math.abs(memberBalance) : 0, // Authoritatively computed from ledger
+        commonsPool: Math.round(getCommonsBalanceExact()), // Authoritatively computed from ledger
+        balance: memberBalance,
+    };
+}
+
 export interface CreateDecisionOptions {
     authorPubkey: string;
     title: string;
@@ -897,19 +987,11 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
 
     let finalParams = opts.params !== undefined && opts.params !== null ? { ...opts.params } : (opts.effect === 'remove_member' && opts.subject ? {} : opts.params);
     if (opts.effect === 'remove_member' && opts.subject) {
-        const member = getMember(opts.subject);
-        const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(opts.subject) as { balance: number } | undefined;
-        const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(opts.subject)?.balance ?? 0);
-        const commonsPoolBal = getCommonsBalanceExact();
-        const memberName = member?.callsign || opts.params?.memberName || opts.subject.slice(0, 8);
-        const debt = memberBalance < 0 ? Math.abs(memberBalance) : 0;
-        finalParams = {
-            ...opts.params,
-            memberName,
-            debt, // Authoritatively computed from ledger
-            commonsPool: Math.round(commonsPoolBal), // Authoritatively computed from ledger
-            balance: memberBalance,
-        };
+        finalParams = { ...opts.params, ...removalBalanceParams(opts.subject, opts.params?.memberName) };
+    }
+    // A pause's own vote is the node's alone (isPauseVote): a member's proposal never carries its marks.
+    if (finalParams && typeof finalParams === 'object') {
+        for (const mark of PAUSE_VOTE_MARKS) delete finalParams[mark];
     }
     const serializedParams = finalParams !== undefined && finalParams !== null ? JSON.stringify(finalParams) : null;
 
@@ -1262,10 +1344,12 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     const now = new Date().toISOString();
     // Keeping an emergency suspension is the one effect a block would turn into a sanction with no end: with formal
     // Decisions off nothing keeps it, so it lifts, as a vote that did not pass would. So does one made while they were
-    // off, whatever the switch says now (madeWithoutVote).
-    if (decision.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(decision))
+    // off, whatever the switch says now (madeWithoutVote). A pause's own vote is the same: no vote removes anyone with
+    // them off, and its pause never outlives it.
+    const pauseVote = isPauseVote(decision);
+    if (((decision.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(decision))) || (pauseVote && !decisionsOn()))
         && (decision.status === 'open' || decision.status === 'passed')) {
-        const why = decisionsOn() ? NO_VOTE_SUSPENSION_MADE_ENDED : NO_VOTE_SUSPENSION_ENDED;
+        const why = pauseVote ? NO_VOTE_PAUSE_ENDED : decisionsOn() ? NO_VOTE_SUSPENSION_MADE_ENDED : NO_VOTE_SUSPENSION_ENDED;
         closeUnkeptSuspension(decision, 'unresolved', why, now, { actor: 'SYSTEM', how: 'the suspension ended' });
         return { success: false, status: 'unresolved', error: why };
     }
@@ -1325,6 +1409,12 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     }
 
     if (preflight.status === 'blocked') {
+        // A pause never outlives its vote (design §3.2): one whose removal can't be carried out (its subject holds an owner
+        // or admin role, which no vote removes, §3.8) lifts the pause, as a vote that did not pass would.
+        if (pauseVote) {
+            closeUnkeptSuspension(decision, 'execution_blocked', preflight.reason || 'Preflight blocked', now, { actor: COMMUNITY_DECISION_ACTOR, how: 'the suspension lifted' });
+            return { success: false, status: 'execution_blocked', error: preflight.reason };
+        }
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Preflight blocked', now, decisionId);
@@ -1332,7 +1422,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         return { success: false, status: 'execution_blocked', error: preflight.reason };
     }
 
-    // Handle Destructive removal: 7-day grace window (§3.7, §3.8)
+    // Handle Destructive removal: 7-day grace window (§3.7, §3.8). A pause's own vote that passed starts it the same way:
+    // the role its pause held aside stays under the same id (nothing is left in node_roles to hold again), for a halt in
+    // the window to give back.
     if (decision.effect === 'remove_member') {
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         try {
@@ -1362,6 +1454,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             announceDecisionUpdated(decisionId);
             return { success: true, status: 'execution_pending_grace' };
         } catch (e: any) {
+            // A pause's grace window that can't start leaves no pause behind: nothing would end it.
+            if (pauseVote) {
+                try {
+                    closeUnkeptSuspension(decision, 'execution_blocked', e?.message || String(e), now, { actor: COMMUNITY_DECISION_ACTOR, how: 'the suspension lifted' });
+                    return { success: false, status: 'execution_blocked', error: e?.message };
+                } catch { /* recorded as any removal that can't start */ }
+            }
             db.prepare(
                 "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
             ).run(e?.message || String(e), now, decisionId);
@@ -1729,8 +1828,9 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
             restoreSuspendedNodeRole(decision.id, { actor: adminPubkey, how: 'a removal halted' });
         }
         // Halting the ratifying vote takes away the only thing that could keep an emergency suspension,
-        // so it lifts — an admin can't park a suspension forever by stopping its vote.
-        if (decision.effect === 'keep_suspension') {
+        // so it lifts — an admin can't park a suspension forever by stopping its vote. Nor a pause, by halting its own vote
+        // while it is open (in its grace window it is the removal's halt above).
+        if (decision.effect === 'keep_suspension' || (decision.status === 'open' && isPauseVote(decision))) {
             liftEmergencySuspensionRow(decision, { actor: adminPubkey, how: "the suspension's vote halted" });
         }
     })();
@@ -1833,9 +1933,22 @@ function roleRestoreRefusal(role: 'owner' | 'admin'): string {
 }
 
 /** Halting this Decision gives the member back the node role held aside for it (adminHaltDecision). */
-function haltRestoresRole(decision: { status: string; effect: string }): boolean {
+function haltRestoresRole(decision: Pick<Decision, 'status' | 'effect' | 'authorPubkey' | 'params'>): boolean {
     return (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member')
-        || decision.effect === 'keep_suspension';
+        || decision.effect === 'keep_suspension'
+        || (decision.status === 'open' && isPauseVote(decision));
+}
+
+/**
+ * The open votes that hold a pause: its own vote (isPauseVote), or a "Keep this suspension?" row (one opened before
+ * removal by vote S2, or the record of a pause where formal Decisions are off). This member's, or every member's.
+ * Lifting the pause by hand closes them (adminLiftSuspension); the admin queue counts them (engine/admin-queue.ts).
+ */
+export function openPauseVotes(subjectPubkey?: string): Decision[] {
+    const rows = subjectPubkey === undefined
+        ? db.prepare("SELECT * FROM decisions WHERE status = 'open' AND effect IN ('keep_suspension', 'remove_member')").all()
+        : db.prepare("SELECT * FROM decisions WHERE subject = ? AND status = 'open' AND effect IN ('keep_suspension', 'remove_member')").all(subjectPubkey);
+    return (rows as any[]).map(rowToDecision).filter(d => d.effect === 'keep_suspension' || isPauseVote(d));
 }
 
 export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend' | 'rekey';
@@ -1859,12 +1972,7 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
     if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
     if (action === 'rekey') return !!heldPrivilegedRole(target);
-    if (action === 'lift') {
-        const openKeeps = db.prepare(
-            "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"
-        ).all(target) as { id: string }[];
-        return !!heldRoleFor(openKeeps.map(k => k.id));
-    }
+    if (action === 'lift') return !!heldRoleFor(openPauseVotes(target).map(k => k.id));
     const decision = getDecision(target);
     if (!decision) return false;
     if (action === 'halt') return haltRestoresRole(decision) && !!heldRoleFor([target]);
@@ -1962,16 +2070,22 @@ function liftEmergencySuspensionRow(decision: Decision, by: RoleChangeBy): boole
     return true;
 }
 
+/** What the record of a pause's own vote says when it lifted the pause (closeUnkeptSuspension). */
+export const PAUSE_LIFTED = word('The pause has been lifted.');
+
 /**
- * Close a "Keep this suspension?" Decision that did not pass and lift the suspension, atomically.
+ * Close a "Keep this suspension?" Decision that did not pass, or a pause's own vote that did not pass or can't be carried
+ * out (`execution_blocked`, the reason also as its error), and lift the pause, atomically.
  */
-function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved', why: string, nowIso: string, by: RoleChangeBy): void {
+function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved' | 'execution_blocked', why: string, nowIso: string, by: RoleChangeBy): void {
     let lifted = false;
     db.transaction(() => {
         lifted = liftEmergencySuspensionRow(decision, by);
+        const after = !lifted ? 'The member was already restored or is held by another Decision.'
+            : isPauseVote(decision) ? PAUSE_LIFTED : 'The suspension has been lifted.';
         db.prepare(`
-            UPDATE decisions SET status = ?, execution_reason = ?, updated_at = ? WHERE id = ?
-        `).run(status, `${why}. ${lifted ? 'The suspension has been lifted.' : 'The member was already restored or is held by another Decision.'}`, nowIso, decision.id);
+            UPDATE decisions SET status = ?, execution_reason = ?, execution_error = COALESCE(?, execution_error), updated_at = ? WHERE id = ?
+        `).run(status, `${why}. ${after}`, status === 'execution_blocked' ? why : null, nowIso, decision.id);
     })();
     if (lifted && decision.subject) broadcast({ type: 'profile_updated', publicKey: decision.subject });
     announceDecisionUpdated(decision.id);
@@ -2011,17 +2125,21 @@ export function mayBePaused(member: { publicKey: string; status?: string | null 
  * actionReport). Call inside the caller's transaction, after its own guards (who may pause whom, mayBePaused, the reason).
  * In it:
  *  - the member's node role is held aside under the record's id (suspended_node_roles), so a pause that ends gives it back
- *    exactly (liftEmergencySuspensionRow, adminLiftSuspension) and one the community keeps drops it (executeDecision);
+ *    exactly (liftEmergencySuspensionRow, adminLiftSuspension) and a removal it ends in takes it with them;
  *  - the account is 'disabled', the one status of a pause: it reads what a non-member reads (@beanpool/engine
  *    readsAsMember), does only what a suspension leaves it (close its open deals, answer its messages, take its own
  *    things down, delete itself), brings nobody in (mayBringSomeoneIn), and its listings are off the board (engine
- *    posts.ts ENTERPRISE_ON_BOARD_SQL) until the account is active again, with nothing written to them;
- *  - the record everyone sees opens, with the reason: a 7-day "Keep …'s suspension?" Decision (member-touching rules: one
- *    member one vote, the usual quorum, 60%), which lifts the pause on the tick if it doesn't pass or misses quorum. With
- *    formal Decisions off (the global node) the moderators decide, not a vote: the same row records it, titled as a
- *    suspension rather than a question, nobody can vote on it, and the tick lifts it when the 7 days end
- *    (executeDecision); its params carry `noVote`, so it stays so if the switch goes back on before it ends
- *    (madeWithoutVote).
+ *    posts.ts ENTERPRISE_ON_BOARD_SQL) until the account is active again, with nothing written to them; it keeps its vote
+ *    on every other Decision (checkVoterEligibility);
+ *  - the record everyone sees opens, with the reason: the community's 7-day vote on removing them, "Remove …?" (slice
+ *    S2, design §3.2: a pause's own vote, isPauseVote), decided as any removal is (one member one vote, 25% turnout,
+ *    66%), with their balance, debt and the pot recorded for its voters. Yes starts the removal's grace window (the
+ *    member still paused); anything else lifts the pause on the tick that closes it. A member who holds an owner or admin
+ *    role (held aside included) is removed by no vote (§3.8): their vote says so, and ends the pause whatever it decides.
+ *    With formal Decisions off (the global node) the moderators decide, not a vote: a "Keep …'s suspension?"
+ *    (keep_suspension) row records it, titled as a suspension rather than a question, nobody can vote on it, and the tick
+ *    lifts it when the 7 days end (executeDecision); its params carry `noVote`, so it stays so if the switch goes back on
+ *    before it ends (madeWithoutVote).
  * Moves no Beans: nothing here touches an account's balance, so it runs in the caller's plain transaction. Returns the
  * record; announcePause tells everyone once the caller's transaction has committed.
  */
@@ -2031,15 +2149,31 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
     const opensAt = now.toISOString();
     const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
     const memberName = subject.callsign || subject.publicKey.slice(0, 8);
-    const votes = decisionsOn();
-    const params = { memberName, suspendedAt: opensAt, ...(actor ? { suspendedBy: actor } : {}), reason, ...(votes ? {} : { noVote: true }) };
-    const title = votes ? `Keep ${memberName}'s suspension?` : `${memberName} is suspended until ${closesAt.slice(0, 10)}`;
-    const description = votes
-        ? `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${reason}`
-        : `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Community votes are switched off on this node, so `
+    let effect: DecisionEffect;
+    let params: Record<string, unknown>;
+    let title: string;
+    let description: string;
+    if (decisionsOn()) {
+        const serverRole = heldPrivilegedRole(subject.publicKey);
+        effect = 'remove_member';
+        params = {
+            ...removalBalanceParams(subject.publicKey), memberName, pausedAt: opensAt, pausedBy: actor, rule: PAUSE_VOTE_RULE, reason,
+            ...(serverRole ? { serverRole } : {}),
+        };
+        title = tr('Remove {name}?', { name: memberName });
+        description = serverRole
+            ? tr("An admin paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
+                { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason })
+            : tr('An admin paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
+                { name: memberName, date: opensAt.slice(0, 10), reason });
+    } else {
+        effect = 'keep_suspension';
+        params = { memberName, suspendedAt: opensAt, ...(actor ? { suspendedBy: actor } : {}), reason, noVote: true };
+        title = `${memberName} is suspended until ${closesAt.slice(0, 10)}`;
+        description = `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Community votes are switched off on this node, so `
             + `the suspension lifts by itself on ${closesAt.slice(0, 10)}, or sooner if a moderator lifts it. Reason given: ${reason}`;
-    // Hold the member's node role aside before the pause deletes it, so a pause the community does not keep gives it
-    // back exactly.
+    }
+    // Hold the member's node role aside before the pause deletes it, so a pause that ends gives it back exactly.
     db.prepare(`
         INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
         SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
@@ -2050,8 +2184,8 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
         INSERT INTO decisions (
             id, author_pubkey, title, description, touches, effect, subject, params,
             franchise, status, opens_at, closes_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'member', 'keep_suspension', ?, ?, '1m1v', 'open', ?, ?, ?, ?)
-    `).run(id, SYSTEM_AUTHOR, title, description, subject.publicKey, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+        ) VALUES (?, ?, ?, ?, 'member', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?)
+    `).run(id, SYSTEM_AUTHOR, title, description, effect, subject.publicKey, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
     return getDecision(id)!;
 }
 
@@ -2103,9 +2237,12 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     return { success: true, decision };
 }
 
+/** Why a pause's own vote closed when an admin lifted the pause by hand (adminLiftSuspension). */
+export const PAUSE_LIFTED_BY_ADMIN = word('An admin lifted the pause before the vote closed');
+
 /**
- * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
- * decide, so it closes as halted, with the lift recorded as the reason.
+ * An admin lifts a suspension by hand. An open vote holding it (the pause's own vote, or a "Keep this suspension?" vote
+ * from before) has nothing left to decide, so it closes as halted, with the lift recorded as the reason.
  *
  * It lifts a pause, an admin's or a report's (pauseMember), and a Decision's 'disabled', each with its listings back on
  * the board and its invites (the status decides both), and a report's 'suspended' from before its suspension was a pause:
@@ -2139,9 +2276,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
         return { success: false, status: 409, error: 'The community voted to remove this member; halt that Decision instead' };
     }
     const nowIso = new Date().toISOString();
-    const openKeeps = db.prepare(
-        "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"
-    ).all(subjectPubkey) as { id: string }[];
+    const openKeeps = openPauseVotes(subjectPubkey);
     // Lifting gives back the role the suspension held aside; only an owner may give back an owner or admin role.
     if (!isOwnerLevelActor(adminActor)) {
         const held = heldRoleFor(openKeeps.map(k => k.id));
@@ -2153,9 +2288,9 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
             restoreSuspendedNodeRole(k.id, { actor: adminActor, how: 'the suspension lifted' });
             db.prepare(`
                 UPDATE decisions SET status = 'admin_halted', admin_halted_at = ?, admin_halted_by = ?,
-                    admin_halt_reason = 'An admin lifted the suspension before the vote closed', updated_at = ?
+                    admin_halt_reason = ?, updated_at = ?
                 WHERE id = ?
-            `).run(nowIso, adminActor, nowIso, k.id);
+            `).run(nowIso, adminActor, isPauseVote(k) ? PAUSE_LIFTED_BY_ADMIN : 'An admin lifted the suspension before the vote closed', nowIso, k.id);
         }
     })();
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
@@ -2205,16 +2340,18 @@ export function tickDecisions(asOfTime?: number): {
 
             // Formal Decisions off: an emergency suspension ends with its 7 days, whatever votes it held before the
             // switch went off (executeDecision lifts it). So does one made while they were off, never tallied even if
-            // the switch is back on (madeWithoutVote). Anything else that closes is not carried out: it passes to
-            // executeDecision below, which blocks it.
-            if (r.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(rowToDecision(r)))) {
+            // the switch is back on (madeWithoutVote), and a pause's own vote (isPauseVote). Anything else that closes is
+            // not carried out: it passes to executeDecision below, which blocks it.
+            const pauseVote = isPauseVote(rowToDecision(r));
+            if ((r.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(rowToDecision(r)))) || (pauseVote && !decisionsOn())) {
                 executeDecision(r.id);
                 continue;
             }
 
             const tally = tallyDecision(r.id, asOfTime);
 
-            if (r.effect === 'keep_suspension' && !tally.passed) {
+            // A pause never outlives its vote (design §3.2): No, a tie, a missed quorum or no votes at all lift it now.
+            if ((r.effect === 'keep_suspension' || pauseVote) && !tally.passed) {
                 const why = !tally.quorumMet
                     ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`
                     : `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;

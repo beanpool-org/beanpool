@@ -1,10 +1,9 @@
 /**
  * One pause (removal by vote, slice S1: scratch/fable-design/DESIGN-removal-by-vote-fable.md §3, §9). An admin's
  * emergency suspension and a report actioned with a suspension are the same pause (decisions-engine.ts pauseMember):
- * the account is 'disabled', its node role is held aside, the record everyone sees opens (a 7-day "Keep …'s
- * suspension?" vote, or with formal Decisions off one nobody votes on that lifts itself), its listings leave the board
- * and it brings nobody in, until the pause ends. Nothing in it moves Beans. What the vote is stays as it was (S2 changes
- * it).
+ * the account is 'disabled', its node role is held aside, the record everyone sees opens (since slice S2 the community's
+ * 7-day vote on removing the member, "Remove …?"; with formal Decisions off one nobody votes on that lifts itself), its
+ * listings leave the board and it brings nobody in, until the pause ends. Nothing in it moves Beans.
  *
  * Boots the real server; every request goes over HTTPS through the real signature middleware, an admin's through a real
  * key session.
@@ -47,6 +46,12 @@
  *     alike; she gets each again with her request pending, the one kept for her alone as Una's; and she finds Quin's request
  *     waiting for her, accepts it, which is answering in a conversation she is in, and answers him. Xan, a visitor's row Mia
  *     wrote to, decides a request sent to him as a member does (PR #2410): paused, he still accepts hers, and writes no line.
+ *  7. The pause's vote (removal by vote S2, design §3.2, §3.3), over HTTPS: Ada pauses Hugo, and the record is "Remove
+ *     PausedHugo?", the node's removal vote (rule 2, who paused, the reason). She pauses Ruth too. Hugo, paused, signs a
+ *     vote on Ruth's removal and Ruth, paused, on Hugo's: each counts. Hugo's own vote on his removal is refused in words,
+ *     and nothing is written. Hugo reads his own card, with the reason and not who paused. The community says Yes to
+ *     Hugo: his grace window starts on the tick, his account still paused and his credit frozen, his listing still off the
+ *     board, no Bean moved. Ruth's vote doesn't pass: the tick lifts her pause.
  *
  * The re-key's interplay with a report's pause is test-rekey-cancel's (sections H to J); a standby's copy of a pause is
  * test-standby-board-standing's; what a paused member reads is test-suspended-and-visitor-reads'.
@@ -237,7 +242,8 @@ async function main() {
     const statusOf = (id: Id) => row(id.pubKeyHex)?.status as string | undefined;
     const roleOf = (id: Id) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(id.pubKeyHex) as { role: string } | undefined)?.role ?? null;
     const heldAside = (decisionId: string) => db.prepare('SELECT member_pubkey, role FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as { member_pubkey: string; role: string } | undefined;
-    const records = (id: Id) => db.prepare("SELECT * FROM decisions WHERE subject = ? AND effect = 'keep_suspension' ORDER BY created_at").all(id.pubKeyHex) as any[];
+    // A pause's record: the node's own Decision about the member (its removal vote, or with votes off the record of the pause).
+    const records = (id: Id) => db.prepare("SELECT * FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM' ORDER BY created_at").all(id.pubKeyHex) as any[];
     const paramsOf = (r: any) => { try { return JSON.parse(r?.params ?? '{}'); } catch { return {}; } };
     const objectSql = (type: string, name: string) => (db.prepare('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?').get(type, name) as { sql: string } | undefined)?.sql ?? '';
     const list = (a: Answer): any[] => (Array.isArray(a.body) ? a.body : (a.body?.posts ?? []));
@@ -300,6 +306,8 @@ async function main() {
     const bob = seedMember('BlockingBob');      // has blocked Pia, who opens a DM with him all the same
     const cleo = seedMember('BlockingCleo');    // has blocked Pia, who has no DM with her
     const wes = seedMember('BlockedWes');       // Pia has blocked him, and he opens a DM with her all the same
+    const hugo = seedMember('PausedHugo');      // paused in section 7, where the community votes to remove him
+    const ruth = seedMember('PausedRuth');      // paused in section 7 too, where her vote doesn't pass
     const ownerSession = ownerSessionHeaders(gen.pubKeyHex);
     const adaSession = (() => {
         const { handshakeToken } = mintHandshakeToken(ada.pubKeyHex, 'admin');
@@ -377,8 +385,10 @@ async function main() {
     const accountsAfter = accountsNow();
     const piaRecord = records(pia)[0];
     assert(paused.status === 200 && statusOf(pia) === 'disabled', `Ada pauses Pia: her account is 'disabled' (${paused.status} ${statusOf(pia)})`);
-    assert(piaRecord?.status === 'open' && paramsOf(piaRecord).reason === PIA_REASON && paramsOf(piaRecord).suspendedBy === ada.pubKeyHex,
+    assert(piaRecord?.status === 'open' && paramsOf(piaRecord).reason === PIA_REASON && paramsOf(piaRecord).pausedBy === ada.pubKeyHex,
         `the record opens, with Ada's reason (${piaRecord?.status}, ${JSON.stringify(paramsOf(piaRecord).reason)})`);
+    assert(piaRecord?.effect === 'remove_member' && paramsOf(piaRecord).rule === 2 && piaRecord?.title === `Remove ${pia.callsign}?`,
+        `it is the community's vote on removing her (${piaRecord?.effect}, ${JSON.stringify(piaRecord?.title)})`);
     assert(roleOf(pia) === null && heldAside(piaRecord?.id)?.role === 'moderator', `her moderator role is held aside under the record (${roleOf(pia)}, ${heldAside(piaRecord?.id)?.role})`);
     assert(accountsBefore === accountsAfter, 'the pause moves no Beans: every account holds what it held');
 
@@ -481,7 +491,7 @@ async function main() {
     const alPaused = await asAdmin(ownerSession, `/api/local/admin/reports/${alReport}/action`, { suspendUser: true });
     const alRecord = records(al)[0];
     assert(alPaused.status === 200 && statusOf(al) === 'disabled', `an owner pauses Al through a report: 'disabled', not 'suspended' (${alPaused.status} ${statusOf(al)})`);
-    assert(alRecord?.status === 'open' && alRecord?.title === `Keep ${al.callsign}'s suspension?`,
+    assert(alRecord?.status === 'open' && alRecord?.effect === 'remove_member' && alRecord?.title === `Remove ${al.callsign}?`,
         `the report opens the record, as an emergency suspension does (${alRecord?.status} ${JSON.stringify(alRecord?.title)})`);
     const alReason = String(paramsOf(alRecord).reason ?? '');
     assert(alReason.includes(al.callsign) && /report/i.test(alReason) && !alReason.includes('never his to sell') && !alReason.includes(rae.callsign),
@@ -638,6 +648,48 @@ async function main() {
     } finally {
         db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.dmRequests`);
     }
+
+    // ── 7. The pause's vote (removal by vote S2) ─────────────────────────────────────────────────────────────────────
+    console.log('\n── 7. the pause\'s vote ──');
+    const HUGO_REASON = 'Took a deposit for honey that never came, twice';
+    const hugoOffer = offer(hugo, 'Hugo honey');
+    const accountsBeforeHugo = accountsNow();
+    const hugoPaused = await asAdmin(adaSession, `/api/local/admin/users/${hugo.pubKeyHex}/suspend`, { reason: HUGO_REASON });
+    const hugoRecord = records(hugo)[0];
+    assert(hugoPaused.status === 200 && statusOf(hugo) === 'disabled' && hugoRecord?.effect === 'remove_member' && hugoRecord?.status === 'open'
+        && hugoRecord?.title === `Remove ${hugo.callsign}?`,
+        `Ada pauses Hugo, and the record is the community's vote on removing him (${hugoPaused.status} ${hugoRecord?.effect} ${JSON.stringify(hugoRecord?.title)})`);
+    assert(paramsOf(hugoRecord).rule === 2 && paramsOf(hugoRecord).pausedBy === ada.pubKeyHex && paramsOf(hugoRecord).reason === HUGO_REASON,
+        `its params: the pause vote's rule, who paused, the reason (${JSON.stringify(paramsOf(hugoRecord))})`);
+    const ruthPaused = await asAdmin(adaSession, `/api/local/admin/users/${ruth.pubKeyHex}/suspend`, { reason: 'Shouting at sellers in the market, reported by three members' });
+    const ruthRecord = records(ruth)[0];
+    assert(ruthPaused.status === 200 && statusOf(ruth) === 'disabled' && ruthRecord?.status === 'open' && ruthRecord?.effect === 'remove_member',
+        `setup: Ada pauses Ruth too, and her removal vote opens (${ruthPaused.status} ${ruthRecord?.status} ${ruthRecord?.effect})`);
+    const hugoOnRuth = await post(`/api/commons/decisions/${ruthRecord?.id}/vote`, { support: false }, hugo);
+    const ruthOnHugo = await post(`/api/commons/decisions/${hugoRecord?.id}/vote`, { support: true }, ruth);
+    assert(hugoOnRuth.status === 200 && ruthOnHugo.status === 200,
+        `paused, each votes on the other's removal (${hugoOnRuth.status} ${hugoOnRuth.text.slice(0, 100)} | ${ruthOnHugo.status} ${ruthOnHugo.text.slice(0, 100)})`);
+    const hugoOnHugo = await post(`/api/commons/decisions/${hugoRecord?.id}/vote`, { support: false }, hugo);
+    const hugoBallot = db.prepare('SELECT 1 FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?').get(hugoRecord?.id, hugo.pubKeyHex);
+    assert(hugoOnHugo.status === 400 && /remov/i.test(hugoOnHugo.body?.error ?? '') && !hugoBallot,
+        `and Hugo's vote on his own removal is refused in words, nothing written (${hugoOnHugo.status} ${hugoOnHugo.text.slice(0, 140)})`);
+    const hugoReads = await get('/api/commons/decisions', hugo);
+    const hugoCard = (hugoReads.body?.decisions ?? []).find((d: any) => d.id === hugoRecord?.id);
+    assert(hugoReads.status === 200 && hugoCard?.params?.reason === HUGO_REASON && !('pausedBy' in (hugoCard?.params ?? {})),
+        `Hugo reads his own card, with the reason and not who paused (${hugoReads.status} ${JSON.stringify(hugoCard?.params)})`);
+    for (const v of [gen, otto, ada, rae, bea, vic, olive, rita, bob, cleo, wes]) de.castDecisionVote(hugoRecord.id, v.pubKeyHex, true);
+    for (const v of [bob, cleo, wes]) de.castDecisionVote(ruthRecord.id, v.pubKeyHex, false);
+    // Both votes close now, and the tick runs at the real time: a tick a week ahead would also see Hugo's grace window end.
+    db.prepare('UPDATE decisions SET closes_at = ? WHERE id IN (?, ?)').run(new Date(Date.now() - 1000).toISOString(), hugoRecord.id, ruthRecord.id);
+    de.tickDecisions();
+    const hugoAfter = db.prepare('SELECT status, grace_period_ends_at FROM decisions WHERE id = ?').get(hugoRecord.id) as { status: string; grace_period_ends_at: string | null };
+    assert(hugoAfter.status === 'execution_pending_grace' && !!hugoAfter.grace_period_ends_at && statusOf(hugo) === 'disabled' && row(hugo.pubKeyHex)?.credit_frozen === 1,
+        `the community says Yes: Hugo's grace window starts, his account still paused, his credit frozen (${hugoAfter.status} ${statusOf(hugo)})`);
+    assert(!(await board(rita)).has(hugoOffer), 'his listing stays off the board');
+    assert(accountsNow() === accountsBeforeHugo, 'no Bean moved: not the pause, the votes or the start of the grace window');
+    const ruthAfter = db.prepare('SELECT status, execution_reason FROM decisions WHERE id = ?').get(ruthRecord.id) as { status: string; execution_reason: string | null };
+    assert(['failed', 'unresolved'].includes(ruthAfter.status) && statusOf(ruth) === 'active' && /pause has been lifted/i.test(ruthAfter.execution_reason ?? ''),
+        `Ruth's vote doesn't pass: the tick lifts her pause (${ruthAfter.status} ${statusOf(ruth)}: ${ruthAfter.execution_reason})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

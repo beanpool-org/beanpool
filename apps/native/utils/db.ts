@@ -1830,8 +1830,15 @@ export async function getMemberProfile(pubkey: string) {
  */
 export async function fetchNodeCallsign(anchorUrl: string, pubkey: string, privateKey?: string): Promise<string | null> {
     try {
-        const url = `${anchorUrl}/api/community/membership/${pubkey}`;
-        const signed = privateKey ? await buildSignedHeaders('GET', url, '', privateKey, pubkey) : {};
+        if (!anchorUrl || anchorUrl === 'Detecting...' || !pubkey) return null;
+        const cleanUrl = anchorUrl.replace(/\/+$/, '');
+        const url = `${cleanUrl}/api/community/membership/${pubkey}`;
+        let privKey = privateKey;
+        if (!privKey) {
+            const id = await (await import('./identity')).loadIdentity().catch(() => null);
+            if (id?.publicKey === pubkey) privKey = id.privateKey;
+        }
+        const signed = privKey ? await buildSignedHeaders('GET', url, '', privKey, pubkey) : {};
         const res = await fetch(url, {
             headers: { ...signed, Accept: 'application/json' },
         });

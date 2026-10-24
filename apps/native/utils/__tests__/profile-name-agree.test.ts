@@ -20,6 +20,8 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 
+const inputSetters = vi.hoisted(() => new Map<string, (v: string) => void>());
+
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', switch: 'switch', checkbox: 'checkbox' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -29,7 +31,11 @@ vi.mock('react-native', () => {
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
-        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (onChangeText) {
+            attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value);
+            attrs.value = value ?? '';
+            if (accessibilityLabel) inputSetters.set(accessibilityLabel, onChangeText);
+        }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -284,6 +290,7 @@ beforeEach(() => {
     alerts.buttons.length = 0;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
+    store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE, alias: 'Mullum Commons' }]));
     identityState.identity = { publicKey: KEY, privateKey: PRIV, callsign: 'Marty' };
     mockDb.localProfile = null;
     mockDb.updatedProfiles.length = 0;
@@ -384,6 +391,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
             const u = String(url);
             if (u.includes('/api/profile/update')) {
                 nodePayload = JSON.parse(init.body);
+                mockDb.remoteCallsign = nodePayload.callsign;
                 return new Response(JSON.stringify({ success: true }), { status: 200 });
             }
             return new Response('{}', { status: 200 });
@@ -403,14 +411,12 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         await settle();
 
         // Find callsign input and type new name
-        const inputs = Array.from(host.querySelectorAll('input'));
-        const callsignInput = inputs.find((i) => i.getAttribute('aria-label') === 'Callsign' || i.value === 'Marty');
-        expect(callsignInput).toBeDefined();
+        const callsignInput = host.querySelector('input[aria-label="Callsign"]');
+        expect(callsignInput).toBeTruthy();
+        expect(inputSetters.has('Callsign')).toBe(true);
 
         await act(async () => {
-            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-            set.call(callsignInput, 'Marty Renamed');
-            callsignInput!.dispatchEvent(new Event('input', { bubbles: true }));
+            inputSetters.get('Callsign')?.('Marty Renamed');
         });
         await settle();
 
@@ -430,6 +436,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(localRow).toBeDefined();
 
         // 3. Wrote to device-wide identity
+        expect(mockDb.updatedIdentities).toContain('Marty Renamed');
         expect(identityState.identity.callsign).toBe('Marty Renamed');
     });
 

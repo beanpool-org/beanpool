@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Share, Linking, Platform, AppState, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Share, Linking, Platform, AppState, Modal, RefreshControl } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Clipboard from 'expo-clipboard';
 import { useIdentity } from '../IdentityContext';
@@ -16,7 +16,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, fetchNodeCallsign, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../../utils/event-extras';
@@ -144,6 +144,10 @@ export default function SettingsScreen() {
         },
         callsignText: {
             fontSize: 24, fontWeight: '800', color: colors.text.inverse, letterSpacing: 0.5, marginBottom: 4,
+        },
+        communitySubtext: {
+            fontSize: 13, color: palette.emerald200, textAlign: 'center',
+            marginBottom: 8, paddingHorizontal: 12,
         },
         bioText: {
             fontSize: 14, color: palette.emerald200, lineHeight: 20, textAlign: 'center',
@@ -397,11 +401,11 @@ export default function SettingsScreen() {
     // Resolves a human label for the node we are actually anchored to, preferring the
     // saved-node alias over the host. Reads the anchor directly rather than trusting
     // component state.
-    const resolveCommunityLabel = async (): Promise<string | null> => {
+    const resolveCommunityLabel = React.useCallback(async (): Promise<string | null> => {
         try {
             const url = await getAnchorUrl();
             if (!url) return null;
-            const nodes = savedNodes.length > 0 ? savedNodes : await getSavedNodes();
+            const nodes = await getSavedNodes();
             const match = nodes.find(n => n.url === url);
             if (match?.alias) return match.alias;
             try {
@@ -412,7 +416,7 @@ export default function SettingsScreen() {
         } catch {
             return null;
         }
-    };
+    }, []);
 
     const fetchProtectionStatus = async () => {
         // A build without a key vault: the community keeps the sign-in copies, as before the vault.
@@ -635,6 +639,8 @@ export default function SettingsScreen() {
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
     const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
+    const [communityLabel, setCommunityLabel] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
     const [bio, setBio] = useState('');
     const [contact, setContact] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'friends' | 'community'>('community');
@@ -659,7 +665,7 @@ export default function SettingsScreen() {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
                     setAvatar(cleaned || canonical?.avatar || null);
-                    if (profile.callsign) {
+                    if (profile.callsign && mode !== 'profile') {
                         setEditCallsign(profile.callsign);
                     }
                     if (profile.bio) setBio(profile.bio);
@@ -678,10 +684,41 @@ export default function SettingsScreen() {
                     if (canonical.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }
+
+            // Resolve the community label for "Your name in <community>"
+            void resolveCommunityLabel().then((label) => {
+                if (label) setCommunityLabel(label);
+            }).catch(() => {});
+
+            // On open and on pull-to-refresh: ask the active community for this key's own record
+            const targetUrl = await getAnchorUrl().catch(() => null);
+            if (targetUrl) {
+                const remoteName = await fetchNodeCallsign(targetUrl, identity.publicKey, identity.privateKey);
+                if (remoteName) {
+                    if (remoteName !== profile?.callsign) {
+                        setNodeCallsign(remoteName);
+                        if (mode !== 'profile') setEditCallsign(remoteName);
+                        await updateMemberProfile(identity.publicKey, { callsign: remoteName });
+                    }
+                    if (remoteName !== identity.callsign) {
+                        const updated = await updateCallsign(remoteName);
+                        if (updated) setIdentity(updated);
+                    }
+                }
+            }
         } catch {
             // Non-fatal: the card falls back to the local identity.
         }
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, identity?.privateKey, resolveCommunityLabel, mode, setIdentity]);
+
+    const handleRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await loadProfileForCurrentNode();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [loadProfileForCurrentNode]);
 
     React.useEffect(() => {
         void loadProfileForCurrentNode();
@@ -1640,6 +1677,14 @@ export default function SettingsScreen() {
             style={styles.container}
             contentContainerStyle={[styles.content, { paddingBottom: 48 }]}
             bottomOffset={16}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={handleRefresh}
+                    tintColor={colors.brand.primary}
+                    colors={[colors.brand.primary]}
+                />
+            }
         >
             {/* A known community's consent (community modes slice 6): offered, never required. */}
             <KnownConsentCard />
@@ -1672,6 +1717,13 @@ export default function SettingsScreen() {
 
                     {/* Callsign */}
                     <Text style={styles.callsignText}>{nodeCallsign || identity.callsign}</Text>
+
+                    {/* Community name: names are per community */}
+                    {communityLabel ? (
+                        <Text style={styles.communitySubtext} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                            {t('Your name in {name}', { name: communityLabel })}
+                        </Text>
+                    ) : null}
 
                     {/* Bio */}
                     {bio ? <Text style={styles.bioText}>{bio}</Text> : null}

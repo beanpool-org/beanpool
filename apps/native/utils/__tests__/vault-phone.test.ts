@@ -753,7 +753,8 @@ describe('the source: only a build without a vault asks a community for a nonce,
         expect(body(connect, 'connectAndDeposit')).toMatch(/if \(signInCopiesAt\(\) === 'community' \|\| options\.copyAt === 'community'\) return connectAtCommunity\(/);
         const askers = sources().filter(({ src: s }) => /copyAt=\{/.test(s)).map(c => c.rel);
         expect(askers).toEqual(['app/welcome.tsx']);
-        expect(src('app/welcome.tsx').match(/copyAt=\{[^}]*\}/g)).toEqual(["copyAt={joinFlow === 'claim' ? 'community' : undefined}"]);
+        expect(src('app/welcome.tsx').match(/copyAt=\{[^}]*\}/g)).toEqual(["copyAt={joinFlow === 'claim' ? 'community' : undefined}", "copyAt={joinFlow === 'claim' ? 'community' : undefined}"]);
+        // The second is Safety Backup's protection panel: its words say where that copy is (#2433 review r4366342448).
         // The deposit at the community: only for a sign-in bound to the community's nonce (no vault ticket).
         const enrol = src('utils/keeper-enrolment.ts');
         expect(body(enrol, 'enrolSsoKeeper')).toMatch(/'ticket' in input \? enrolAtVault\(input\) : enrolAtCommunity\(input\)/);

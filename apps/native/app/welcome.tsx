@@ -2110,6 +2110,8 @@ export default function WelcomeScreen() {
                         <KeeperProtectionPanel
                             protection={protection}
                             hasWords={hasMnemonic(pendingIdentity)}
+                            copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                            communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);

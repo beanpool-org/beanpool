@@ -1641,7 +1641,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             // The phone's header (GroupChatView openOwner): a group's chat opens its group info, an
                             // enterprise's thread its enterprise page (its id is the enterprise's key, as the phone's
                             // treasury-detail). A group chat's id IS the group's id (lib/api.ts Conversation), compared
-                            // in lower case (lib/group-hold groupIdKey). A DM header stays as it was.
+                            // in lower case (lib/group-hold groupIdKey). A DM header opens the person's public profile
+                            // or the enterprise's page (matching the phone's public-profile route).
                             const ownerTab = activeConv.type === 'group_thread' ? 'group'
                                 : (activeConv.type as string) === 'enterprise_thread' ? 'enterprise' : null;
                             const ownerId = ownerTab === 'group' ? groupIdKey(activeConv.id) : activeConv.id;
@@ -1661,15 +1662,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </span>
                                 </>
                             );
-                            // A request waiting for this member: the sender's profile one tap away (design §4.5).
-                            if (requestMode === 'to-me' && peerPubkey && onOpenProfile) {
+                            if (activeConv.type === 'dm' && peerPubkey && onOpenProfile) {
                                 return (
                                     <button
                                         type="button"
-                                        data-testid="request-header-profile"
+                                        data-testid={requestMode === 'to-me' ? 'request-header-profile' : 'dm-header-profile'}
                                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
                                         onClick={() => onOpenProfile(peerPubkey)}
-                                        aria-label={t("{name}, see {name}'s profile", { name: title })}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                onOpenProfile(peerPubkey);
+                                            }
+                                        }}
+                                        aria-label={t("Open {name}'s profile", { name: title })}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
                                             minHeight: '44px', padding: '0 0.25rem', background: 'none', border: 'none',

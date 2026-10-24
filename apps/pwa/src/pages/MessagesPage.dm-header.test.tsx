@@ -239,7 +239,7 @@ describe('web DM chat header', () => {
             />
         );
 
-        expect(await screen.findByText('I fix bikes')).toBeInTheDocument();
+        expect(await screen.findByText(/I fix bikes/)).toBeInTheDocument();
         expect(onOpenTreasury).not.toHaveBeenCalled();
     });
 

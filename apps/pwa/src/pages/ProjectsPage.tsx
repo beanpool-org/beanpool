@@ -843,7 +843,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 />
                                 {newPhotos.length > 0 && (
                                     <div className="mt-2 flex items-center gap-2">
-                                        <img src={resolveAvatarUrl(newPhotos[0]) || newPhotos[0]} alt={t('Preview')} className="w-12 h-12 rounded-xl object-cover border border-nature-700" />
+                                        <img src={resolveAvatarUrl(newPhotos[0]) || ''} alt={t('Preview')} className="w-12 h-12 rounded-full object-cover border border-nature-700" />
                                         <button
                                             type="button"
                                             onClick={() => setNewPhotos([])}

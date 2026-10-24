@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createHash, createHmac, scryptSync } from 'node:crypto';
@@ -9,6 +9,25 @@ vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
+// The phone's storage, as maps, for the claim that makes the account (utils/claim-key.ts, below): the key item in the
+// secure store, the wizard's record and the anchor in AsyncStorage.
+const phone = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => phone.async.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { phone.async.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { phone.async.delete(k); }),
+        getAllKeys: vi.fn(async () => [...phone.async.keys()]),
+        multiRemove: vi.fn(async (ks: string[]) => { for (const k of ks) phone.async.delete(k); }),
+    },
+}));
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: vi.fn(async (k: string) => phone.secure.get(k) ?? null),
+    setItemAsync: vi.fn(async (k: string, v: string) => { phone.secure.set(k, v); }),
+    deleteItemAsync: vi.fn(async (k: string) => { phone.secure.delete(k); }),
+}));
 
 import {
     APP_CLAIM_SCRYPT, CLAIM_NAME_MAX, buildClaimBody, cleanClaimName, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
@@ -493,5 +512,216 @@ describe('the claim screen at 320dp and 1.3× font: the whole code at once', () 
         expect(src).toMatch(/<Text style=\{styles\.headerTitle\} numberOfLines=\{2\}[^>]*>\{upperCase\(t\('Claim a community'\)\)\}<\/Text>/);
         expect(src).not.toMatch(/textTransform:/);
         expect(src).toMatch(/<Text style=\{styles\.title\}>\{named \? t\('Claim \{name\}', \{ name: named \}\) : t\('Claim this community'\)\}<\/Text>/);
+    });
+});
+
+/**
+ * The claim makes the account (utils/claim-key.ts; DESIGN-account-without-global-fable.md §2.2): on a phone with no
+ * account, a key made in memory signs the claim, goes onto the phone with the wizard's record just before the POST, and
+ * comes off again only when no claim by it can ever land. Real modules all the way down to the phone's storage (maps).
+ */
+describe('the claim that makes the account', () => {
+    const KEY_ITEM = 'sovereign-identity';
+    const RECORD = 'beanpool_pending_onboarding';
+    const owner: OwnerCheck = async () => 'owner';
+    const notOwner: OwnerCheck = async () => 'not-owner';
+    const noAnswer: OwnerCheck = async () => null;
+    const stored = () => (phone.secure.has(KEY_ITEM) ? JSON.parse(phone.secure.get(KEY_ITEM)!) : null);
+    const record = () => (phone.async.has(RECORD) ? JSON.parse(phone.async.get(RECORD)!) : null);
+    beforeEach(() => { phone.async.clear(); phone.secure.clear(); });
+
+    /** A node at ORIGIN: the POST's answer, then whatever the claim asks after (the status, by GET). */
+    function node(post: (body: any) => Response | Promise<Response>, after: Array<() => Response> = []) {
+        const seen: Array<{ method: string; body: any; keyOnPhone: string | null; recordAtSend: any }> = [];
+        const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+            const method = init?.method ?? 'GET';
+            const body = init?.body ? JSON.parse(String(init.body)) : null;
+            seen.push({ method, body, keyOnPhone: stored()?.publicKey ?? null, recordAtSend: record() });
+            if (String(url) !== `${ORIGIN}/api/local/claim`) throw new Error(`unexpected ${url}`);
+            if (method === 'POST') return post(body);
+            const next = after.shift();
+            if (!next) throw new Error('unexpected GET');
+            return next();
+        });
+        return { fetchImpl: fetchImpl as any, seen };
+    }
+    const claimed = () => json(200, { unclaimed: false });
+    const unclaimed = () => json(200, { unclaimed: true, codeId: CODE_ID, salt: SALT, communityName: 'Bean Town' });
+
+    async function drafted() {
+        const { claimKeyForThisPhone } = await import('../claim-key');
+        return claimKeyForThisPhone(ORIGIN);
+    }
+    async function claimWith(key: Awaited<ReturnType<typeof drafted>>, fetchImpl: any, isOwner: OwnerCheck = owner) {
+        const { claimWithKey } = await import('../claim-key');
+        return claimWithKey({ origin: ORIGIN, key, code: CODE, codeId: CODE_ID, salt: SALT, callsign: 'Ada', isOwner, fetchImpl });
+    }
+
+    it('a phone with no account: the key is made in memory, signs the claim, and is on the phone with the record before the POST', async () => {
+        const key = await drafted();
+        expect(key.createdHere).toBe(true);
+        // Nothing is made by opening the screen or drafting: the phone holds nothing yet.
+        expect(stored()).toBeNull();
+        expect(record()).toBeNull();
+        const { fetchImpl, seen } = node(() => json(200, { ok: true, role: 'owner', callsign: 'Ada', again: false }));
+        const sending = vi.fn();
+        const { claimWithKey } = await import('../claim-key');
+        const out = await claimWithKey({ origin: ORIGIN, key, code: CODE, codeId: CODE_ID, salt: SALT, callsign: 'Ada', isOwner: owner, fetchImpl, onSending: sending });
+        expect(out).toMatchObject({ outcome: { kind: 'owner', callsign: 'Ada' }, madeHere: true, released: false });
+        expect(sending).toHaveBeenCalledTimes(1);
+        const [post] = seen;
+        expect(post.method).toBe('POST');
+        // Signed by the drafted key, and that key was already on the phone, with its record, when the POST went.
+        expect(post.body.publicKey).toBe(key.identity.publicKey);
+        expect(post.body.callsign).toBe('Ada');
+        const msg = signedRequestBytes(claimText(HOST, CODE_ID, post.body.publicKey, post.body.proof));
+        expect(ed25519.verify(Buffer.from(post.body.signature, 'base64'), msg, Buffer.from(post.body.publicKey, 'hex'), { zip215: false })).toBe(true);
+        expect(post.keyOnPhone).toBe(key.identity.publicKey);
+        expect(post.recordAtSend).toMatchObject({
+            step: 'claim', flow: 'claim', anchorUrl: ORIGIN, callsign: 'Ada', redeemed: false,
+            freshKey: key.identity.publicKey, joinsOut: 1, claimCodeId: CODE_ID,
+        });
+        // The record never holds the code, or K.
+        expect(JSON.stringify(post.recordAtSend)).not.toContain(CODE.slice(6));
+        expect(stored()).toMatchObject({ publicKey: key.identity.publicKey, callsign: 'Ada' });
+        expect(stored().mnemonic).toHaveLength(12);
+    });
+
+    it('in: the phone is the community\'s, and the wizard goes on to Your Photo under the name the node kept, with no copy anywhere', async () => {
+        const key = await drafted();
+        const { fetchImpl } = node(() => json(200, { ok: true, role: 'owner', callsign: 'Ada 2', again: false }));
+        const out = await claimWith(key, fetchImpl);
+        const { finishClaim } = await import('../claim-key');
+        const kept = await finishClaim(ORIGIN, out.identity, 'Bean Town', out.outcome.kind === 'owner' ? out.outcome.callsign : null);
+        expect(kept.callsign).toBe('Ada 2');
+        expect(stored()).toMatchObject({ publicKey: key.identity.publicKey, callsign: 'Ada 2' });
+        expect(phone.async.get('beanpool_anchor_url')).toBe(ORIGIN);
+        expect(record()).toEqual({
+            step: 'profileSetup', flow: 'claim', inviteCode: '', anchorUrl: ORIGIN, callsign: 'Ada 2', redeemed: true,
+            newKey: key.identity.publicKey, joinDoor: 'words', communityName: 'Bean Town',
+        });
+    });
+
+    it('a refusal of the POST (a wrong code): no longer counted; the key stays for another try, and leaving takes it off', async () => {
+        const key = await drafted();
+        const { fetchImpl } = node(() => json(403, { code: 'claim_wrong_code' }));
+        const out = await claimWith(key, fetchImpl);
+        expect(out).toMatchObject({ outcome: { kind: 'wrong-code' }, released: false });
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        expect(record()).toMatchObject({ step: 'claim', freshKey: key.identity.publicKey, joinsOut: 0 });
+        // Another try signs with the same key, never a second one.
+        const { claimKeyForThisPhone, releaseClaimKey } = await import('../claim-key');
+        const again = await claimKeyForThisPhone(ORIGIN, key);
+        expect(again).toMatchObject({ createdHere: true, identity: { publicKey: key.identity.publicKey } });
+        // Back: nothing it signed can have landed, so the phone is as it was before the scan.
+        expect(await releaseClaimKey(ORIGIN, again)).toBe(true);
+        expect(stored()).toBeNull();
+        expect(record()).toBeNull();
+    });
+
+    it('another phone won the race: asked who owns it first; not this key → it comes off with the record', async () => {
+        const key = await drafted();
+        const { fetchImpl } = node(() => json(409, { code: 'claim_already_claimed' }));
+        const isOwner = vi.fn(notOwner);
+        const out = await claimWith(key, fetchImpl, isOwner);
+        expect(out).toMatchObject({ outcome: { kind: 'already-claimed' }, released: true });
+        expect(isOwner).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ publicKey: key.identity.publicKey }));
+        expect(stored()).toBeNull();
+        expect(record()).toBeNull();
+    });
+
+    it('a 409 for this key\'s own claim (the node\'s names changed since it landed): the owner check says owner, and nothing comes off', async () => {
+        const key = await drafted();
+        let s1 = node(() => json(409, { code: 'claim_already_claimed' }));
+        expect((await claimWith(key, s1.fetchImpl, owner)).outcome).toEqual({ kind: 'owner', callsign: null });
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        // And with no answer from the owner check: check again, the key and the record kept.
+        phone.async.clear(); phone.secure.clear();
+        const key2 = await drafted();
+        s1 = node(() => json(409, { code: 'claim_already_claimed' }));
+        const out = await claimWith(key2, s1.fetchImpl, noAnswer);
+        expect(out).toMatchObject({ outcome: { kind: 'check-again' }, released: false });
+        expect(stored()?.publicKey).toBe(key2.identity.publicKey);
+        expect(record()).toMatchObject({ step: 'claim', joinsOut: 1 });
+    });
+
+    it('a lost answer: the key and the record stay, counted out, whatever the node says it is now', async () => {
+        const { releaseClaimKey } = await import('../claim-key');
+        // Still no owner: the claim didn't reach it, but the key stays counted (a join with no answer is never uncounted).
+        let key = await drafted();
+        let n = node(() => { throw new Error('connection reset'); }, [unclaimed]);
+        expect((await claimWith(key, n.fetchImpl)).outcome.kind).toBe('error');
+        expect(record()).toMatchObject({ step: 'claim', freshKey: key.identity.publicKey, joinsOut: 1 });
+        // Leaving now keeps it: the next launch comes back to the claim with it.
+        expect(await releaseClaimKey(ORIGIN, key)).toBe(false);
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+
+        // Claimed, and the owner check can't say: check again, kept.
+        phone.async.clear(); phone.secure.clear();
+        key = await drafted();
+        n = node(() => json(502, {}), [claimed]);
+        expect(await claimWith(key, n.fetchImpl, noAnswer)).toMatchObject({ outcome: { kind: 'check-again' }, released: false });
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        expect(record()).toMatchObject({ joinsOut: 1 });
+
+        // Check again later: it landed.
+        const { checkOwnClaim } = await import('../claim-key');
+        const later = node(() => { throw new Error('no POST'); }, [claimed]);
+        expect(await checkOwnClaim(ORIGIN, { identity: stored(), createdHere: true }, owner, later.fetchImpl)).toEqual({ outcome: { kind: 'owner', callsign: null }, released: false });
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+    });
+
+    it('a lost answer, and another key owns it: the key comes off', async () => {
+        const key = await drafted();
+        const n = node(() => { throw new Error('timeout'); }, [claimed]);
+        expect(await claimWith(key, n.fetchImpl, notOwner)).toMatchObject({ outcome: { kind: 'already-claimed' }, released: true });
+        expect(stored()).toBeNull();
+        expect(record()).toBeNull();
+    });
+
+    it('a phone with an account claims with it as before: nothing written to the phone, and it never comes off', async () => {
+        const { importIdentity, draftIdentity } = await import('../identity');
+        const account = await draftIdentity('Marty');
+        await importIdentity(account);
+        // The global door's mark on it, from a join whose answer was lost: the key is about to go to this community.
+        phone.async.set(RECORD, JSON.stringify({ step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Marty', redeemed: false, freshKey: account.publicKey, joinsOut: 0 }));
+        const { claimKeyForThisPhone, releaseClaimKey } = await import('../claim-key');
+        const key = await claimKeyForThisPhone(ORIGIN);
+        expect(key).toMatchObject({ createdHere: false, identity: { publicKey: account.publicKey } });
+        const writes = vi.mocked((await import('expo-secure-store')).setItemAsync);
+        writes.mockClear();
+        const { fetchImpl, seen } = node(() => json(409, { code: 'claim_already_claimed' }));
+        const out = await claimWith(key, fetchImpl, notOwner);
+        expect(out).toMatchObject({ outcome: { kind: 'already-claimed' }, madeHere: false, released: false });
+        expect(seen[0].body.publicKey).toBe(account.publicKey);
+        // The door's mark went before the POST, and nothing else changed.
+        expect(seen[0].recordAtSend).not.toHaveProperty('freshKey');
+        expect(writes).not.toHaveBeenCalled();
+        expect(await releaseClaimKey(ORIGIN, key)).toBe(false);
+        expect(stored()?.publicKey).toBe(account.publicKey);
+    });
+
+    it('a key the screen made, and a different account stored since: never written over it, and nothing is sent', async () => {
+        const key = await drafted();
+        const { importIdentity, draftIdentity } = await import('../identity');
+        const other = await draftIdentity('Kim');
+        await importIdentity(other);
+        const { fetchImpl, seen } = node(() => json(200, { ok: true, role: 'owner' }));
+        const out = await claimWith(key, fetchImpl);
+        expect(out.outcome.kind).toBe('error');
+        expect(seen).toHaveLength(0);
+        expect(stored()?.publicKey).toBe(other.publicKey);
+    });
+
+    it('the owner check: a 401 (the phone\'s clock), a 421 (a host the node\'s names don\'t take yet) or a 404 is no answer, never "someone else"', async () => {
+        const identity = { publicKey: PUB, privateKey: SEED };
+        for (const status of [401, 421, 404, 426]) {
+            const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+                if (String(url).endsWith('/api/community/info')) return json(200, { requestSigning: 2 });
+                return json(status, { error: 'nope' });
+            }) as any);
+            expect(await ownerCheckViaRole(ORIGIN, identity), String(status)).toBeNull();
+            spy.mockRestore();
+        }
     });
 });

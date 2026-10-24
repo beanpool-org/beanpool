@@ -116,7 +116,11 @@ export default function ClaimCommunityScreen() {
     // ── Which key ───────────────────────────────────────────────────────────────────────────────────────
     // Read from the phone (utils/claim-key.ts claimKeyState): the app's identity is set only once the join wizard ends.
     const [phoneKey, setPhoneKey] = useState<ClaimKeyState | null>(null);
-    const refreshPhoneKey = useCallback(async (o: string | null) => { setPhoneKey(await claimKeyState(o)); }, []);
+    const refreshPhoneKey = useCallback(async (o: string | null) => {
+        const held = await claimKeyState(o);
+        // The app's own account when the phone's store can't be read for it: never a second key beside it.
+        setPhoneKey(held.kind === 'none' && identity ? { kind: 'account', identity } : held);
+    }, [identity]);
     useEffect(() => { void refreshPhoneKey(origin); }, [origin, identity, refreshPhoneKey]);
     /** The phone's own account, which claims as it always has. */
     const account = phoneKey?.kind === 'account' ? phoneKey.identity : null;
@@ -191,6 +195,8 @@ export default function ClaimCommunityScreen() {
     /** The name kept for the owner's card at the wizard's end, whatever the status says by then. */
     const namedAtClaim = useRef<string | null>(null);
     if (named) namedAtClaim.current = named;
+    /** The name for a server that has an owner by now: its status names nobody, so the one it gave before. */
+    const knownName = named ?? namedAtClaim.current;
 
     const paste = async () => {
         const text = (await Clipboard.getStringAsync().catch(() => '')) || '';
@@ -314,7 +320,7 @@ export default function ClaimCommunityScreen() {
         setPhase('checking');
         // The key (DESIGN §2.2 step 2): the phone's own when it has one, never a second; else the claim's own; else a new
         // one, in memory until the claim is about to go (utils/claim-key.ts).
-        const key = await claimKeyForThisPhone(o, ownKey ?? heldKey.current);
+        const key: JoinKey = account ? { identity: account, createdHere: false } : await claimKeyForThisPhone(o, ownKey ?? heldKey.current);
         if (key.createdHere) heldKey.current = key;
         const result = await claimWithKey({
             origin: o, key, code, codeId: status.codeId, salt: status.salt,
@@ -497,7 +503,7 @@ export default function ClaimCommunityScreen() {
         // Another phone won the race (DESIGN §3.3): the key this claim made came off again. The phone is as it was.
         body = (
             <>
-                <Text style={styles.title} testID="claim-someone-owns">{claimOutcomeWords({ kind: 'already-claimed' }, named ?? name)}</Text>
+                <Text style={styles.title} testID="claim-someone-owns">{knownName ? claimOutcomeWords({ kind: 'already-claimed' }, knownName) : t('Someone already owns this community.')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
                 <Text style={styles.note}>{t('Nothing was made on this phone.')}</Text>
                 <Pressable style={styles.primary} onPress={leave} accessibilityRole="button">
@@ -509,7 +515,7 @@ export default function ClaimCommunityScreen() {
         // The claim's own key, and the server has an owner now: whose is being asked (above), or couldn't be told.
         body = (
             <>
-                <Text style={styles.title}>{named ? t('Claim {name}', { name: named }) : t('Claim this community')}</Text>
+                <Text style={styles.title}>{knownName ? t('Claim {name}', { name: knownName }) : t('Claim this community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
                 {busy ? (
                     <View style={styles.busyRow}>

@@ -3319,6 +3319,12 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         const decide = screen.getByRole('button', { name: /Compost bay/ });
         fireEvent.click(decide);
         expect(nav).toHaveBeenCalledWith('projects');
+
+        // Poll opens Market, accessible name includes closing time and opens the Market
+        const poll = screen.getByTestId('home-decide-poll');
+        expect(poll).toHaveAccessibleName(/Poll: Market on Sundays\? · .*\. Opens the Market\./);
+        fireEvent.click(poll);
+        expect(nav).toHaveBeenCalledWith('marketplace', 'pol-1');
     });
 
     it('images lazy with at most 8 eager across the page', async () => {

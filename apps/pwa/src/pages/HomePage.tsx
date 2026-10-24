@@ -713,18 +713,25 @@ function DecideBody({
                     </HomeLine>
                 );
             })}
-            {d.poll && (
-                <HomeLine
-                    onClick={() => onNavigate('projects')}
-                    label={t('Poll: {title}. Opens Commons.', { title: d.poll.title })}
-                    testId="home-decide-poll"
-                >
-                    <span className="min-w-0 flex-1">
-                        <span className="block break-words text-sm font-semibold">{t('Poll: {title}', { title: d.poll.title })}</span>
-                        <span className="block text-xs text-text-secondary break-words">{closesIn(d.poll.closesAt, now)}</span>
-                    </span>
-                </HomeLine>
-            )}
+            {d.poll && (() => {
+                const pollCloses = closesIn(d.poll.closesAt, now);
+                const pollHeading = t('Poll: {title}', { title: d.poll.title });
+                const pollLabel = pollCloses
+                    ? t('{title} · {status}. Opens the Market.', { title: pollHeading, status: pollCloses })
+                    : t('{title}. Opens the Market.', { title: pollHeading });
+                return (
+                    <HomeLine
+                        onClick={() => onNavigate('marketplace', d.poll!.id)}
+                        label={pollLabel}
+                        testId="home-decide-poll"
+                    >
+                        <span className="min-w-0 flex-1">
+                            <span className="block break-words text-sm font-semibold">{pollHeading}</span>
+                            {pollCloses && <span className="block text-xs text-text-secondary break-words">{pollCloses}</span>}
+                        </span>
+                    </HomeLine>
+                );
+            })()}
             <HomeMore onClick={() => onNavigate('projects')} label={t('Decide ›')}>{t('Decide ›')}</HomeMore>
         </div>
     );

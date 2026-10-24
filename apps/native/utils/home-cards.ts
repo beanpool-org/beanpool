@@ -1146,7 +1146,7 @@ export const DECIDE_HREF: HomeHref = { pathname: '/(tabs)/projects', params: { s
  * `decisionsOn` and `hiddenTabsFor`, said again here so this file stays pure; a test holds the two together). The global
  * node has neither.
  */
-export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;
+export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false;
 /** Polls are posts, on every node: the Market's Polls pill (app/(tabs)/market.tsx takes `filter=polls`). Decide never lists them. */
 export const POLLS_HREF: HomeHref = { pathname: '/(tabs)/market', params: { filter: 'polls' } };
 

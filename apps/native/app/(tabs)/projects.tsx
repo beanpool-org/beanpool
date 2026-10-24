@@ -8,9 +8,9 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
-import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
-import { DecideSection } from '../../components/DecideSection';
+import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
@@ -43,19 +43,6 @@ const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
 const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
 const named = (table: Readonly<Record<string, WordKey>>, name: string, asWritten: string) => (own(table, name) ? t(table[name]) : asWritten);
 
-/** The question the + and Decide's button ask before a Decision can be proposed: whole, in the member's language. */
-function proposeRefusal(canPropose: boolean, hasOpenDecision: boolean): boolean {
-    if (!canPropose) {
-        Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
-        return true;
-    }
-    if (hasOpenDecision) {
-        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
-        return true;
-    }
-    return false;
-}
-
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
     const listRef = useRef<FlatList>(null);
@@ -64,17 +51,27 @@ export default function ProjectsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
-    // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
-    // "Groups you could join" (decision 7).
-    const yourGroupsLive = useYourGroups(identity?.publicKey);
-    const yourGroupsState = yourGroupsPaneState(yourGroupsLive.items, yourGroupsLive.error);
-    const yourGroups = useMemo(() => yourGroupsLive.items || [], [yourGroupsLive.items]);
-    const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
-    // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
+    // A community with Beans off (the worldwide one) hides this tab when Decisions are off too (with Decisions on,
+    // the tab stays for Decide and groups); where hidden, a link still opens it (Talk's "Find groups",
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
     // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
     const reader = useReaderFeatures();
     const showsBeans = beansOn(reader.effective);
+    // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
+    // "Groups you could join" (decision 7).
+    const yourGroupsLive = useYourGroups(identity?.publicKey);
+    const yourGroups = useMemo(() => {
+        const all = yourGroupsLive.items || [];
+        if (!enterprisesOn(reader.effective)) {
+            return all.filter(g => g.kind !== 'enterprise');
+        }
+        return all;
+    }, [yourGroupsLive.items, reader.effective]);
+    const yourGroupsState = yourGroupsPaneState(
+        yourGroupsLive.items === null ? null : yourGroups,
+        yourGroupsLive.error
+    );
+    const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
     // have, so the row never leads to an empty screen. From the reader's features this screen already has: no read of its
     // own (the Tools screen asks each tool with the community's profile too).
@@ -564,7 +561,7 @@ export default function ProjectsScreen() {
                                 balanceState={balanceState}
                                 onRefresh={loadData}
                                 onOpenPropose={() => {
-                                    if (proposeRefusal(canProposeDecision, hasOpenDecision)) return;
+                                    if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
                                     setShowProposeDecision(true);
                                 }}
                                 canPropose={canProposeDecision}
@@ -572,6 +569,7 @@ export default function ProjectsScreen() {
                                 activeView={activeDecideView}
                                 onChangeView={setActiveDecideView}
                                 preview={decisionsPreview}
+                                features={reader.effective}
                             />
                         ) : (
                             <View style={{ gap: 12 }}>
@@ -680,7 +678,7 @@ export default function ProjectsScreen() {
                         ]);
                         return;
                     }
-                    if (proposeRefusal(canProposeDecision, hasOpenDecision)) return;
+                    if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
                     setShowProposeDecision(true);
                 }}
             >
@@ -702,6 +700,7 @@ export default function ProjectsScreen() {
                     commonsBalance={balanceState.commons || 0}
                     treasuries={enterprises}
                     members={membersList}
+                    features={reader.effective}
                 />
             )}
 

@@ -6799,12 +6799,12 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
     // canonical copy is not an unconditional replacement for it: only a local pick ever writes
     // canonical, so when the node holds a photo this phone has not picked, canonical is the
     // OLDER one and posting it would overwrite the member's newest choice.
-    // Through the one shared rule, which every publish path uses: a pick parked by the offline
-    // branch of settings Save / Re-run Setup first (re-checked for portability, since anything
-    // that is not a `data:`/`bundled://` value is not ours to publish), otherwise the catch-up
-    // inference below. There is no session pick on this path — it runs with no screen in front of
-    // it. `decision.clearsParkedPick` is what licenses retiring the parked copy afterwards, and
-    // only after a verified 2xx: every `return false` below leaves it for the next retry.
+    // Through the one shared rule, which every publish path uses: a pick the offline branch of
+    // settings Save / Re-run Setup parked for THIS community first (re-checked for portability,
+    // since anything that is not a `data:`/`bundled://` value is not ours to publish), otherwise
+    // the catch-up inference below. There is no session pick on this path — it runs with no screen
+    // in front of it. The parked copy, and the change it waits in, retire only after a verified
+    // 2xx: every `return false` below leaves them for the next retry.
     const decision = await resolveProfilePublishAvatar({
         parked: pending?.avatar,
         catchUp: { localRow: profile?.avatar_url, canonical: canonical?.avatar, nodeHasNoPhoto: opts?.nodeHasNoPhoto },

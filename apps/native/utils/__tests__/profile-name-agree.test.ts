@@ -312,9 +312,9 @@ const settle = async (n = 10) => {
 };
 
 describe('profile-name-agree: My Profile and Invite picker', () => {
-    it('shows and caches the active community record when community answers, bringing identity.callsign in line', async () => {
-        // Marty has device-wide name "Marty", stale local row "Old Stale Marty"
-        identityState.identity = { publicKey: KEY, privateKey: PRIV, callsign: 'Marty' };
+    it('shows and caches the active community record when community answers, bringing identity.callsign in line when unset', async () => {
+        // Marty has unset device-wide name "", stale local row "Old Stale Marty"
+        identityState.identity = { publicKey: KEY, privateKey: PRIV, callsign: '' };
         mockDb.localProfile = { public_key: KEY, callsign: 'Old Stale Marty' };
         mockDb.remoteCallsign = 'Marty party';
 
@@ -330,11 +330,31 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         const cachedUpdate = mockDb.updatedProfiles.find((u) => u.pk === KEY && u.callsign === 'Marty party');
         expect(cachedUpdate).toBeDefined();
 
-        // 3. Must bring identity.callsign in line
+        // 3. Must bring identity.callsign in line when unset
         expect(identityState.identity.callsign).toBe('Marty party');
 
         // 4. Must say which community this name is for
         expect(host.textContent).toContain('Your name in Mullum Commons');
+    });
+
+    it('routine profile viewing preserves device-wide identity callsign to protect multi-community isolation', async () => {
+        // Marty has device-wide name "Marty", but this community knows him as "Marty party"
+        identityState.identity = { publicKey: KEY, privateKey: PRIV, callsign: 'Marty' };
+        mockDb.localProfile = { public_key: KEY, callsign: 'Old Stale Marty' };
+        mockDb.remoteCallsign = 'Marty party';
+
+        await act(async () => {
+            root.render(createElement(SettingsScreen) as any);
+        });
+        await settle();
+
+        // Must show community name "Marty party"
+        expect(host.textContent).toContain('Marty party');
+        // Must cache community name to local SQLite
+        const cachedUpdate = mockDb.updatedProfiles.find((u) => u.pk === KEY && u.callsign === 'Marty party');
+        expect(cachedUpdate).toBeDefined();
+        // Preserves device-wide identity callsign across communities
+        expect(identityState.identity.callsign).toBe('Marty');
     });
 
     it('keeps showing the cached community record offline, never the device-wide name when a community record exists', async () => {
@@ -377,7 +397,8 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         await settle();
 
         expect(host.textContent).toContain('Marty party');
-        expect(identityState.identity.callsign).toBe('Marty party');
+        expect(identityState.identity.callsign).toBe('Marty');
+        expect(mockDb.updatedProfiles.some((u) => u.pk === KEY && u.callsign === 'Marty party')).toBe(true);
     });
 
     it('editing the name writes to the node, the local row and the device-wide identity', async () => {

@@ -648,6 +648,8 @@ export default function SettingsScreen() {
     const [loading, setLoading] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
+    const modeRef = React.useRef(mode);
+    modeRef.current = mode;
     
     // Reads the profile from whichever node we are currently anchored to. `getDb()` is
     // keyed on `beanpool_anchor_url`, so this always resolves against the active node's
@@ -665,7 +667,7 @@ export default function SettingsScreen() {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
                     setAvatar(cleaned || canonical?.avatar || null);
-                    if (profile.callsign && mode !== 'profile') {
+                    if (profile.callsign && modeRef.current !== 'profile') {
                         setEditCallsign(profile.callsign);
                     }
                     if (profile.bio) setBio(profile.bio);
@@ -686,21 +688,30 @@ export default function SettingsScreen() {
             }
 
             // Resolve the community label for "Your name in <community>"
-            void resolveCommunityLabel().then((label) => {
-                if (label) setCommunityLabel(label);
-            }).catch(() => {});
+            const label = await resolveCommunityLabel();
+            setCommunityLabel(label);
 
             // On open and on pull-to-refresh: ask the active community for this key's own record
             const targetUrl = await getAnchorUrl().catch(() => null);
             if (targetUrl) {
                 const remoteName = await fetchNodeCallsign(targetUrl, identity.publicKey, identity.privateKey);
                 if (remoteName) {
+                    const activeAnchor = await getAnchorUrl().catch(() => null);
+                    if (activeAnchor !== targetUrl) return;
+
                     if (remoteName !== profile?.callsign) {
                         setNodeCallsign(remoteName);
-                        if (mode !== 'profile') setEditCallsign(remoteName);
-                        await updateMemberProfile(identity.publicKey, { callsign: remoteName });
+                        if (modeRef.current !== 'profile') setEditCallsign(remoteName);
+                        await updateMemberProfile(identity.publicKey, {
+                            callsign: remoteName,
+                            avatar_url: profile?.avatar_url ?? (canonical?.avatar ? canonical.avatar : undefined),
+                            bio: profile?.bio ?? canonical?.bio,
+                            contact_value: profile?.contact_value ?? canonical?.contactValue,
+                            contact_visibility: profile?.contact_visibility ?? (canonical?.contactVisibility as any),
+                            archetype: profile?.archetype ?? canonical?.archetype,
+                        });
                     }
-                    if (remoteName !== identity.callsign) {
+                    if (!identity.callsign?.trim()) {
                         const updated = await updateCallsign(remoteName);
                         if (updated) setIdentity(updated);
                     }
@@ -709,7 +720,7 @@ export default function SettingsScreen() {
         } catch {
             // Non-fatal: the card falls back to the local identity.
         }
-    }, [identity?.publicKey, identity?.privateKey, resolveCommunityLabel, mode, setIdentity]);
+    }, [identity?.publicKey, identity?.privateKey, identity?.callsign, resolveCommunityLabel, setIdentity]);
 
     const handleRefresh = React.useCallback(async () => {
         setRefreshing(true);

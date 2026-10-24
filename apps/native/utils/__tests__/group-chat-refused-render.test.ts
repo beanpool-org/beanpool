@@ -87,6 +87,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid' }));
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/' }));
+// The photo button's picker and encoder (a locked group chat's photos): nothing here picks one.
+vi.mock('expo-image-picker', () => ({ requestCameraPermissionsAsync: vi.fn(), launchCameraAsync: vi.fn(), launchImageLibraryAsync: vi.fn() }));
+vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => null) }));
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn() }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));

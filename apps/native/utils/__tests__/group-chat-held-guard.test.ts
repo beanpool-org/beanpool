@@ -106,7 +106,8 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind, isKnownDmConversation, leaveGroupApi } from '../db';
+import { insertMessage, postGroupChatMessage, postGroupChatPhoto, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind, isKnownDmConversation, leaveGroupApi } from '../db';
+import { openLine, GROUP_NONCE_PREFIX } from '../group-chat-crypto';
 import { dmConversationsSeenStoreKey } from '../storage-keys';
 import {
     unlockGroupHistoryWithWords, checkScannedNewPhone, confirmScannedNewPhone, newPhoneHandOvers, newPhoneConfirmedNotes,
@@ -131,6 +132,8 @@ const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 /** Every group in this file is one this phone may have held keys of; the fake node answers each the same way. */
 const groups = Array.from({ length: 34 }, () => randomUUID());
 let chatAnswer: 'unlocked' | 'refused' | 'locked' = 'unlocked';
+/** Groups the fake node serves keys and members for, as a locked node does; every other group's keys answer 404. */
+const servesKeys = new Set<string>();
 const received: { method: string; path: string; body: any }[] = [];
 function reply(status: number, body: any) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body), clone() { return this; } }; }
 (globalThis as any).fetch = vi.fn(async (url: string, init: any = {}) => {
@@ -141,6 +144,13 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
     // Ids matched however they are spelled, as the node's push routes match them.
     const g = groups.find((x) => path.toLowerCase().includes(x));
     const lp = path.toLowerCase();
+    // A locked node that serves this group's keys: me and OTHER, epoch 1 current (the record heldWithKey made).
+    if (g && method === 'GET' && servesKeys.has(g) && lp.startsWith(`/api/groups/${g}/keys`)) {
+        return reply(200, { current: 1, stale: false, fromEpoch: 1, roster: [who.me.publicKey, OTHER].sort(), epochs: [], myWraps: [], more: false });
+    }
+    if (g && method === 'GET' && servesKeys.has(g) && lp.startsWith(`/api/groups/${g}/members`)) {
+        return reply(200, [who.me.publicKey, OTHER].map((memberPubkey) => ({ memberPubkey, status: 'active' })));
+    }
     // The node: no keys for this phone (an old node, or one refusing it: 404), its chat answer with no `encryption`.
     if (g && method === 'GET' && lp.startsWith(`/api/groups/${g}/keys`)) return reply(404, { error: 'Not found' });
     if (g && method === 'GET' && lp.startsWith(`/api/groups/${g}/chat`)) {
@@ -542,19 +552,84 @@ function heldWithKey(g: string) {
     store.keyState.set(`${who.me.publicKey}/${g}`, { highest: 1, after: 1 });
 }
 
+const PHOTO = 'data:image/jpeg;base64,/9j/AAAA';
+
 describe('group chats: the photo guard and an edit with the key on the phone (confirmation 2 of #1788, finding 4)', () => {
-    it('held, its row kept as dm, the node lists one other person: a photo is refused and nothing goes (never DM-sealed to the node\'s pick)', async () => {
-        forgetGroupKeys(); chatAnswer = 'unlocked';
+    it('held, its row kept as dm, the node lists one other person: a photo goes GROUP-sealed under the keyring\'s epoch, never DM-sealed to the node\'s pick (DESIGN-group-chat-photos-fable.md §5 S3)', async () => {
+        forgetGroupKeys(); chatAnswer = 'locked';
         const g = groups[21];
-        held(g);
+        heldWithKey(g);
+        servesKeys.add(g);
         store.nodeType.set(g, 'dm');
         store.conversations.set(g, { id: g, type: 'dm', created_by: null });
         partsOf(g).add(who.me.publicKey); partsOf(g).add(OTHER);
         const from = received.length;
-        const a = await tryIt(() => sendImageMessage(g, 'data:image/jpeg;base64,/9j/AAAA', 'a caption'));
-        console.log(`photo, held, row dm: ${a}; writes ${JSON.stringify(writes(from))}`);
-        expect(a).toBe('refused: Photos can only be sent in direct messages.');
+        const a = await tryIt(() => sendImageMessage(g, PHOTO, 'a caption'));
+        const post = received.slice(from).find((r) => r.method === 'POST');
+        console.log(`photo, held, row dm: ${a}; writes ${JSON.stringify(writes(from))}; type ${post?.body?.type}; nonces ${String(post?.body?.nonce).split(':')[0]} / ${String(post?.body?.attachment?.nonce).split(':')[0]}`);
+        expect(a).toBe('went');
+        expect(writes(from)).toEqual([`/api/groups/${g}/chat/message`]);
+        expect(post!.body.type).toBe('image');
+        expect(post!.body.metadata).toEqual({ epoch: 1 });
+        expect(String(post!.body.nonce).startsWith(GROUP_NONCE_PREFIX)).toBe(true);
+        expect(String(post!.body.attachment.nonce).startsWith(GROUP_NONCE_PREFIX)).toBe(true);
+        expect(post!.body.attachment.mime).toBe('image/jpeg');
+        // Both parts under the group's epoch-1 key, as me, under the line's own id: the photo as part 'attachment', its caption as 'body'.
+        const key = (await groupKeyringFor(g)).openedKey(1)!;
+        const bind = { groupId: g, epoch: 1, senderPubHex: who.me.publicKey, messageId: post!.body.clientId, replyToId: null };
+        const photoPart = { ciphertext: post!.body.attachment.data, nonce: post!.body.attachment.nonce };
+        const captionPart = { ciphertext: post!.body.ciphertext, nonce: post!.body.nonce };
+        expect(openLine(photoPart, { ...bind, part: 'attachment' }, key).text).toBe(PHOTO);
+        expect(openLine(captionPart, { ...bind, part: 'body' }, key).text).toBe('a caption');
+        expect(() => openLine(photoPart, { ...bind, part: 'body' }, key)).toThrow();
+        expect(() => openLine(captionPart, { ...bind, part: 'attachment' }, key)).toThrow();
+    });
+
+    it('held, its row kept as dm, the node says unlocked and serves no keys: the photo is refused with the phone\'s lock words and nothing goes', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[31];
+        heldWithKey(g);
+        store.nodeType.set(g, 'dm');
+        store.conversations.set(g, { id: g, type: 'dm', created_by: null });
+        partsOf(g).add(who.me.publicKey); partsOf(g).add(OTHER);
+        const from = received.length;
+        const a = await tryIt(() => sendImageMessage(g, PHOTO, 'a caption'));
+        console.log(`photo, held, row dm, node unlocked: ${a}; writes ${JSON.stringify(writes(from))}`);
+        expect(a).toBe(`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`);
         expect(writes(from)).toEqual([]);
+    });
+
+    it('a known DM never takes a group photo: the group chat\'s photo path refuses it before any group route is asked; its own photo goes DM-sealed', async () => {
+        forgetGroupKeys(); chatAnswer = 'locked';
+        const d = randomUUID();
+        store.conversations.set(d, { id: d, type: 'dm', created_by: null });
+        partsOf(d).add(who.me.publicKey); partsOf(d).add(OTHER);
+        const from = received.length;
+        const r: Record<string, string> = {};
+        r.screenLocked = await tryIt(() => postGroupChatPhoto(d, { dataUri: PHOTO, caption: 'as a group photo', clientId: randomUUID() }, { after: null }));
+        r.screenOldNode = await tryIt(() => postGroupChatPhoto(d, { dataUri: PHOTO, caption: 'as an old node\'s group photo', clientId: randomUUID() }));
+        const dm = await tryIt(() => sendImageMessage(d, PHOTO, 'a DM photo'));
+        const groupRoutes = received.slice(from).filter((x) => x.path.includes(`/api/groups/${d}`)).map((x) => `${x.method} ${x.path}`);
+        const sent = received.slice(from).filter((x) => x.method === 'POST').map((x) => `${x.path} ${x.body?.type} ${String(x.body?.nonce ?? '').split(':')[0]} ${String(x.body?.attachment?.nonce ?? '').split(':')[0]}`);
+        console.log(`known DM, group photo: ${JSON.stringify(r)}; DM photo ${dm}; group routes asked ${JSON.stringify(groupRoutes)}; sent ${JSON.stringify(sent)}`);
+        expect(r).toEqual({ screenLocked: `refused: ${GROUP_KEYS_FOR_DM_TEXT}`, screenOldNode: `refused: ${GROUP_KEYS_FOR_DM_TEXT}` });
+        expect(dm).toBe('went');
+        expect(groupRoutes).toEqual([]);
+        expect(sent).toEqual(['/api/messages/send image x25519-xc20p-v2 x25519-xc20p-v2']);
+        expect(await isHeldGroupChat(d)).toBe(false);
+    });
+
+    it('a group never held on an old node (keys 404, its chat answer has no encryption): a photo is refused with the old-node words and nothing goes, by the screen and by the conversation path', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[32];
+        store.conversations.set(g, { id: g, type: 'group_thread', created_by: null });
+        const from = received.length;
+        const screen = await tryIt(() => postGroupChatPhoto(g, { dataUri: PHOTO, caption: 'on an old node', clientId: randomUUID() }));
+        const conversation = await tryIt(() => sendImageMessage(g, PHOTO, 'on an old node, from the conversation path'));
+        console.log(`never held, old node, photo: screen ${screen}; conversation ${conversation}; writes ${JSON.stringify(writes(from))}; held after ${await isHeldGroupChat(g)}`);
+        expect([screen, conversation]).toEqual([`refused: ${GROUP_CHAT_OLD_NODE_NOTICE}`, `refused: ${GROUP_CHAT_OLD_NODE_NOTICE}`]);
+        expect(writes(from)).toEqual([]);
+        expect(await isHeldGroupChat(g)).toBe(false);
     });
 
     it('held with a real key, the node says unlocked and serves no keys: the screen\'s edit (locked:false) goes SEALED under the line\'s epoch; a new line is refused', async () => {

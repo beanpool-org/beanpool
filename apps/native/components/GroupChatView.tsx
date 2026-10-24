@@ -20,6 +20,11 @@
  * message actually offers is decided once, in utils/chat-actions — an enterprise thread is read-and-write only,
  * this round, and its bubbles offer nothing.
  *
+ * Photos (DESIGN-group-chat-photos-fable.md §5 S3): a locked group chat's box has a photo button. The photo, fitted to
+ * 800 px, waits above the box; Send sends it with the box's words as its caption, both sealed on this phone under the line's
+ * one key (utils/db.ts postGroupChatPhoto). A photo line's bubble opens its photo only once its words opened, and a tap
+ * shows it full screen. An enterprise thread and an old node's chat have no photo button.
+ *
  * Keyboard: KeyboardAvoidingView from react-native-keyboard-controller, padding on both platforms, no nested
  * provider (memory keyboard-avoidance-pattern). At 320dp and 1.3× text the header truncates the name, the
  * composer keeps a Send that never shrinks and the notice wraps.
@@ -45,11 +50,14 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import * as Crypto from 'expo-crypto';
 import {
-    getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
-    markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
+    getGroupChat, postGroupChatMessage, postGroupChatPhoto, getDecryptedGroupPhoto, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi,
+    fetchGroupDetails, markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
     groupScreenKeyringFor, noteLockedHistoryRow,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
+import * as ImagePicker from 'expo-image-picker';
+import { chatPhotoDataUri, withinMs } from '../utils/chat-photo';
+import { ChatPhoto, ChatPhotoViewer, ChatWaitingPhoto } from './chat/ChatPhoto';
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
@@ -60,7 +68,7 @@ import {
     type YourChatMute,
 } from '../utils/your-groups';
 import {
-    buildChatListItems, chatActionErrorMessage, chatListIndexOf, formatMessageTime, hasAnyAction, isTombstone, messageActions,
+    buildChatListItems, chatActionErrorMessage, chatListIndexOf, formatMessageTime, hasAnyAction, isTombstone, messageActions, messageTime,
     pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneWords,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
@@ -160,6 +168,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [refused, setRefused] = useState(false);
     const [sending, setSending] = useState(false);
     const [pending, setPending] = useState<PendingMessage[]>([]);
+    // A photo picked and fitted to 800 px, waiting above the box until Send (DESIGN-group-chat-photos-fable.md §5 S3), with
+    // the id it goes under: kept while it waits, so a Send retried after a lost answer is stored once.
+    const [photo, setPhoto] = useState<{ uri: string; clientId: string } | null>(null);
+    // A photo tapped open full screen.
+    const [viewerUri, setViewerUri] = useState<string | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [inviteOpen, setInviteOpen] = useState(false);
@@ -332,6 +345,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const canPost = !!view?.canPost && !!me;
     // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
     const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
+    // Photos are sealed on this phone: a locked group chat only, and not while a line is being edited.
+    const photoButton = kind === 'group' && locked && !editingMessage;
 
     // This member changed phones: their own row carries a verified former key (the line-display design's chain).
     const myFormer = useMemo(() => {
@@ -457,7 +472,77 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         }
     }, [kind, id, load, locked, rawMessages, rosterRows]);
 
+    /**
+     * Pick a photo (camera or gallery) and fit it to 800 px: it waits above the box until Send. A group's photo is sealed
+     * on this phone, so the picker is offered only in a locked chat; an old node's chat has none (design §2.6).
+     */
+    const pickPhoto = async () => {
+        if (sending) return;
+        // The source sheet and the picker are their own windows: the keyboard goes first (the DM screen's phantom-keyboard note).
+        await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+        const take = async (pick: () => Promise<ImagePicker.ImagePickerResult>) => {
+            try {
+                const r = await pick();
+                const asset = r.canceled ? null : r.assets[0];
+                if (!asset?.uri) return;
+                const uri = await withinMs(chatPhotoDataUri(asset), 30_000, t('Processing the image is taking too long — please try again.'));
+                setPhoto({ uri, clientId: Crypto.randomUUID() });
+                setKeyNotice(null);
+            } catch (e: any) {
+                hapticWarning();
+                Alert.alert(t('Image Failed'), e?.message ? chatLineWords(e.message) : t('Could not process image.'));
+            }
+        };
+        Alert.alert(t('Send Photo'), t('Choose a source'), [
+            { text: t('Camera'), onPress: async () => {
+                const perm = await ImagePicker.requestCameraPermissionsAsync();
+                if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); return; }
+                take(() => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 }));
+            } },
+            { text: t('Gallery'), onPress: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 })) },
+            { text: t('Cancel'), style: 'cancel' },
+        ]);
+    };
+
+    /**
+     * Send the waiting photo with the box's words as its caption (design §2.2): both sealed on this phone under one message
+     * key (utils/db.ts postGroupChatPhoto). Not optimistic, as a DM photo isn't: the bubble comes with the node's copy. A
+     * refusal keeps the photo where it was and puts the caption back in the box, and says why above it.
+     */
+    const sendPhoto = async (caption: string) => {
+        const waiting = photo;
+        if (!waiting || sending) return;
+        setSending(true);
+        hapticTick();
+        try {
+            const lastSealed = [...rawMessages].reverse().find(m => isSealedGroupLine(m));
+            await withinMs(postGroupChatPhoto(id, { dataUri: waiting.uri, caption, clientId: waiting.clientId, replyToId: replyToMessage?.id ?? null }, {
+                after: lastSealed ? String(lastSealed.id) : null,
+                mentionCandidates: rosterRows.map(r => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
+                onProgress: (done, total) => setSecuring(total >= 10 && done < total ? { done, total } : null),
+            }), 60_000, t('Sending the image is taking too long — please try again.'));
+            setPhoto(null);
+            setReplyToMessage(null);
+            setSecuring(null);
+            setKeyNotice(null);
+            hapticSuccess();
+            while (inFlight.current) await new Promise(r => setTimeout(r, 100));
+            await load();
+            scrollChatToBottom(listRef, true);
+        } catch (e: any) {
+            setSecuring(null);
+            hapticWarning();
+            composerRef.current?.setText(caption);
+            const why = e instanceof GroupChatKeyError ? e.message : refusedSendNotice(e);
+            setKeyNotice(why || e?.message || t('Could not send image.'));
+            console.warn('[GroupChat] photo not sent:', e?.message || e);
+        } finally {
+            setSending(false);
+        }
+    };
+
     const send = async (text: string) => {
+        if (photo && !editingMessage) return sendPhoto(text);
         if (!text || sending) return;
         setSending(true);
         hapticTick();
@@ -577,6 +662,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         if (group) setInfoOpen(true);
     };
 
+    const openPhoto = (uri: string) => {
+        KeyboardController.dismiss().then(() => setViewerUri(uri));
+    };
+
     const openMenu = async () => {
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
         setMenuOpen(true);
@@ -679,9 +768,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
 
         const quote = item.metadata?.replyToId ? (() => {
             const parent = messagesById.get(item.metadata.replyToId);
+            // A photo line quotes as a DM's does: "🔒 Photo" (utils/chat-actions.ts dmQuoteFor).
             const parentText = !parent
                 ? t('Message not found')
-                : isTombstone(parent) ? tombstoneWords(parent, kind) : parent.unattributed ? chatLineWords(parent.text) : parent.text;
+                : isTombstone(parent) ? tombstoneWords(parent, kind) : parent.unattributed ? chatLineWords(parent.text) : parent.type === 'image' ? t('🔒 Photo') : parent.text;
             const parentAuthor = !parent
                 ? t('Someone')
                 : (me && parent.senderId === me) ? t('You') : (chatAuthorWords(parent.authorName) || (parent.senderId || '').slice(0, 8) || t('Someone'));
@@ -708,6 +798,20 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 // One tick: the node has it. A group has no single reader, so there is no second tick to earn.
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ✓</Text>
             )
+        ) : null;
+
+        // A photo line of a locked chat (design §2.3): its photo above its caption, opened only because its words did (the
+        // line is attributed); with no caption, the time and tick go under the photo, as a DM photo's do.
+        const raw = kind === 'group' && item.type === 'image' ? rawById.get(item.id) : undefined;
+        const lineView = raw ? thread?.views.get(item.id) : undefined;
+        const photoSlot = raw && lineView ? (
+            <ChatPhoto photoKey={`${item.id}|${lineView.signer}|${lineView.epoch}`} load={() => getDecryptedGroupPhoto(id, raw, lineView)} onOpen={openPhoto} />
+        ) : null;
+        const photoFooter = photoSlot && !item.text ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
+                <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 10 }]}>{messageTime(item)}</Text>
+                {status}
+            </View>
         ) : null;
 
         return (
@@ -753,6 +857,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 authorLabel={showAuthorById.get(item.id) ? (chatAuthorWords(item.authorName) || (item.senderId || '').slice(0, 8)) : null}
                 quote={quote}
                 status={status}
+                attachment={photoSlot}
+                footer={photoFooter}
             />
             {/* The message's details, with its actions: an earlier key of the member's, or a name on a new key (§6). */}
             {activeMessageActionsId === item.id && !!item.integrityNote && (
@@ -835,7 +941,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 <ChatReplyBanner
                     styles={chat}
                     author={me && replyToMessage.senderId === me ? t('You') : (chatAuthorWords(replyToMessage.authorName) || t('Someone'))}
-                    text={replyToMessage.text}
+                    text={replyToMessage.type === 'image' ? t('🔒 Photo') : replyToMessage.text}
                     onCancel={() => setReplyToMessage(null)}
                 />
             )}
@@ -859,12 +965,19 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     maxLength={GROUP_MESSAGE_MAX}
                     // The phone's own words for what it decided, never the node's notice (finding 4).
                     notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked })) : t(CHAT_NOTICE.enterprise)}
-                    // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
-                    placeholder={name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
+                    // A long name wrapped the placeholder to three lines at 320dp; short ones read better named. Beside the photo
+                    // button the box is 48 dp narrower and at 1.3× text even "Message the group…" wraps: the header names the chat.
+                    placeholder={photoButton ? t('Message…') : name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
                     accessibilityLabel={t('Message {name}', { name })}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
+                    onAttach={photoButton ? pickPhoto : undefined}
+                    attachment={photo && !editingMessage ? (
+                        <ChatWaitingPhoto uri={photo.uri} styles={chat} disabled={sending} onRemove={() => setPhoto(null)} />
+                    ) : null}
                 />
             )}
+
+            <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />
 
             <ChatMenuSheet
                 styles={chat}

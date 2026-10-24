@@ -352,6 +352,13 @@ export function checkGroupPhotoVector(api: GroupCryptoApi): void {
     for (const v of [caption, photo]) {
         const opened = api.openGroupLineWithMessageKey(v.payload, refOf(v), mk);
         if (opened.text !== v.text || opened.after !== v.after) fail(`${v.label}: the message's one key opened ${JSON.stringify(opened)}`);
+        // Under a disclosed key the part is all that keeps the caption from passing as the photo, or the photo as the caption.
+        for (const part of PARTS) {
+            if (part === v.part) continue;
+            let moved: OpenedGroupLine | undefined;
+            try { moved = api.openGroupLineWithMessageKey(v.payload, refOf(v, { part }), mk); } catch { /* as it should */ }
+            if (moved) fail(`${v.label}: the message's one key opened it as part ${part}`);
+        }
     }
     const resealed: GroupLineVector = {
         ...photo, label: "Ben's photo re-sealed under another message id", messageId: ANOTHER_MESSAGE,

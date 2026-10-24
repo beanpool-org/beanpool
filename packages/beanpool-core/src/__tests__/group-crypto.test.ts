@@ -187,6 +187,16 @@ describe('the frozen vectors', () => {
         expect(() => checkGroupPhotoVector(anyPart)).toThrow(/as another part of its message opened/);
         const anyMessageKey = { ...gc, openGroupLineWithMessageKey: (p: GroupLinePayload, r: GroupLineBinding) => gc.openGroupLine(p, r, hexToBytes(GROUP_VECTOR_KEY_HEX)) };
         expect(() => checkGroupPhotoVector(anyMessageKey)).toThrow(/opened with the photo message's key/);
+        const mkAnyPart = {
+            ...gc,
+            openGroupLineWithMessageKey: (p: GroupLinePayload, r: GroupLineBinding, mk: Uint8Array) => {
+                for (const part of ['body', 'attachment', 'edit'] as const) {
+                    try { return gc.openGroupLineWithMessageKey(p, { ...r, part }, mk); } catch { /* the next part */ }
+                }
+                throw new GroupLineNotVerifiedError();
+            },
+        };
+        expect(() => checkGroupPhotoVector(mkAnyPart)).toThrow(/the message's one key opened it as part/);
     });
 
     it('the top-up is signed by its wrapper over its canonical array', () => {

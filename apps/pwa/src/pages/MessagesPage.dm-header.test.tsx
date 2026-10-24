@@ -52,8 +52,8 @@ vi.mock('../components/ImageLightbox', () => ({
     ImageLightbox: () => null,
 }));
 
-vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
-    dmThreadInShownOrder: (msgs: any[]) => msgs,
+vi.mock('../lib/e2e-crypto', () => ({
+    dmThreadInShownOrder: (msgs: unknown[]) => msgs,
     dmQuoteFrom: vi.fn(() => null),
     dmQuoteLabel: vi.fn(() => null),
     dmLineShownText: vi.fn((v: { text: string | null } | undefined) => v?.text ?? ''),

@@ -25,8 +25,9 @@ function notFound(ctx: any): void {
     ctx.body = { error: 'Not found' };
 }
 
-function card(d: Decision, actor: string) {
-    const mine = getOwnDecisionVotes(actor, [d.id]).get(d.id);
+function card(d: Decision, actor: string, ownVotesMap?: Map<string, any>) {
+    // ⚡ Bolt: Batch pre-fetch own decision votes to eliminate N+1 queries when mapping decisions
+    const mine = ownVotesMap ? ownVotesMap.get(d.id) : getOwnDecisionVotes(actor, [d.id]).get(d.id);
     return {
         ...publicDecision(d),
         tally: scopedTallyForReader(d),
@@ -45,8 +46,9 @@ export function createEnterpriseDecisionRoutes(_deps: RouteDeps): Router {
         try {
             const decisions = getScopedDecisions(ctx.params.treasury, actor);
             const roll = enterpriseRollNow(ctx.params.treasury);
+            const ownVotes = getOwnDecisionVotes(actor, decisions.map(d => d.id));
             ctx.body = {
-                decisions: decisions.map(d => card(d, actor)),
+                decisions: decisions.map(d => card(d, actor, ownVotes)),
                 // A roll of one holds no vote (§2.2): the apps show no propose button then.
                 canPropose: decisionsOn() && roll.length >= 2 && roll.some(k => k.pubkey === actor),
                 rollSize: roll.length,

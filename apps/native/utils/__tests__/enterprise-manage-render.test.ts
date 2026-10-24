@@ -134,6 +134,16 @@ vi.mock('../../components/AvatarPickerSheet', () => ({
         ? createElement('button', { 'data-testid': 'picker-pick', onClick: () => { onSelectImage(PICKED); onClose(); } }, 'pick')
         : null),
 }));
+// The banner's picker: the photo the keeper chose, already the phone's 800 px copy; or none (cancelled); or one it can't read.
+const banner = vi.hoisted(() => ({ picks: 0, next: 'data:image/jpeg;base64,/9j/BBBB' as string | null | Error }));
+const BANNER_PICKED = 'data:image/jpeg;base64,/9j/BBBB';
+vi.mock('../banner-photo', () => ({
+    pickBannerPhoto: async () => {
+        banner.picks++;
+        if (banner.next instanceof Error) throw banner.next;
+        return banner.next;
+    },
+}));
 vi.mock('../node-post', () => ({ signedGet: () => new Promise(() => {}), signedPost: () => new Promise(() => {}), anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null, getCachedAnchorUrl: () => store.map.get('beanpool_anchor_url') ?? null }));
 const net = vi.hoisted(() => ({ calls: [] as string[], args: [] as Array<[string, unknown[]]>, answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => { net.args.push([name, args]); return net.answer?.(name, args); }));
@@ -462,6 +472,7 @@ for (const dark of [false, true]) {
             expect(byId('manage-face-logo')).not.toBeNull();
             expect(byId('manage-face-kind')).toBeNull();
             expect(byId('manage-face-how')).toBeNull();
+            expect(byId('manage-face-banner')).toBeNull();
             expect(byId('manage-featured')).toBeNull();
             expect(byId('manage-shop-open')).toBeNull();
             expect(host.textContent).not.toContain('OPERATOR CONTROLS');
@@ -512,6 +523,49 @@ for (const dark of [false, true]) {
                 expect(byId('manage-face-logo-image')?.querySelector('[data-avatar="56"]')?.getAttribute('data-src')).toBe(PICKED);
                 await click(byId('manage-face-save'), 'Save');
                 expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } }]);
+            });
+
+            it('the logo and the banner photo are two pictures, each labelled; a banner photo picked goes to its shop alone', async () => {
+                banner.picks = 0;
+                banner.next = BANNER_PICKED;
+                await render('console');
+                expect(byId('manage-face-banner-row')?.textContent).toContain('Banner photo');
+                expect(byId('manage-face-banner')?.textContent).toBe('Choose a banner photo');
+                expect(byId('manage-face-banner-remove')).toBeNull();
+                expect(byId('manage-face-banner-image')).toBeNull();
+                await click(byId('manage-face-banner'), 'Choose a banner photo');
+                expect(banner.picks).toBe(1);
+                expect(byId('manage-face-banner-image')?.querySelector('img')?.getAttribute('src')).toBe(BANNER_PICKED);
+                expect(byId('manage-face-banner')?.textContent).toBe('Change the banner photo');
+                await click(byId('manage-face-save'), 'Save');
+                expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: BANNER_PICKED } }]);
+                expect(byId('manage-face-saved')?.textContent).toBe('Saved.');
+            });
+
+            it('the banner photo it has shows, from its community; Remove takes it down with one Save', async () => {
+                const HELD = `/api/shops/${SHOP_ID}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
+                net.answer = community({ getTreasuryDetail: leadsView({ shop: { ...SHOP, photoUrl: HELD } }) });
+                await render('console');
+                expect(byId('manage-face-banner-image')?.querySelector('img')?.getAttribute('src')).toBe(`${NODE}${HELD}`);
+                expect(byId('manage-face-banner')?.textContent).toBe('Change the banner photo');
+                await click(byId('manage-face-banner-remove'), 'Remove the banner photo');
+                expect(byId('manage-face-banner-image')).toBeNull();
+                expect(byId('manage-face-banner-remove')).toBeNull();
+                await click(byId('manage-face-save'), 'Save');
+                expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
+            });
+
+            it('no photo picked changes nothing; one that cannot be read says so, and nothing is sent', async () => {
+                banner.next = null;
+                await render('console');
+                await click(byId('manage-face-banner'), 'Choose a banner photo');
+                expect(byId('manage-face-banner-image')).toBeNull();
+                expect(byId('manage-face-save')?.getAttribute('aria-disabled')).toBe('true');
+                banner.next = new Error('could not decode');
+                await click(byId('manage-face-banner'), 'Choose a banner photo');
+                expect(byId('manage-face-error')?.textContent).toBe("That picture couldn't be read. Try another.");
+                expect(writes()).toEqual([]);
+                banner.next = BANNER_PICKED;
             });
 
             it('a keeper who does not lead reads its name and purpose, and why they are the lead\'s; their About goes alone', async () => {

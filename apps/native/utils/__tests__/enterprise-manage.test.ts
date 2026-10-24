@@ -65,6 +65,20 @@ describe('what one Save sends', () => {
         expect(faceSaveOf(before, draft, true, false)).toEqual({ face: { name: 'Renamed', about: 'New words.' }, shop: {} });
         expect(savesAnything(faceSaveOf(before, { ...before, kind: 'food', howToDeal: '' }, true, false))).toBe(false);
     });
+
+    // Its banner is its shop's one photo (round 3 §0 row 4; Marty, 24 Oct): a keeper's, through its shop's route.
+    it('a banner photo picked goes to its shop as the picture; taken down, as none; untouched, not at all', () => {
+        const PHOTO = 'data:image/jpeg;base64,BANNER';
+        expect(faceSaveOf(before, { ...before, banner: PHOTO }, false)).toEqual({ face: {}, shop: { photo: PHOTO } });
+        expect(faceSaveOf(before, { ...before, banner: null }, false)).toEqual({ face: {}, shop: { photo: null } });
+        expect(faceSaveOf(before, { ...before, banner: undefined }, false)).toEqual({ face: {}, shop: {} });
+        expect(faceFormOf({ ...DETAIL, shop: { ...DETAIL.shop, photoUrl: '/api/shops/shop-1/photo?v=1&k=K' } }).banner).toBeUndefined();
+    });
+
+    it('a node admin who keeps none of it sends no banner, whatever the form holds', () => {
+        expect(savesAnything(faceSaveOf(before, { ...before, banner: 'data:image/jpeg;base64,BANNER' }, true, false))).toBe(false);
+        expect(savesAnything(faceSaveOf(before, { ...before, banner: null }, true, false))).toBe(false);
+    });
 });
 
 describe('the form when the enterprise is read again, and once saved', () => {
@@ -104,6 +118,21 @@ describe('the form when the enterprise is read again, and once saved', () => {
         expect(after.before).toEqual({ ...before, about: 'New words.' });
         expect(after.draft).toEqual({ ...before, about: 'Newer words.', kind: 'food', logo: null });
         expect(faceSaveOf(after.before, after.draft, true)).toEqual({ face: { about: 'Newer words.' }, shop: { kind: 'food' } });
+    });
+
+    it('a banner photo picked stays through a read; once its shop took it, it is not sent again; its shop refused, it is', () => {
+        const PHOTO = 'data:image/jpeg;base64,BANNER';
+        const draft = { ...before, banner: PHOTO };
+        expect(faceOnRead({ before, draft }, faceFormOf(DETAIL)).draft.banner).toBe(PHOTO);
+        const sent = faceSaveOf(before, draft, true);
+        expect(sent.shop).toEqual({ photo: PHOTO });
+        const went = faceAfterSave({ before, draft }, draft, sent);
+        expect(went.draft.banner).toBeUndefined();
+        expect(savesAnything(faceSaveOf(went.before, went.draft, true))).toBe(false);
+        const refused = faceAfterSave({ before, draft }, draft, { face: sent.face, shop: {} });
+        expect(faceSaveOf(refused.before, refused.draft, true)).toEqual({ face: {}, shop: { photo: PHOTO } });
+        const down = { ...before, banner: null };
+        expect(faceAfterSave({ before, draft: down }, down, faceSaveOf(before, down, true)).draft.banner).toBeUndefined();
     });
 });
 

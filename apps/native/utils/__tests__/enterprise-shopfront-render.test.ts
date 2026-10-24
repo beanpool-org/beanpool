@@ -336,6 +336,18 @@ for (const dark of [false, true]) {
             expect(byId('shopfront-featured')).toBeNull();
         });
 
+        it("the banner is its shop's photo, from its community, filling the block; with none, the quiet block", async () => {
+            const PHOTO = `/api/shops/${SHOP_ID}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
+            const view = membersView();
+            net.answer = community({ getTreasuryDetail: { ...view, shop: { ...(view.shop as Record<string, unknown>), photoUrl: PHOTO } } });
+            await renderIn();
+            const banner = byId('shopfront-banner');
+            expect(banner?.querySelector('img')?.getAttribute('src')).toBe(`${NODE}${PHOTO}`);
+            expect(banner?.textContent).toBe('');
+            expect(styleOf(banner).height).toBe(128);
+            expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
+        });
+
         it('an older node (no About, no since): the page reads as before, its listings in sections, no cut-off', async () => {
             const { about: _a, since: _s, offerCategories: _o, shop: _shop, ...older } = membersView();
             net.answer = community({ getTreasuryDetail: { ...older, keepers: keepers.map(({ publicKey, callsign, role }) => ({ publicKey, callsign, role })) } }, 'down');

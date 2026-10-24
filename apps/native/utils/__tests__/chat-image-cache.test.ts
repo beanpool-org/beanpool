@@ -53,7 +53,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import * as FileSystem from 'expo-file-system/legacy';
 import { makeGroupEpochRecord } from '@beanpool/core';
-import { deleteMessageApi, syncSingleConversation, getGroupChat } from '../db';
+import { deleteMessageApi, syncSingleConversation, getGroupChat, leaveGroupApi } from '../db';
 import { groupPhotoCache } from '../group-photo-cache';
 import { getDecryptedGroupAttachment } from '../group-chat-lines';
 import { groupKeyring, memoryGroupKeyStore } from '../group-chat-keys';
@@ -214,6 +214,16 @@ describe('a group chat\'s photos: kept by message id in the group\'s own folder,
         fetchMock.mockResolvedValue(reply(500, { error: 'busy' }));
         await expect(getGroupChat(held)).rejects.toMatchObject({ status: 500 });
         expect(mockDeleteAsync.mock.calls).toEqual([[`/tmp/cache/chat-images/groups/${held}/`, { idempotent: true }]]);
+    });
+
+    it('leaving the group clears its folder; a leave the node refused clears nothing', async () => {
+        const g = randomUUID();
+        fetchMock.mockResolvedValue(reply(500, { error: 'busy' }));
+        await leaveGroupApi(g, 'me-pub').catch(() => null);
+        expect(mockDeleteAsync).not.toHaveBeenCalled();
+        fetchMock.mockResolvedValue(reply(200, { success: true }));
+        expect(await leaveGroupApi(g, 'me-pub')).toBe(true);
+        expect(mockDeleteAsync.mock.calls).toEqual([[`/tmp/cache/chat-images/groups/${g}/`, { idempotent: true }]]);
     });
 
     it('a line the node now serves as removed takes its kept photo with it', async () => {

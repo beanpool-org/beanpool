@@ -8311,6 +8311,8 @@ export async function leaveGroupApi(groupId: string, memberPubkey: string, onPro
         } catch (dbErr) {
             console.warn('[SQLite] Failed to remove group member locally:', dbErr);
         }
+        // I left: the group's photos this phone opened go with its chat (DESIGN-group-chat-photos-fable.md §2.4).
+        if (memberPubkey === identity.publicKey) await forgetGroupPhotos(ring.groupId);
     }
     return Boolean(res?.success);
 }

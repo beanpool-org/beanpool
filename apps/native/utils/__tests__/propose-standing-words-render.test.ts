@@ -159,7 +159,7 @@ describe('removal card Commons pool debt line', () => {
     });
 });
 
-describe('Beans off: only node admins propose, and nothing asks for a trade nobody can make (#2434 review r4366787637)', () => {
+describe('Beans off: nothing asks for a trade nobody can make; admins, and members who traded before Beans went off, propose (#2434 review r4366787637, #2434 Sonnet note)', () => {
     const decide = (canPropose: boolean, beans: boolean) => createElement(DecideSection, {
         decisions: [],
         myPoolVoting: null,
@@ -175,11 +175,11 @@ describe('Beans off: only node admins propose, and nothing asks for a trade nobo
     });
     const alert = async () => vi.mocked((await import('react-native')).Alert.alert);
 
-    it('a member who is not an admin reads that only node admins propose here, and no trade', async () => {
+    it('a member who can\'t propose reads why, and is never asked to complete a trade', async () => {
         await render(decide(false, false));
-        expect(text()).toContain('Binding decisions execute automatically upon passing (§3.7). On this community, only node admins propose them.');
-        expect(text()).toContain('⚠️ On this community, only node admins can propose a Decision.');
-        expect(text()).not.toMatch(/trade/i);
+        expect(text()).toContain('Binding decisions execute automatically upon passing (§3.7). Open to node admins, and to members who completed a trade before Beans were switched off.');
+        expect(text()).toContain('⚠️ With Beans switched off, you can\'t complete a trade here, so you can\'t propose. Node admins can.');
+        expect(text()).not.toMatch(/completed a trade\.|Complete a Trade First|once you have completed/i);
     });
 
     it('their Propose button says the same, never "Complete a Trade First"', async () => {
@@ -187,30 +187,30 @@ describe('Beans off: only node admins propose, and nothing asks for a trade nobo
         a.mockClear();
         await render(decide(false, false));
         act(() => { (host.querySelector('[aria-label="Propose a Community Decision"]') as HTMLElement).click(); });
-        expect(a).toHaveBeenCalledWith('Only Admins Propose Here', 'On this community, only node admins can propose a Decision.');
+        expect(a).toHaveBeenCalledWith('No Trades Here', 'With Beans switched off, nobody can complete a trade here, so you can\'t propose a Decision. Node admins can.');
     });
 
-    it('an admin sees no trade words either', async () => {
+    it('someone who can propose is never asked to complete a trade either', async () => {
         await render(decide(true, false));
-        expect(text()).not.toMatch(/trade/i);
+        expect(text()).not.toMatch(/Complete a Trade First|once you have completed a trade|You can propose once/i);
     });
 
-    it('the propose form\'s notice names admins only', async () => {
+    it('the propose form\'s notice (only someone who may propose opens it) names no gate and no trade', async () => {
         await render(createElement(ProposeDecisionModal, {
             isOpen: true, onClose: () => {}, onCreated: () => {},
             identity: { publicKey: ME, callsign: 'Me' }, commonsBalance: 0, treasuries: [], members: [],
             features: { beans: false, decisions: true },
         }));
-        expect(text()).toContain('No bond required. Open to node admins on this community. Open for 7 days. Closes and executes automatically.');
-        expect(text()).not.toMatch(/trade/i);
+        expect(text()).toContain('No bond required. Open for 7 days. Closes and executes automatically.');
+        expect(text()).not.toMatch(/Complete a Trade First|once you have completed a trade|You can propose once/i);
     });
 
-    it('the shared refusal: Beans off → admins only; Beans on → a completed trade, as before', async () => {
+    it('the shared refusal: Beans off → no trade can be made here; Beans on → a completed trade, as before', async () => {
         const { proposeRefusal } = await import('../../components/DecideSection');
         const a = await alert();
         a.mockClear();
         expect(proposeRefusal(false, false, false)).toBe(true);
-        expect(a).toHaveBeenLastCalledWith('Only Admins Propose Here', 'On this community, only node admins can propose a Decision.');
+        expect(a).toHaveBeenLastCalledWith('No Trades Here', 'With Beans switched off, nobody can complete a trade here, so you can\'t propose a Decision. Node admins can.');
         expect(proposeRefusal(false, false, true)).toBe(true);
         expect(a).toHaveBeenLastCalledWith('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
         expect(proposeRefusal(true, true, false)).toBe(true);

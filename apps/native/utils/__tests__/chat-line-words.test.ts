@@ -90,13 +90,18 @@ describe('every sentence the key and line code writes is in the table', () => {
         for (const s of [
             'You are off-grid. Please connect to a BeanPool Node to send messages.', 'You are off-grid. Please connect to a BeanPool Node to edit messages.',
             'You are off-grid. Please connect to a BeanPool Node.', 'Failed to deliver message.', 'Failed to send image.',
-            'Photos can only be sent in direct messages.', 'Could not open this group chat.', 'Could not open this enterprise chat.',
+            'Could not open this group chat.', 'Could not open this enterprise chat.',
             'This phone has switched community since this chat was opened.',
         ]) {
             expect(db, s).toContain(`'${s}'`);
             expect(chatLineWords(s), s).toBe(s);
             expect(known(s), s).toBe(true);
         }
+        // A photo in an event's or an enterprise's chat (DESIGN-group-chat-photos-fable.md §4); its apostrophe makes it double-quoted.
+        const noPhotos = "Photos can't be sent in this chat.";
+        expect(db).toContain(`export const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "${noPhotos}";`);
+        expect(chatLineWords(noPhotos)).toBe(noPhotos);
+        expect(known(noPhotos)).toBe(true);
         // signedRequestWithMethod's refusal with no words of the node's, by its status.
         expect(db).toContain('`Request failed: ${res.status}`');
         expect(known('Request failed: 502')).toBe(true);

@@ -50,7 +50,11 @@ import {
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
-import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
+import {
+    sendSealedGroupLine, editSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
+    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT, type GroupPhotoCache,
+} from './group-chat-lines';
+import type { GroupLineView, ServedGroupLine } from './group-line-display';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
 import { SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, sayOutsideShop, shopChoiceFor } from './shop-choice';
@@ -74,6 +78,63 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
     try {
         await FileSystem.deleteAsync(`${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`, { idempotent: true });
     } catch { /* nothing to do: the message is gone either way */ }
+}
+
+// A group chat's opened photos, one folder per group (DESIGN-group-chat-photos-fable.md §2.3, §2.4): kept by message id as a
+// DM's are, so a group this phone is no longer in is cleared in one go. A name the node served is a file name here only when
+// it is a plain id: nothing it serves can name a file outside the group's folder.
+const GROUP_PHOTO_DIR = `${CHAT_IMAGE_CACHE_DIR}groups/`;
+const PLAIN_ID = /^[0-9a-z][0-9a-z-]{0,63}$/;
+const groupPhotoFolder = (groupId: string): string | null => (PLAIN_ID.test(groupId) ? `${GROUP_PHOTO_DIR}${groupId}/` : null);
+const groupPhotoFile = (groupId: string, messageId: string): string | null => {
+    const folder = groupPhotoFolder(groupId);
+    return folder && PLAIN_ID.test(messageId) ? `${folder}${messageId}.jpg` : null;
+};
+
+/** Where GroupChatView keeps the photos it opened (utils/group-chat-lines.ts getDecryptedGroupAttachment). */
+export const groupPhotoCache: GroupPhotoCache = {
+    async get(groupId, messageId) {
+        const file = groupPhotoFile(groupId, messageId);
+        return file && (await FileSystem.getInfoAsync(file)).exists ? file : null;
+    },
+    async put(groupId, messageId, dataUri) {
+        const file = groupPhotoFile(groupId, messageId);
+        const jpeg = dataUri.match(/^data:image\/[a-z0-9.+-]+;base64,(.*)$/is);
+        // Drawn from memory this once when it can't be kept under a plain name, as a DM photo of an unknown shape is.
+        if (!file || !jpeg) return dataUri;
+        try { await FileSystem.makeDirectoryAsync(groupPhotoFolder(groupId)!, { intermediates: true }); } catch {}
+        await FileSystem.writeAsStringAsync(file, jpeg[1], { encoding: 'base64' });
+        return file;
+    },
+};
+
+/**
+ * Take a group's opened photos off this phone, best effort and with no promise in words: the node no longer serves this
+ * phone the group's chat (a removed member, a leaver), as it no longer serves the words (§2.4).
+ */
+async function forgetGroupPhotos(groupId: string): Promise<void> {
+    const folder = groupPhotoFolder(groupId.toLowerCase());
+    if (!folder) return;
+    try { await FileSystem.deleteAsync(folder, { idempotent: true }); } catch { /* the OS trims its cache folder anyway */ }
+}
+
+/** The kept files this session already took off for a removed line: each is asked once, not on every poll. */
+const removedGroupPhotos = new Set<string>();
+
+/**
+ * A line the node now serves as removed (deleted by its author, removed by a convenor) takes its kept photo with it, on
+ * every phone that opened it. Not waited on: the chat's read doesn't wait for the cache folder.
+ */
+function forgetRemovedGroupPhotos(groupId: string, messages: unknown): void {
+    if (!Array.isArray(messages)) return;
+    for (const m of messages) {
+        if (m?.type !== 'removed') continue;
+        const file = groupPhotoFile(groupId.toLowerCase(), String(m.id));
+        if (!file || removedGroupPhotos.has(file)) continue;
+        if (removedGroupPhotos.size >= 5000) removedGroupPhotos.clear();
+        removedGroupPhotos.add(file);
+        FileSystem.deleteAsync(file, { idempotent: true }).catch(() => { /* the line is gone either way */ });
+    }
 }
 
 /**
@@ -6333,14 +6394,26 @@ export async function editMessage(conversationId: string, messageId: string, new
     );
 }
 
+/** A chat the node reads by design (an event's, an enterprise's thread) takes no photo (DESIGN-group-chat-photos-fable.md §4). */
+export const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "Photos can't be sent in this chat.";
+
 /**
  * Send an image in a DM (NAT-1 attachments). The image is E2E-encrypted with the
  * DM key and uploaded as a separate blob (lazy-loaded), so the node only ever holds
- * ciphertext and the message feed stays light. DM-only — encryption requires a peer key.
+ * ciphertext and the message feed stays light.
+ *
+ * A group's chat goes as a group's photo (postGroupChatPhoto), decided by this phone's own key memory first: once it held
+ * the group's keys, sealed under the keyring's epoch whatever the row says, never DM-sealed to whoever the node lists
+ * (DESIGN-group-chat-photos-fable.md §5 S3). An event's or an enterprise's chat is refused, nothing sent.
  */
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
     const database = await getDb();
-    if (await isNodeReadableConversation(conversationId) || await isHeldGroupChat(conversationId)) throw new Error('Photos can only be sent in direct messages.');
+    // Asked first: a conversation not on this phone yet is asked of the node, and a held group's row is written group_thread.
+    const nodeReadable = await isNodeReadableConversation(conversationId);
+    const groupChat = await isHeldGroupChat(conversationId)
+        || (nodeReadable && (await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]))?.type === 'group_thread');
+    if (groupChat) return postGroupChatPhoto(conversationId, { dataUri, caption, replyToId: replyToIdOf(metadata) });
+    if (nodeReadable) throw new Error(PHOTOS_NOT_IN_THIS_CHAT_TEXT);
     // The picture and its caption are locked, or neither goes (DmNotLockedError). Both are sealed to the message's own
     // id, which goes to the node with them, each as its own part, so neither can stand in for the other.
     const dmCtx = await requireDmKeyContext(conversationId);
@@ -6428,6 +6501,12 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     } catch {
         return null;
     }
+}
+
+/** A group photo line's photo for GroupChatView: opened on this phone, kept in the group's folder (groupPhotoCache). */
+export async function getDecryptedGroupPhoto(groupId: string, line: ServedGroupLine, view: GroupLineView): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return getDecryptedGroupAttachment(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, line, view }, groupPhotoCache);
 }
 
 /** A list of keys as a set to compare: each lower-cased, once, sorted. */
@@ -8333,9 +8412,44 @@ export async function fetchYourGroups(): Promise<import('./your-groups').YourCha
 export async function getGroupChat(groupId: string, limit = 50, offset = 0): Promise<any> {
     const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`);
     const body = await res.json().catch(() => ({}));
-    // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read.
-    if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
+    // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read. A phone that
+    // held the group's keys then takes the group's opened photos off, as the words are no longer served to it (§2.4).
+    if (!res.ok) {
+        if ((res.status === 403 || res.status === 404) && await isHeldGroupChat(groupId).catch(() => false)) await forgetGroupPhotos(groupId);
+        throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
+    }
+    forgetRemovedGroupPhotos(groupId, body?.messages);
     return body;
+}
+
+/**
+ * Send a photo in a group's chat (DESIGN-group-chat-photos-fable.md §2.2): its caption sealed as part 'body' and the photo
+ * as part 'attachment' under the line's one message key and the keyring's epoch, both sealed again on a 409
+ * (utils/group-chat-lines.ts sendSealedGroupLine). Only ever sealed: a known DM is refused before any key is asked; when the
+ * node serves no keys, a group this phone held keys of is refused in the phone's lock words, and one it never held is
+ * refused with an old node's notice (a node from before locked chats, §2.6) or as a chat it isn't in. Nothing goes then.
+ */
+export async function postGroupChatPhoto(
+    groupId: string, photo: { dataUri: string; caption: string; clientId?: string; replyToId?: string | null },
+    lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
+): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    try {
+        return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
+            groupId, text: photo.caption, photo: photo.dataUri, clientId: photo.clientId || Crypto.randomUUID(), replyToId: photo.replyToId,
+            after: lock?.after, mentionCandidates: lock?.mentionCandidates, progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
+        });
+    } catch (e) {
+        // A 404 is an old node (no keys route) or a new one refusing this phone the group: never a reason to send it readable.
+        if (e instanceof GroupKeysRequestError && e.status === 404) {
+            if (await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+            if (await nodeChatIsUnlocked(groupId)) throw new GroupChatKeyError(GROUP_CHAT_OLD_NODE_NOTICE, 'refused');
+            throw new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+        }
+        throw e;
+    }
 }
 
 /**

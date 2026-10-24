@@ -57,7 +57,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'You are off-grid. Please connect to a BeanPool Node.': word('You are off-grid. Please connect to a BeanPool Node.'),
     'Failed to deliver message.': word('Failed to deliver message.'),
     'Failed to send image.': word('Failed to send image.'),
-    'Photos can only be sent in direct messages.': word('Photos can only be sent in direct messages.'),
+    "Photos can't be sent in this chat.": word("Photos can't be sent in this chat."),
     'Could not open this group chat.': word('Could not open this group chat.'),
     'Could not open this enterprise chat.': word('Could not open this enterprise chat.'),
     'Could not open this event chat.': word('Could not open this event chat.'),

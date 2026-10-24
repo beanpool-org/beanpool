@@ -455,7 +455,10 @@ describe('group chats on the phone, end to end against a real node', () => {
 
         const served = await json(await signedGet(URL_BASE, `/api/messages/${firstPhotoId}/attachment`, ben.identity));
         expect(Buffer.from(served.data, 'base64').toString('latin1')).not.toContain('data:image');
+        // Ben's phone learns of epoch 3 (Ana's join) as it would on opening the chat.
+        await ring(ben, PG).sync();
         const key = (await ring(ben, PG).keyFor(3))!;
+        expect(key).toBeInstanceOf(Uint8Array);
         const bind = { groupId: PG, epoch: 3, senderPubHex: ana.identity.publicKey, messageId: firstPhotoId, replyToId: null };
         const line = await servedLine(ben, PG, firstPhotoId);
         expect(openLine({ ciphertext: served.data, nonce: served.nonce }, { ...bind, part: 'attachment' }, key).text).toBe(photos.get(firstPhotoId));

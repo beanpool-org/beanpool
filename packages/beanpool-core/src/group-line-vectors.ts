@@ -11,6 +11,10 @@
  * keyCommit, membersDigest and wrapsDigest, and its canonical form and signature changed. The wraps, the top-up and the
  * four lines are byte-identical to #1749's (core's group-crypto.test.ts pins that).
  *
+ * Added in group photos S1 (DESIGN-group-chat-photos-fable.md §2.2, §5): GROUP_PHOTO_VECTOR, one message sealed as a
+ * caption and a photo under its one message key, from streams 'line l5' and 'line l6'. Nothing above changed for it; core's
+ * group-crypto.test.ts pins its bytes too.
+ *
  * Kept out of the main index (import `@beanpool/core/group-line-vectors`) so no app bundle carries it. The checks throw a
  * plain Error and depend on no test framework.
  *
@@ -162,6 +166,37 @@ export const GROUP_LINE_VECTORS: GroupLineVector[] = [
     },
 ];
 
+/**
+ * A group photo (photos design §2.2): ONE message sealed as two lines under its one message key. The caption is part
+ * 'body' and names the newest line its sender had; the JPEG data URI (a real 2×2 one) is part 'attachment' and names
+ * none. Same id, epoch, sender, group and reply; a nonce each; each signed by the sender. Ben answers Cat's line with a
+ * photo; the newest line he had was Ana's.
+ */
+export const GROUP_PHOTO_VECTOR: { caption: GroupLineVector; photo: GroupLineVector } = {
+    caption: {
+        label: "Ben's photo answering Cat: its caption (part 'body')",
+        from: 'ben', messageId: '4d5e6f7a-8b9c-4d0e-9f1a-3b4c5d6e7f80', part: 'body', after: '3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f', replyToId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e',
+        text: 'Gloves are on the top shelf in the shed 📷',
+        rng: 'line l5',
+        messageKeyHex: '35f9478af545a809f9e334452d4ad2364389295926c204e3795befc71cf49cf7',
+        payload: {
+            ciphertext: 'ItFAy/kAriEewYCjjTsubnt/c/nSggckuB2ahUoosDhg9M575o+ZagFuIODOmJyWeGHKMgz2zK5fr339qkMEjnq0foq8MDUFHPUEQOHysYyyM0WYiYUhVEZtS90tG38srgFOJ1ULUTBUGYC7ZhK/8SV/68t7IiJ+YxUZE2D7NICpgH+SKpqWiArrbrh7ENr3plluX96t5rdypOxhZ6kKs11v',
+            nonce: 'group-xc20p-v1:YlJLjpgEv4EaeYNEQ0l3Ha58AP6+0NFb',
+        },
+    },
+    photo: {
+        label: "Ben's photo answering Cat: the photo (part 'attachment', the same message)",
+        from: 'ben', messageId: '4d5e6f7a-8b9c-4d0e-9f1a-3b4c5d6e7f80', part: 'attachment', after: null, replyToId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e',
+        text: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAT/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJwAo9//2Q==',
+        rng: 'line l6',
+        messageKeyHex: '35f9478af545a809f9e334452d4ad2364389295926c204e3795befc71cf49cf7',
+        payload: {
+            ciphertext: 'KOmCeVtKSQ23n18HA1G+A4U8T4WkaB0fBY/LDw7/05REWaA03ngRs04MBbZAOW/8NX6XMR3NBxNpAa+uYbi1/7fXos4e93TK/uaayCyGQbxdEgPkpDqNwTvAX3AGmKBU8TidaXIsAhmwSVQsLaWrDiiDC93lWBgegc51uYxA0gaQLa3WIaz75e5LK+ioACZEXm6Irg65cX/S6bDK1e22ePyO9j85VAO2Uo0wL1N/H8zigEUNsIwOAfeWGyxZsscWBICXepZOn/bnuOnz40MBCXHVc744/sDRxiCeV+uRhkRJZ5uFGn7vWF3Mtq3FVMJptD25yxrelpIKSRl/k3j2OKD8QIuzHfmbAZzhgFpJD3HnUb6Ofxsl2q/Ns0FYPaGuc2eqScqD9gzBmUYIozHInXhPnCdiz+FC3ZD4v0VbBgPH3/iPHsZPrVZQuqNxonLS2w+1XeEmk7TaZSJ1LUaKnnnNMyz2E9plVkzsSzc3JfsqkooycfhlpPT2iVkTQrXaSY6C6HqV72xJ3b68Zqwyvlfr7mJscT/dCFJSUmfzPMcAoyW57MSj+hHmiw/Yy8p+RIn6xJ66Eed5WtwXWA7f9mcW2g9RdI7xyEdTVz6e1UuG63wW7dn8yST+NEHv9CMUbYeeLsMA14BL',
+            nonce: 'group-xc20p-v1:WluVTGrys2n5CbniT8GvvPAYAOGP4y2O',
+        },
+    },
+};
+
 /** The parts of an app's e2e-crypto module the vectors exercise. */
 export interface GroupCryptoApi {
     makeGroupEpochRecord(input: MakeGroupEpochInput, opts?: GroupCryptoRandom): { record: GroupEpochRecord; groupKey: Uint8Array };
@@ -186,6 +221,8 @@ function fail(msg: string): never {
 
 const keyOf = (who: Who, pkcs8: boolean) => (pkcs8 ? GROUP_VECTOR_PEOPLE[who].pkcs8Hex : GROUP_VECTOR_PEOPLE[who].seedHex);
 const MEMBERS: Who[] = ['ana', 'ben', 'cat'];
+const PARTS: GroupLinePart[] = ['body', 'attachment', 'edit'];
+const ANOTHER_MESSAGE = '11111111-2222-4333-8444-555555555555';
 
 function refOf(v: GroupLineVector, over: Partial<GroupLineBinding> = {}): GroupLineBinding {
     return {
@@ -264,28 +301,77 @@ export function checkGroupCryptoVectors(api: GroupCryptoApi): void {
     if (!api.walkKeySuccession({ memberPubkey: succ.newPubkey, formerKeys: [succ.former] }, people.ana.publicKey)) fail("Ana's old key did not walk to her new one");
     if (api.walkKeySuccession({ memberPubkey: people.ben.publicKey, formerKeys: [succ.former] }, people.ana.publicKey)) fail("Ana's old key walked to Ben");
 
-    for (const v of GROUP_LINE_VECTORS) {
-        if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);
-        for (const pkcs8 of [false, true]) {
-            const sealed = api.sealGroupLine(v.text, {
-                myEdPrivHex: keyOf(v.from, pkcs8), groupKey: key, groupId: GROUP_VECTOR_GROUP, epoch: 3, messageId: v.messageId,
-                part: v.part, after: v.after, replyToId: v.replyToId,
-            }, { randomBytesForVectors: groupVectorRandom(v.rng) });
-            if (sealed.ciphertext !== v.payload.ciphertext || sealed.nonce !== v.payload.nonce) {
-                fail(`${v.label}: sealed with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key, the bytes differ from the frozen line`);
-            }
+    for (const v of GROUP_LINE_VECTORS) checkLine(api, key, v);
+    checkGroupPhotoVector(api);
+}
+
+/** One frozen line: its message key; re-sealed byte-identically with both key spellings; opened; refused when moved. */
+function checkLine(api: GroupCryptoApi, key: Uint8Array, v: GroupLineVector): void {
+    if (bytesToHex(api.groupMessageKey(key, v.messageId)) !== v.messageKeyHex) fail(`${v.label}: the message key differs`);
+    for (const pkcs8 of [false, true]) {
+        const sealed = api.sealGroupLine(v.text, {
+            myEdPrivHex: keyOf(v.from, pkcs8), groupKey: key, groupId: GROUP_VECTOR_GROUP, epoch: 3, messageId: v.messageId,
+            part: v.part, after: v.after, replyToId: v.replyToId,
+        }, { randomBytesForVectors: groupVectorRandom(v.rng) });
+        if (sealed.ciphertext !== v.payload.ciphertext || sealed.nonce !== v.payload.nonce) {
+            fail(`${v.label}: sealed with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key, the bytes differ from the frozen line`);
         }
-        const opened = api.openGroupLine(v.payload, refOf(v), key);
-        if (opened.text !== v.text || opened.after !== v.after) fail(`${v.label}: opened ${JSON.stringify(opened)}`);
-        const disclosed = api.openGroupLineWithMessageKey(v.payload, refOf(v), hexToBytes(v.messageKeyHex));
-        if (disclosed.text !== v.text) fail(`${v.label}: its disclosed message key opened ${JSON.stringify(disclosed)}`);
-        const other = MEMBERS.find((w) => w !== v.from)!;
-        refused(api, v, key, { senderPubHex: people[other].publicKey }, 'named as another member\'s line');
-        refused(api, v, key, { groupId: '00000000-0000-4000-8000-000000000000' }, 'in another group');
-        refused(api, v, key, { epoch: 4 }, 'under another epoch');
-        refused(api, v, key, { messageId: '11111111-2222-4333-8444-555555555555' }, 'under another message id');
-        refused(api, v, key, { part: v.part === 'body' ? 'attachment' : 'body' }, 'as another part of its message');
-        refused(api, v, key, { replyToId: '22222222-3333-4444-8555-666666666666' }, 'as an answer to another message');
-        if (v.replyToId) refused(api, v, key, { replyToId: null }, 'as a line that answers nothing');
+    }
+    const opened = api.openGroupLine(v.payload, refOf(v), key);
+    if (opened.text !== v.text || opened.after !== v.after) fail(`${v.label}: opened ${JSON.stringify(opened)}`);
+    const disclosed = api.openGroupLineWithMessageKey(v.payload, refOf(v), hexToBytes(v.messageKeyHex));
+    if (disclosed.text !== v.text) fail(`${v.label}: its disclosed message key opened ${JSON.stringify(disclosed)}`);
+    const other = MEMBERS.find((w) => w !== v.from)!;
+    refused(api, v, key, { senderPubHex: GROUP_VECTOR_PEOPLE[other].publicKey }, 'named as another member\'s line');
+    refused(api, v, key, { groupId: '00000000-0000-4000-8000-000000000000' }, 'in another group');
+    refused(api, v, key, { epoch: 4 }, 'under another epoch');
+    refused(api, v, key, { messageId: ANOTHER_MESSAGE }, 'under another message id');
+    refused(api, v, key, { part: v.part === 'body' ? 'attachment' : 'body' }, 'as another part of its message');
+    refused(api, v, key, { replyToId: '22222222-3333-4444-8555-666666666666' }, 'as an answer to another message');
+    if (v.replyToId) refused(api, v, key, { replyToId: null }, 'as a line that answers nothing');
+}
+
+/**
+ * The group photo (GROUP_PHOTO_VECTOR): both lines checked as any line is, and refused as each other part; the message's
+ * one key opens both; that key opens nothing sealed under another message id (every other frozen line, and this photo
+ * re-sealed with only its id changed), under that line's own id or under this one; and no other message's key opens either.
+ */
+export function checkGroupPhotoVector(api: GroupCryptoApi): void {
+    const key = hexToBytes(GROUP_VECTOR_KEY_HEX);
+    const { caption, photo } = GROUP_PHOTO_VECTOR;
+    if (caption.part !== 'body' || photo.part !== 'attachment') fail('the photo pair is a caption (part body) and a photo (part attachment)');
+    if (caption.messageId !== photo.messageId || caption.from !== photo.from || caption.replyToId !== photo.replyToId || caption.messageKeyHex !== photo.messageKeyHex) {
+        fail('the caption and the photo are not one message: the same id, sender, reply and key');
+    }
+    if (caption.payload.nonce === photo.payload.nonce) fail('the caption and the photo share a nonce under one key');
+    for (const v of [caption, photo]) {
+        checkLine(api, key, v);
+        for (const part of PARTS) if (part !== v.part) refused(api, v, key, { part }, 'as another part of its message');
+    }
+    const mk = hexToBytes(photo.messageKeyHex);
+    for (const v of [caption, photo]) {
+        const opened = api.openGroupLineWithMessageKey(v.payload, refOf(v), mk);
+        if (opened.text !== v.text || opened.after !== v.after) fail(`${v.label}: the message's one key opened ${JSON.stringify(opened)}`);
+    }
+    const resealed: GroupLineVector = {
+        ...photo, label: "Ben's photo re-sealed under another message id", messageId: ANOTHER_MESSAGE,
+        messageKeyHex: bytesToHex(api.groupMessageKey(key, ANOTHER_MESSAGE)),
+        payload: api.sealGroupLine(photo.text, {
+            myEdPrivHex: keyOf(photo.from, false), groupKey: key, groupId: GROUP_VECTOR_GROUP, epoch: 3, messageId: ANOTHER_MESSAGE,
+            part: photo.part, after: photo.after, replyToId: photo.replyToId,
+        }, { randomBytesForVectors: groupVectorRandom(photo.rng) }),
+    };
+    if (api.openGroupLine(resealed.payload, refOf(resealed), key).text !== photo.text) fail(`${resealed.label}: it did not open under its own id`);
+    for (const other of [...GROUP_LINE_VECTORS, resealed]) {
+        for (const ref of [refOf(other), refOf(other, { messageId: photo.messageId })]) {
+            let opened: OpenedGroupLine | undefined;
+            try { opened = api.openGroupLineWithMessageKey(other.payload, ref, mk); } catch { /* as it should */ }
+            if (opened) fail(`${other.label}: opened with the photo message's key, named as message ${ref.messageId}`);
+        }
+        for (const v of [caption, photo]) {
+            let opened: OpenedGroupLine | undefined;
+            try { opened = api.openGroupLineWithMessageKey(v.payload, refOf(v), hexToBytes(other.messageKeyHex)); } catch { /* as it should */ }
+            if (opened) fail(`${v.label}: opened with the message key of ${other.label}`);
+        }
     }
 }

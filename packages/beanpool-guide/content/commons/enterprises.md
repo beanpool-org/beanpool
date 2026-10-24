@@ -24,7 +24,7 @@ Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each
 
 An enterprise's page is its shop front. Every member sees, from the top:
 
-- its picture, its name, what kind of shop it is and since when it has been here;
+- its banner photo across the top, or a plain block with its kind's emoji when it has none, then its logo, its name, what kind of shop it is and since when it has been here;
 - what it is for;
 - who keeps it (**Kept by**; **Run by** on a project), each with their trust level, stars and how many trades they have done. These badges show what each person has done. They don't decide anything;
 - a project's goal and its pledge box;
@@ -37,7 +37,7 @@ An enterprise's page is its shop front. Every member sees, from the top:
 - its balance and credit line in one line. Tap **Money and backing** to see its live Offers, surplus and capital ceiling, what its keepers back it with, and **Income & Spend**: every bean in and out. Its keepers see who paid or was paid and the note with it; other members see the amounts, and their own payments in full;
 - **Recent activity** and a **Discussion** you can write in.
 
-Where a community lets people who are not members read its pages, they see its picture, name and kind, what it is for, its keepers' names, About and a project's goal, but not its listings, badges or money. Most communities don't: there, only members can open the page.
+Where a community lets people who are not members read its pages, they see its logo, name and kind, what it is for, its keepers' names, About and a project's goal, but not its banner photo, listings, badges or money. Most communities don't: there, only members can open the page.
 
 At the bottom, **Report Enterprise** (**Report Project** on a project) if something is wrong.
 
@@ -52,7 +52,7 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 If you keep an enterprise, or help run a project, everything only its keepers do is under **Manage**: at the top of its page on the phone, and in the web app its page has two tabs, **Page** and **Manage**. So its page shows what every member sees. A community admin sees **Manage** too. **Manage** shows only what you can do:
 
 - requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See "Keepers".
-- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its kind or **How we deal**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.
+- **Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its kind and **How we deal**. Any keeper can change the logo, the banner photo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, kind or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one, and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.
 - **Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.
 - **Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.
 - **Decisions:** its keepers' votes.
@@ -74,11 +74,11 @@ Before a project reaches its goal, its leader can also cancel it (on the phone, 
 - Choose **Project** or **Enterprise**.
 - Give it a **Name** and a **Purpose statement**.
 - For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.
-- Add a photo if you like.
+- Add its logo if you like: the round picture people see beside its name. Its banner photo, across the top of its page, is chosen later under **Manage**.
 - Tap **Start Initiative** (**Propose Enterprise** in the web app; it still starts at once).
 
 It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one.
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 
-Its keepers change its picture and its words under **Manage**, in either app (see "If you keep it").
+Its keepers change its logo, its banner photo and its words under **Manage**, in either app (see "If you keep it").

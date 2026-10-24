@@ -1569,6 +1569,10 @@ export function initSchema() {
     // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
     // existing row: nothing is featured until its author or a keeper says so.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
+    // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
+    // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
+    // shops has no table to alter, and the schema.sql exec makes it with the column.
+    try { db.prepare(`ALTER TABLE shops ADD COLUMN photo_ref TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
     // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.

@@ -2327,8 +2327,11 @@ export async function changeEnterpriseFace(treasury: string, changes: { name?: s
     return request('PUT', `/api/treasury/${encodeURIComponent(treasury)}/profile`, changes);
 }
 
-/** Its shop's kind and how it deals; opens the shop when it has none (an empty change opens it as it is). */
-export async function changeEnterpriseShop(treasury: string, changes: { kind?: string | null; howToDeal?: string | null }): Promise<{ success: boolean; shop: any }> {
+/**
+ * Its shop's kind, how it deals and its banner photo (a picture, or null to take it down); opens the shop when it has none
+ * (an empty change opens it as it is).
+ */
+export async function changeEnterpriseShop(treasury: string, changes: { kind?: string | null; howToDeal?: string | null; photo?: string | null }): Promise<{ success: boolean; shop: any }> {
     return request('PUT', `/api/treasury/${encodeURIComponent(treasury)}/shop`, changes);
 }
 

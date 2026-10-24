@@ -716,6 +716,14 @@ describe('the Commons at 320 dp with 1.3× text, in the pseudo-locale', () => {
         expect(header.getAttribute('data-shrink')).toBe('1');
     });
 
+    it("its one picture is the logo, said so; the banner photo is its shop's, chosen later in Manage (Marty, 24 Oct)", async () => {
+        await renderIn('en', createElement(ProposeProjectScreen));
+        expect(host.textContent).toContain('LOGO (OPTIONAL)');
+        expect(host.textContent).toContain('Its banner photo is chosen later, in Manage.');
+        expect(host.textContent).not.toContain('COVER PHOTO');
+        expect(byLabel('Choose a logo')).not.toBeNull();
+    });
+
     it('labels in capitals carry them in their words: none is upper-cased by the phone', async () => {
         await renderIn('xx');
         await click(byLabel(pseudoLocalise('About the Commons Pool')), 'info');

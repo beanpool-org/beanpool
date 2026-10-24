@@ -1,7 +1,7 @@
 /**
  * Tests for web DM chat header: tapping the header opens who you're talking to.
  * - In a DM with a person, the avatar + name is one button with an accessible name
- *   ("Open <name>'s profile") opening their public profile.
+ *   ("{name}, see {name}'s profile") opening their public profile.
  * - In a DM with an enterprise, it opens the enterprise's page.
  * - Keyboard (Enter/Space) works.
  * - A group chat header keeps its current behaviour (no change).
@@ -217,7 +217,7 @@ describe('web DM chat header', () => {
 
         await screen.findByRole('button', { name: 'Back to messages' });
 
-        const headerBtn = screen.getByRole('button', { name: "Open Kofi's profile" });
+        const headerBtn = screen.getByRole('button', { name: "Kofi, see Kofi's profile" });
         expect(headerBtn).toBeInTheDocument();
         expect(headerBtn).toHaveAttribute('data-testid', 'dm-header-profile');
         expect(within(headerBtn).getByText('Kofi')).toBeInTheDocument();
@@ -255,7 +255,7 @@ describe('web DM chat header', () => {
 
         await screen.findByRole('button', { name: 'Back to messages' });
 
-        const headerBtn = screen.getByRole('button', { name: "Open Damo's Enterprise's profile" });
+        const headerBtn = screen.getByRole('button', { name: "Damo's Enterprise, see Damo's Enterprise's profile" });
         expect(headerBtn).toBeInTheDocument();
         expect(within(headerBtn).getByText("Damo's Enterprise")).toBeInTheDocument();
 
@@ -290,7 +290,7 @@ describe('web DM chat header', () => {
         );
 
         await screen.findByRole('button', { name: 'Back to messages' });
-        const headerBtn = screen.getByRole('button', { name: "Open Kofi's profile" });
+        const headerBtn = screen.getByRole('button', { name: "Kofi, see Kofi's profile" });
 
         fireEvent.keyDown(headerBtn, { key: 'Enter' });
         expect(onOpenProfile).toHaveBeenCalledWith(KOFI);
@@ -319,7 +319,7 @@ describe('web DM chat header', () => {
         fireEvent.click(header);
         expect(onNavigate).toHaveBeenCalledWith('group', GROUP_ID);
         expect(onOpenProfile).not.toHaveBeenCalled();
-        expect(screen.queryByRole('button', { name: /Open .*'s profile/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /see .*'s profile/ })).toBeNull();
     });
 
     it('a conversation whose other side is unknown/deleted draws no button', async () => {

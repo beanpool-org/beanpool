@@ -1675,7 +1675,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 onOpenProfile(peerPubkey);
                                             }
                                         }}
-                                        aria-label={t("Open {name}'s profile", { name: title })}
+                                        // The visible name first, so speech input matches it (review of #1979, X2).
+                                        aria-label={t("{name}, see {name}'s profile", { name: title })}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
                                             minHeight: '44px', padding: '0 0.25rem', background: 'none', border: 'none',

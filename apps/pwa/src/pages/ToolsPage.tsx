@@ -108,7 +108,7 @@ function ToolsList({ identity, onOpen, onClose, tools = TOOLS, apps = TOOL_APPS,
     return (
         <>
             <PageBar onBack={onClose} title={t('Tools')} />
-            <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 py-4 min-w-0">
+            <div className="max-w-xl mx-auto px-4 py-4 min-w-0">
                 <p className="m-0 mb-4 text-sm text-nature-700 dark:text-nature-200 break-words">
                     {t('Things you can do on your own, that make your community stronger.')}
                 </p>
@@ -353,7 +353,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         <>
             <PageBar onBack={back} title={t(manifest.name)} icon={manifest.icon} line={lineText(row)}
                 end={<ToolMenu name={t(manifest.name)} onPick={pick} />} />
-            <div className="max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl mx-auto px-4 py-4 min-w-0">
+            <div className="max-w-xl mx-auto px-4 py-4 min-w-0">
                 {panel === 'settings' && (
                     <ToolSettings manifest={manifest} copy={copy} onCopy={(on) => { void switchCopy(on); }} onRemove={remove}
                         tooBigLine={copy.failed === 'too-big' ? copyTooBigLine(manifest, store.get(), copy.max) : ''} />

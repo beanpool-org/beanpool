@@ -316,6 +316,66 @@ describe('a change made in one community while offline is kept for that communit
         expect(sentTo(B)).toEqual([]);
         expect(await pendingProfileChange(A, ME)).not.toBeNull();
     });
+
+    it('a switch to B while A\'s update is out writes nothing of A\'s into B\'s copy (#2461 review r4368471301)', async () => {
+        const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
+        await openCommunity(B);
+        await rowHere({ callsign: 'Marty', bio: 'Bio in B' });
+        await openCommunity(A);
+        await rowHere({ callsign: 'Marty Renamed', bio: 'Grows tomatoes in A' });
+        await keepPendingProfileChange(A, ME, { callsign: 'Marty Renamed' });
+        // A takes the update, and the member switches to B while its answer is on the way.
+        const asNodesAnswer = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementationOnce(async (url: string, init?: { method?: string; body?: string }) => {
+            const res = await asNodesAnswer(url, init);
+            store.set('beanpool_anchor_url', B);
+            return res;
+        });
+
+        expect(await pushProfileToServer({ community: A })).toBe(true);
+        expect(nodeAt(A).held).toMatchObject({ callsign: 'Marty Renamed', bio: 'Grows tomatoes in A' });
+        expect(await pendingProfileChange(A, ME)).toBeNull();
+        // B's copy is the copy open now: its row is still B's own.
+        const row = await (await getDb()).getFirstAsync('SELECT callsign, bio FROM members WHERE public_key = ?', [ME]);
+        expect(row).toEqual({ callsign: 'Marty', bio: 'Bio in B' });
+        expect(sentTo(B)).toEqual([]);
+    });
+
+    it('a switch to B before A\'s row is read sends A nothing, B\'s row least of all, and A\'s change still waits', async () => {
+        const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
+        const { loadIdentity } = await import('../identity');
+        await openCommunity(B);
+        await rowHere({ callsign: 'Marty in B', bio: 'Bio in B' });
+        await openCommunity(A);
+        await rowHere({ callsign: 'Marty Renamed', bio: 'Grows tomatoes in A' });
+        await keepPendingProfileChange(A, ME, { callsign: 'Marty Renamed' });
+        // The member switches to B just after the retry read which community it publishes to.
+        vi.mocked(loadIdentity).mockImplementationOnce(async () => {
+            store.set('beanpool_anchor_url', B);
+            return me.identity as Awaited<ReturnType<typeof loadIdentity>>;
+        });
+
+        const published = await pushProfileToServer();
+        expect(sentTo(A)).toEqual([]);
+        expect(sentTo(B)).toEqual([]);
+        expect(published).toBe(false);
+        expect(await pendingProfileChange(A, ME)).toEqual({ publicKey: ME, callsign: 'Marty Renamed' });
+    });
+
+    it('once A takes the waiting name, A\'s row says it, a photo already in the row and all (#2461 review r4368471301)', async () => {
+        const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
+        const NODE_PHOTO = `/api/avatar/${ME}?size=thumb&v=1`;
+        await openCommunity(A);
+        // The row as a members sync leaves it: the name A still holds, and A's own photo URL.
+        await rowHere({ callsign: 'Marty', avatar_url: NODE_PHOTO });
+        await keepPendingProfileChange(A, ME, { callsign: 'Marty Renamed' });
+
+        expect(await pushProfileToServer({ community: A })).toBe(true);
+        expect(nodeAt(A).held.callsign).toBe('Marty Renamed');
+        expect(await pendingProfileChange(A, ME)).toBeNull();
+        const row = await (await getDb()).getFirstAsync('SELECT callsign, avatar_url FROM members WHERE public_key = ?', [ME]);
+        expect(row).toEqual({ callsign: 'Marty Renamed', avatar_url: NODE_PHOTO });
+    });
 });
 
 describe('a community leaving the phone takes its waiting change with it', () => {

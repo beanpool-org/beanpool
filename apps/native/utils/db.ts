@@ -6790,6 +6790,9 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
     // What waits for this community, read once: the publish is built from it, and only it is retired.
     const pending = await pendingProfileChange(anchorUrl, identity.publicKey);
     const profile = await getMemberProfile(identity.publicKey);
+    // The row comes from the copy open when it was read (getDb follows a switch): with the phone moved on, it may be
+    // another community's, and none of it goes to this one (#2461 review).
+    if (!(await stillOnCommunity(anchorUrl))) return false;
 
     const canonical = await getCanonicalProfile();
     // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
@@ -6884,6 +6887,9 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
         // `return false` above leaves it for the next retry, and a change kept while this was out
         // waits for the next.
         await clearPendingProfileChange(anchorUrl, pending);
+        // The local mirror writes the copy open now (getDb): after a switch while the update was out, that is another
+        // community's, and this one's profile stays out of it. This community's next members sync brings it home.
+        if (!(await stillOnCommunity(anchorUrl))) return true;
         // Mirror the canonical avatar into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
@@ -6897,10 +6903,22 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
                     archetype: archetypeRaw || undefined,
                 });
             } catch { /* local mirror is best-effort */ }
+        } else if (callsign !== profile?.callsign) {
+            // A name it has just taken (the one waiting here) goes into the row as well, and only the name: until the
+            // next members sync the row still holds the old one, which the screens show and a later retry here falls
+            // back on (#2461 review).
+            try {
+                await updateMemberProfile(identity.publicKey, { callsign });
+            } catch { /* local mirror is best-effort */ }
         }
         return true;
     } catch {}
     return false;
+}
+
+/** Whether the phone is still on `community`: the copy getDb opens is that community's (pillar-sync's mid-sync check). */
+async function stillOnCommunity(community: string): Promise<boolean> {
+    return getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === getDatabaseFilenameForNode(community);
 }
 
 function _isProfilePhotoError(msg: string): boolean {

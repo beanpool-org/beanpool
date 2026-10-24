@@ -163,6 +163,7 @@ export interface MonthFigures {
     trades: number;
     in: number;
     out: number;
+    more?: boolean;
 }
 
 export interface HomeCards {
@@ -699,6 +700,9 @@ export function dealStatusLine(d: DealItem): string {
 /** "This month: 5 trades · +120 in · −60 out" */
 export function monthSummaryLine(m: MonthFigures): string {
     const trades = tn(m.trades, '{n} trade', '{n} trades');
+    if (m.more) {
+        return t('This month (partial): {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in), out: beansFigure(m.out) });
+    }
     return t('This month: {trades} · +{in} in · −{out} out', { trades, in: beansFigure(m.in), out: beansFigure(m.out) });
 }
 

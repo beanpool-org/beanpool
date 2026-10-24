@@ -629,7 +629,7 @@ function DealsBody({
                     </HomeLine>
                 );
             })}
-            <HomeMore onClick={() => onNavigate('marketplace')} label={t('All deals ›')}>{t('All deals ›')}</HomeMore>
+            <HomeMore onClick={() => onNavigate('marketplace')} label={t('All deals')}>{t('All deals ›')}</HomeMore>
         </div>
     );
 }
@@ -737,7 +737,7 @@ function DecideBody({
                     </HomeLine>
                 );
             })()}
-            <HomeMore onClick={() => onNavigate('projects')} label={t('Decide ›')}>{t('Decide ›')}</HomeMore>
+            <HomeMore onClick={() => onNavigate('projects')} label={t('Decide')}>{t('Decide ›')}</HomeMore>
         </div>
     );
 }
@@ -2029,12 +2029,21 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         </div>
                     </HomeCard>
                 );
-            case 'deals':
-                return c.deals && (
-                    <HomeCard key={id} {...common}>
-                        <DealsBody d={c.deals} onNavigate={onNavigate} />
+            case 'deals': {
+                const d = c.deals;
+                if (!d) return null;
+                const hasItems = (d.items && d.items.length > 0);
+                const showOpen = d.open > 3 || (hasItems && d.open > d.items!.length);
+                return (
+                    <HomeCard
+                        key={id}
+                        {...common}
+                        titleAside={showOpen ? <span className="text-xs font-normal text-text-secondary">{tn(d.open, '{n} open', '{n} open')}</span> : undefined}
+                    >
+                        <DealsBody d={d} onNavigate={onNavigate} />
                     </HomeCard>
                 );
+            }
             case 'enterprise':
                 return c.enterprise && (
                     <HomeCard key={id} {...common}>

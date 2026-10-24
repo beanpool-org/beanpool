@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage } from '@beanpool/core';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
-    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -413,5 +413,23 @@ describe('enterprise latest line: positive incoming ("from"), negative outgoing 
     it('commons: positive is "from Commons", negative is "to Commons"', () => {
         expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: '' })).toBe('Latest: +10 Beans from Commons');
         expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: '' })).toBe('Latest: −10 Beans to Commons');
+    });
+});
+
+describe('deal title line: deleted listing fallback label', () => {
+    it('deleted listing with empty title falls back to Deal without dangling · with or blank row', () => {
+        expect(dealTitleLine({ txId: '1', postId: 'p1', title: '', with: 'Ana', waitsOnMe: false, at: null })).toBe('Deal · with Ana');
+        expect(dealTitleLine({ txId: '1', postId: 'p1', title: '', with: null, waitsOnMe: false, at: null })).toBe('Deal');
+    });
+});
+
+describe('month summary line: partial month indication when more is set', () => {
+    it('shows exact monthly figures when more is falsy', () => {
+        expect(monthSummaryLine({ trades: 3, in: 40, out: 25 })).toBe('This month: 3 trades · +40 in · −25 out');
+        expect(monthSummaryLine({ trades: 3, in: 40, out: 25, more: false })).toBe('This month: 3 trades · +40 in · −25 out');
+    });
+
+    it('shows partial indicator when more is true', () => {
+        expect(monthSummaryLine({ trades: 200, in: 500, out: 300, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
     });
 });

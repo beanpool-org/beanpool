@@ -3124,6 +3124,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(deals).toHaveTextContent('Sourdough · with Ana');
         expect(deals).toHaveTextContent('Mend clothes · with Kofi');
         expect(deals).toHaveTextContent('All deals ›');
+        expect(within(deals).getByRole('button', { name: 'All deals' })).toBeInTheDocument();
 
         // Enterprise card contains name, lifecycle, balance, month, latest, requests
         const ent = screen.getByTestId('home-card-enterprise');
@@ -3138,6 +3139,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(decide).toHaveTextContent('Compost bay');
         expect(decide).toHaveTextContent('Poll: Market on Sundays?');
         expect(decide).toHaveTextContent('Decide ›');
+        expect(within(decide).getByRole('button', { name: 'Decide' })).toBeInTheDocument();
 
         // Groups card contains group names, status, and last message lines
         const groups = screen.getByTestId('home-card-groups');
@@ -3312,6 +3314,26 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(within(ent).getByRole('button', {
             name: 'Local Food Coop · enterprise. 4 keepers. 1 request to approve. Opens the enterprise.',
         })).toBeInTheDocument();
+    });
+
+    it('deals card shows N open count in header when there are more than three deals', async () => {
+        const manyDeals = answer({}, {
+            deals: {
+                open: 5,
+                waiting: 2,
+                waitingOnMe: { txId: 't1', postId: 'p1', title: 'Sourdough' },
+                items: [
+                    { txId: 't1', postId: 'p1', title: 'Sourdough', with: 'Ana', waitsOnMe: true, at: null },
+                    { txId: 't2', postId: 'p2', title: 'Mend clothes', with: 'Kofi', waitsOnMe: false, at: null },
+                    { txId: 't3', postId: 'p3', title: 'Garlic', with: 'River', waitsOnMe: false, at: null },
+                ],
+            },
+        });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(manyDeals));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const deals = await screen.findByTestId('home-card-deals');
+        expect(deals).toHaveTextContent('5 open');
+        expect(within(deals).getAllByTestId('home-deal-item')).toHaveLength(3);
     });
 
     it('navigation: listing tile opens listing, group line opens chat, Pulse tile opens Pulse, deal opens deal', async () => {

@@ -56,7 +56,7 @@ If you take an invitation back and invite the same person again, they get no sec
 
 A group's chat is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions.
 
-- You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words.
+- You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words or photos.
 - When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.
 - A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
@@ -70,7 +70,7 @@ A group's chat works exactly like a chat with one person. Tap a message and smal
 
 - **Reply** quotes it above what you write next. Tap the quote to jump back to what it answers.
 - **React** opens seven emojis. One each; tap it again to take it back. The reactions show as a badge under the message.
-- **Edit**, on your own messages, for 15 minutes. The message then shows **edited**.
+- **Edit**, on your own messages, for 15 minutes. The message then shows **edited**. Photos cannot be edited.
 - **Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.
 - **Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**.
 
@@ -78,7 +78,9 @@ Two or more messages in a row that their authors deleted show as one line, such 
 
 Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
 
-Photos cannot be sent in a group's chat, and a deal cannot be started in one. Both belong in a chat between two people. See "Messages".
+In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo someone else swaps on the server reads **Image unavailable**. A photo message cannot be edited; it can be deleted like any message (the author; a convenor can remove it).
+
+A deal cannot be started in a group's chat: deals belong in a chat between two people. See "Messages".
 
 An **observer** can read the chat but not write in it, react or reply.
 

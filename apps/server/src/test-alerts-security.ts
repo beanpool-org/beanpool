@@ -608,9 +608,9 @@ async function main(): Promise<void> {
         /^An admin lost that role, by deleting their own account\./);
     await told('an owner suspends an admin', () => call('POST', `/api/local/admin/users/${sue}/suspend`, { reason: 'A second time, for the vote.' }, asOwner),
         /^An admin lost that role, suspended by an owner\./, 'ExponentPushToken[sue-admin]');
-    // The moderator's suspension on the report is a pause (removal by vote S1): it opened its own vote, which closes
-    // first, and unkept it gives the role back, told on its own line.
-    const rptKeep = db.prepare("SELECT closes_at FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'").get(rpt) as { closes_at: string } | undefined;
+    // The moderator's suspension on the report is a pause (removal by vote S1): it opened its own vote (since S2 the vote
+    // on removing them), which closes first, and not passed it gives the role back, told on its own line.
+    const rptKeep = db.prepare("SELECT closes_at FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM' AND status = 'open'").get(rpt) as { closes_at: string } | undefined;
     await told("the community does not keep the moderator's pause on the report", async () => { tickDecisions(Date.parse(rptKeep?.closes_at ?? '') + 1); },
         /^Someone was made a moderator again, the suspension not kept by a community vote\./);
     assert(heldNodeRoleOf(rpt) === 'moderator', '5c. the moderator\'s role is back');
@@ -645,7 +645,7 @@ async function main(): Promise<void> {
     await settle(300);
     assert(sEve.status === 200 && heldNodeRoleOf(eve) === null && (historyOf('sec.role').find((e) => /^An admin lost that role, suspended by an owner\./.test(e.detail))?.count ?? 1) >= 2,
         `5c. an owner suspends an admin for its vote: told (${sEve.status})`);
-    const keep = (db.prepare("SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'").get(eve) as { id: string } | undefined)?.id;
+    const keep = (db.prepare("SELECT id FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM' AND status = 'open'").get(eve) as { id: string } | undefined)?.id;
     await told('an owner halts its keep vote', async () => { assert(!!keep && adminHaltDecision(keep, owner, 'Halted: lift it.').success, '5c. the owner halts the keep vote'); },
         /^Someone was made an admin again, the suspension's vote halted by an owner\./);
     assert(heldNodeRoleOf(eve) === 'admin', '5c. the halt gave the role back');

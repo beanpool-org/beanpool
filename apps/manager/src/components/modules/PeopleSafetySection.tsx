@@ -5,8 +5,6 @@ import { useSectionSubTab } from '../../lib/sections';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
-import { DoorSettingPanel } from './DoorSettingPanel';
-import { KnownFloorPanel } from './KnownFloorPanel';
 import { CommunityHealthPanel } from './CommunityHealthPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
@@ -355,12 +353,6 @@ export function PeopleSafetySection({
 
             {subTab === 'invites' && (
                 <div className="space-y-6">
-                    <SectionErrorBoundary sectionName="Who may invite" resetKey={activeNode.id}>
-                        <DoorSettingPanel activeNode={activeNode} viewer={rolesViewer} />
-                    </SectionErrorBoundary>
-                    <SectionErrorBoundary sectionName="The known floor" resetKey={activeNode.id}>
-                        <KnownFloorPanel activeNode={activeNode} viewer={rolesViewer} />
-                    </SectionErrorBoundary>
                     <SectionErrorBoundary sectionName="Community health" resetKey={activeNode.id}>
                         <CommunityHealthPanel activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>

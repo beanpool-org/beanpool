@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { HelpLink } from '../manual/Manual';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
+import { getTfaSessionToken } from '../../lib/node-client';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
 import { WebVisitsCard } from './WebVisitsCard';
 import { AppVersionsCard } from './AppVersionsCard';
-import type { NodeProfile } from '../../lib/profiles';
+import { type NodeProfile, nodeCredential } from '../../lib/profiles';
+import { type Shape, fetchCommunityShape } from '../../lib/community-shape';
 
 /** The Alerts card (AlertsPanel, under Backups & Restore): where each of the server's alerts is listed and marked seen. */
 export const SERVER_ALERTS_ANCHOR = 'server-alerts';
 
-type HomeTab = 'people' | 'economy' | 'bulletin' | 'appliance';
+type HomeTab = 'shape' | 'people' | 'economy' | 'bulletin' | 'appliance';
 
 interface HomeScreenProps {
     communityName: string;
@@ -39,6 +41,8 @@ interface HomeScreenProps {
     onForgetStandby?: (id: string) => Promise<void>;
     /** The node this Home is for: its web app visits card reads it. Without one the card is not shown. */
     activeNode?: NodeProfile;
+    /** How this community works shape settings (optional, will fetch from activeNode if omitted). */
+    shape?: Shape | null;
 }
 
 export function HomeScreen({
@@ -62,8 +66,46 @@ export function HomeScreen({
     onAcknowledgeShutdown,
     onForgetStandby,
     activeNode,
+    shape,
 }: HomeScreenProps) {
     const [shutdownDismissed, setShutdownDismissed] = useState(false);
+    const [communityShape, setCommunityShape] = useState<Shape | null>(shape ?? null);
+
+    useEffect(() => {
+        if (shape !== undefined) {
+            setCommunityShape(shape);
+            return;
+        }
+        let mounted = true;
+        if (activeNode) {
+            fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
+                .then((data) => {
+                    if (mounted) setCommunityShape(data);
+                })
+                .catch(() => {});
+        }
+        return () => {
+            mounted = false;
+        };
+    }, [shape, activeNode?.id, activeNode?.url]);
+
+    const shapeCardText = useMemo(() => {
+        // An answer without the four settings (a node on an older build, an error body) draws no line: Home must still render.
+        const s = communityShape?.settings;
+        if (!s?.join || !s.beans || !s.decisions || !s.knocks) return null;
+        const joinText =
+            s.join.value === 'members'
+                ? 'any member invites'
+                : s.join.value === 'admins'
+                ? 'only admins invite'
+                : s.join.value === 'paused'
+                ? 'paused'
+                : 'open door';
+        const beansText = s.beans.value ? 'Beans on' : 'Beans off';
+        const votesText = s.decisions.value ? 'votes on' : 'votes off';
+        const knocksText = s.knocks.value ? 'requests to join on' : 'requests to join off';
+        return `🧭 How this community works · ${joinText} · ${beansText} · ${votesText} · ${knocksText} · Change ›`;
+    }, [communityShape]);
 
     useEffect(() => {
         setShutdownDismissed(false);
@@ -474,6 +516,18 @@ export function HomeScreen({
                     )
                 )}
             </div>
+
+            {/* How this community works card */}
+            {shapeCardText && (
+                <button
+                    type="button"
+                    data-testid="home-community-shape-card"
+                    onClick={() => onNavigate('shape')}
+                    className="w-full p-4 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md text-left flex items-center justify-between gap-3 text-xs text-nature-300 hover:text-white"
+                >
+                    <span className="break-words leading-relaxed">{shapeCardText}</span>
+                </button>
+            )}
 
             {/* 3. Four cards — Members · Commons pool · Shared enterprises · Circulation this week */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

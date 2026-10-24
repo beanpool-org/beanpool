@@ -18,8 +18,9 @@
  *     Pia (decisions-engine.ts adminEmergencySuspend).
  *  3. The standby's next pull (a delta) holds the enterprise's, Hana's and Pia's standing as the main server wrote it,
  *     at its stamp: the wind-up's status and the pause's come with it and don't stamp the standby's own time over the
- *     main server's. Olly has none, there as here. The pause is all there: Pia 'disabled', its record open, her
- *     moderator role held aside under it, and no role row of hers left.
+ *     main server's. Olly has none, there as here. The pause is all there: Pia 'disabled', its record open (the
+ *     community's vote on removing her, rule 2: removal by vote S2), her moderator role held aside under it, and no role
+ *     row of hers left.
  *  4. A delta since before step 2 on the main server carries the enterprise's, Hana's and Pia's listings, not Olly's;
  *     and on each node the authors whose standing moved since then, which is what that delta's author half reads, are
  *     the same three.
@@ -107,13 +108,17 @@ async function child(): Promise<void> {
             const paused = se.adminEmergencySuspend(a.pia, 'owner:password', 'Threats made to another member at the market');
             return !!se.updateProfile(a.olly, { bio: 'Splits and stacks it too' }) && paused.success;
         },
-        // A member's pause as a node holds it: the record, the role held aside under it, and any role row left.
+        // A member's pause as a node holds it: the record (the node's own Decision about them: the vote on removing them,
+        // with its rule), the role held aside under it, and any role row left.
         pause: async (a: { key: string }) => {
             const { db } = await import('./db/db.js');
-            const record = db.prepare("SELECT id, status FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(a.key) as { id: string; status: string } | undefined;
+            const record = db.prepare("SELECT id, status, effect, params FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM'").get(a.key) as
+                { id: string; status: string; effect: string; params: string | null } | undefined;
             const held = record ? db.prepare('SELECT role FROM suspended_node_roles WHERE decision_id = ?').get(record.id) as { role: string } | undefined : undefined;
             const role = db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(a.key) as { role: string } | undefined;
-            return { record: record?.status ?? null, held: held?.role ?? null, role: role?.role ?? null };
+            let rule: unknown = null;
+            try { rule = JSON.parse(record?.params ?? 'null')?.rule ?? null; } catch { /* not JSON */ }
+            return { record: record?.status ?? null, effect: record?.effect ?? null, rule, held: held?.role ?? null, role: role?.role ?? null };
         },
         fill: async (a: { key: string; at: string }) => {
             const { db } = await import('./db/db.js');
@@ -219,9 +224,10 @@ async function main(): Promise<void> {
         assert(piaThere.status === 'disabled' && !!piaThere.standing && piaThere.standing === onMain.pia.standing && piaThere.updatedAt === onMain.pia.updatedAt,
             `Pia's pause reaches it: 'disabled', with the main server's standing and stamp (${piaThere.status}, ${piaThere.standing} / ${onMain.pia.standing})`);
         const pauseOn = { main: await main.send('pause', { key: pia }), standby: await standby.send('pause', { key: pia }) };
-        assert(pauseOn.main.record === 'open' && pauseOn.main.held === 'moderator' && pauseOn.main.role === null
+        assert(pauseOn.main.record === 'open' && pauseOn.main.effect === 'remove_member' && pauseOn.main.rule === 2
+            && pauseOn.main.held === 'moderator' && pauseOn.main.role === null
             && JSON.stringify(pauseOn.standby) === JSON.stringify(pauseOn.main),
-            `and all of it: the record open, her moderator role held aside under it, no role row left (main ${JSON.stringify(pauseOn.main)}, standby ${JSON.stringify(pauseOn.standby)})`);
+            `and all of it: the record open (the vote on removing her, rule 2), her moderator role held aside under it, no role row left (main ${JSON.stringify(pauseOn.main)}, standby ${JSON.stringify(pauseOn.standby)})`);
 
         console.log('\n— 4. a delta since before the changes —');
         const ids = (rows: Array<{ id: string }>) => rows.map(r => r.id).filter(id => Object.values(posts).includes(id)).sort();

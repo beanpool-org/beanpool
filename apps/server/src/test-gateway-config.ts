@@ -6,11 +6,16 @@
  * 2. getGatewayConfig / updateGatewayConfig persistence.
  * 3. CORS Allowed Origins headers matching.
  * 4. Admin IP allowlist 403 Forbidden interceptor logic.
- * 5. Subsystem Feature Toggles (marketplace, messaging, invites, federation, servePwa) 503/530 interceptor logic.
+ * 5. One switch, servePwa (the headless node's 530). The four that were beside it (marketplace, messaging, federation,
+ *    invites) are gone (How this community works S3): a stored one is never read, a save never keeps one, and a save
+ *    that names one is refused whole (removedGatewaySwitchRefusal). test-shape-upgrade.ts boots a stored one over HTTP.
  * 6. Gateway Rate Limiting 429 Too Many Requests interceptor.
  */
 
-import { getGatewayConfig, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { getGatewayConfig, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG, getLocalConfig, saveLocalConfig } from './config/local-config.js';
+import { removedGatewaySwitchRefusal, REMOVED_GATEWAY_SWITCHES } from './config/gateway.js';
 
 function assert(condition: boolean, message: string) {
     if (!condition) {
@@ -28,8 +33,7 @@ async function runTests() {
 
     // 1. Initial State & Defaults
     const initialGw = getGatewayConfig();
-    assert(initialGw.features.marketplace === true, 'Marketplace feature is enabled by default');
-    assert(initialGw.features.servePwa === true, 'PWA serving is enabled by default');
+    assert(JSON.stringify(initialGw.features) === JSON.stringify({ servePwa: true }), 'PWA serving is enabled by default, and is the only switch');
     assert(initialGw.rateLimiting.enabled === true, 'Rate limiting is enabled by default (#132)');
     assert(initialGw.rateLimiting.maxRequestsPerMinute === 120, 'Default rate limit is 120 req/min (#132)');
 
@@ -38,11 +42,7 @@ async function runTests() {
         corsAllowedOrigins: ['https://app.beanpool.org'],
         adminIpAllowlist: ['127.0.0.1'],
         features: {
-            marketplace: false,
-            messaging: true,
-            federation: true,
-            invites: false,
-            servePwa: true,
+            servePwa: false,
         },
         rateLimiting: {
             enabled: true,
@@ -52,20 +52,36 @@ async function runTests() {
 
     assert(updated.corsAllowedOrigins.includes('https://app.beanpool.org'), 'CORS allowed origins updated');
     assert(updated.adminIpAllowlist.includes('127.0.0.1'), 'Admin IP allowlist updated');
-    assert(updated.features.marketplace === false, 'Marketplace feature toggle updated to false');
-    assert(updated.features.invites === false, 'Invites feature toggle updated to false');
+    assert(updated.features.servePwa === false, 'PWA serving toggled off (a headless node)');
     assert(updated.rateLimiting.enabled === true, 'Rate limiting enabled');
     assert(updated.rateLimiting.maxRequestsPerMinute === 30, 'Rate limit max requests updated');
 
     // Re-fetch to ensure persistence
     const reFetched = getGatewayConfig();
-    assert(reFetched.features.marketplace === false, 'Persisted marketplace feature state verified');
+    assert(reFetched.features.servePwa === false, 'Persisted PWA serving state verified');
     assert(reFetched.rateLimiting.maxRequestsPerMinute === 30, 'Persisted rate limit verified');
 
-    // 3. Reset back to defaults
+    // 3. The switches that are gone: never read, never kept by a save, a save naming one refused whole.
+    const config = getLocalConfig();
+    config.gateway = { ...config.gateway!, features: { marketplace: false, messaging: false, federation: false, invites: false, servePwa: false } as any };
+    saveLocalConfig(config);
+    assert(JSON.stringify(getGatewayConfig().features) === JSON.stringify({ servePwa: false }), 'a stored old switch is never read: servePwa alone');
+    const sneaked = updateGatewayConfig({ features: { servePwa: true, invites: false } as any });
+    const file = JSON.parse(fs.readFileSync(path.join(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'), 'local-config.json'), 'utf8'));
+    assert(JSON.stringify(sneaked.features) === JSON.stringify({ servePwa: true }) && JSON.stringify(file.gateway.features) === JSON.stringify({ servePwa: true }),
+        `a save keeps only servePwa, in the file too: the old ones are dropped (${JSON.stringify(file.gateway.features)})`);
+    for (const k of Object.keys(REMOVED_GATEWAY_SWITCHES)) {
+        const refusal = removedGatewaySwitchRefusal({ features: { servePwa: true, [k]: true } });
+        assert(refusal?.code === 'gateway_switch_removed' && JSON.stringify(refusal.removed) === JSON.stringify([k]) && /How this community works/.test(refusal.error),
+            `a save naming ${k}, even on, is refused: ${refusal?.error}`);
+    }
+    assert(removedGatewaySwitchRefusal({ features: { servePwa: false } }) === null && removedGatewaySwitchRefusal({ corsAllowedOrigins: [] }) === null
+        && removedGatewaySwitchRefusal(null) === null, 'a save of servePwa, or of no switch at all, is not');
+
+    // 4. Reset back to defaults
     updateGatewayConfig(DEFAULT_GATEWAY_CONFIG);
     const reset = getGatewayConfig();
-    assert(reset.features.marketplace === true, 'Gateway config reset back to defaults');
+    assert(reset.features.servePwa === true, 'Gateway config reset back to defaults');
     assert(reset.rateLimiting.enabled === true, 'Rate limiting reset back to enabled (#132)');
 
     console.log('\n⭐️ ALL PHASE 3 GATEWAY CONFIGURATION CHECKS PASSED.');

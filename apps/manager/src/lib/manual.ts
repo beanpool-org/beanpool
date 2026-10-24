@@ -26,6 +26,7 @@ export const SCREEN_HELP = {
     login: 'signing-in',
     'cold-start': 'first-time-setup',
     home: 'the-settings-screens',
+    shape: 'how-this-community-works',
     'people/directory': 'members-and-invites',
     'people/invites': 'members-and-invites',
     'people/funnel': 'members-and-invites',

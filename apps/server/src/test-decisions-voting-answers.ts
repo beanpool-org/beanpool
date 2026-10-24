@@ -8,14 +8,18 @@
  *    backup restore.
  * K. Turnout: 30% (25% for removal) of the Decision's electorate ACTIVE in the last 30 days — any signed
  *    activity, not only trades — never fewer than 3. Last activity is backed by records that survive a restore.
- * L. Emergency suspension: an admin suspends at once and a 7-day "Keep this suspension?" Decision opens in the
- *    same step; not passing lifts it; the admin halt works from the settings app (password auth) with a reason.
+ * L. Emergency suspension, the pause (removal by vote S2, scratch/fable-design/DESIGN-removal-by-vote-fable.md §3.2): an
+ *    admin pauses at once, and the node opens the community's 7-day vote on removing the member ("Remove X?", decided as
+ *    a removal) in the same step; not passing lifts it; passing starts the removal's grace window, except for an owner or
+ *    admin, whom no vote removes (§3.8): the pause still ends with its vote. The admin halt works from the settings app
+ *    (password auth) with a reason. Paused, a member still votes on other Decisions over the route, and never on their own
+ *    removal (§3.3).
  *
  * Follow-ups from the review of #921:
  * - L: a plain admin cannot emergency-suspend an owner; a suspension that is lifted (voted down, unresolved,
- *   halted, lifted by hand) gives back exactly the node role the member held; a kept one does not.
+ *   halted, lifted by hand, or passed on an admin) gives back exactly the node role the member held.
  * - K: node-written ledger rows FROM a member (the circulation fee) are not member activity.
- * - I: lastActiveAt is served to the UTC day to everyone but the member; admin keys (params.suspendedBy,
+ * - I: lastActiveAt is served to the UTC day to everyone but the member; admin keys (params.pausedBy, params.suspendedBy,
  *   adminHaltedBy) are not served to members.
  *
  * Run:
@@ -403,18 +407,19 @@ async function run() {
     const suspended = await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Posting threats in the market chat' } });
     assert(suspended.status === 200 && statusOf(troll) === 'disabled', 'an admin suspends immediately');
     const keep = suspended.body.decision;
-    assert(keep && keep.effect === 'keep_suspension' && keep.status === 'open' && keep.subject === troll,
-        'the same step opens a "Keep this suspension?" Decision');
+    assert(keep && keep.effect === 'remove_member' && keep.status === 'open' && keep.subject === troll,
+        `the same step opens the community's vote on removing them (got ${keep?.effect} ${keep?.status})`);
     const windowDays = (Date.parse(keep.closesAt) - Date.parse(keep.opensAt)) / DAY;
     assert(Math.abs(windowDays - 7) < 0.001, `it runs 7 days (got ${windowDays})`);
     assert(keep.franchise === '1m1v' && keep.touches === 'member' && keep.authorPubkey === 'SYSTEM',
         'one member one vote, opened by the node itself');
-    assert(keep.params.memberName === 'Troll' && keep.params.reason === 'Posting threats in the market chat' && keep.params.suspendedBy === 'owner:password',
-        'the card has the name, the reason and who suspended');
-    assert(keep.description.startsWith(`An admin suspended Troll on ${keep.opensAt.slice(0, 10)}. Keep the suspension?`),
-        `the Decision explains itself (got "${keep.description}")`);
+    assert(keep.params.memberName === 'Troll' && keep.params.reason === 'Posting threats in the market chat' && keep.params.pausedBy === 'owner:password'
+        && keep.params.rule === 2, `the card has the name, the reason, who paused and the pause vote's rule (got ${JSON.stringify(keep.params)})`);
+    assert(keep.params.serverRole === 'admin', `and that Troll holds the admin role, which no vote removes (got ${keep.params.serverRole})`);
+    assert(keep.title === 'Remove Troll?' && keep.description.startsWith(`An admin paused Troll on ${keep.opensAt.slice(0, 10)}.`),
+        `the Decision explains itself (got "${keep.title}": "${keep.description}")`);
     const keepTally = tallyDecision(keep.id);
-    assert(keepTally.thresholdRequired === 0.6 && keepTally.quorumRatio === 0.3, '60% to keep, usual 30% quorum');
+    assert(keepTally.thresholdRequired === 0.66 && keepTally.quorumRatio === 0.25, `decided as a removal: 66% to remove, 25% quorum (got ${keepTally.thresholdRequired}, ${keepTally.quorumRatio})`);
 
     const again = await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Posting threats in the market chat' } });
     assert(again.status === 409, 'suspending someone already suspended is refused');
@@ -432,7 +437,7 @@ async function run() {
     const byPlainAdmin = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/suspend`, { actor: plainAdmin, body: { reason: 'An admin trying to strip a co-owner' } });
     assert(byPlainAdmin.status === 403 && statusOf(secondOwner) === 'active' && roleRow(secondOwner)?.role === 'owner',
         `a plain admin cannot emergency-suspend an owner (got ${byPlainAdmin.status} ${JSON.stringify(byPlainAdmin.body)})`);
-    assert(!(db.prepare("SELECT 1 FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(secondOwner)), 'and no vote opens');
+    assert(!(db.prepare('SELECT 1 FROM decisions WHERE subject = ?').get(secondOwner)), 'and no vote opens');
     const secondOwnerRole = roleRow(secondOwner);
     const ownerSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/suspend`, { actor: owner, body: { reason: 'Trying to lock out the other owner' } });
     assert(ownerSuspend.status === 200, 'with two owners, another owner can suspend one (and the vote decides)');
@@ -461,14 +466,24 @@ async function run() {
     assert(getDecision(downVote.id)!.status === 'failed' && statusOf(troll) === 'active', 'voted down (25% yes) lifts the suspension');
     assert(sameRole(trollRole2, roleRow(troll)), 'and gives the role back exactly');
 
-    // Kept → stays suspended.
+    // Passed on an admin → no vote removes an owner or admin (§3.8): not carried out, and the pause still ends with its vote.
+    const trollRole3 = roleRow(troll);
     const keptVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Third incident, same person' } })).body.decision;
     for (const v of voters.slice(0, 4)) castDecisionVote(keptVote.id, v, true);
     closeForTick(keptVote.id);
     tickDecisions();
-    assert(getDecision(keptVote.id)!.status === 'executed' && statusOf(troll) === 'disabled', 'kept by 60%+ → the suspension stays');
-    assert(!roleRow(troll), 'kept: the node role stays gone');
+    assert(getDecision(keptVote.id)!.status === 'execution_blocked' && statusOf(troll) === 'active',
+        `passed on an admin, the removal is not carried out and the pause lifts with its vote (${getDecision(keptVote.id)!.status}, ${statusOf(troll)})`);
+    assert(sameRole(trollRole3, roleRow(troll)), 'and gives the admin role back exactly');
     assert(!(db.prepare('SELECT 1 FROM suspended_node_roles WHERE decision_id = ?').get(keptVote.id)), 'and nothing is held aside for it any more');
+    // Passed on a member with no role → the removal's grace window starts, the member still paused, as for any removal.
+    const plainTroll = makeMember('PlainTroll', { lastActiveAt: new Date().toISOString() });
+    const plainVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${plainTroll}/suspend`, { body: { reason: 'Threats again, from a member with no role' } })).body.decision;
+    for (const v of voters.slice(0, 4)) castDecisionVote(plainVote.id, v, true);
+    closeForTick(plainVote.id);
+    tickDecisions();
+    assert(getDecision(plainVote.id)!.status === 'execution_pending_grace' && statusOf(plainTroll) === 'disabled',
+        `passed on a member, the removal's grace window starts and they stay paused (${getDecision(plainVote.id)!.status}, ${statusOf(plainTroll)})`);
 
     // The admin halt from the settings app: password auth, written reason required; halting the vote lifts it.
     const halt = second.body.decision;
@@ -499,7 +514,16 @@ async function run() {
     const keyAdmin = voters[2];
     grantNodeRole(keyAdmin, 'admin', owner);
     const byKey = await callRouter(admin, 'POST', `/api/local/admin/users/${voters[1]}/suspend`, { actor: keyAdmin, body: { reason: 'Signed admin session suspension' } });
-    assert(byKey.status === 200 && byKey.body.decision.params.suspendedBy === keyAdmin, 'a signed admin session is attributed to its key');
+    assert(byKey.status === 200 && byKey.body.decision.params.pausedBy === keyAdmin, 'a signed admin session is attributed to its key');
+
+    // The voter rule over the routes (design §3.3): LVoter1, paused, still votes on another Decision, and never on their own removal.
+    const otherOpen = createDecision({ authorPubkey: voters[0], title: 'Freeze OtherTarget', description: 'Another vote while LVoter1 is paused', touches: 'member', effect: 'freeze_credit', subject: makeMember('OtherTarget') });
+    const pausedVotes = await callRouter(commons, 'POST', `/api/commons/decisions/${otherOpen.id}/vote`, { actor: voters[1], body: { support: true } });
+    assert(pausedVotes.status === 200 && pausedVotes.body?.success === true, `paused, a member still votes on another Decision (got ${pausedVotes.status} ${JSON.stringify(pausedVotes.body)})`);
+    const ownRemoval = await callRouter(commons, 'POST', `/api/commons/decisions/${byKey.body.decision.id}/vote`, { actor: voters[1], body: { support: false } });
+    assert(ownRemoval.status === 400 && /you/i.test(ownRemoval.body?.error ?? '') && !(db.prepare('SELECT 1 FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?').get(byKey.body.decision.id, voters[1])),
+        `and never on their own removal (got ${ownRemoval.status} ${JSON.stringify(ownRemoval.body)})`);
+    decisionsEngine.adminHaltDecision(otherOpen.id, owner, 'Closing the route check, so its author may propose again');
 
     // Giving back an owner or admin role takes an owner (node_roles: only an owner grants them). These use a
     // KEY-authenticated plain admin — the password acts as owner, which is how the halt test above missed it.
@@ -620,8 +644,8 @@ async function run() {
     const suspendedCard = byKey.body.decision;
     const memberList = await callRouter(commons, 'GET', '/api/commons/decisions', { actor: voters[0] });
     const memberCard = memberList.body.decisions.find((d: any) => d.id === suspendedCard.id);
-    assert(memberCard && !('suspendedBy' in (memberCard.params || {})) && memberCard.params.reason === 'Signed admin session suspension',
-        'members see the reason on the keep-suspension card, not which admin key suspended');
+    assert(memberCard && !('pausedBy' in (memberCard.params || {})) && !('suspendedBy' in (memberCard.params || {})) && memberCard.params.reason === 'Signed admin session suspension',
+        'members see the reason on the pause vote\'s card, not which admin key paused');
     const listJson2 = JSON.stringify(memberList.body);
     assert(!listJson2.includes(keyAdmin) && !listJson2.includes('owner:password'), 'no admin key anywhere in the member list');
     const haltedCard = memberList.body.decisions.find((d: any) => d.id === halt.id);
@@ -631,7 +655,7 @@ async function run() {
     assert(memberDetail.status === 200 && !JSON.stringify(memberDetail.body).includes(keyAdmin), 'nor in the detail response');
     const adminDecisions = await callRouter(admin, 'POST', '/api/local/admin/decisions');
     const adminCard = adminDecisions.body.decisions.find((d: any) => d.id === suspendedCard.id);
-    assert(adminCard?.params?.suspendedBy === keyAdmin, 'the admin Decisions list still says who suspended');
+    assert(adminCard?.params?.pausedBy === keyAdmin, 'the admin Decisions list still says who paused');
     const heard: any[] = [];
     // A member's socket, on the member feed, so it hears each event in full: a key-less one hears no Decision's doorbell on
     // a local community (its Decisions are members-only, 2026-10-01), and a bare doorbell could carry no key anyway.

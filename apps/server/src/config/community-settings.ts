@@ -8,10 +8,9 @@
  *
  * - local-config.json: `callsign`, `communityName`, `location`, `contactEmail`, `contactPhone`, `currencyType`,
  *   `currencyValue`, `thresholds`, and `gateway` without its admin IP allowlist. The gateway is the community's:
- *   origins its web app may call from, the subsystem switches (marketplace, messaging, federation, invites, the web
- *   app) and the request limit. The allowlist names addresses on one server's own network (a LAN, a home address, the
- *   old host's), so it stays with each server: taken over, it could lock the owners out of the Settings they need
- *   right then.
+ *   origins its web app may call from, whether it serves the web app, and the request limit. The allowlist names
+ *   addresses on one server's own network (a LAN, a home address, the old host's), so it stays with each server: taken
+ *   over, it could lock the owners out of the Settings they need right then.
  * - node_config rows: the accepted audit baseline and its note, the pricing guide's source and seasonality, the snapshot
  *   schedule, the door (who may invite, config/door.ts), whether a confirmation against the names list needs two
  *   admins (engine/names-list.ts), and the listing promise's ticked lines and closing day (engine/directory-promise.ts). The baseline travels only where the main server has one (every main server writes one at its first
@@ -29,6 +28,14 @@
  * and applies none of it: while it is a standby its own name, directory choices and thresholds are its own. A take-over
  * installs the kept record in its `community-settings` step, before `role` (services/takeover.ts); a standby promoted by
  * hand installs it at its first boot as a main server (initStateEngine). Installing is safe to run again.
+ *
+ * ## A main server from before How this community works S3
+ *
+ * Its record can carry what S3 took away: a gateway switch that is gone (marketplace, messaging, federation, invites:
+ * gateway.ts REMOVED_GATEWAY_SWITCHES) and the update schedule's 0, Never. A standby keeps both as sent, and installing
+ * the record carries them over the way this server's own boot does (config/community-shape-upgrade.ts), so a take-over
+ * from such a main server runs the community as that server did: paused where its invites switch was off, unlisted
+ * where it was never sent.
  */
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
@@ -39,6 +46,8 @@ import type { SyncCommunitySettings } from '@beanpool/engine';
 import { cleanLabel } from './clean-label.js';
 import { cleanStartCommunityUrl } from './start-community.js';
 import { cleanPromiseRow } from '../engine/directory-promise.js';
+import { REMOVED_GATEWAY_SWITCHES } from './gateway.js';
+import { upgradeLegacyShape, type ShapeUpgrade } from './community-shape-upgrade.js';
 
 export type { SyncCommunitySettings };
 
@@ -111,7 +120,7 @@ export function readCommunitySettings(): SyncCommunitySettings {
             publishContactEmail: n.publishContactEmail === true,
             publishContactPhone: n.publishContactPhone === true,
             publishHealth: n.publishHealth !== false,
-            directoryPushIntervalHours: n.directoryPushIntervalHours ?? 12,
+            directoryPushIntervalHours: n.directoryPushIntervalHours ?? DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS,
         },
     };
 }
@@ -146,7 +155,8 @@ const thresholds: Check<Record<string, number>> = (v) => {
     return out;
 };
 
-const GATEWAY_FEATURES = ['marketplace', 'messaging', 'federation', 'invites', 'servePwa'] as const;
+/** The web app's switch, and those that are gone, kept as sent for the install to carry over (the header). */
+const GATEWAY_FEATURES = ['servePwa', ...Object.keys(REMOVED_GATEWAY_SWITCHES)] as const;
 
 /** The gateway's community parts; an admin IP allowlist in it is never read. */
 const gateway: Check<NonNullable<SyncCommunitySettings['localConfig']['gateway']>> = (v) => {
@@ -230,15 +240,20 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
 };
 
 /**
- * How often the directory is told, in whole hours; 0 is never. The publisher's timer (services/directory-publisher.ts)
+ * How often the directory is told, in whole hours, from 1. The publisher's timer (services/directory-publisher.ts)
  * can't wait longer than 2^31 - 1 ms: past that, below zero, or a fraction of an hour that rounds to nothing, and Node
  * fires it every millisecond, a flood on the directory registry every community shares. The admin route
- * (routes/settings.ts) takes the same, and both Settings screens offer 0 to 24.
+ * (routes/settings.ts) takes the same. 0 was Never, a second way not to be listed: Listed (the `publishToDirectory`
+ * switch, How this community works) is the one now, and a stored 0 is carried over to it once
+ * (config/community-shape-upgrade.ts).
  */
 export const MAX_DIRECTORY_PUSH_INTERVAL_HOURS = Math.floor((2 ** 31 - 1) / 3_600_000);
+export const DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS = 12;
 export function isDirectoryPushInterval(v: unknown): v is number {
-    return Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_DIRECTORY_PUSH_INTERVAL_HOURS;
+    return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_DIRECTORY_PUSH_INTERVAL_HOURS;
 }
+/** The schedule's old Never, which a main server from before S3 may still send (the header). */
+export const LEGACY_NEVER_INTERVAL = 0;
 
 const DIRECTORY_CHECKS: Record<(typeof COMMUNITY_DIRECTORY_FIELDS)[number], Check<unknown>> = {
     serviceRadius: orNull(radius),
@@ -247,7 +262,7 @@ const DIRECTORY_CHECKS: Record<(typeof COMMUNITY_DIRECTORY_FIELDS)[number], Chec
     publishContactEmail: bool,
     publishContactPhone: bool,
     publishHealth: bool,
-    directoryPushIntervalHours: (v) => (isDirectoryPushInterval(v) ? v : BAD),
+    directoryPushIntervalHours: (v) => (isDirectoryPushInterval(v) || v === LEGACY_NEVER_INTERVAL ? v : BAD),
 };
 
 /**
@@ -391,6 +406,14 @@ export function installCommunitySettings(): InstallOutcome {
         if (Object.keys(directory).length > 0) updateNodeConfig(directory);
         upsert.run(KEPT_COMMUNITY_SETTINGS_KEY, JSON.stringify({ ...kept, installedAt }));
     })();
+    // What a main server from before S3 sent that S3 took away, carried over as this server's own boot does (the header).
+    // A failure is the boot's to carry again (upgradeLegacyShapeAtBoot): the settings themselves are installed.
+    let upgraded: ShapeUpgrade = { carried: [], told: [] };
+    try {
+        upgraded = upgradeLegacyShape();
+    } catch (e: any) {
+        logger.error('SYS', `[Settings] Installed the community's settings, but could not carry over what is from before How this community works: ${e?.message || e}. It is tried again at the next start as the main server.`);
+    }
     // The snapshot timer runs on the schedule it was armed with, not on the row. A take-over finished at boot
     // (resumeTakeoverAtBoot, after index.ts armed the scheduler from this server's own row) has no restart after it:
     // without this, the promoted server kept the standby's schedule until its next restart while the Backup tab
@@ -405,7 +428,8 @@ export function installCommunitySettings(): InstallOutcome {
     return {
         installed: true,
         detail: `${name ? `"${name}"; ` : ''}${count} setting(s) as the main server had them${kept.copiedAt ? ` at ${kept.copiedAt}` : ''}`
-            + (hidden.length ? `; the directory is not sent its ${hidden.join(' or ')}` : ''),
+            + (hidden.length ? `; the directory is not sent its ${hidden.join(' or ')}` : '')
+            + (upgraded.carried.length ? `; carried over from before How this community works: ${upgraded.carried.join(', ')}` : ''),
     };
 }
 

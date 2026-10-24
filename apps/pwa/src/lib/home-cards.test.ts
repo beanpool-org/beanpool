@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage } from '@beanpool/core';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
-    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -140,7 +140,7 @@ describe('the words (§3.1, §9)', () => {
 
     it('Beans: their own balance, plain for a new member, the tier as a word only', () => {
         expect(beansLines(beans)).toEqual({ line: '0 Beans · nothing to repay', note: 'Your credit opens with a first trade.' });
-        expect(beansLines({ balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false })).toEqual({ line: '-35 Beans · room to spend 165', note: 'Resident' });
+        expect(beansLines({ balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false })).toEqual({ line: '−35 Beans · room to spend 165', note: 'Resident' });
         expect(beansLines({ balance: 1, room: 200, tier: 'Resident', activated: true, frozen: false }).line).toBe('1 Bean · room to spend 200');
         expect(beansLines({ balance: 12, room: 0, tier: 'Resident', activated: true, frozen: true }).line).toBe('12 Beans · spending paused');
     });
@@ -149,16 +149,16 @@ describe('the words (§3.1, §9)', () => {
         const at = (balance: number) => beansLines({ balance, room: 2310, tier: 'Resident', activated: true, frozen: false }).line;
         expect(at(1234)).toBe('1,234 Beans · room to spend 2,310');
         expect(at(1234.5)).toBe('1,234.5 Beans · room to spend 2,310');
-        expect(at(-1234.56)).toBe('-1,234.56 Beans · room to spend 2,310');
+        expect(at(-1234.56)).toBe('−1,234.56 Beans · room to spend 2,310');
         expect(at(1234567.89)).toBe('1,234,567.89 Beans · room to spend 2,310');
-        expect(at(-0.5)).toBe('-0.5 Beans · room to spend 2,310');
+        expect(at(-0.5)).toBe('−0.5 Beans · room to spend 2,310');
         expect(at(12.5)).toBe('12.5 Beans · room to spend 2,310');
         // Elsewhere amounts are the digits alone, with the language's decimal separator (core formatNumber).
         addDateWords('fr', frDates);
         setLanguage('fr');
         try {
             expect(at(1234.5).startsWith('1234,5 ')).toBe(true);
-            expect(at(-0.5).startsWith('-0,5 ')).toBe(true);
+            expect(at(-0.5).startsWith('−0,5 ')).toBe(true);
         } finally {
             setLanguage('en');
         }
@@ -395,5 +395,41 @@ describe('a pinned Find your community on the web (#1517)', () => {
     it('after 30 days it is a card like any other: drawn where the list puts it', () => {
         expect(shown(global(30), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
         expect(shown(global(30), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+    });
+});
+
+describe('enterprise latest line: positive incoming ("from"), negative outgoing ("to")', () => {
+    it('member: positive incoming is "from", negative outgoing is "to"', () => {
+        expect(enterpriseLatestLine({ kind: 'member', amount: 12, who: 'Ana', at: '' })).toBe('Latest: +12 Beans from Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: -50, who: 'Ana', at: '' })).toBe('Latest: −50 Beans to Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount: -1, who: 'Ana', at: '' })).toBe('Latest: −1 Bean to Ana');
+    });
+
+    it('deal / escrow: positive is "from escrow", negative is "to escrow"', () => {
+        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: '' })).toBe('Latest: +25 Beans from escrow');
+        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: '' })).toBe('Latest: −25 Beans to escrow');
+    });
+
+    it('commons: positive is "from Commons", negative is "to Commons"', () => {
+        expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: '' })).toBe('Latest: +10 Beans from Commons');
+        expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: '' })).toBe('Latest: −10 Beans to Commons');
+    });
+});
+
+describe('deal title line: deleted listing fallback label', () => {
+    it('deleted listing with empty title falls back to Deal without dangling · with or blank row', () => {
+        expect(dealTitleLine({ txId: '1', postId: 'p1', title: '', with: 'Ana', waitsOnMe: false, at: null })).toBe('Deal · with Ana');
+        expect(dealTitleLine({ txId: '1', postId: 'p1', title: '', with: null, waitsOnMe: false, at: null })).toBe('Deal');
+    });
+});
+
+describe('month summary line: partial month indication when more is set', () => {
+    it('shows exact monthly figures when more is falsy', () => {
+        expect(monthSummaryLine({ trades: 3, in: 40, out: 25 })).toBe('This month: 3 trades · +40 in · −25 out');
+        expect(monthSummaryLine({ trades: 3, in: 40, out: 25, more: false })).toBe('This month: 3 trades · +40 in · −25 out');
+    });
+
+    it('shows partial indicator when more is true', () => {
+        expect(monthSummaryLine({ trades: 200, in: 500, out: 300, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
     });
 });

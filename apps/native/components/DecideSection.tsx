@@ -15,12 +15,35 @@ import {
     type MyPoolVoting,
     castDecisionVote,
 } from '../utils/db';
+import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
-import { DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
+import {
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline,
+    poolVoteBlocker, turnoutLine, voiceCreditsLine,
+} from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
 import { signedRequestWords } from './signed-request-lines';
+
+/**
+ * The question Decide's button and the Commons "+" ask before a Decision can be proposed, whole, in the member's language.
+ * With Beans on, a member proposes once they have completed a trade (or as a node admin). With Beans off no trade can be made,
+ * so only node admins and members who traded before Beans went off can propose (checkProposalStanding), and nothing may
+ * ask for a trade. True when it refused.
+ */
+export function proposeRefusal(canPropose: boolean, hasOpenDecision: boolean, beans: boolean): boolean {
+    if (!canPropose) {
+        if (beans) Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
+        else Alert.alert(t('No Trades Here'), t("With Beans switched off, nobody can complete a trade here, so you can't propose a Decision. Node admins can."));
+        return true;
+    }
+    if (hasOpenDecision) {
+        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
+        return true;
+    }
+    return false;
+}
 
 /**
  * What a Decision does, what it touches and where it ended, as the node names them: word() keys, shown through t(). A
@@ -58,6 +81,7 @@ interface Props {
     activeView: 'open' | 'history';
     onChangeView: (view: 'open' | 'history') => void;
     preview?: boolean;
+    features?: NodeFeatures | null;
 }
 
 export function DecideSection({
@@ -72,8 +96,10 @@ export function DecideSection({
     activeView,
     onChangeView,
     preview = false,
+    features,
 }: Props) {
     const { theme, colors } = useTheme();
+    const showsBeans = beansOn(features);
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
@@ -680,14 +706,16 @@ export function DecideSection({
             {/* OPEN DECISIONS VIEW */}
             {activeView === 'open' && (
                 <>
-                    {/* Propose Decision Banner (a completed trade or a node admin; 1 open per author; no bond) */}
+                    {/* Propose Decision Banner (a completed trade or a node admin; with Beans off no new trade can count; 1 open per author; no bond) */}
                     <View style={styles.proposeBanner}>
                         <View style={styles.proposeHeaderRow}>
                             <Text style={styles.proposeTitle}>{t('🌱 Propose Community Action')}</Text>
                             <Text style={{ fontSize: 12, color: colors.text.muted }}>{t('No bond required')}</Text>
                         </View>
                         <Text style={styles.proposeDesc}>
-                            {t('Binding decisions execute automatically upon passing (§3.7). Open to members who have completed a trade, and to node admins.')}
+                            {showsBeans
+                                ? t('Binding decisions execute automatically upon passing (§3.7). Open to members who have completed a trade, and to node admins.')
+                                : t('Binding decisions execute automatically upon passing (§3.7). Open to node admins, and to members who completed a trade before Beans were switched off.')}
                         </Text>
                         {preview ? (
                             <LocalCommunityMark variant="action" feature="decisions" label={t('+ Propose a Decision')} />
@@ -697,14 +725,7 @@ export function DecideSection({
                                 accessibilityLabel={t('Propose a Community Decision')}
                                 style={[styles.proposeBtn, (!canPropose || hasOpenDecision) && styles.proposeBtnDisabled]}
                                 onPress={() => {
-                                    if (!canPropose) {
-                                        Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
-                                        return;
-                                    }
-                                    if (hasOpenDecision) {
-                                        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
-                                        return;
-                                    }
+                                    if (proposeRefusal(canPropose, hasOpenDecision, showsBeans)) return;
                                     onOpenPropose();
                                 }}
                             >
@@ -715,7 +736,9 @@ export function DecideSection({
                         )}
                         {!preview && !canPropose && (
                             <Text style={styles.gateWarning}>
-                                {t('⚠️ You can propose once you have completed a trade.')}
+                                {showsBeans
+                                    ? t('⚠️ You can propose once you have completed a trade.')
+                                    : t("⚠️ With Beans switched off, you can't complete a trade here, so you can't propose. Node admins can.")}
                             </Text>
                         )}
                         {!preview && canPropose && hasOpenDecision && (
@@ -802,8 +825,20 @@ export function DecideSection({
                                         </View>
                                     )}
 
+                                    {/* A pause's own vote: the node opened it when an admin paused someone (removal by vote S2) */}
+                                    {isPauseVote(item) && (
+                                        <View style={styles.keepBox} testID="pause-vote-box">
+                                            <Text style={styles.keepHeadline}>
+                                                {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                            </Text>
+                                            <Text style={styles.keepBody}>
+                                                {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                            </Text>
+                                        </View>
+                                    )}
+
                                     {/* §3.8 Removal Ballot debt-write-off line */}
-                                    {item.effect === 'remove_member' && (
+                                    {showsBeans && item.effect === 'remove_member' && (
                                         <View style={styles.debtWarningBox} testID="removal-debt-write-off-box">
                                             <Text style={styles.debtWarningLabel}>{inCapitalsOf(t('Mandatory Debt Disclosure (§3.8)'))}</Text>
                                             <Text style={styles.debtWriteOffText} testID="removal-debt-write-off-line">
@@ -926,6 +961,8 @@ export function DecideSection({
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👍 Vote YES')} />
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👎 Vote NO')} />
                                             </View>
+                                        ) : isOwnRemoval(item, identity?.publicKey) ? (
+                                            <Text style={styles.blockerText} testID="own-removal-note">{t("This vote is about you, so you can't vote on it.")}</Text>
                                         ) : (
                                             <View style={styles.voteButtonsRow}>
                                                 <Pressable

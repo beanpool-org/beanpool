@@ -52,6 +52,7 @@ html, body, body *:not(code):not(pre):not(kbd):not(samp):not(.font-mono) { font-
  */
 export const SCREENS = [
     { tab: 'home' },
+    { tab: 'shape' },
     { tab: 'people', sub: 'directory' },
     { tab: 'people', sub: 'invites' },
     { tab: 'people', sub: 'funnel' },

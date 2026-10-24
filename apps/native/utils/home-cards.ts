@@ -134,7 +134,19 @@ export interface HomeEventItem {
     /** A repeating event's pattern and last date (DESIGN-event-times §8), for the ↻ caption; absent on a one-off. */
     repeat?: RepeatPattern | null; repeatUntil?: string | null;
 }
-export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }
+export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt?: string | null }
+
+export interface HomeDealItem { txId: string; postId: string; title: string; with: string | null; waitsOnMe: boolean; at: string | null }
+
+export interface HomeMonthFigures { trades: number; in: number; out: number }
+
+export interface HomeEnterpriseLine { amount: number; at: string; kind: 'member' | 'deal' | 'commons' | 'other'; who: string | null }
+
+export interface HomeDecideItem { id: string; title: string; closesAt: string; voted: boolean }
+
+export interface HomeDecidePoll { id: string; title: string; closesAt: string }
+
+export interface HomeGroupLastLine { who: string | null; at: string; text: string; locked?: { ciphertext: string; nonce: string; metadata: string | null } }
 
 /**
  * Find your community's body: GET /api/global/home's, assembled in-process (apps/server routes/global-directory.ts
@@ -164,21 +176,30 @@ export interface HomeCards {
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
-    deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
+    deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: HomeDealItem[] };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
-    enterprise?: { id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded' };
+    enterprise?: {
+        id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded'; keepers?: number;
+        balance?: number; month?: HomeMonthFigures; latest?: HomeEnterpriseLine | null;
+    };
     /** "Your shop and tools" (slice S4′): the member's own shop, or none yet (components/shop/ShopHomeBody.tsx). */
     shop?: ShopHomeCard;
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
-    decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
-    groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean }[]; total: number };
+    decide?: {
+        open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
+        items?: HomeDecideItem[]; poll?: HomeDecidePoll | null;
+    };
+    groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last?: HomeGroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
     pulse?: { items: HomePulseItem[] };
-    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean };
+    beans?: { balance: number; room: number; tier: string; activated: boolean; frozen: boolean; month?: HomeMonthFigures & { fees: number; more: boolean } };
     notices?: { unseen: number; first: { id: string; title: string; line: string } };
     /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
-    community?: { name: string | null; members: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number } };
+    community?: {
+        name: string | null; members: number; listings?: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
+        joined7d?: number; eventsSoon?: number; commonsPot?: number;
+    };
 }
 
 export interface HomeMe {
@@ -1052,7 +1073,29 @@ export function communityLines(card: HomeCards['community'] | undefined, profile
 }
 
 /** "38 communities listed": the worldwide community's count of the communities in its directory. */
-const communitiesListed = (n: number) => tn(n, '{n} community listed', '{n} communities listed', { n: formatCount(n) });
+export const communitiesListed = (n: number) => tn(n, '{n} community listed', '{n} communities listed', { n: formatCount(n) });
+
+/**
+ * Relative time in words for Home rows: "Just now", "5m ago", "2h ago", "3d ago", or the date ("15 Oct").
+ * Shown through t() in the member's language.
+ */
+export function timeAgoInWords(dateString: string | null | undefined, nowMs: number = Date.now()): string {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    const diffMs = nowMs - date.getTime();
+    if (diffMs < 0) return t('Just now');
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return t('Just now');
+    if (diffMin < 60) return t('{n}m ago', { n: diffMin });
+    if (diffHour < 24) return t('{n}h ago', { n: diffHour });
+    if (diffDay < 7) return t('{n}d ago', { n: diffDay });
+    return formatDate(date, 'day-month');
+}
 
 /**
  * The faces and names Who joined may show: a local community's (the members list shows them to members already); on the
@@ -1103,7 +1146,7 @@ export const DECIDE_HREF: HomeHref = { pathname: '/(tabs)/projects', params: { s
  * `decisionsOn` and `hiddenTabsFor`, said again here so this file stays pure; a test holds the two together). The global
  * node has neither.
  */
-export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;
+export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false;
 /** Polls are posts, on every node: the Market's Polls pill (app/(tabs)/market.tsx takes `filter=polls`). Decide never lists them. */
 export const POLLS_HREF: HomeHref = { pathname: '/(tabs)/market', params: { filter: 'polls' } };
 

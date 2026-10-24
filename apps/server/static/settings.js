@@ -145,7 +145,7 @@
             if (tabName === 'moderation' || tabName === 'members') loadAdminData();
             if (tabName === 'members') loadThresholdGroup(AUDIT_THRESHOLD_KEYS);
             if (tabName === 'comms') loadAdminInbox();
-            if (tabName === 'commons') { loadCommonsData(); loadNodeConfig(); loadThresholdGroup(COMMONS_THRESHOLD_KEYS); }
+            if (tabName === 'commons') { loadCommonsData(); loadNodeConfig(); }
             if (tabName === 'pulse') loadPulseChannels();
             if (tabName === 'diagnostics') {
                 unseenWarningErrorCount = 0;
@@ -1458,8 +1458,7 @@
             'isolatedBranchMinTxns', 'maxProjectExpiryDays',
             'sybilFunnelMinInvitees', 'sybilFunnelMinAmount', 'sybilFunnelWindowDays',
         ];
-        const COMMONS_THRESHOLD_KEYS = ['circulationRate'];
-        const ALL_THRESHOLD_KEYS = [...AUDIT_THRESHOLD_KEYS, ...COMMONS_THRESHOLD_KEYS];
+        const ALL_THRESHOLD_KEYS = [...AUDIT_THRESHOLD_KEYS];
 
         let _thresholdsCache = null;
 
@@ -1534,8 +1533,6 @@
         document.getElementById('reset-audit-thresholds-btn').addEventListener('click', () => resetThresholdGroup(AUDIT_THRESHOLD_KEYS, 'audit-thresholds-status'));
 
         // Commons tab (circulation rate)
-        document.getElementById('save-commons-thresholds-btn').addEventListener('click', () => saveThresholdGroup(COMMONS_THRESHOLD_KEYS, 'commons-thresholds-status'));
-        document.getElementById('reset-commons-thresholds-btn').addEventListener('click', () => resetThresholdGroup(COMMONS_THRESHOLD_KEYS, 'commons-thresholds-status'));
 
 
         document.getElementById('refresh-health-btn').addEventListener('click', loadHealthDashboard);
@@ -2011,10 +2008,10 @@
             }
         }
 
-        // Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" community vote.
-        // If the vote does not pass, the suspension lifts by itself. The reason is shown to members.
+        // Emergency suspension: takes effect at once and opens the community's 7-day vote on removing the member (removal
+        // by vote S2). If the vote does not pass, the suspension lifts by itself. The reason is shown to members.
         async function suspendMember(pubkey) {
-            const reason = prompt('Suspend now. Members vote over 7 days on whether to keep it; if they do not, it lifts by itself.\n\nReason (members will see this, at least 10 characters):');
+            const reason = prompt('Suspend now. Members vote over 7 days on removing them; if the vote does not pass, the suspension lifts by itself.\n\nReason (members will see this, at least 10 characters):');
             if (reason === null) return;
             if (reason.trim().length < 10) { alert('Please give a reason of at least 10 characters.'); return; }
             try {
@@ -2025,7 +2022,7 @@
                 });
                 const body = await res.json().catch(() => ({}));
                 if (res.ok) {
-                    alert('Suspended. A 7-day community vote on keeping it is now open.');
+                    alert('Suspended. A 7-day community vote on removing them is now open.');
                     loadAdminData();
                 } else {
                     alert('Suspend failed: ' + (body.error || res.status));
@@ -4506,16 +4503,7 @@
                 if (rateMaxInput) rateMaxInput.value = config.rateLimiting?.maxRequestsPerMinute || 600;
                 
                 const features = config.features || {};
-                const checkMarketplace = document.getElementById('gw-feat-marketplace');
-                const checkMessaging = document.getElementById('gw-feat-messaging');
-                const checkFederation = document.getElementById('gw-feat-federation');
-                const checkInvites = document.getElementById('gw-feat-invites');
                 const checkPwa = document.getElementById('gw-feat-pwa');
-
-                if (checkMarketplace) checkMarketplace.checked = !!features.marketplace;
-                if (checkMessaging) checkMessaging.checked = !!features.messaging;
-                if (checkFederation) checkFederation.checked = !!features.federation;
-                if (checkInvites) checkInvites.checked = !!features.invites;
                 if (checkPwa) checkPwa.checked = !!features.servePwa;
             } catch (e) {
                 console.warn('Failed to load gateway config:', e);
@@ -4541,10 +4529,6 @@
                         maxRequestsPerMinute: Number.isFinite(rateMax) && rateMax > 0 ? rateMax : 120,
                     },
                     features: {
-                        marketplace: !!document.getElementById('gw-feat-marketplace')?.checked,
-                        messaging: !!document.getElementById('gw-feat-messaging')?.checked,
-                        federation: !!document.getElementById('gw-feat-federation')?.checked,
-                        invites: !!document.getElementById('gw-feat-invites')?.checked,
                         servePwa: !!document.getElementById('gw-feat-pwa')?.checked,
                     }
                 };

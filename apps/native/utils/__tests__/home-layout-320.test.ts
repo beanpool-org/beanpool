@@ -396,3 +396,41 @@ describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', ()
         for (const l of labels) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
     });
 });
+
+describe('new fixed strings at 320dp x 1.3 (Home slice W5)', () => {
+    it('none of the new fixed strings has a clipped word (measured at 320dp and 1.3x text)', () => {
+        const strings = [
+            'All deals ›',
+            'Deal · with Ana',
+            'Deal',
+            'waiting on you',
+            'waiting on them',
+            'waiting on you · 2h ago',
+            'waiting on them · 1d ago',
+            'Balance 340 Beans · 3 keepers',
+            'This month: 5 trades · +120 in · −60 out',
+            'This month (partial): 5 trades · +120 in · −60 out',
+            'Latest: +12 Beans from Ana · 2h ago',
+            'Latest: −20 Beans to Ana · 2h ago',
+            'Latest: −5 Beans to the Commons · 2h ago',
+            'Latest: +50 Beans from a deal · 2h ago',
+            'Latest: −60 Beans · 2h ago',
+            '1 request to approve',
+            '3 requests to approve',
+            'Poll: Market on Sundays?',
+            'You voted',
+            'Not yet',
+            '🔒 Message',
+            'Decide ›',
+            'Commons pot 310 Beans',
+            '81 members · 4 joined this week',
+            '23 trades this month · Commons pot 310 Beans',
+            '37 listings · 3 events coming up',
+            'by Mullum Ceramics · 3h ago',
+        ];
+        for (const str of strings) {
+            expect(longestWord(str, num(s.rowLine.fontSize)), str).toBeLessThan(CARD_INNER);
+            expect(longestWord(str, num(s.rowSub.fontSize)), str).toBeLessThan(CARD_INNER);
+        }
+    });
+});

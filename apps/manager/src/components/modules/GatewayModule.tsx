@@ -137,7 +137,7 @@ export function GatewayModule({
             <div className="border-b border-nature-800 pb-4">
                 <h3 className="text-lg font-bold text-white m-0">🛡️ Node Gateway Self-Protection Config</h3>
                 <p className="text-xs text-nature-400 m-0 mt-1">
-                    Configure CORS allowed origins, IP allowlists, rate limiting, and subsystem feature flags.
+                    Configure CORS allowed origins, IP allowlists, rate limiting, and whether this node serves the web app.
                 </p>
             </div>
 
@@ -223,66 +223,11 @@ export function GatewayModule({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Feature Toggles */}
+                {/* The web app: on, or a headless node. Who can join, chat, the Market and federation have no switch here
+                    (How this community works S3): the server refuses a save that names one. */}
                 <div className="space-y-3">
-                    <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider">Subsystem Feature Toggles</h4>
+                    <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider">Web App</h4>
                     <div className="space-y-3 bg-nature-950/60 p-4 rounded-xl border border-nature-800/80 text-xs">
-                        <label className="flex items-center justify-between cursor-pointer group">
-                            <span className="text-nature-200 font-semibold group-hover:text-white">🛒 Marketplace (Posts & Escrow)</span>
-                            <input
-                                type="checkbox"
-                                checked={gateway.features.marketplace}
-                                onChange={(e) =>
-                                    onChangeGateway({
-                                        ...gateway,
-                                        features: { ...gateway.features, marketplace: e.target.checked },
-                                    })
-                                }
-                                className="w-4 h-4 accent-terra-500 rounded cursor-pointer"
-                            />
-                        </label>
-                        <label className="flex items-center justify-between cursor-pointer group">
-                            <span className="text-nature-200 font-semibold group-hover:text-white">💬 P2P Direct Messaging</span>
-                            <input
-                                type="checkbox"
-                                checked={gateway.features.messaging}
-                                onChange={(e) =>
-                                    onChangeGateway({
-                                        ...gateway,
-                                        features: { ...gateway.features, messaging: e.target.checked },
-                                    })
-                                }
-                                className="w-4 h-4 accent-terra-500 rounded cursor-pointer"
-                            />
-                        </label>
-                        <label className="flex items-center justify-between cursor-pointer group">
-                            <span className="text-nature-200 font-semibold group-hover:text-white">🌐 Multi-Node Federation</span>
-                            <input
-                                type="checkbox"
-                                checked={gateway.features.federation}
-                                onChange={(e) =>
-                                    onChangeGateway({
-                                        ...gateway,
-                                        features: { ...gateway.features, federation: e.target.checked },
-                                    })
-                                }
-                                className="w-4 h-4 accent-terra-500 rounded cursor-pointer"
-                            />
-                        </label>
-                        <label className="flex items-center justify-between cursor-pointer group">
-                            <span className="text-nature-200 font-semibold group-hover:text-white">🎫 Cryptographic Invites</span>
-                            <input
-                                type="checkbox"
-                                checked={gateway.features.invites}
-                                onChange={(e) =>
-                                    onChangeGateway({
-                                        ...gateway,
-                                        features: { ...gateway.features, invites: e.target.checked },
-                                    })
-                                }
-                                className="w-4 h-4 accent-terra-500 rounded cursor-pointer"
-                            />
-                        </label>
                         <label className="flex items-center justify-between cursor-pointer group">
                             <span className="text-nature-200 font-semibold group-hover:text-white">📱 Static PWA Asset Server</span>
                             <input
@@ -297,6 +242,9 @@ export function GatewayModule({
                                 className="w-4 h-4 accent-terra-500 rounded cursor-pointer"
                             />
                         </label>
+                        <p className="text-[11px] text-nature-400 leading-normal m-0 break-words">
+                            Off, this node serves the API and Settings but not the web app. Who can join is set under How this community works, and connections to other communities on the server (ENABLE_PEER_CONNECTORS).
+                        </p>
                     </div>
                 </div>
 

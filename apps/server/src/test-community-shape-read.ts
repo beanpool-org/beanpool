@@ -178,7 +178,9 @@ async function main(): Promise<void> {
         floorLog: db.prepare('SELECT COUNT(*) AS n FROM known_floor_log').get(),
     });
 
-    type HeldBack = 'named' | 'unnamed' | 'unlisted' | 'probation' | 'never';
+    // No `never`: the schedule's Never is gone (S3), refused by the route and carried over to Listed off at boot
+    // (test-shape-upgrade.ts enumerates it).
+    type HeldBack = 'named' | 'unnamed' | 'unlisted' | 'probation';
     type Hatch = '' | 'ENFORCE_READ_AUTH' | 'ENFORCE_WS_AUTH';
     interface State {
         profile: 'local' | 'global';
@@ -224,7 +226,7 @@ async function main(): Promise<void> {
         const name = st.heldBack === 'unnamed' ? '' : 'Riverside Commons';
         if (name !== lastName) { updateLocalConfig({ communityName: name }); lastName = name; }
         const directory = {
-            directoryPushIntervalHours: st.heldBack === 'never' ? 0 : 12,
+            directoryPushIntervalHours: 12,
             publicAddress: st.heldBack === 'probation'
                 ? { name: 'riverside', mode: 'tunnel' as const, hostname: 'riverside.beanpool.org', status: 'live', probation: true }
                 : null,
@@ -374,22 +376,16 @@ async function main(): Promise<void> {
         }
 
         // Listed: what a push does (it stops at a hold-back before it reaches the network; here the P2P node is never up, so
-        // a push that would go stops there instead), and the schedule's Never, which only the timer reads.
+        // a push that would go stops there instead).
         if (st.hatch === '' && st.rows === 'none') {
             const pushed = await pushDirectoryNow() as { success: boolean; error?: string; heldBack?: string };
-            const interval = se.getNodeConfig().directoryPushIntervalHours;
             const wouldGo = pushed.error === 'P2P node not ready';
-            tally.check('listed.value is whether a push goes, on the schedule', S.listed.value === (wouldGo && interval !== 0), () => `${label()} shape=${S.listed.value} push=${JSON.stringify(pushed)} interval=${interval}`);
+            tally.check('listed.value is whether a push goes', S.listed.value === wouldGo, () => `${label()} shape=${S.listed.value} push=${JSON.stringify(pushed)}`);
             // On the global kind Listed is its kind's (design §2.3), whatever the push does.
             const listedLock = st.profile === 'global' ? 'profile'
                 : pushed.heldBack === 'unlisted' ? 'server_env'
-                : eff.publishToDirectory && interval === 0 ? 'schedule_never'
                 : pushed.heldBack ? 'held_back' : null;
-            tally.check('listed.lock is the push\'s hold-back, or the schedule', lockOf(S.listed) === listedLock, () => `${label()} shape=${lockOf(S.listed)} want=${listedLock}`);
-            if (listedLock === 'schedule_never') {
-                tally.check('the schedule\'s Never says Publish Now still sends', /Publish Now/.test(S.listed.lock!.why) && !/nothing is sent/i.test(S.listed.lock!.why),
-                    () => `${label()} ${S.listed.lock!.why}`);
-            }
+            tally.check('listed.lock is the push\'s hold-back', lockOf(S.listed) === listedLock, () => `${label()} shape=${lockOf(S.listed)} want=${listedLock}`);
         }
         tally.check('listed.configured is publishToDirectory', S.listed.configured === cfg.publishToDirectory && S.listed.source === owned('publishToDirectory'), label);
 
@@ -433,7 +429,7 @@ async function main(): Promise<void> {
 
     async function matrix(ledger: boolean): Promise<void> {
         for (const profile of ['local', 'global'] as const) for (const overrides of OVERRIDE_SETS) for (const rows of ['none', 'admins', 'bad'] as const)
-            for (const preview of [false, true]) for (const heldBack of ['named', 'unnamed', 'unlisted', 'probation', 'never'] as const)
+            for (const preview of [false, true]) for (const heldBack of ['named', 'unnamed', 'unlisted', 'probation'] as const)
                 for (const hatch of ['', 'ENFORCE_READ_AUTH', 'ENFORCE_WS_AUTH'] as const) {
                     await checkState({ profile, overrides, rows, preview, heldBack, hatch, ledger });
                 }
@@ -446,7 +442,7 @@ async function main(): Promise<void> {
     assert(np.ledgerHistory() !== null, 'the ledger has moved');
     await matrix(true);
     tally.report();
-    assert(states === 2 * 2 * OVERRIDE_SETS.length * 3 * 2 * 5 * 3, `the matrix ran ${states} states`);
+    assert(states === 2 * 2 * OVERRIDE_SETS.length * 3 * 2 * 4 * 3, `the matrix ran ${states} states`);
     clearState();
 
     // ── 2. Every switch placed, every lock spoken ──────────────────────────────────────────────
@@ -625,7 +621,7 @@ async function main(): Promise<void> {
     const copied = keepMainServerCommunitySettings({
         localConfig: { communityName: 'Riverside Commons' },
         nodeConfig: { door: 'admins', confirmation: 'off', known_floor: '1200', credit_cap: '2500' },
-        directory: { publishLocation: false, publishMembers: true, publishContactEmail: true, publishContactPhone: false, publishHealth: false, directoryPushIntervalHours: 0 },
+        directory: { publishLocation: false, publishMembers: true, publishContactEmail: true, publishContactPhone: false, publishHealth: false, directoryPushIntervalHours: 6 },
     }, '2026-10-23T08:00:00.000Z');
     assert(copied.kept, 'the main server\'s settings are kept, as a copy brings them');
     const own = { door: rowOf('door'), confirmation: rowOf('confirmation'), location: se.getNodeConfig().publishLocation };
@@ -647,10 +643,10 @@ async function main(): Promise<void> {
     const standbyHttp = await call('GET', null, PATH, undefined, owner);
     assert(standbyHttp.status === 200 && standbyHttp.body?.standby === true && standbyHttp.body?.settings?.join?.value === 'admins',
         `over HTTPS the standby answers the same (${show(standbyHttp)})`);
-    // A standby can't know that its main server publishes (here the copy's schedule is Never, so it doesn't), and where
+    // A standby can't know that its main server publishes (its env and hold-backs are that server's own), and where
     // the switch is off it says what the main server's shape says: off, nothing locked.
     const standbyWhy = fromCopy.settings.listed.lock?.why ?? '';
-    assert(!/main server/i.test(standbyWhy), `the standby's reason claims nothing of the main server, whose copied schedule is Never (${standbyWhy})`);
+    assert(!/main server/i.test(standbyWhy), `the standby's reason claims nothing of the main server, whose env and hold-backs are its own (${standbyWhy})`);
     const SWITCH_OFF: [string, () => void][] = [
         ['the global kind', () => { process.env.NODE_PROFILE = 'global'; }],
         ['its nodeProfile.publishToDirectory override', () => setOverrideRow('publishToDirectory', false)],

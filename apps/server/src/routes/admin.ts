@@ -46,7 +46,7 @@ import {
     getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
-import { gatewayAllowlistRefusal } from '../config/gateway.js';
+import { gatewayAllowlistRefusal, removedGatewaySwitchRefusal } from '../config/gateway.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
@@ -1776,9 +1776,10 @@ function resolveAdminActor(ctx: any): string | null {
     return 'owner:password';
 }
 
-// Emergency suspension (§3.8, answer L): suspends at once and opens a 7-day "Keep this suspension?"
-// Decision in the same transaction. The reason is shown to members on that Decision. With formal Decisions off (the
-// global node) it opens no vote: it lasts the 7 days and lifts itself (decisions-engine adminEmergencySuspend).
+// Emergency suspension (§3.8, answer L), the pause: suspends at once and opens the community's 7-day vote on removing
+// the member (removal by vote S2, decisions-engine pauseMember) in the same transaction. The reason is shown to members
+// on that Decision. With formal Decisions off (the global node) it opens no vote: it lasts the 7 days and lifts itself
+// (decisions-engine adminEmergencySuspend).
 router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
@@ -1798,7 +1799,7 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     ctx.body = { success: true, decision: result.decision };
 });
 
-// Status: 'active' lifts a suspension (and closes an open "Keep this suspension?" vote about it). Suspending
+// Status: 'active' lifts a suspension (and closes the open vote it opened, on removing them or "Keep this suspension?"). Suspending
 // is only ever the emergency route above — an admin cannot suspend someone with no community review.
 router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -2300,6 +2301,13 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can change its gateway settings')) return;
     const { code, ...body } = (ctx as any).requestBody || {};
+    // The four switches that are gone (config/gateway.ts): a save that names one is refused whole.
+    const removedSwitch = removedGatewaySwitchRefusal(body);
+    if (removedSwitch) {
+        ctx.status = 400;
+        ctx.body = removedSwitch;
+        return;
+    }
     const allowlistRefusal = gatewayAllowlistRefusal(body.adminIpAllowlist, clientIp(ctx));
     if (allowlistRefusal) {
         ctx.status = 400;

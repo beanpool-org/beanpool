@@ -89,6 +89,9 @@ import zlib from 'node:zlib';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lockedDm } from './dm-test-payload.js';
+// The server runs in this process with a 5 s keep-alive; the money section pays 1000 times without yielding, and on CI's
+// Node 22 the next request then reused a socket the server had closed ("fetch failed", four runs on 24 Oct).
+import { localFetch } from './keepalive-test-fetch.js';
 
 const MODE = `[${RUN}]`;
 let run = 0, passed = 0;
@@ -143,7 +146,7 @@ type Res = { status: number; text: string; body: any; etag: string | null; heade
 async function get(urlPath: string, id?: Id | null, extra: Record<string, string> = {}): Promise<Res> {
     beforeCall();
     const started = performance.now();
-    const res = await fetch(`${BASE}${urlPath}`, { headers: { ...(id ? signedHeaders('GET', urlPath, '', id) : {}), ...extra } });
+    const res = await localFetch(`${BASE}${urlPath}`, { headers: { ...(id ? signedHeaders('GET', urlPath, '', id) : {}), ...extra } });
     const text = await res.text();
     const ms = performance.now() - started;
     let body: any;
@@ -155,7 +158,7 @@ async function postJson(urlPath: string, id: Id, payload: unknown): Promise<Res>
     beforeCall();
     const started = performance.now();
     const body = JSON.stringify(payload);
-    const res = await fetch(`${BASE}${urlPath}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', urlPath, body, id) } });
+    const res = await localFetch(`${BASE}${urlPath}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', urlPath, body, id) } });
     const text = await res.text();
     let parsed: any;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }
@@ -421,7 +424,7 @@ async function main(): Promise<void> {
         const stranger = await get('/api/home', outsider);
         assert(stranger.status === 403 && stranger.body?.code === 'members_only' && !stranger.text.includes('HomeSentinel'),
             `a key that is no member here is refused 403 members_only (got ${stranger.status} ${stranger.text.slice(0, 80)})`);
-        const head = await fetch(`${BASE}/api/home`, { method: 'HEAD' });
+        const head = await localFetch(`${BASE}/api/home`, { method: 'HEAD' });
         assert(head.status === 401, `and a HEAD is refused as its GET (got ${head.status})`);
         const mine = await get('/api/home', alice);
         assert(mine.status === 200 && mine.body?.me?.joinedAt && mine.body?.profile === 'local' && typeof mine.body?.features?.beans === 'boolean',
@@ -545,6 +548,19 @@ async function main(): Promise<void> {
             `a vote cast moves the tag, and the vote line goes (got ${afterVote.status})`);
         const steady = await get('/api/home', alice, { 'If-None-Match': afterVote.etag! });
         assert(steady.status === 304, `and with nothing else changed, a 304 again (got ${steady.status})`);
+
+        // A vote on removing Alice is never a vote Alice is asked to cast: she can't vote in it (the voter rule refuses her), so
+        // the line would stay all week. Carol, who may vote, is asked (#2430, deciding review r4365798773).
+        const carolVotes = async () => ((await get('/api/home', carol)).body?.cards?.needs?.items ?? []).find((i: any) => i.kind === 'vote')?.count ?? 0;
+        const carolBefore = await carolVotes();
+        db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, franchise, status, opens_at, closes_at)
+                    VALUES ('dec-home-remove-alice', 'SYSTEM', 'HomeSentinel remove alice', 'A removal', 'member', 'remove_member', ?, '1m1v', 'open', ?, ?)`)
+            .run(alice.pk, new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 6 * DAY).toISOString()); // as a pause opens it (S2)
+        const aliceNeeds = (await get('/api/home', alice)).body?.cards?.needs?.items ?? [];
+        assert(!aliceNeeds.some((i: any) => i.kind === 'vote'), `a vote on removing her is no vote Alice is asked to cast (${JSON.stringify(aliceNeeds)})`);
+        const carolAfter = await carolVotes();
+        assert(carolAfter === carolBefore + 1, `and Carol, who may vote in it, is asked (${carolBefore} → ${carolAfter})`);
+        db.prepare("DELETE FROM decisions WHERE id = 'dec-home-remove-alice'").run();
     }
 
     // ── 5. cards= skips work ────────────────────────────────────────────────────────────────────────────────────

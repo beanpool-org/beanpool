@@ -40,10 +40,11 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import {
-    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, homeEventWhen, homeEventRepeats, dealsLine,
-    decideLine, distanceText, findBody, findListed, findOffersStart, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
-    SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
-    type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
+    NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
+    dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, isHomeCardId,
+    joinedLine, monthSummaryLine, nearbyLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
+    starredFirst, stepLines, tierWords, toggleInterest, SKY_NO_PLACE_LINE,
+    type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
@@ -72,7 +73,7 @@ import {
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
-import { CardMenu, HomeCard, HomeLine, HomeMore } from '../components/HomeCard';
+import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
@@ -279,6 +280,638 @@ interface Props {
      */
     addCardType?: string | null;
     onAddCardTaken?: () => void;
+}
+
+// ── Card bodies (DESIGN-home-wide-and-content-fable.md §2, slice W4) ──────────────────────────────────────────────────
+
+function MarketListingItem({
+    item,
+    testId,
+    beansOn,
+    isVisitor,
+    wide,
+    onNavigate,
+    nextImageLoading,
+}: {
+    item: HomeMarketItem;
+    testId: string;
+    beansOn: boolean;
+    isVisitor: boolean;
+    wide: boolean;
+    onNavigate: (page: string, id?: string) => void;
+    nextImageLoading: () => 'eager' | 'lazy';
+}) {
+    const photo = resolveImageUrl(item.photoUrl);
+    const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
+    const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
+        : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
+    const km = distanceText(item.distanceKm);
+    const kind = item.type === 'need' ? 'NEED' : 'OFFER';
+    const label = [
+        kind === 'NEED' ? t('Need', undefined, 'listing type') : t('Offer', undefined, 'listing type'),
+        item.title,
+        price,
+        km ? t('{km} away', { km }) : null,
+    ].filter(Boolean).join(', ');
+
+    if (wide) {
+        return (
+            <button
+                key={item.id}
+                type="button"
+                onClick={() => onNavigate('marketplace', item.id)}
+                aria-label={label}
+                data-testid={testId}
+                className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+                {photo ? (
+                    <img
+                        src={listPhotoUrl(photo)}
+                        alt=""
+                        loading={nextImageLoading()}
+                        decoding="async"
+                        className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
+                    />
+                ) : (
+                    <span aria-hidden="true" className="w-full h-24 rounded-lg flex items-center justify-center text-2xl bg-bg-hover mb-2">
+                        {cat?.emoji ?? '🌱'}
+                    </span>
+                )}
+                <div className="min-w-0 flex-1">
+                    <div className="mb-1">
+                        <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
+                            {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
+                        </span>
+                        <span dir="auto" className="text-sm font-semibold break-words text-text-primary">
+                            {item.title}
+                        </span>
+                    </div>
+                    {(price || km) && (
+                        <span className="block text-xs text-text-secondary break-words">
+                            {[price, km].filter(Boolean).join(' · ')}
+                        </span>
+                    )}
+                </div>
+            </button>
+        );
+    }
+
+    return (
+        <HomeLine
+            key={item.id}
+            onClick={() => onNavigate('marketplace', item.id)}
+            testId={testId}
+            label={label}
+        >
+            {photo ? (
+                <img
+                    src={listPhotoUrl(photo)}
+                    alt=""
+                    loading={nextImageLoading()}
+                    decoding="async"
+                    className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
+                />
+            ) : (
+                <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-bg-hover">
+                    {cat?.emoji ?? '🌱'}
+                </span>
+            )}
+            <span className="min-w-0 flex-1">
+                <span className="block break-words">
+                    <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
+                        {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
+                    </span>
+                    <span dir="auto">{item.title}</span>
+                </span>
+                {(price || km) && <span className="block text-xs text-text-secondary">{[price, km].filter(Boolean).join(' · ')}</span>}
+            </span>
+        </HomeLine>
+    );
+}
+
+function MarketBody({
+    m,
+    isVisitor,
+    myInterests,
+    beansOn,
+    onNavigate,
+    nextImageLoading,
+}: {
+    m: NonNullable<HomeCards['market']>;
+    isVisitor: boolean;
+    myInterests: string[];
+    beansOn: boolean;
+    onNavigate: (page: string, id?: string) => void;
+    nextImageLoading: () => 'eager' | 'lazy';
+}) {
+    const { wide } = useCardContainer();
+    const items = starredFirst(m.items, i => i.category, isVisitor ? [] : myInterests);
+    const examples = m.examples && m.items.length < 6;
+
+    return (
+        <div>
+            <div
+                data-testid="home-market-items"
+                data-layout={wide ? 'tiles' : 'rows'}
+                className={wide ? 'home-tiles-grid grid grid-cols-2 gap-3' : 'flex flex-col'}
+            >
+                {items.map(item => (
+                    <MarketListingItem
+                        key={item.id}
+                        item={item}
+                        testId="home-market-item"
+                        beansOn={beansOn}
+                        isVisitor={isVisitor}
+                        wide={wide}
+                        onNavigate={onNavigate}
+                        nextImageLoading={nextImageLoading}
+                    />
+                ))}
+            </div>
+            {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-text-secondary">{t(VISITOR_WORDS.listNote)}</p>}
+            {examples && (
+                <div data-testid="home-examples" className="mt-2">
+                    <p className="m-0 mb-1 text-xs font-bold text-text-secondary">{t(EXAMPLE_WORDS.heading)}</p>
+                    {EXAMPLE_LISTINGS.slice(0, 2).map(ex => (
+                        <p key={ex.key} data-testid="home-example" className="m-0 py-1 text-sm text-text-primary flex items-start gap-2 min-w-0">
+                            <span className="sr-only">{exampleLabel(ex)}</span>
+                            <span aria-hidden="true" className="shrink-0">{ex.emoji}</span>
+                            <span aria-hidden="true" className="min-w-0 break-words">
+                                <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-bg-hover text-text-primary">{t(EXAMPLE_WORDS.badge)}</span>
+                                {t(ex.title)}
+                            </span>
+                        </p>
+                    ))}
+                    <p className="m-0 text-xs text-text-secondary">{t(EXAMPLE_WORDS.note)}</p>
+                </div>
+            )}
+            <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
+        </div>
+    );
+}
+
+function SearchBody({
+    card,
+    a,
+    beansOn,
+    onNavigate,
+    nextImageLoading,
+}: {
+    card: HomeCardInstance;
+    a: HomeAnswer;
+    beansOn: boolean;
+    onNavigate: (page: string, id?: string) => void;
+    nextImageLoading: () => 'eager' | 'lazy';
+}) {
+    const { wide } = useCardContainer();
+    const { q, km } = readSearchSettings(card.settings);
+    const found = searchCardFor(a, card);
+    const first = searchFirstLine(q, found ? found.km : km ?? null);
+
+    return (
+        <div>
+            <p data-testid="home-search-words" className="m-0 mb-1 text-sm font-semibold text-text-primary break-words">{first}</p>
+            {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-text-primary break-words">{t(LIB_LINES.searchOffline)}</p>}
+            {found && !found.items.length && <p data-testid="home-search-empty" className="m-0 text-sm text-text-primary break-words">{searchEmptyLine(q, found.km)}</p>}
+            {found && found.items.length > 0 && (
+                <div
+                    data-testid="home-search-items"
+                    data-layout={wide ? 'tiles' : 'rows'}
+                    className={wide ? 'home-tiles-grid grid grid-cols-2 gap-3' : 'flex flex-col'}
+                >
+                    {found.items.map(item => (
+                        <MarketListingItem
+                            key={item.id}
+                            item={item}
+                            testId="home-search-item"
+                            beansOn={beansOn}
+                            isVisitor={false}
+                            wide={wide}
+                            onNavigate={onNavigate}
+                            nextImageLoading={nextImageLoading}
+                        />
+                    ))}
+                </div>
+            )}
+            {found?.more && (
+                <HomeMore onClick={() => onNavigate('marketplace-search', q)} testId="home-search-more" label={q ? t('See more listings for {q} in the Market', { q }) : t('See more listings for this search in the Market')}>{t('See more ›')}</HomeMore>
+            )}
+        </div>
+    );
+}
+
+function PulseBody({
+    items,
+    onNavigate,
+    nextImageLoading,
+}: {
+    items: NonNullable<HomeCards['pulse']>['items'];
+    onNavigate: (page: string) => void;
+    nextImageLoading: () => 'eager' | 'lazy';
+}) {
+    const { wide } = useCardContainer();
+    return (
+        <div>
+            <div
+                data-testid="home-pulse-items"
+                data-layout={wide ? 'tiles' : 'rows'}
+                className={wide ? 'home-tiles-grid grid grid-cols-2 gap-3' : 'flex flex-col'}
+            >
+                {items.slice(0, 4).map(p => {
+                    const thumb = p.thumbnailUrl ? resolvePulseThumbnailUrl(p.id) : null;
+                    const postTitle = p.title || t('A new post');
+                    const byLine = pulseByLine(p);
+                    const label = t('{title}, by {name}. Opens the Pulse.', { title: postTitle, name: p.callsign });
+
+                    if (wide) {
+                        return (
+                            <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => onNavigate('pulse')}
+                                aria-label={label}
+                                data-testid="home-pulse-tile"
+                                className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                                {thumb ? (
+                                    <img
+                                        src={thumb}
+                                        alt=""
+                                        loading={nextImageLoading()}
+                                        decoding="async"
+                                        className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
+                                    />
+                                ) : (
+                                    <span aria-hidden="true" className="w-full h-24 rounded-lg flex items-center justify-center text-2xl bg-bg-hover mb-2">
+                                        📡
+                                    </span>
+                                )}
+                                <span dir="auto" className="block text-sm font-semibold line-clamp-2 break-words text-text-primary mb-1">
+                                    {postTitle}
+                                </span>
+                                <span className="block text-xs text-text-secondary break-words">
+                                    {byLine}
+                                </span>
+                            </button>
+                        );
+                    }
+
+                    return (
+                        <HomeLine
+                            key={p.id}
+                            onClick={() => onNavigate('pulse')}
+                            label={label}
+                            testId="home-pulse-item"
+                        >
+                            {thumb ? (
+                                <img
+                                    src={thumb}
+                                    alt=""
+                                    loading={nextImageLoading()}
+                                    decoding="async"
+                                    className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
+                                />
+                            ) : (
+                                <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-bg-hover">
+                                    📡
+                                </span>
+                            )}
+                            <span className="min-w-0 flex-1">
+                                <span dir="auto" className="block break-words line-clamp-2 font-semibold">{postTitle}</span>
+                                <span className="block text-xs text-text-secondary break-words">{byLine}</span>
+                            </span>
+                        </HomeLine>
+                    );
+                })}
+            </div>
+            <HomeMore onClick={() => onNavigate('pulse')} label={t('See all of the Pulse')}>{t('See all ›')}</HomeMore>
+        </div>
+    );
+}
+
+function DealsBody({
+    d,
+    onNavigate,
+}: {
+    d: NonNullable<HomeCards['deals']>;
+    onNavigate: (page: string, id?: string) => void;
+}) {
+    const items = d.items ?? [];
+    if (items.length === 0) {
+        return (
+            <HomeLine onClick={() => onNavigate('marketplace', d.waitingOnMe?.postId)} label={t('Your deals: {line}', { line: dealsLine(d) })}>
+                <span className="min-w-0 break-words">{dealsLine(d)}</span>
+            </HomeLine>
+        );
+    }
+    return (
+        <div>
+            {items.slice(0, 3).map(item => {
+                const titleLine = dealTitleLine(item);
+                const statusLine = dealStatusLine(item);
+                const lineLabel = t('{title}. {status}', { title: titleLine, status: statusLine });
+                return (
+                    <HomeLine
+                        key={item.txId}
+                        onClick={() => onNavigate('marketplace', item.postId)}
+                        label={lineLabel}
+                        testId="home-deal-item"
+                    >
+                        <span className="min-w-0 flex-1">
+                            <span className="block break-words font-semibold">{titleLine}</span>
+                            <span className="block text-xs text-text-secondary break-words">
+                                {item.waitsOnMe && (
+                                    <span aria-hidden="true" className="shrink-0 text-amber-700 dark:text-amber-400 font-black mr-1">▲</span>
+                                )}
+                                {statusLine}
+                            </span>
+                        </span>
+                    </HomeLine>
+                );
+            })}
+            <HomeMore onClick={() => onNavigate('marketplace')} label={t('All deals')}>{t('All deals ›')}</HomeMore>
+        </div>
+    );
+}
+
+function EnterpriseBody({
+    e,
+    onNavigate,
+}: {
+    e: NonNullable<HomeCards['enterprise']>;
+    onNavigate: (page: string, id?: string) => void;
+}) {
+    const lifecycleWord = e.lifecycle === 'bounded' ? t('project', undefined, 'lifecycle') : t('enterprise', undefined, 'lifecycle');
+    const titleLine = `${e.name} · ${lifecycleWord}`;
+    const requests = e.requests ? tn(e.requests, '{n} request to approve', '{n} requests to approve') : null;
+    const keeperText = typeof e.keepers === 'number' ? tn(e.keepers, '{n} keeper', '{n} keepers') : null;
+    const balanceText = typeof e.balance === 'number' && keeperText
+        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance), keepers: keeperText })
+        : typeof e.balance === 'number'
+            ? t('Balance {balance}', { balance: beansAmount(e.balance) })
+            : keeperText;
+    const monthText = e.month ? monthSummaryLine(e.month) : null;
+    const latestText = e.latest ? enterpriseLatestLine(e.latest) : null;
+
+    const fullLine = [titleLine, balanceText, monthText, latestText, requests].filter(Boolean).join('. ');
+
+    return (
+        <div>
+            <HomeLine
+                onClick={() => onNavigate('enterprise', e.id)}
+                label={e.lifecycle === 'bounded' ? t('{line}. Opens the project.', { line: fullLine }) : t('{line}. Opens the enterprise.', { line: fullLine })}
+            >
+                <span className="min-w-0 flex-1">
+                    <span className="block break-words font-semibold">{titleLine}</span>
+                    {balanceText && (
+                        <span className="block text-xs text-text-secondary break-words">{balanceText}</span>
+                    )}
+                    {monthText && (
+                        <span className="block text-xs text-text-secondary break-words">{monthText}</span>
+                    )}
+                    {latestText && (
+                        <span className="block text-xs text-text-secondary break-words">{latestText}</span>
+                    )}
+                    {requests && (
+                        <span className="block text-xs font-bold text-amber-700 dark:text-amber-400 break-words">{requests}</span>
+                    )}
+                </span>
+            </HomeLine>
+            {e.others > 0 && (
+                <p className="m-0 mt-1 text-xs text-text-secondary">{tn(e.others, 'and {n} more you keep', 'and {n} more you keep')}</p>
+            )}
+        </div>
+    );
+}
+
+function DecideBody({
+    d,
+    now,
+    onNavigate,
+}: {
+    d: NonNullable<HomeCards['decide']>;
+    now: number;
+    onNavigate: (page: string, contextId?: string) => void;
+}) {
+    const items = d.items ?? [];
+    if (items.length === 0 && !d.poll) {
+        return (
+            <HomeLine onClick={() => onNavigate('projects')} label={t('{line}. Opens Commons.', { line: decideLine(d, now) })}>
+                <span className="min-w-0 break-words">{decideLine(d, now)}</span>
+            </HomeLine>
+        );
+    }
+
+    return (
+        <div>
+            {items.slice(0, 3).map(item => {
+                const when = closesIn(item.closesAt, now);
+                const votedStatus = item.voted ? t('You voted') : t('Not yet');
+                const sub = [when, votedStatus].filter(Boolean).join(' · ');
+                const label = sub ? t('{title} · {status}. Opens Commons.', { title: item.title, status: sub }) : t('{title}. Opens Commons.', { title: item.title });
+                return (
+                    <HomeLine key={item.id} onClick={() => onNavigate('projects')} label={label} testId="home-decide-item">
+                        <span className="min-w-0 flex-1">
+                            <span className="block break-words font-semibold">{item.title}</span>
+                            {sub && <span className="block text-xs text-text-secondary break-words">{sub}</span>}
+                        </span>
+                    </HomeLine>
+                );
+            })}
+            {d.poll && (() => {
+                const pollCloses = closesIn(d.poll.closesAt, now);
+                const pollHeading = t('Poll: {title}', { title: d.poll.title });
+                const pollLabel = pollCloses
+                    ? t('{title} · {status}. Opens the Market.', { title: pollHeading, status: pollCloses })
+                    : t('{title}. Opens the Market.', { title: pollHeading });
+                return (
+                    <HomeLine
+                        onClick={() => onNavigate('marketplace', d.poll!.id)}
+                        label={pollLabel}
+                        testId="home-decide-poll"
+                    >
+                        <span className="min-w-0 flex-1">
+                            <span className="block break-words text-sm font-semibold">{pollHeading}</span>
+                            {pollCloses && <span className="block text-xs text-text-secondary break-words">{pollCloses}</span>}
+                        </span>
+                    </HomeLine>
+                );
+            })()}
+            <HomeMore onClick={() => onNavigate('projects')} label={t('Decide')}>{t('Decide ›')}</HomeMore>
+        </div>
+    );
+}
+
+function GroupsBody({
+    groups,
+    onNavigate,
+}: {
+    groups: NonNullable<HomeCards['groups']>;
+    onNavigate: (page: string, id: string) => void;
+}) {
+    return (
+        <div>
+            {groups.items.map(g => {
+                const status = g.unread > 0 ? tn(g.unread, '{n} new', '{n} new') : t('quiet');
+                const line = `${g.name} · ${status}`;
+                const lastLine = g.last ? groupLastLine(g.last) : null;
+                const fullLabel = lastLine ? `${line}. ${lastLine}` : line;
+                return (
+                    <HomeLine
+                        key={g.id}
+                        onClick={() => onNavigate('messages', g.id)}
+                        label={g.muted ? t('{line}, muted', { line: fullLabel }) : fullLabel}
+                        testId="home-group-item"
+                    >
+                        <span className="min-w-0 flex-1">
+                            <span className="block break-words font-semibold">{line}</span>
+                            {lastLine && (
+                                <span className="block text-xs text-text-secondary break-words line-clamp-1">
+                                    {lastLine}
+                                </span>
+                            )}
+                        </span>
+                    </HomeLine>
+                );
+            })}
+        </div>
+    );
+}
+
+function BeansBody({
+    b,
+    onNavigate,
+}: {
+    b: NonNullable<HomeCards['beans']>;
+    onNavigate: (page: string) => void;
+}) {
+    const lines = beansLines(b);
+    const month = b.month ? monthSummaryLine(b.month) : null;
+    const isNewcomer = !b.activated && Math.round(b.balance * 100) / 100 === 0;
+    const tierBadge = !isNewcomer && b.tier ? tierWords(b.tier) : null;
+    const note = isNewcomer ? lines.note : null;
+    const fullLine = [lines.line, month].filter(Boolean).join('. ');
+
+    return (
+        <HomeLine
+            onClick={() => onNavigate('ledger')}
+            label={lines.note ? t('{line}. {note}. Opens the Ledger.', { line: fullLine, note: lines.note }) : t('{line}. Opens the Ledger.', { line: fullLine })}
+        >
+            <span className="min-w-0 flex-1">
+                <span className="block break-words font-semibold">{lines.line}</span>
+                {month && <span className="block text-xs text-text-secondary break-words">{month}</span>}
+                {note && <span className="block text-xs text-text-secondary break-words">{note}</span>}
+            </span>
+            {tierBadge && (
+                <span className="shrink-0 self-center text-xs font-semibold px-2 py-0.5 rounded-full bg-bg-hover text-text-secondary border border-border-primary">
+                    {tierBadge}
+                </span>
+            )}
+        </HomeLine>
+    );
+}
+
+function CommunityBody({
+    cm,
+    profile,
+    isVisitor,
+    onAddCard,
+    onEditHome,
+}: {
+    cm: NonNullable<HomeCards['community']>;
+    profile: string;
+    isVisitor: boolean;
+    onAddCard: () => void;
+    onEditHome: () => void;
+}) {
+    const { wide } = useCardContainer();
+    const isGlobal = profile === 'global';
+    const hasDetailedStats = !isGlobal
+        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
+        : typeof cm.listings === 'number';
+
+    const globalTiles = [
+        { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
+        ...(typeof cm.communities === 'number' ? [{ figure: formatCount(cm.communities), label: tn(cm.communities, 'community listed', 'communities listed') }] : []),
+        ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
+    ];
+
+    const localTiles = [
+        { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
+        ...(typeof cm.joined7d === 'number' ? [{ figure: formatCount(cm.joined7d), label: t('joined this week') }] : []),
+        ...(typeof cm.tradesThisMonth === 'number' ? [{ figure: formatCount(cm.tradesThisMonth), label: t('trades this month') }] : []),
+        ...(typeof cm.commonsPot === 'number' ? [{ figure: beansAmount(cm.commonsPot), label: t('Commons pot') }] : []),
+        ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
+        ...(typeof cm.eventsSoon === 'number' ? [{ figure: formatCount(cm.eventsSoon), label: tn(cm.eventsSoon, 'event coming up', 'events coming up') }] : []),
+    ];
+
+    const tiles = isGlobal ? globalTiles : localTiles;
+
+    const globalLine1 = tn(cm.members, '{n} member', '{n} members', { n: formatCount(cm.members) });
+    const globalLine2 = typeof cm.communities === 'number' ? tn(cm.communities, '{n} community listed', '{n} communities listed', { n: formatCount(cm.communities) }) : null;
+    const globalLine3 = typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings', { n: formatCount(cm.listings) }) : null;
+
+    const isSolo = cm.members === 1 && !isVisitor;
+    const localLine1 = isSolo
+        ? t("1 member. You're first. Invite someone.")
+        : [
+            tn(cm.members, '{n} member', '{n} members'),
+            typeof cm.joined7d === 'number' ? tn(cm.joined7d, '{n} joined this week', '{n} joined this week') : null,
+        ].filter(Boolean).join(' · ');
+
+    const localLine2 = [
+        typeof cm.tradesThisMonth === 'number' ? tn(cm.tradesThisMonth, '{n} trade this month', '{n} trades this month') : null,
+        typeof cm.commonsPot === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot) }) : null,
+    ].filter(Boolean).join(' · ');
+
+    const localLine3 = [
+        typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings') : null,
+        typeof cm.eventsSoon === 'number' ? tn(cm.eventsSoon, '{n} event coming up', '{n} events coming up') : null,
+    ].filter(Boolean).join(' · ');
+
+    const line1 = isGlobal ? globalLine1 : localLine1;
+    const line2 = isGlobal ? globalLine2 : localLine2;
+    const line3 = isGlobal ? globalLine3 : localLine3;
+
+    return (
+        <div>
+            {wide && hasDetailedStats ? (
+                <>
+                    {isSolo && (
+                        <p className="m-0 mb-3 text-sm text-text-primary break-words">
+                            {t("1 member. You're first. Invite someone.")}
+                        </p>
+                    )}
+                    <div data-testid="home-community-body" data-layout="tiles" className={isGlobal || tiles.length === 3 ? "grid grid-cols-3 gap-2 mb-3" : tiles.length === 4 ? "grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3" : "grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3"}>
+                        {tiles.map((tile, i) => (
+                            <div key={i} data-testid="home-community-tile" className="p-2 rounded-xl bg-bg-hover text-center flex flex-col justify-center min-w-0">
+                                <span className="text-base font-bold text-text-primary break-words leading-tight">{tile.figure}</span>
+                                <span className="text-[0.7rem] text-text-secondary break-words leading-tight">{tile.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            ) : hasDetailedStats ? (
+                <div data-testid="home-community-body" data-layout="rows" className="mb-2">
+                    <p className="m-0 text-sm text-text-primary break-words">{line1}</p>
+                    {line2 ? <p className="m-0 text-sm text-text-secondary break-words">{line2}</p> : null}
+                    {line3 ? <p className="m-0 text-sm text-text-secondary break-words">{line3}</p> : null}
+                </div>
+            ) : (
+                <div data-testid="home-community-body" data-layout="rows" className="mb-2">
+                    <p className="m-0 text-sm text-text-primary break-words">
+                        {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : t('{line}.', { line: communityLine(cm, profile) })}
+                    </p>
+                </div>
+            )}
+            {!isVisitor && (
+                <div className="flex flex-wrap justify-end gap-x-4">
+                    <HomeMore onClick={onAddCard} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
+                    <HomeMore onClick={onEditHome} testId="home-edit-open" label={t('Edit home: the cards on Home and their order')}>{t('Edit home ›')}</HomeMore>
+                </div>
+            )}
+        </div>
+    );
 }
 
 export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken }: Props) {
@@ -1070,6 +1703,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
     const pins = pinnedCards(a, now);
+    let imgCount = 0;
+    const nextImageLoading = () => (imgCount++ < 8 ? 'eager' : 'lazy');
     // Only the cards on screen: a "Your way back in" with nothing to say is no place to move to, or a press on the card
     // next to it would swap the two in the saved list and move nothing anyone can see (PR #2411 review).
     const movable = shown.filter(c => canMoveCard(c.type, pins) && (c.type !== 'safety' || safetyDrawn));
@@ -1191,28 +1826,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             return <HomeLine key={i} href={`${getNodeApiUrl()}/settings#from=pwa`} label={t("{line}. Opens your community's settings.", { line: words })} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
         }
         return <HomeLine key={i} onClick={go} label={item.accent ? t('{line}. Waiting on you.', { line: words }) : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
-    }
-
-    /** One listing as the Market card draws it (photo, Offer or Need, title, price, distance); opens the listing. */
-    function marketLine(item: HomeMarketItem, testId: string): ReactNode {
-        const photo = resolveImageUrl(item.photoUrl);
-        const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
-        const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
-            : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
-        const km = distanceText(item.distanceKm);
-        const kind = item.type === 'need' ? 'NEED' : 'OFFER';
-        return (
-            <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId={testId}
-                label={[kind === 'NEED' ? t('Need', undefined, 'listing type') : t('Offer', undefined, 'listing type'), item.title, price, km ? t('{km} away', { km }) : null].filter(Boolean).join(', ')}>
-                {photo
-                    ? <img src={listPhotoUrl(photo)} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
-                    : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">{cat?.emoji ?? '🌱'}</span>}
-                <span className="min-w-0 flex-1">
-                    <span className="block break-words"><span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>{kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}</span><span dir="auto">{item.title}</span></span>
-                    {(price || km) && <span className="block text-xs text-nature-600 dark:text-nature-300">{[price, km].filter(Boolean).join(' · ')}</span>}
-                </span>
-            </HomeLine>
-        );
     }
 
     function renderCard(card: HomeCardInstance, index: number): ReactNode {
@@ -1416,27 +2029,27 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         </div>
                     </HomeCard>
                 );
-            case 'deals':
+            case 'deals': {
+                const d = c.deals;
+                if (!d) return null;
+                const hasItems = (d.items && d.items.length > 0);
+                const showOpen = d.open > 3 || (hasItems && d.open > d.items!.length);
                 return (
-                    <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('marketplace', c.deals!.waitingOnMe?.postId)} label={t('Your deals: {line}', { line: dealsLine(c.deals!) })}>
-                            <span className="min-w-0 break-words">{dealsLine(c.deals!)}</span>
-                        </HomeLine>
-                    </HomeCard>
-                );
-            case 'enterprise': {
-                const e = c.enterprise!;
-                const requests = e.requests ? tn(e.requests, '{n} request to approve', '{n} requests to approve') : null;
-                const line = requests ? `${e.name} · ${requests}` : `${e.name}`;
-                return (
-                    <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('enterprise', e.id)} label={e.lifecycle === 'bounded' ? t('{line}. Opens the project.', { line }) : t('{line}. Opens the enterprise.', { line })}>
-                            <span className="min-w-0 break-words">{line}</span>
-                        </HomeLine>
-                        {e.others > 0 && <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{tn(e.others, 'and {n} more you keep', 'and {n} more you keep')}</p>}
+                    <HomeCard
+                        key={id}
+                        {...common}
+                        titleAside={showOpen ? <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">{tn(d.open, '{n} open', '{n} open')}</span> : undefined}
+                    >
+                        <DealsBody d={d} onNavigate={onNavigate} />
                     </HomeCard>
                 );
             }
+            case 'enterprise':
+                return c.enterprise && (
+                    <HomeCard key={id} {...common}>
+                        <EnterpriseBody e={c.enterprise} onNavigate={onNavigate} />
+                    </HomeCard>
+                );
             case 'events': {
                 const ev = c.events!;
                 return (
@@ -1472,57 +2085,46 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             }
             case 'market': {
                 const m = c.market!;
-                const items = starredFirst(m.items, i => i.category, isVisitor ? [] : myInterests);
-                const examples = m.examples && m.items.length < 6;
                 return (
                     <HomeCard key={id} {...common} titleAside={!isVisitor && (
                         <button type="button" onClick={openTune} aria-label={t('Tune: pick what comes first')} data-testid="home-tune"
-                            className="min-h-[44px] px-2 -mt-2 bg-transparent border-0 text-xs font-bold text-nature-700 dark:text-nature-200 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                            className="min-h-[44px] px-2 -mt-2 bg-transparent border-0 text-xs font-bold text-text-secondary hover:text-text-primary cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                             {t('Tune')}
                         </button>
                     )}>
-                        {items.map(item => marketLine(item, 'home-market-item'))}
-                        {isVisitor && items.length > 0 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{t(VISITOR_WORDS.listNote)}</p>}
-                        {examples && (
-                            <div data-testid="home-examples" className="mt-2">
-                                <p className="m-0 mb-1 text-xs font-bold text-nature-700 dark:text-nature-200">{t(EXAMPLE_WORDS.heading)}</p>
-                                {EXAMPLE_LISTINGS.slice(0, 2).map(ex => (
-                                    <p key={ex.key} data-testid="home-example" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 flex items-start gap-2 min-w-0">
-                                        {/* "Example" first for a screen reader (lib/example-listings.ts exampleLabel). */}
-                                        <span className="sr-only">{exampleLabel(ex)}</span>
-                                        <span aria-hidden="true" className="shrink-0">{ex.emoji}</span>
-                                        <span aria-hidden="true" className="min-w-0 break-words">
-                                            <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white">{t(EXAMPLE_WORDS.badge)}</span>
-                                            {t(ex.title)}
-                                        </span>
-                                    </p>
-                                ))}
-                                <p className="m-0 text-xs text-nature-600 dark:text-nature-300">{t(EXAMPLE_WORDS.note)}</p>
-                            </div>
-                        )}
-                        <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
+                        <MarketBody
+                            m={m}
+                            isVisitor={isVisitor}
+                            myInterests={myInterests}
+                            beansOn={beansOn}
+                            onNavigate={onNavigate}
+                            nextImageLoading={nextImageLoading}
+                        />
                     </HomeCard>
                 );
             }
-            case 'decide':
+            case 'decide': {
+                const d = c.decide;
+                if (!d) return null;
+                const hasItems = (d.items && d.items.length > 0) || !!d.poll;
                 return (
-                    <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('projects')} label={t('{line}. Opens Commons.', { line: decideLine(c.decide!, now) })}>
-                            <span className="min-w-0 break-words">{decideLine(c.decide!, now)}</span>
-                        </HomeLine>
+                    <HomeCard
+                        key={id}
+                        {...common}
+                        titleAside={hasItems ? (
+                            <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">
+                                {decideLine(d, now)}
+                            </span>
+                        ) : undefined}
+                    >
+                        <DecideBody d={d} now={now} onNavigate={onNavigate} />
                     </HomeCard>
                 );
+            }
             case 'groups':
-                return (
+                return c.groups && (
                     <HomeCard key={id} {...common}>
-                        {c.groups!.items.map(g => {
-                            const line = `${g.name} · ${g.unread > 0 ? tn(g.unread, '{n} new', '{n} new') : t('quiet')}`;
-                            return (
-                                <HomeLine key={g.id} onClick={() => onNavigate('messages', g.id)} label={g.muted ? t('{line}, muted', { line }) : line}>
-                                    <span className="min-w-0 break-words">{line}</span>
-                                </HomeLine>
-                            );
-                        })}
+                        <GroupsBody groups={c.groups} onNavigate={onNavigate} />
                     </HomeCard>
                 );
             case 'joined': {
@@ -1544,39 +2146,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             }
             case 'pulse':
-                return (
+                return c.pulse && (
                     <HomeCard key={id} {...common}>
-                        {c.pulse!.items.map(p => {
-                            const thumb = p.thumbnailUrl ? resolvePulseThumbnailUrl(p.id) : null;
-                            const postTitle = p.title || t('A new post');
-                            return (
-                                <HomeLine key={p.id} onClick={() => onNavigate('pulse')} label={t('{title}, by {name}. Opens the Pulse.', { title: postTitle, name: p.callsign })}>
-                                    {thumb
-                                        ? <img src={thumb} alt="" loading="lazy" decoding="async" className="shrink-0 w-12 h-12 rounded-lg object-cover bg-nature-100 dark:bg-nature-800" />
-                                        : <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-nature-100 dark:bg-nature-800">📡</span>}
-                                    <span className="min-w-0 flex-1">
-                                        <span dir="auto" className="block break-words line-clamp-2">{postTitle}</span>
-                                        <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{t('by {name}', { name: p.callsign })}</span>
-                                    </span>
-                                </HomeLine>
-                            );
-                        })}
-                        <HomeMore onClick={() => onNavigate('pulse')} label={t('See all of the Pulse')}>{t('See all ›')}</HomeMore>
+                        <PulseBody items={c.pulse.items} onNavigate={onNavigate} nextImageLoading={nextImageLoading} />
                     </HomeCard>
                 );
-            case 'beans': {
-                const b = beansLines(c.beans!);
-                return (
+            case 'beans':
+                return c.beans && (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('ledger')} label={b.note ? t('{line}. {note}. Opens the Ledger.', { line: b.line, note: b.note }) : t('{line}. Opens the Ledger.', { line: b.line })}>
-                            <span className="min-w-0">
-                                <span className="block break-words font-semibold">{b.line}</span>
-                                {b.note && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{b.note}</span>}
-                            </span>
-                        </HomeLine>
+                        <BeansBody b={c.beans} onNavigate={onNavigate} />
                     </HomeCard>
                 );
-            }
             case 'notices': {
                 const n = c.notices!;
                 return (
@@ -1602,40 +2182,32 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </HomeCard>
                 );
             case 'community': {
-                const cm = c.community!;
+                const cm = c.community;
+                if (!cm) return null;
                 return (
                     <HomeCard key={id} {...common} title={communityName(cm, profile)}>
-                        <p className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">
-                            {cm.members === 1 && !isVisitor ? t("1 member. You're first. Invite someone.") : t('{line}.', { line: communityLine(cm, profile) })}
-                        </p>
-                        {!isVisitor && (
-                            <div className="flex flex-wrap justify-end gap-x-4">
-                                <HomeMore onClick={() => setPickerOpen(true)} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
-                                <HomeMore onClick={() => setEditOpen(true)} testId="home-edit-open" label={t('Edit home: the cards on Home and their order')}>{t('Edit home ›')}</HomeMore>
-                            </div>
-                        )}
+                        <CommunityBody
+                            cm={cm}
+                            profile={profile}
+                            isVisitor={isVisitor}
+                            onAddCard={() => setPickerOpen(true)}
+                            onEditHome={() => setEditOpen(true)}
+                        />
                     </HomeCard>
                 );
             }
-            case 'search': {
-                // A saved search (CARD-FRAME §4): the caption is fixed; the words and distance are the first line, never the
-                // caption. Up to four listings as the Market card draws them, See more opens the Market with the words in its
-                // search; nothing found says so; before the node has answered for these words, it says it will.
-                const { q, km } = readSearchSettings(card.settings);
-                const found = searchCardFor(a, card);
-                const first = searchFirstLine(q, found ? found.km : km ?? null);
+            case 'search':
                 return (
                     <HomeCard key={card.id} {...common}>
-                        <p data-testid="home-search-words" className="m-0 mb-1 text-sm font-semibold text-nature-900 dark:text-white break-words">{first}</p>
-                        {!found && <p data-testid="home-search-offline" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{t(LIB_LINES.searchOffline)}</p>}
-                        {found && !found.items.length && <p data-testid="home-search-empty" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{searchEmptyLine(q, found.km)}</p>}
-                        {found?.items.map(item => marketLine(item, 'home-search-item'))}
-                        {found?.more && (
-                            <HomeMore onClick={() => onNavigate('marketplace-search', q)} testId="home-search-more" label={q ? t('See more listings for {q} in the Market', { q }) : t('See more listings for this search in the Market')}>{t('See more ›')}</HomeMore>
-                        )}
+                        <SearchBody
+                            card={card}
+                            a={a}
+                            beansOn={beansOn}
+                            onNavigate={onNavigate}
+                            nextImageLoading={nextImageLoading}
+                        />
                     </HomeCard>
                 );
-            }
             case 'sky': {
                 // Sun and moon (CARD-FRAME §4): one line worked out here, nothing to open, no request of its own. A screen
                 // reader hears it in words, never the picture.

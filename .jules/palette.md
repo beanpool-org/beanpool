@@ -262,3 +262,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-21 - FormerAddressBanner ARIA Live Region & Internationalization
 **Learning:** `FormerAddressBanner.tsx` displayed community migration alerts using `role="status"` without explicit `aria-live="polite"` or `aria-label`, preventing screen readers from describing the alert context, and hardcoded text strings without `t(...)` translation wrappers.
 **Action:** Added `aria-live="polite"` and `aria-label={t('Community address change alert')}` to the status container, wrapped text strings with `t(...)`, and verified test suite passing.
+
+## 2026-10-22 - StartCommunityScreen Focus Rings & Touch Target Sizing
+**Learning:** `StartCommunityScreen.tsx` back button lacked 44px minimum touch target dimensions, form inputs relied on `focus:outline-none`, and buttons/links lacked explicit `focus-visible` ring indicators during keyboard navigation.
+**Action:** Added `min-w-[44px] min-h-[44px]` touch target sizing and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500` ring styling across interactive controls in `StartCommunityScreen.tsx`.

@@ -17,7 +17,6 @@ import path from 'node:path';
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(PWA_DIR);
 const SHOTS_DIR = path.join(PWA_DIR, 'e2e', 'shots', 'wide-pages');
-fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
 const WINDOW_WIDTHS = [320, 768, 1024, 1280, 1600];
 const TEXT_SCALES = [1.0, 1.3];
@@ -122,8 +121,10 @@ try {
 
     // 3. Take screenshots of Pulse, Commons, Tools, Channels, and Chat
     // at 768, 1024, 1280, 1600 and at 320 x 130%, light and dark (<= 900px crops)
-    const shouldTakeShots = process.argv.includes('--shots') || process.env.SHOTS === '1' || !fs.existsSync(path.join(SHOTS_DIR, 'pulse-1600-light.png'));
+    // Only captured when explicitly requested with --shots.
+    const shouldTakeShots = process.argv.includes('--shots');
     if (shouldTakeShots) {
+        fs.mkdirSync(SHOTS_DIR, { recursive: true });
         const SHOT_CASES = [
             { name: '320-130pc', width: 320, height: 800, scale: 1.3 },
             { name: '768', width: 768, height: 900, scale: 1.0 },

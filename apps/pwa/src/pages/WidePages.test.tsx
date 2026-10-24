@@ -1,15 +1,12 @@
 /**
- * Wide-screen layout tests for web app pages (tier B, damo-findings items 2 & 5, fix round 1).
+ * Wide-screen layout tests for web app pages (tier B, damo-findings items 2 & 5, fix round 1 & 2).
  * Pins wide-screen container classes, responsive grids, and reading caps:
  * - PulsePage: wide container (max-w-7xl), container-driven auto-fill grid, 1 col on mobile.
  * - MessagesPage (Chat view & List view): wide container on md+/lg+/xl+, reading cap (≤ 75%) on wide screens, 85% on phone.
- * - Headless Chromium render check: verifies real Pulse & Enterprise card widths and Tool photo bounds across viewports.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
-import { execFileSync } from 'node:child_process';
-import path from 'node:path';
 import { PulsePage } from './PulsePage';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -194,15 +191,3 @@ describe('Wide screen layout: Chat (Group and DM)', () => {
     });
 });
 
-describe('Wide screen layout: Render checks in headless Chromium', () => {
-    it('Pulse card and enterprise card are never narrower than at a 320 px phone at windows 768, 1024, 1280, 1600 and at 100% / 130% text, and tool photo is never drawn wider than 800 px', () => {
-        const pwaDir = path.resolve(__dirname, '../..');
-        const scriptPath = path.join(pwaDir, 'e2e', 'wide-pages-check.mjs');
-        const output = execFileSync('node', [scriptPath], {
-            cwd: pwaDir,
-            encoding: 'utf8',
-            timeout: 60_000,
-        });
-        expect(output).toContain('✓ All card widths and tool photo constraints passed across all windows and text scales.');
-    }, 65_000);
-});

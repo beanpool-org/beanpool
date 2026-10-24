@@ -22,7 +22,9 @@ import {
 } from '../../utils/event-extras';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
-import { keepPendingProfileChange, pendingNameAccepted, pendingProfileChange } from '../../utils/pending-profile-sync';
+import {
+    keepPendingProfileChange, nameRefusedForGood, pendingNameAccepted, pendingNameRefused, pendingProfileChange, takeNameRefusal,
+} from '../../utils/pending-profile-sync';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
@@ -719,14 +721,25 @@ export default function SettingsScreen() {
             // On open and on pull-to-refresh: ask the active community for this key's own record
             const targetUrl = await getAnchorUrl().catch(() => null);
             if (targetUrl) {
+                // A waiting name this community refused for good at a retry no one watched (db.ts pushProfileToServer):
+                // said here once, in the community's words, as a Save's refusal is.
+                const refusal = await takeNameRefusal(targetUrl, identity.publicKey);
+                if (refusal) {
+                    Alert.alert(
+                        refusal.status === 409 ? t('Name Taken') : t('Could Not Save'),
+                        refusal.message || t('The community node rejected this profile update. Please try again.')
+                    );
+                }
                 const remoteName = await fetchNodeCallsign(targetUrl, identity.publicKey, identity.privateKey);
                 if (remoteName) {
                     const activeAnchor = await getAnchorUrl().catch(() => null);
                     if (activeAnchor !== targetUrl) return;
                     // An offline edit waiting to be sent to THIS community wins until it is. The node still holds the old
                     // name, and writing it into the row here is what pillar-sync's retry would then publish. One waiting
-                    // for another community is that community's (utils/pending-profile-sync.ts).
-                    if (await pendingProfileChange(targetUrl, identity.publicKey)) return;
+                    // for another community is that community's (utils/pending-profile-sync.ts). Once the community has
+                    // refused the waiting name for good, the name it holds is the one to show.
+                    const waiting = await pendingProfileChange(targetUrl, identity.publicKey);
+                    if (waiting && waiting.refusedCallsign === undefined) return;
                     // A newer load, or a Save, started while this one waited: its answer may predate the Save.
                     if (seq !== profileLoadSeqRef.current) return;
 
@@ -1191,7 +1204,10 @@ export default function SettingsScreen() {
             // The name this Save stands for: one typed now, else a rename an earlier offline Save kept for this community.
             // Not the field's: it starts from the row, which the members sync writes the node's old name over, and sending
             // that would put the old name back on the node and retire the waiting one with it (#2461 review).
-            const savedCallsign = renames ? newCallsign : (pending?.callsign || newCallsign);
+            let savedCallsign = renames ? newCallsign : (pending?.callsign || newCallsign);
+            // A waiting name this community refused for good, still in the field (the row kept it): sent again only if the
+            // member types it (#2461 review r4368601839). The community keeps the name it holds, and the row takes it.
+            const refusedHere = !renames && pending?.refusedCallsign !== undefined && savedCallsign === pending.refusedCallsign;
             if (!url) {
                 offline = true;
             } else {
@@ -1205,7 +1221,7 @@ export default function SettingsScreen() {
                 // and the next answer from the community writes it back (#2439 review). `pending` is this community's
                 // own: another community's name is not this one's to send.
                 const pendingRename = !!pending && savedCallsign.length >= 2;
-                if (renames || pendingRename) payloadObj.callsign = savedCallsign;
+                if ((renames || pendingRename) && !refusedHere) payloadObj.callsign = savedCallsign;
                 payloadCarriesName = payloadObj.callsign !== undefined;
                 // The one shared rule decides, so this Save cannot disagree with the wizard or
                 // with the pending-sync retry. It sends a photo picked in this session, else a
@@ -1242,12 +1258,22 @@ export default function SettingsScreen() {
                 if (res && !res.ok) {
                     // The node answered and said no — surface its reason and abort rather
                     // than committing a value the server has already rejected.
-                    const serverMsg = await res.json().then((b: any) => b?.message).catch(() => null);
+                    const answer = await res.json().catch(() => null);
+                    const serverMsg = answer?.message;
+                    // The waiting name refused for good leaves the change, so neither this screen nor the retry sends it
+                    // again (utils/pending-profile-sync.ts). The member is told here.
+                    if (pending && payloadObj.callsign !== undefined && payloadObj.callsign === pending.callsign && nameRefusedForGood(res.status, answer?.error)) {
+                        await pendingNameRefused(url, pending, payloadObj.callsign);
+                    }
                     Alert.alert(
                         res.status === 409 ? t('Name Taken') : t('Could Not Save'),
                         serverMsg || t('The community node rejected this profile update. Please try again.')
                     );
                     return;
+                }
+                if (refusedHere && res) {
+                    const held = await res.json().then((b: any) => b?.profile?.callsign).catch(() => null);
+                    if (typeof held === 'string' && held) savedCallsign = held;
                 }
             }
 

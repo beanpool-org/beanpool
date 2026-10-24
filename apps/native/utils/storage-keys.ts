@@ -138,6 +138,13 @@ export const NOTICE_COUNTS_STORE_KEY = 'beanpool_notice_counts';
 export const PENDING_PROFILE_STORE_PREFIX = 'beanpool_pending_profile:';
 
 /**
+ * What a community said when it refused for good a name waiting to reach it (utils/pending-profile-sync.ts), kept until
+ * Settings has said it: this prefix and the community's address in one spelling. It starts with
+ * PENDING_PROFILE_STORE_PREFIX, so Sign Out wipes it with the changes.
+ */
+export const PENDING_PROFILE_REFUSAL_STORE_PREFIX = `${PENDING_PROFILE_STORE_PREFIX}refused:`;
+
+/**
  * This phone's push token as last registered for the account on it (services/push-notifications.ts; SecureStore, not
  * AsyncStorage). The account unregisters it on its communities as it leaves the phone (utils/account-leaves-phone.ts).
  */

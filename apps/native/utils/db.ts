@@ -28,7 +28,7 @@ import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from '
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
-import { clearPendingProfileChange, pendingProfileChange } from './pending-profile-sync';
+import { clearPendingProfileChange, nameRefusedForGood, pendingNameRefused, pendingProfileChange } from './pending-profile-sync';
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
@@ -6759,7 +6759,8 @@ export async function redeemInvite(
 // It publishes the change waiting for the ACTIVE community (pending-profile-sync.ts) and no other:
 // that community's own row, with the name and photo its entry keeps over the row's. The retry
 // passes `community`, the community its sync cycle is for, and publishes nothing if the phone has
-// moved on since: one community's change and row never reach another.
+// moved on since: one community's change and row never reach another. A name the community refuses
+// for good leaves the change (pendingNameRefused), and the rest goes again at once without a name.
 //
 // The avatar is resolved in two steps: a photo picked during an OFFLINE save, parked in this
 // community's entry by the screen that could not publish it, always goes — it has
@@ -6815,8 +6816,9 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
     const avatar = decision.avatar;
 
     // A name changed here and not yet accepted wins over the row's: a members sync landing first writes the name the
-    // node still holds over the row.
-    const callsign = pending?.callsign || profile?.callsign || identity.callsign;
+    // node still holds over the row. Once the community has refused the waiting name for good, no name goes (the row
+    // may still hold the refused one), and the community keeps the name it holds (#2461 review r4368601839).
+    const callsign = pending?.callsign || (pending?.refusedCallsign !== undefined ? undefined : profile?.callsign || identity.callsign);
     const bio = profile?.bio ?? canonical?.bio ?? '';
     const contactValue = profile?.contact_value ?? canonical?.contactValue ?? null;
     const contactVisibility = profile?.contact_visibility ?? canonical?.contactVisibility ?? 'community';
@@ -6854,8 +6856,8 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
     // result alone can bring us here, sending `avatar: null` would wipe the picture off the node.
     const payloadObj: any = {
         publicKey: identity.publicKey,
-        callsign,
     };
+    if (callsign !== undefined) payloadObj.callsign = callsign;
     if (avatar) payloadObj.avatar = avatar;
     if (bio) payloadObj.bio = bio;
     if (contactValue) payloadObj.contact = { value: contactValue, visibility: contactVisibility };
@@ -6868,17 +6870,33 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
             headers,
             body: bodyString,
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+            // The name refused for good (someone else's there, or too short) would be refused at every sync, and the
+            // photo and bio with it never arrive: it leaves the change, the member is told once in Settings, in the
+            // community's words, and the rest goes again now without a name. Any other answer waits for the next sync.
+            if (pending && callsign !== undefined) {
+                const answer = await res.json().catch(() => null);
+                const said = { status: res.status, message: typeof answer?.message === 'string' ? answer.message : null };
+                if (nameRefusedForGood(res.status, answer?.error) && await pendingNameRefused(anchorUrl, pending, callsign, said)) {
+                    return await pushProfileToServer(opts);
+                }
+            }
+            return false;
+        }
         // A 200 alone isn't proof the avatar took: if we sent one but the node
         // echoed none back, the write didn't land — keep the pending flag and
         // retry rather than silently giving up (this previously stranded pics).
         let avatarPersisted = true;
+        // The name the node answers it holds: the row takes it when this publish sent none.
+        let heldName: string | undefined;
         try {
             const data = await res.json();
             const savedAvatar = data?.profile?.avatar || null;
             if (avatar && !savedAvatar) avatarPersisted = false;
+            if (typeof data?.profile?.callsign === 'string') heldName = data.profile.callsign;
         } catch { /* non-JSON body — trust the 2xx */ }
         if (!avatarPersisted) return false;
+        const rowCallsign = callsign ?? heldName;
 
         // This function IS the pending-sync retry and has just published everything this
         // community's change holds (its parked pick is always chosen above when portable), so the
@@ -6895,7 +6913,7 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
             try {
                 await updateMemberProfile(identity.publicKey, {
-                    callsign,
+                    callsign: rowCallsign ?? profile?.callsign ?? identity.callsign,
                     avatar_url: avatar || undefined,
                     bio: bio || undefined,
                     contact_value: contactValue || undefined,
@@ -6903,12 +6921,12 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
                     archetype: archetypeRaw || undefined,
                 });
             } catch { /* local mirror is best-effort */ }
-        } else if (callsign !== profile?.callsign) {
+        } else if (rowCallsign !== undefined && rowCallsign !== profile?.callsign) {
             // A name it has just taken (the one waiting here) goes into the row as well, and only the name: until the
             // next members sync the row still holds the old one, which the screens show and a later retry here falls
-            // back on (#2461 review).
+            // back on (#2461 review). With none sent, the name it holds replaces a refused one there.
             try {
-                await updateMemberProfile(identity.publicKey, { callsign });
+                await updateMemberProfile(identity.publicKey, { callsign: rowCallsign });
             } catch { /* local mirror is best-effort */ }
         }
         return true;

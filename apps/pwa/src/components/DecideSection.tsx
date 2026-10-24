@@ -8,8 +8,8 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker,
-    turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline,
+    poolVoteBlocker, turnoutLine, voiceCreditsLine,
 } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
@@ -477,6 +477,10 @@ export function DecideSection({
                                                     <LocalCommunityAction feature="decisions" label={t('👍 Vote YES')} className="flex-1" {...ways} />
                                                     <LocalCommunityAction feature="decisions" label={t('👎 Vote NO')} className="flex-1" {...ways} />
                                                 </div>
+                                            ) : isOwnRemoval(item, identity?.publicKey) ? (
+                                                <p className="text-sm font-semibold text-amber-300" data-testid="own-removal-note">
+                                                    {t("This vote is about you, so you can't vote on it.")}
+                                                </p>
                                             ) : (
                                                 <div className="flex flex-wrap gap-3">
                                                     {/* Not min-w-0: a button keeps its longest word whole (max-w-full lets a word wider than the card

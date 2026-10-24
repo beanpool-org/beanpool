@@ -53,6 +53,14 @@ export function isPauseVote(decision: { effect: string; authorPubkey?: string; p
     return decision.effect === 'remove_member' && decision.authorPubkey === 'SYSTEM' && decision.params?.rule === 2;
 }
 
+/**
+ * A vote on removing the reader themself, a pause's or one a member proposed: nobody votes on their own removal (the node
+ * refuses it, removal by vote S2), so the card says so instead of offering the vote.
+ */
+export function isOwnRemoval(decision: { effect: string; subject?: string | null }, me: string | null | undefined): boolean {
+    return decision.effect === 'remove_member' && !!me && decision.subject === me;
+}
+
 /** The pause vote card's first line: who was paused, and when (core's formatDate, "22 Oct 2026"). */
 export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: string } | null | undefined, fallbackName: string): string {
     const name = params?.memberName || fallbackName;

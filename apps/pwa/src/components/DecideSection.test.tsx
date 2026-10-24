@@ -203,6 +203,24 @@ describe('DecideSection voting answers', () => {
         expect(screen.queryByTestId('pause-vote-box')).toBeNull();
     });
 
+    // Nobody votes on their own removal (the node refuses it): its subject reads why, and gets no buttons to press.
+    it('a vote on removing the reader says they can\'t vote on it, in place of the buttons; anyone else votes', () => {
+        const mine = decisionCard('o', '1m1v', null);
+        mine.authorPubkey = 'SYSTEM';
+        mine.effect = 'remove_member';
+        mine.subject = 'viewer';
+        mine.params = { memberName: 'Visitor', rule: 2, pausedAt: '2026-10-22T10:00:00.000Z' };
+        const first = renderDecide(true, [mine]);
+        expect(screen.getByTestId('own-removal-note').textContent).toBe("This vote is about you, so you can't vote on it.");
+        expect(screen.queryByText('Vote YES')).toBeNull();
+        expect(screen.queryByText('Vote NO')).toBeNull();
+        first.unmount();
+
+        renderDecide(true, [{ ...mine, subject: 'someone-else' }]);
+        expect(screen.queryByTestId('own-removal-note')).toBeNull();
+        expect(screen.getByText('Vote YES')).toBeInTheDocument();
+    });
+
     // Balances are private (2026-09-28): the node sends a removal vote's record of the member's balance and debt only to
     // those who can vote in it. Anyone else is told so, never shown a made-up −0.
     it('a removal vote: a voter reads the debt the node sent; anyone else reads that it is for voters only', () => {

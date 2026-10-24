@@ -254,6 +254,8 @@ const OPEN = [
     // A pause's own vote (removal by vote S2), and one on an admin, whom no vote removes.
     decision('18181818', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Ola', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()), reason: 'Threats at the market' } }),
     decision('19191919', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Abe', rule: 2, serverRole: 'admin', pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) } }),
+    // A vote on removing the member themself: it says they can't vote on it, in place of the buttons.
+    decision('20202020', { authorPubkey: 'SYSTEM', effect: 'remove_member', subject: KEY, params: { memberName: 'Zed', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) } }),
 ];
 const PAST = [
     decision('77777777', { status: 'executed', effect: 'freeze_credit', executionReason: 'Credit floor set to 0', tally: tally({ quorumMet: true, passed: true }) }),
@@ -273,7 +275,7 @@ const OTHERS = [
     ...GROUPS.flatMap((g) => [g.name, g.description]), 'drum circle', 'by vote', 'DRUM_CIRCLE',
     ...TREASURIES.flatMap((e) => [e.name, e.purpose]),
     ...[...OPEN, ...PAST].flatMap((d) => [d.title, d.description]),
-    'Dave', 'Mia', 'Kofi', 'Ana', 'Ola', 'Abe', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
+    'Dave', 'Mia', 'Kofi', 'Ana', 'Ola', 'Abe', 'Zed', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
     'Example Valley', ...SAMPLE_COMMUNITY.decisions.flatMap((d) => [d.question, (d as { body?: string }).body ?? '']),
     ...sampleDecisions().flatMap((d) => [d.title, d.description]), ...sampleEnterprises().flatMap((e) => [e.name ?? '', e.purpose ?? '']),
 ].filter(Boolean).sort((a, b) => b.length - a.length);
@@ -438,6 +440,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(host.textContent).toContain(pseudoLocalise('An admin paused {name} on {date}.').replace('{name}', 'Ola').split('{date}')[0]);
         expect(host.textContent).toContain(pseudoLocalise('Yes removes {name} after 7 days. No brings {name} back as soon as the vote closes.').split('{name}').join('Ola'));
         expect(host.textContent).toContain(pseudoLocalise("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.").split('{name}').join('Abe'));
+        expect(host.querySelector('[data-testid="own-removal-note"]')?.textContent).toBe(pseudoLocalise("This vote is about you, so you can't vote on it."));
         expect(bypassing(), 'open').toEqual([]);
         await click(byLabel(pseudoLocalise('Increase votes')), 'Increase votes');
         await click(button('Vote YES'), 'Vote YES');
@@ -547,7 +550,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
             'An admin suspended Ana on 3 Oct 2026. Keep the suspension?', '🔒 Secret ballot: members see the totals, never who voted how.', '3 days left', 'Closing now',
             'Reach The Moon', 'TOUCHES: SKY', 'Keep Suspension?', 'Grant Enterprise', 'Quadratic', '1m1v', 'Vote YES', 'Vote NO',
             'An admin paused Ola on 22 Oct 2026.', 'Yes removes Ola after 7 days. No brings Ola back as soon as the vote closes.',
-            "Abe holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Abe is back when it closes."]) {
+            "Abe holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Abe is back when it closes.",
+            "This vote is about you, so you can't vote on it."]) {
             expect(host.textContent, english).toContain(english);
         }
         expect(host.textContent).not.toContain('An admin paused Mia');

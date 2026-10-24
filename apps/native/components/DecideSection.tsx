@@ -18,8 +18,8 @@ import {
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker,
-    turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline,
+    poolVoteBlocker, turnoutLine, voiceCreditsLine,
 } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
@@ -941,6 +941,8 @@ export function DecideSection({
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👍 Vote YES')} />
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👎 Vote NO')} />
                                             </View>
+                                        ) : isOwnRemoval(item, identity?.publicKey) ? (
+                                            <Text style={styles.blockerText} testID="own-removal-note">{t("This vote is about you, so you can't vote on it.")}</Text>
                                         ) : (
                                             <View style={styles.voteButtonsRow}>
                                                 <Pressable

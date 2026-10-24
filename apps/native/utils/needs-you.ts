@@ -7,7 +7,7 @@
 import { capitalFirst, t, tn } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
-import { poolVoteBlocker } from './decision-card';
+import { isOwnRemoval, poolVoteBlocker } from './decision-card';
 import { canManageNode, type AdminQueueItem, type SettingsSection } from './node-role';
 
 export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
@@ -121,7 +121,11 @@ export interface NeedsYouInputs {
     /** null when a source failed to load: that kind is left out rather than guessed. */
     transactions: NeedsYouTransaction[] | null;
     /** Only a signed list says which votes are the member's own; an unsigned one is left out. */
-    decisions: { decisions: Pick<DecisionWithTally, 'opensAt' | 'closesAt' | 'myVote' | 'franchise'>[]; myPoolVoting: MyPoolVoting | null; signed: boolean } | null;
+    decisions: {
+        decisions: (Pick<DecisionWithTally, 'opensAt' | 'closesAt' | 'myVote' | 'franchise'> & Partial<Pick<DecisionWithTally, 'effect' | 'subject'>>)[];
+        myPoolVoting: MyPoolVoting | null;
+        signed: boolean;
+    } | null;
     conversations: NeedsYouConversation[] | null;
     groupChats: NeedsYouGroupChat[] | null;
     /**
@@ -216,8 +220,10 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         const votes = i.decisions.decisions
             .filter(d => !d.myVote
                 && Date.parse(d.opensAt) <= i.now && Date.parse(d.closesAt) > i.now
-                // A money vote the member can't cast yet (no completed trade) isn't asking anything of them.
-                && !(d.franchise === 'quadratic_trade' && blocked))
+                // A money vote the member can't cast yet (no completed trade) isn't asking anything of them, nor is a vote
+                // on removing them (removal by vote S2: nobody votes on their own removal).
+                && !(d.franchise === 'quadratic_trade' && blocked)
+                && !isOwnRemoval({ effect: d.effect ?? '', subject: d.subject }, i.me))
             .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt));
         if (votes.length) {
             const soonest = votes[0].closesAt;

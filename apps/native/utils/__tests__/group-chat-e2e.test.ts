@@ -60,7 +60,8 @@ import {
     groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, removeWithEpoch, approveWithEpoch, GroupChatKeyError,
     GROUP_KEY_ROLLBACK_TEXT, type GroupKeyStore,
 } from '../group-chat-keys';
-import { sendSealedGroupLine, editSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
+import { sendSealedGroupLine, editSealedGroupLine, openGroupThread, chatIsLocked, getDecryptedGroupAttachment, type GroupPhotoCache } from '../group-chat-lines';
+import { openLine } from '../group-chat-crypto';
 import { GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT, type DisplayRosterRow } from '../group-line-display';
 import type { BeanPoolIdentity } from '../identity';
 import { buildSignedHeaders } from '../crypto';
@@ -74,8 +75,10 @@ let URL_BASE = '';
 const replies = new Map<number, (r: { result?: any; error?: string }) => void>();
 let nextId = 1;
 const realFetch = globalThis.fetch;
-const sent: { method: string; path: string; status: number }[] = [];
+const sent: { method: string; path: string; status: number; body?: string }[] = [];
 const elsewhere: string[] = [];
+/** Run before a request reaches the node (the photo tests' 409: an epoch moves between the seal and the post). */
+let beforeRequest: ((path: string, init?: any) => Promise<void>) | null = null;
 
 function control<T = any>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
     const id = nextId++;
@@ -152,8 +155,9 @@ beforeAll(async () => {
             elsewhere.push(href);
             throw new TypeError(`Network request failed: the phone contacted ${href}`);
         }
+        if (beforeRequest) await beforeRequest(new URL(href).pathname, init);
         const res = await realFetch(input, init);
-        sent.push({ method: String(init?.method ?? 'GET'), path: new URL(href).pathname, status: res.status });
+        sent.push({ method: String(init?.method ?? 'GET'), path: new URL(href).pathname, status: res.status, body: typeof init?.body === 'string' ? init.body : undefined });
         return res;
     }) as typeof fetch;
 }, START_MS);
@@ -418,6 +422,126 @@ describe('group chats on the phone, end to end against a real node', () => {
         await control('sql', { sql: 'UPDATE group_members SET from_epoch = 2 WHERE group_id = ? AND member_pubkey = ?', params: [g6, p0.identity.publicKey] });
         expect((await shown(p0, g6)).visible.map((l) => [l.name, l.text])).toEqual([['Mal', 'hello everyone']]);
     }, 120_000);
+
+    // Photos (DESIGN-group-chat-photos-fable.md §2.2, §2.3, §5 S3): the caption sealed as part 'body', the photo's data URI
+    // as part 'attachment', both under the line's one message key, against the node S2 built.
+    let PG = '';
+    let firstPhotoId = '';
+    let secondPhotoId = '';
+    const photoUri = () => `data:image/jpeg;base64,${randomBytes(6000).toString('base64')}`;
+    const photos = new Map<string, string>();
+    const memoryCache = (): GroupPhotoCache & { kept: Map<string, string> } => {
+        const kept = new Map<string, string>();
+        return { kept, async get(g, id) { return kept.get(`${g}/${id}`) ?? null; }, async put(g, id, uri) { kept.set(`${g}/${id}`, uri); return uri; } };
+    };
+    const servedLine = async (p: Phone, g: string, id: string) => (await getChat(p, g)).messages.find((m: any) => m.id === id);
+
+    it('a photo with its caption: the node holds both sealed, the photo as part attachment and the caption as part body; a member opens both, named by the key that signed them', async () => {
+        await control('limiters');
+        // Dov starts it (Ana has started her five groups today): epoch 1; Ben's join makes 2, Ana's 3.
+        PG = await newGroup(dov, 'Photo Club');
+        await say(dov, PG, 'welcome to the photo club');
+        await joinGroupWithEpoch(URL_BASE, ben.identity, ben.store, { id: PG, joinPolicy: 'open' });
+        await joinGroupWithEpoch(URL_BASE, ana.identity, ana.store, { id: PG, joinPolicy: 'open' });
+        firstPhotoId = randomUUID();
+        photos.set(firstPhotoId, photoUri());
+        await sendSealedGroupLine(URL_BASE, ana.identity, ana.store, { groupId: PG, text: 'the new beds', clientId: firstPhotoId, photo: photos.get(firstPhotoId) });
+
+        const [row] = await control<any[]>('sql', { sql: "SELECT type, json_extract(metadata, '$.epoch') e FROM messages WHERE id = ?", params: [firstPhotoId], all: true });
+        expect(row).toEqual({ type: 'image', e: 3 });
+        const [att] = await control<any[]>('sql', { sql: 'SELECT nonce, mime FROM message_attachments WHERE message_id = ?', params: [firstPhotoId], all: true });
+        expect(att.nonce.startsWith('group-xc20p-v1:')).toBe(true);
+        expect(att.mime).toBe('image/jpeg');
+
+        const served = await json(await signedGet(URL_BASE, `/api/messages/${firstPhotoId}/attachment`, ben.identity));
+        expect(Buffer.from(served.data, 'base64').toString('latin1')).not.toContain('data:image');
+        const key = (await ring(ben, PG).keyFor(3))!;
+        const bind = { groupId: PG, epoch: 3, senderPubHex: ana.identity.publicKey, messageId: firstPhotoId, replyToId: null };
+        const line = await servedLine(ben, PG, firstPhotoId);
+        expect(openLine({ ciphertext: served.data, nonce: served.nonce }, { ...bind, part: 'attachment' }, key).text).toBe(photos.get(firstPhotoId));
+        expect(() => openLine({ ciphertext: served.data, nonce: served.nonce }, { ...bind, part: 'body' }, key)).toThrow();
+        expect(openLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { ...bind, part: 'body' }, key).text).toBe('the new beds');
+        expect(() => openLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { ...bind, part: 'attachment' }, key)).toThrow();
+
+        // Ben's chat: Ana's line, its words the caption, its photo the one she sent (opened once, then from the cache).
+        const v = await shown(ben, PG);
+        const l = v.visible.find((x) => x.id === firstPhotoId)!;
+        expect([l.name, l.text, line.type]).toEqual(['Ana', 'the new beds', 'image']);
+        const cache = memoryCache();
+        const view = v.opened.views.get(firstPhotoId)!;
+        expect(await getDecryptedGroupAttachment(URL_BASE, ben.identity, ben.store, { groupId: PG, line, view }, cache)).toBe(photos.get(firstPhotoId));
+        const before = sent.length;
+        expect(await getDecryptedGroupAttachment(URL_BASE, ben.identity, ben.store, { groupId: PG, line, view }, cache)).toBe(photos.get(firstPhotoId));
+        expect(sent.slice(before)).toEqual([]);
+    }, 60_000);
+
+    it('a 409 mid-send (another member\'s join moved the epoch between the seal and the post) re-seals BOTH parts under the new epoch, once', async () => {
+        await control('limiters');
+        secondPhotoId = randomUUID();
+        photos.set(secondPhotoId, photoUri());
+        let joined = false;
+        beforeRequest = async (path) => {
+            if (joined || !path.endsWith('/chat/message')) return;
+            joined = true;
+            await joinGroupWithEpoch(URL_BASE, cat.identity, cat.store, { id: PG, joinPolicy: 'open' });
+        };
+        const from = sent.length;
+        try {
+            await sendSealedGroupLine(URL_BASE, ana.identity, ana.store, { groupId: PG, text: 'and the seedlings', clientId: secondPhotoId, photo: photos.get(secondPhotoId) });
+        } finally {
+            beforeRequest = null;
+        }
+        const posts = sent.slice(from).filter((s) => s.method === 'POST' && s.path === `/api/groups/${PG}/chat/message`);
+        const bodies = posts.map((s) => JSON.parse(s.body!));
+        console.log(`photo 409: statuses ${JSON.stringify(posts.map((s) => s.status))}; epochs ${JSON.stringify(bodies.map((b) => b.metadata.epoch))}`);
+        expect(posts.map((s) => s.status)).toEqual([409, 201]);
+        expect(bodies.map((b) => [b.type, b.metadata.epoch, b.clientId])).toEqual([['image', 3, secondPhotoId], ['image', 4, secondPhotoId]]);
+        expect(bodies[1].nonce).not.toBe(bodies[0].nonce);
+        expect(bodies[1].attachment.nonce).not.toBe(bodies[0].attachment.nonce);
+
+        const [row] = await control<any[]>('sql', { sql: "SELECT json_extract(metadata, '$.epoch') e FROM messages WHERE id = ?", params: [secondPhotoId], all: true });
+        expect(row.e).toBe(4);
+        const served = await json(await signedGet(URL_BASE, `/api/messages/${secondPhotoId}/attachment`, cat.identity));
+        const bind = { groupId: PG, senderPubHex: ana.identity.publicKey, messageId: secondPhotoId, replyToId: null, part: 'attachment' as const };
+        const key4 = (await ring(cat, PG).keyFor(4))!;
+        const key3 = (await ring(ben, PG).keyFor(3))!;
+        expect(openLine({ ciphertext: served.data, nonce: served.nonce }, { ...bind, epoch: 4 }, key4).text).toBe(photos.get(secondPhotoId));
+        expect(() => openLine({ ciphertext: served.data, nonce: served.nonce }, { ...bind, epoch: 3 }, key3)).toThrow();
+        // Cat, a member from epoch 4, opens the photo and its caption; the first photo, from before her, is never served to her.
+        const v = await shown(cat, PG);
+        expect(v.visible.find((x) => x.id === secondPhotoId)?.text).toBe('and the seedlings');
+        expect(await getDecryptedGroupAttachment(URL_BASE, cat.identity, cat.store, { groupId: PG, line: await servedLine(cat, PG, secondPhotoId), view: v.opened.views.get(secondPhotoId)! }, memoryCache())).toBe(photos.get(secondPhotoId));
+        await expect(json(await signedGet(URL_BASE, `/api/messages/${firstPhotoId}/attachment`, cat.identity))).rejects.toMatchObject({ status: 404 });
+    }, 60_000);
+
+    it('receiving: a photo whose words wait for a key fetches nothing, and a photo the node swapped for another line\'s reads unavailable', async () => {
+        await control('limiters');
+        // Ben's phone is new (no keys kept) and the node lost his wrap for epoch 4: the second photo's key isn't here.
+        await control('sql', { sql: 'DELETE FROM group_key_wraps WHERE group_id = ? AND epoch = 4 AND recipient_pubkey = ?', params: [PG, ben.identity.publicKey] });
+        forgetGroupKeys();
+        const benNew: Phone = { ...ben, store: memoryGroupKeyStore() };
+        const v = await shown(benNew, PG);
+        const view = v.opened.views.get(secondPhotoId)!;
+        expect(view.waitingKey).toBe(true);
+        const cache = memoryCache();
+        const before = sent.length;
+        expect(await getDecryptedGroupAttachment(URL_BASE, benNew.identity, benNew.store, { groupId: PG, line: await servedLine(benNew, PG, secondPhotoId), view }, cache)).toBeNull();
+        expect(sent.slice(before).filter((s) => s.path.endsWith('/attachment'))).toEqual([]);
+        expect(cache.kept.size).toBe(0);
+
+        // The node serves the second photo's sealed bytes as the first's: it opens under neither line's binding here.
+        const [other] = await control<any[]>('sql', { sql: 'SELECT data, nonce, storage_key FROM message_attachments WHERE message_id = ?', params: [secondPhotoId], all: true });
+        await control('sql', { sql: 'UPDATE message_attachments SET data = ?, nonce = ?, storage_key = ? WHERE message_id = ?', params: [other.data, other.nonce, other.storage_key, firstPhotoId] });
+        const swapped = await json(await signedGet(URL_BASE, `/api/messages/${firstPhotoId}/attachment`, ana.identity));
+        const real = await json(await signedGet(URL_BASE, `/api/messages/${secondPhotoId}/attachment`, ana.identity));
+        expect([swapped.data, swapped.nonce]).toEqual([real.data, real.nonce]);
+        const forAna = await shown(ana, PG);
+        const anaView = forAna.opened.views.get(firstPhotoId)!;
+        expect([anaView.name, anaView.text]).toEqual(['Ana', 'the new beds']);
+        const anaCache = memoryCache();
+        expect(await getDecryptedGroupAttachment(URL_BASE, ana.identity, ana.store, { groupId: PG, line: await servedLine(ana, PG, firstPhotoId), view: anaView }, anaCache)).toBeNull();
+        expect(anaCache.kept.size).toBe(0);
+    }, 60_000);
 
     it('every request stayed on this machine, and none was a readable group line', () => {
         expect(elsewhere).toEqual([]);

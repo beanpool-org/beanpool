@@ -40,6 +40,13 @@ interface Props {
     accessibilityLabel: string;
     /** The DM's photo button; nothing in a node-readable chat, where the node refuses images. */
     leading?: React.ReactNode;
+    /**
+     * A locked group chat's photo button (DESIGN-group-chat-photos-fable.md §5 S3): 48 × 48 before the box, never shrinking
+     * it or Send at 320 dp and 1.3× text. Absent, no button.
+     */
+    onAttach?: () => void;
+    /** A photo waiting to go, shown above the box: Send sends it with the box's words as its caption, or with none. */
+    attachment?: React.ReactNode;
     /** The honest line about who can read this chat, above the box. */
     notice?: string | null;
     /** A spinner on the send button while the node is being waited on (node-readable chats). */
@@ -56,7 +63,7 @@ interface Props {
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
-    { styles, onSend, placeholder, accessibilityLabel, leading, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding }, ref,
+    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding }, ref,
 ) {
     const { colors } = useTheme();
     const inputRef = useRef<TextInput>(null);
@@ -131,7 +138,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
         // Guard and payload both come from draftRef, never `draft` state. Guarding on state made the button
         // silently swallow presses whenever state lagged the box (the "chat locked up" report).
         const text = draftRef.current.trim();
-        if (!text || disabled || sendingRef.current) return;
+        // A waiting photo goes with no words too: its caption is optional.
+        if ((!text && !attachment) || disabled || sendingRef.current) return;
         if (canSendNow && !canSendNow()) return; // asked before the box is emptied — see the prop's note
         sendingRef.current = true;
         try {
@@ -143,13 +151,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
         }
     };
 
-    const canSend = draft.trim().length > 0 && !disabled && !busy;
+    const canSend = (draft.trim().length > 0 || !!attachment) && !disabled && !busy;
 
     return (
         <View>
             {!!notice && <Text style={styles.composerNotice}>{notice}</Text>}
-            <View style={[styles.inputContainer, { paddingBottom: bottomPadding }]}>
+            {attachment}
+            {/* One block with the waiting photo above it: the photo's row draws the line between the chat and the box. */}
+            <View style={[styles.inputContainer, { paddingBottom: bottomPadding }, attachment ? { borderTopWidth: 0 } : null]}>
                 {leading}
+                {!!onAttach && (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Attach image')}
+                        accessibilityState={{ disabled: !!disabled || !!busy }}
+                        disabled={!!disabled || !!busy}
+                        style={styles.composerAttachBtn}
+                        onPress={onAttach}
+                    >
+                        <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />
+                    </Pressable>
+                )}
                 <TextInput
                     ref={inputRef}
                     accessibilityLabel={accessibilityLabel}

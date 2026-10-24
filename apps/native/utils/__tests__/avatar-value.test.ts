@@ -97,8 +97,11 @@ import {
     retireParkedPickAfterPublish,
 } from '../avatar-value';
 import { updateMemberProfile, pushProfileToServer, applyDelta, syncMessages, redeemInvite } from '../db';
+import { keepPendingProfileChange, pendingProfileChange } from '../pending-profile-sync';
 
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+/** The community the phone is in for the publish sections below. */
+const HERE = 'https://test.beanpool.org';
 const NODE_URL_RELATIVE = `/api/avatar/${SELF_PK}?size=thumb`;
 const NODE_URL_VERSIONED = `/api/avatar/${SELF_PK}?size=thumb&v=e3733e23`;
 const NODE_URL_ABSOLUTE = `https://mullum.beanpool.org/api/avatar/${SELF_PK}?size=thumb`;
@@ -290,7 +293,9 @@ describe('the explicit-edit screens publish only a session pick', () => {
         // The session pick is still what an explicit edit sends FIRST — that is now inside
         // `resolveProfilePublishAvatar`, tested directly above, rather than restated here.
         const src = read('app/(tabs)/settings.tsx');
-        expect(src).toContain('resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession })');
+        // The parked pick is the one waiting for THIS community (pending-profile-sync.ts), read by the Save itself.
+        expect(src).toContain('resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession, parked: pending?.avatar })');
+        expect(src).toContain('const pending = await pendingProfileChange(url, identity.publicKey);');
         // The only assignment of the payload's avatar is that decision.
         expect(src.match(/payloadObj\.avatar\s*=\s*([A-Za-z0-9_.]+)/g)).toEqual(['payloadObj.avatar = publishAvatar']);
         // And the displayed `avatar` state never reaches the publish decision again.
@@ -313,6 +318,7 @@ describe('the explicit-edit screens publish only a session pick', () => {
         expect(src).toContain('sessionPick: pendingAvatar');
         expect(src).toContain('catchUp: { localRow: nodeAvatar, canonical: canonicalAvatar }');
         expect(src).toContain('resolveProfilePublishAvatar({');
+        expect(src).toContain('parked: pending?.avatar,');
         // `avatar: pendingAvatar` in the request body was the stale-preview publish itself.
         expect(src).not.toMatch(/avatar:\s*pendingAvatar/);
         expect(src).not.toContain('publishableAvatar');
@@ -320,16 +326,20 @@ describe('the explicit-edit screens publish only a session pick', () => {
         expect(src).not.toContain('profileSetupAvatar');
     });
 
-    it('both offline branches park the session pick beside the pending flag', () => {
+    it('both offline branches park the session pick in the change kept for their community', () => {
         // The retry cannot recover a pick it was never given, and the local members row is not
-        // a durable place to leave one — the next full-directory sync overwrites it.
+        // a durable place to leave one — the next full-directory sync overwrites it. It is kept
+        // with the community the Save was made in (pending-profile-sync.ts), never for the phone:
+        // a photo parked for the phone was published to whichever community synced next.
         for (const [rel, pick] of [
             ['app/(tabs)/settings.tsx', 'avatarPickedThisSession'],
             ['app/profile-setup.tsx', 'pendingAvatar'],
         ] as const) {
             const src = read(rel);
             expect(src).toContain(`const offlinePick = explicitEditAvatar(${pick});`);
-            expect(src).toContain("if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);");
+            expect(src).toMatch(/await keepPendingProfileChange\(url, identity\.publicKey, \{[^}]*avatar: offlinePick \}\);/);
+            expect(src).not.toContain("'pending_profile_avatar'");
+            expect(src).not.toContain("'pending_profile_sync'");
         }
     });
 
@@ -351,12 +361,16 @@ describe('the explicit-edit screens publish only a session pick', () => {
         // keeping its own copy of "prefer the parked pick, else catch up".
         const src = read('utils/db.ts');
         expect(src).toContain('resolveProfilePublishAvatar({');
-        expect(src).toContain('retireParkedPickAfterPublish(');
         expect(src).not.toContain('catchUpAvatar(');
-        // Exactly one hand-written removal survives: the give-up branch, which is reached only
-        // when there is nothing publishable anywhere — a portable parked pick would have been
-        // chosen as `avatar` and kept this code out of that branch entirely.
-        expect(src.match(/removeItem\('pending_profile_avatar'\)/g)).toHaveLength(1);
+        // The parked pick it sends is the one waiting for the community it publishes to.
+        expect(src).toContain('parked: pending?.avatar,');
+        // This publish carries everything the community's change holds, its parked pick
+        // included, so a verified 2xx retires the whole change, as it retired the flag and
+        // the pick before; the give-up branch, reached only when there is nothing publishable
+        // anywhere, is the one other. Both only for the community published to, and nothing
+        // in db.ts touches the phone-wide keys of older builds.
+        expect(src.match(/clearPendingProfileChange\(anchorUrl, pending\)/g)).toHaveLength(2);
+        expect(src).not.toMatch(/'pending_profile_(avatar|sync)'/);
     });
 
     it('only the NODE\'s own answer claims the node has no photo', () => {
@@ -565,7 +579,9 @@ describe('an offline pick survives a members sync landing before the retry', () 
      * Only the viewer's own row and only the columns this path reads.
      */
     let row: any;
-    let parked: string | null;
+    let store: Record<string, string>;
+    /** What waits for this community (pending-profile-sync.ts): the old flag and its parked pick, together. */
+    const waiting = () => pendingProfileChange(HERE, SELF_PK);
 
     const postedBody = (): any => {
         const call = (globalThis.fetch as any).mock.calls[0];
@@ -577,23 +593,15 @@ describe('an offline pick survives a members sync landing before the retry', () 
             public_key: SELF_PK, callsign: 'Damo', avatar_url: null,
             bio: null, contact_value: null, contact_visibility: null, archetype: null,
         };
-        parked = null;
+        store = { beanpool_anchor_url: HERE };
         h.loadIdentity.mockResolvedValue({ publicKey: SELF_PK, callsign: 'Damo', privateKey: 'k' });
         h.getCanonicalProfile.mockResolvedValue({ avatar: OLD_PHOTO });
         h.db.withTransactionAsync.mockImplementation(async (cb: () => Promise<void>) => { await cb(); });
         h.db.getAllAsync.mockResolvedValue([]);
         h.getFirstAsync.mockImplementation(async () => row);
-        h.asyncStorage.getItem.mockImplementation(async (k: string) => {
-            if (k === 'beanpool_anchor_url') return 'https://test.beanpool.org';
-            if (k === 'pending_profile_avatar') return parked;
-            return null;
-        });
-        h.asyncStorage.setItem.mockImplementation(async (k: string, v: string) => {
-            if (k === 'pending_profile_avatar') parked = v;
-        });
-        h.asyncStorage.removeItem.mockImplementation(async (k: string) => {
-            if (k === 'pending_profile_avatar') parked = null;
-        });
+        h.asyncStorage.getItem.mockImplementation(async (k: string) => store[k] ?? null);
+        h.asyncStorage.setItem.mockImplementation(async (k: string, v: string) => { store[k] = v; });
+        h.asyncStorage.removeItem.mockImplementation(async (k: string) => { delete store[k]; });
         // The members upsert, applied to `row` with the same precedence the SQL has: on a
         // COMPLETE list the incoming value wins outright, including a null.
         h.runAsync.mockImplementation(async (sql: string, params: any[]) => {
@@ -612,8 +620,7 @@ describe('an offline pick survives a members sync landing before the retry', () 
 
     /** What the offline branch of settings Save / Re-run Setup does. */
     const offlineSaveWithPick = async (pick: string) => {
-        await h.asyncStorage.setItem('pending_profile_sync', 'true');
-        await h.asyncStorage.setItem('pending_profile_avatar', pick);
+        await keepPendingProfileChange(HERE, SELF_PK, { avatar: pick });
         await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: pick });
     };
 
@@ -640,8 +647,8 @@ describe('an offline pick survives a members sync landing before the retry', () 
     it('clears the parked pick once the node has taken it', async () => {
         await offlineSaveWithPick(PHOTO);
         await pushProfileToServer();
-        expect(parked).toBeNull();
-        expect(h.asyncStorage.removeItem).toHaveBeenCalledWith('pending_profile_sync');
+        // The pick and the change it waited in, both gone: nothing waits for this community.
+        expect(await waiting()).toBeNull();
     });
 
     it('KEEPS the parked pick when the publish fails, so the next retry still has it', async () => {
@@ -650,7 +657,7 @@ describe('an offline pick survives a members sync landing before the retry', () 
 
         expect(await pushProfileToServer()).toBe(false);
 
-        expect(parked).toBe(PHOTO);
+        expect((await waiting())?.avatar).toBe(PHOTO);
     });
 
     it('KEEPS the parked pick when the node 200s without storing the avatar', async () => {
@@ -660,14 +667,14 @@ describe('an offline pick survives a members sync landing before the retry', () 
 
         expect(await pushProfileToServer()).toBe(false);
 
-        expect(parked).toBe(PHOTO);
+        expect((await waiting())?.avatar).toBe(PHOTO);
     });
 
     it('a bio-only offline edit parks nothing and still says nothing about the photo', async () => {
         // No pick this session, so nothing is parked; by the time the retry runs the node holds
         // a photo this phone has never seen, and the bio must not drag an older one along.
         row.bio = 'wrote this on the train';
-        await h.asyncStorage.setItem('pending_profile_sync', 'true');
+        await keepPendingProfileChange(HERE, SELF_PK, {});
         await membersSyncWritesNodeUrl();
 
         await pushProfileToServer();
@@ -701,7 +708,7 @@ describe('an online Save that is not about the photo still delivers the parked p
             public_key: SELF_PK, callsign: 'Damo', avatar_url: null,
             bio: 'wrote this on the train', contact_value: null, contact_visibility: null, archetype: null,
         };
-        store = { beanpool_anchor_url: 'https://test.beanpool.org' };
+        store = { beanpool_anchor_url: HERE };
         h.loadIdentity.mockResolvedValue({ publicKey: SELF_PK, callsign: 'Damo', privateKey: 'k' });
         h.getCanonicalProfile.mockResolvedValue({ avatar: OLD_PHOTO });
         h.db.withTransactionAsync.mockImplementation(async (cb: () => Promise<void>) => { await cb(); });
@@ -724,12 +731,13 @@ describe('an online Save that is not about the photo still delivers the parked p
         globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ profile: { avatar: 'stored' } }) }) as any;
     });
 
-    /** The offline branch both screens share: park the pick beside the flag, commit locally. */
+    /** The offline branch both screens share: park the pick in the change kept for this community, commit locally. */
     const offlineSaveWithPick = async (pick: string) => {
-        await h.asyncStorage.setItem('pending_profile_sync', 'true');
-        await h.asyncStorage.setItem('pending_profile_avatar', pick);
+        await keepPendingProfileChange(HERE, SELF_PK, { avatar: pick });
         await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: pick });
     };
+    /** What waits for this community (pending-profile-sync.ts): the old flag and its parked pick, together. */
+    const waiting = () => pendingProfileChange(HERE, SELF_PK);
 
     /** The node's hourly full directory, which knows nothing of the unpublished pick. */
     const membersSyncWritesNodeUrl = async () => {
@@ -745,24 +753,27 @@ describe('an online Save that is not about the photo still delivers the parked p
      * never fall back to canonical. `accepted` is the node's answer.
      */
     const settingsSave = async (sessionPick: string | null, accepted: boolean) => {
-        const decision = await resolveProfilePublishAvatar({ sessionPick });
+        const pending = await pendingProfileChange(HERE, SELF_PK);
+        const decision = await resolveProfilePublishAvatar({ sessionPick, parked: pending?.avatar });
         const payloadObj: any = { publicKey: SELF_PK, callsign: 'Damo', bio: row.bio };
         if (decision.avatar) payloadObj.avatar = decision.avatar;
         if (!accepted) return payloadObj;       // the node said no: nothing local moves
-        await retireParkedPickAfterPublish(decision);
+        await retireParkedPickAfterPublish(decision, HERE);
         return payloadObj;
     };
 
     /** Re-run Setup's `published` branch, with the node's row as its catch-up input. */
     const wizardFinish = async (sessionPick: string | null, accepted: boolean) => {
+        const pending = await pendingProfileChange(HERE, SELF_PK);
         const decision = await resolveProfilePublishAvatar({
             sessionPick,
+            parked: pending?.avatar,
             catchUp: { localRow: row.avatar_url, canonical: OLD_PHOTO },
         });
         const body: any = { publicKey: SELF_PK, callsign: 'Damo' };
         if (decision.avatar) body.avatar = decision.avatar;
         if (!accepted) return body;
-        await retireParkedPickAfterPublish(decision);
+        await retireParkedPickAfterPublish(decision, HERE);
         return body;
     };
 
@@ -770,14 +781,13 @@ describe('an online Save that is not about the photo still delivers the parked p
         await offlineSaveWithPick(PHOTO);
         globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({}) }) as any;
         expect(await pushProfileToServer()).toBe(false);
-        expect(store.pending_profile_avatar).toBe(PHOTO);   // the retry kept it
+        expect((await waiting())?.avatar).toBe(PHOTO);   // the retry kept it
 
         const payload = await settingsSave(null, true);
 
         // Before this fix: no `avatar` at all, and both keys gone on the 200.
         expect(payload.avatar).toBe(PHOTO);
-        expect(store.pending_profile_avatar).toBeUndefined();
-        expect(store.pending_profile_sync).toBeUndefined();
+        expect(await waiting()).toBeNull();
     });
 
     it('the keys clear only AFTER the node has taken it', async () => {
@@ -786,8 +796,7 @@ describe('an online Save that is not about the photo still delivers the parked p
         const payload = await settingsSave(null, false);   // node rejected / unreachable
 
         expect(payload.avatar).toBe(PHOTO);
-        expect(store.pending_profile_avatar).toBe(PHOTO);
-        expect(store.pending_profile_sync).toBe('true');
+        expect(await waiting()).toEqual({ publicKey: SELF_PK, avatar: PHOTO });
     });
 
     it('the same through Re-run Setup, with a members sync landing in between', async () => {
@@ -799,8 +808,7 @@ describe('an online Save that is not about the photo still delivers the parked p
         // Before this fix the wizard asked `profileSetupAvatar(null, <node URL>, canonical)`,
         // which correctly returns null — and then cleared the parked pick anyway.
         expect(body.avatar).toBe(PHOTO);
-        expect(store.pending_profile_avatar).toBeUndefined();
-        expect(store.pending_profile_sync).toBeUndefined();
+        expect(await waiting()).toBeNull();
     });
 
     it('a bio-only online Save with nothing parked still leaves out `avatar`', async () => {
@@ -809,7 +817,7 @@ describe('an online Save that is not about the photo still delivers the parked p
         const payload = await settingsSave(null, true);
 
         expect('avatar' in payload).toBe(false);
-        expect(store.pending_profile_avatar).toBeUndefined();
+        expect(await waiting()).toBeNull();
     });
 
     it('a photo picked in THIS session beats an older parked one, and retires it', async () => {
@@ -821,14 +829,13 @@ describe('an online Save that is not about the photo still delivers the parked p
         const payload = await settingsSave(PHOTO, true);
 
         expect(payload.avatar).toBe(PHOTO);
-        expect(store.pending_profile_avatar).toBeUndefined();
-        expect(store.pending_profile_sync).toBeUndefined();
+        expect(await waiting()).toBeNull();
     });
 
     it('a parked pick the retry DID deliver is never sent twice', async () => {
         await offlineSaveWithPick(PHOTO);
         expect(await pushProfileToServer()).toBe(true);
-        expect(store.pending_profile_avatar).toBeUndefined();
+        expect(await waiting()).toBeNull();
 
         await membersSyncWritesNodeUrl();
         const payload = await settingsSave(null, true);

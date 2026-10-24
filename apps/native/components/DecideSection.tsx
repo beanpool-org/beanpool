@@ -15,6 +15,7 @@ import {
     type MyPoolVoting,
     castDecisionVote,
 } from '../utils/db';
+import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
@@ -61,6 +62,7 @@ interface Props {
     activeView: 'open' | 'history';
     onChangeView: (view: 'open' | 'history') => void;
     preview?: boolean;
+    features?: NodeFeatures | null;
 }
 
 export function DecideSection({
@@ -75,8 +77,10 @@ export function DecideSection({
     activeView,
     onChangeView,
     preview = false,
+    features,
 }: Props) {
     const { theme, colors } = useTheme();
+    const showsBeans = beansOn(features);
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
@@ -818,7 +822,7 @@ export function DecideSection({
                                     )}
 
                                     {/* §3.8 Removal Ballot debt-write-off line */}
-                                    {item.effect === 'remove_member' && (
+                                    {showsBeans && item.effect === 'remove_member' && (
                                         <View style={styles.debtWarningBox} testID="removal-debt-write-off-box">
                                             <Text style={styles.debtWarningLabel}>{inCapitalsOf(t('Mandatory Debt Disclosure (§3.8)'))}</Text>
                                             <Text style={styles.debtWriteOffText} testID="removal-debt-write-off-line">

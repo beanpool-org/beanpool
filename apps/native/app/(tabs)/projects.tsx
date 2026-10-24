@@ -581,6 +581,7 @@ export default function ProjectsScreen() {
                                 activeView={activeDecideView}
                                 onChangeView={setActiveDecideView}
                                 preview={decisionsPreview}
+                                features={reader.effective}
                             />
                         ) : (
                             <View style={{ gap: 12 }}>
@@ -711,6 +712,7 @@ export default function ProjectsScreen() {
                     commonsBalance={balanceState.commons || 0}
                     treasuries={enterprises}
                     members={membersList}
+                    features={reader.effective}
                 />
             )}
 

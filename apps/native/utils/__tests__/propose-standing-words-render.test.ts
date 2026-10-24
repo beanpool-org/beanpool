@@ -104,3 +104,57 @@ describe('who may propose a Decision, in the phone\'s words: a completed trade o
         offersNoBadgeRoute();
     });
 });
+
+describe('removal card Commons pool debt line', () => {
+    const removalDecision = {
+        id: 'rem-1',
+        authorPubkey: 'a'.repeat(64),
+        title: 'Remove someone',
+        description: 'Testing removal',
+        touches: 'member',
+        effect: 'remove_member',
+        franchise: '1m1v',
+        status: 'open',
+        subject: 'b'.repeat(64),
+        closesAt: new Date(Date.now() + 86400000).toISOString(),
+        createdAt: new Date().toISOString(),
+        tally: { totalVoters: 5, quorumRequired: 10, supportRatio: 0.8, thresholdRequired: 0.66, yesWeight: 4, noWeight: 1 },
+        params: { memberName: 'BadActor', commonsPool: 50 },
+    } as any;
+
+    it('Beans off: removal card does not show Commons pool debt line or warning box', async () => {
+        await render(createElement(DecideSection, {
+            decisions: [removalDecision],
+            myPoolVoting: null,
+            identity: { publicKey: ME },
+            balanceState: { earnedCredit: 0, commons: 0 },
+            activeView: 'open',
+            onChangeView: () => {},
+            onRefresh: async () => {},
+            onOpenPropose: () => {},
+            canPropose: true,
+            hasOpenDecision: false,
+            features: { beans: false, decisions: true },
+        }));
+        expect(host.querySelector('[data-testid="removal-debt-write-off-box"]')).toBeFalsy();
+        expect(text()).not.toMatch(/Commons pool/i);
+    });
+
+    it('Beans on: removal card shows Commons pool debt line', async () => {
+        await render(createElement(DecideSection, {
+            decisions: [removalDecision],
+            myPoolVoting: null,
+            identity: { publicKey: ME },
+            balanceState: { earnedCredit: 0, commons: 50 },
+            activeView: 'open',
+            onChangeView: () => {},
+            onRefresh: async () => {},
+            onOpenPropose: () => {},
+            canPropose: true,
+            hasOpenDecision: false,
+            features: { beans: true, decisions: true },
+        }));
+        expect(host.querySelector('[data-testid="removal-debt-write-off-box"]')).toBeTruthy();
+        expect(text()).toMatch(/Commons pool/i);
+    });
+});

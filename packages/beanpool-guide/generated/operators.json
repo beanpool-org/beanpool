@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 147,
-  "hash": "209efe74d56823cd4772d70fb623670830590afee387b1d48d47bbc9b8e6798d",
+  "version": 148,
+  "hash": "9458899d7030492c8a4ab9bbe8d1e9dcc73b42c34e5e35bbaf1eae4c82f05487",
   "sections": [
     {
       "id": "setup",
@@ -12,6 +12,7 @@
         "install-with-ai",
         "signing-in",
         "the-settings-screens",
+        "how-this-community-works",
         "settings-map",
         "access-and-security"
       ]
@@ -175,6 +176,10 @@
         },
         {
           "type": "p",
+          "text": "First, on the phone that will own the community: install BeanPool from Google Play or the App Store, open it and make your account. With no invite, tap **Explore BeanPool worldwide**. It shows you 12 words: write them on paper. Then scan the QR code below. Scanned before the account is made, BeanPool says so, offers **Make my account**, and comes back to the claim once it is made."
+        },
+        {
+          "type": "p",
           "text": "The last step of an install, on the server:"
         },
         {
@@ -187,7 +192,7 @@
             "With your server's IP address, beanpool claim --ip 203.0.113.7, or your own domain, beanpool claim --address https://your.domain: your server keeps the address and gets its own certificate for it, and beanpool claim waits up to three minutes until the address answers with that certificate. Then the QR code carries it. If it does not answer in time, beanpool claim says why, for example that port 80 is not reachable from the internet and needs opening in the firewall; for a domain, it also says which DNS record to make. With --ip the QR code then carries no address, and with --address it carries your domain anyway. Your server keeps trying by itself: run beanpool claim again once it has its certificate, and the QR code carries the address.",
             "Without either, it asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip, or use --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.",
             "Without an address that works, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it. On a home network that works; on a server on the internet the phone refuses it, and beanpool claim says so before the QR code (see Your community needs an address phones can reach, above).",
-            "It shows the one-time claim code and a QR code. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up."
+            "It shows the one-time claim code, a QR code and, numbered, what to do next on your phone. Scan the QR code with your phone. Or open BeanPool, go to **Find a community**, type your server's address in the search box, and tap **Claim ‹name›**. That phone becomes the owner, and the code is used up."
           ]
         },
         {
@@ -336,7 +341,7 @@
             "On a server with 1 GB of memory, first add 2 GB of swap and keep it on after a restart.",
             "Install BeanPool with the one block under Start a community on beanpool.org, which is also in the README at github.com/beanpool-org/beanpool. It pulls the published image of the latest release. Never build BeanPool from source, and change nothing in docker-compose.yml.",
             "For the block's last line, give the community its address. On a rented server with a public IP address and ports 80 and 443 open: docker compose exec beanpool-node beanpool claim --ip THE-SERVER'S-IP. On a computer at home, or with no ports open: --name NAME instead. If I have my own domain pointed at the server: --address https://my.domain. Never give the phone a plain http:// address on the internet: phones refuse it.",
-            "Stop when it shows the one-time claim code and the QR code, and show me both. Never claim the community yourself, and never run beanpool claim --key.",
+            "Stop when it shows the one-time claim code and the QR code, and show me both, with the numbered steps for my phone it prints under them. Never claim the community yourself, and never run beanpool claim --key.",
             "Tell me what you ran, and anything you decided on your own."
           ]
         },
@@ -351,7 +356,7 @@
             "Installs Docker, and adds swap on a 1 GB server, which otherwise can run out of memory while it starts.",
             "Runs the one block: fetches the compose file, creates the network the server uses, pulls the published image, starts it, and waits until the server has made its one-time claim code.",
             "Runs beanpool claim with the address. With --ip or your own domain, your server gets its own certificate for the address, and beanpool claim waits up to three minutes until the address answers with it. With a name, your server asks for NAME.beanpool.org with its own key and waits up to three minutes for it to go live; a name that waits for approval moves over by itself once approved. See Your community needs an address phones can reach, in First-time setup.",
-            "Shows you the claim code and the QR code."
+            "Shows you the claim code, the QR code and the numbered steps for your phone: install BeanPool, make your account, then scan."
           ]
         },
         {
@@ -369,7 +374,7 @@
         {
           "type": "ul",
           "items": [
-            "**The claim.** Your phone claims the community and becomes its owner: scan the QR code, or open BeanPool, go to **Find a community**, type the address in the search box and tap **Claim ‹name›**. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.",
+            "**The claim.** Your phone claims the community and becomes its owner. First install BeanPool on it and make your account (with no invite, tap **Explore BeanPool worldwide**). Then scan the QR code, or open BeanPool, go to **Find a community**, type the address in the search box and tap **Claim ‹name›**. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.",
             "**Your 12 words.** Your phone shows them when it makes your key. Write them on paper and keep them. Never type them into an assistant, a chat or a server: whoever has them is you.",
             "**Your keys and secrets.** Give the assistant nothing more than a token you can revoke: an SSH key made for this job, which you remove from the server when it is done, or a cloud provider's token you can revoke. Never your cloud account's password, and never your phone. Afterwards, change anything you keep secret that it saw."
           ]
@@ -639,6 +644,114 @@
         {
           "type": "p",
           "text": "A few numbers in Settings are not calculated yet: the \"Trust Rating\" on a member's page, the \"Live Request Traffic vs Limit\" meter under Gateway & Peers, the \"Backed up recently\" line on Home, and everything on the Commons Pool tab. That tab always shows \"240.0 beans\", \"✓ Solvent & Fully Backed\", \"0.0 drift\" and \"0 queued\", whatever the real figures are. These never change either: the version on Home and at the foot of the side bar (\"v1.4.2\"), and the side bar's \"Online\". Home says \"Ledger not audited yet\" until you press **Run Ledger Audit**. Don't read your server's version or health from them: your server's address followed by /api/version gives the real version. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them."
+        }
+      ]
+    },
+    {
+      "slug": "how-this-community-works",
+      "title": "How this community works",
+      "summary": "The one place owners set how their community works: who can join, Beans, votes, being found, and safety.",
+      "section": "setup",
+      "related": [
+        "the-settings-screens",
+        "members-and-invites",
+        "running-a-known-community",
+        "address-and-peers"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "**How this community works** is the owner's screen for the structural settings that define what your community does."
+        },
+        {
+          "type": "p",
+          "text": "Only an owner can change these settings. Admins can view every setting and its reasons, but cannot make changes. When an owner changes a member-facing setting, every member is automatically notified on Home with the change and any optional note the owner includes."
+        },
+        {
+          "type": "h2",
+          "text": "Who can join"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Who can join**: Choose whether any member can invite new people, only admins can invite, or new members are paused for now. On a global server, the door is open to anyone.",
+            "**Requests to join**: Allow people who find your community on the global node to ask to join. A member or admin answers with an invite.",
+            "**Private preview**: Set on the server (PRIVATE_PREVIEW). While on, only people invited by an owner or admin can enter and visitors see nothing."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Money"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Beans**: The medium of trade, credit and the Commons. Once any member has traded and the ledger has moved, Beans are locked on and cannot be turned off.",
+            "**Known floor for confirmed members**: How far confirmed members on the names list may go into debt while keeping an offer listed. Requires Beans to be on."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Talking"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**First message from someone new**: When on, a message from someone new waits under Requests until accepted. When off, messages arrive straight away."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Deciding together"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Community votes (Decisions)**: Turn formal community proposals and votes on or off."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Being found"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Listed in the BeanPool directory**: Whether this community is published in the directory and map at beanpool.org.",
+            "**Share location & radius**: Whether non-members can see your community's rough location on the map.",
+            "**Share member count, email, phone, health**: Choose which details are sent to the public directory.",
+            "**Visitors**: What non-members see when visiting this server."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Safety"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Limits on new accounts**: Small daily posting and messaging limits for new members' first days.",
+            "**Reported posts hidden automatically**: Automatically hide posts reported by three independent groups until a moderator reviews them.",
+            "**Repeat offenders muted automatically**: Automatically mute members with multiple takedowns."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Connections"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Connections to other communities**: Whether this node connects to peer communities (ENABLE_PEER_CONNECTORS). Set on the server."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Changes"
+        },
+        {
+          "type": "p",
+          "text": "The audit log at the bottom lists every structural change made to the community, including who changed it, when, what changed, and any note to members."
         }
       ]
     },
@@ -1145,7 +1258,7 @@
             "lift a suspension that took away an owner's or an admin's role, which gives that role back;",
             "end the waiting time early when an owner or admin is being removed;",
             "change or retire the admin password, and turn two-factor sign-in on or off;",
-            "choose who may invite, set the known floor and the cap, and move the exception lines;",
+            "choose who may invite, turn requests to join and message requests on or off, set the known floor and the cap, and move the exception lines;",
             "make or revoke automation tokens, set the alerts, and choose where off-box backups go;",
             "make the recovery code, or take over;",
             "allow or stop AI assistants;",
@@ -1425,7 +1538,15 @@
         },
         {
           "type": "p",
-          "text": "Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. The server's log says who changed it."
+          "text": "**While no new members are being taken** (the community is paused), the card says so first. No choice is marked as the one in use; the one from before the pause is marked \"before the pause\". Saving either choice takes new members again, and every member is told. Until the manager has checked whether the community is paused, it won't save: if it can't check, reload to try again."
+        },
+        {
+          "type": "p",
+          "text": "**While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The card says so first, in the server's words, with what would end it, and offers nothing to save until the preview is off."
+        },
+        {
+          "type": "p",
+          "text": "Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. Each change is logged with who made it, the owners get an alert, and every member is told in a notice from the community."
         },
         {
           "type": "p",
@@ -1457,7 +1578,7 @@
         },
         {
           "type": "p",
-          "text": "Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing."
+          "text": "Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge gives that badge's trust, so a deeper credit line, and nothing more: badges gate nothing. It is no standing to propose a Decision; only a completed trade is."
         },
         {
           "type": "ul",
@@ -1538,7 +1659,7 @@
         {
           "type": "ul",
           "items": [
-            "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on keeping the suspension, and if the vote does not pass it lifts by itself. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.",
+            "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on removing them: if the vote does not pass, the suspension lifts when it closes, and if it passes, they are removed after 7 days' grace. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.",
             "**Lift suspension**: ends a suspension early and closes its vote.",
             "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level doesn't change, on their profile and their listings alike: it counts what they have done, not their credit line.",
             "**Promote** and **Demote**: whether they can vouch for others.",
@@ -1635,7 +1756,7 @@
         },
         {
           "type": "p",
-          "text": "**Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). If a report suspended them, before or while the code waited, they stay suspended and the window says why; **Lift suspension** on their page lifts it if that's no longer right. A report dealt with without suspending them changes nothing. An admin can suspend them while the code waits, and that suspension stays after a cancel. Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, unless a report may have suspended them (one dealt with before this server noted which reports did): then they stay suspended, the window says so, and **Lift suspension** lifts it. Completing the code doesn't lift a report's suspension either: their new key stays suspended until it is lifted."
+          "text": "**Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). A suspension made before or while the code waited, from their page or on a report, stays after a cancel; **Lift suspension** on their page lifts it if that's no longer right, and lifted, it stays lifted. A report dealt with without suspending them changes nothing. Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, unless a report may have suspended them (one dealt with before this server noted which reports did): then they stay suspended, the window says so, and **Lift suspension** lifts it. Completing the code doesn't lift a suspension either: their new key stays suspended until it is lifted."
         },
         {
           "type": "h2",
@@ -1647,8 +1768,9 @@
             "A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as \"Deleted post\".",
             "A Re-Key code that runs out unused leaves the person suspended in a way neither the Lift button nor Cancel this code undoes. Make a new Re-Key code, then cancel it if they don't need it: they are back to what they were before the first code.",
             "The \"Trust Rating\" shown on a member's page is not calculated yet. It is a placeholder. Do not act on it.",
-            "Suspended members can still make invites from their app, where any member invites.",
+            "While suspended, a member brings nobody in: they can't make an invite or answer a request to join, and an invite or a paper ticket they made admits nobody until the suspension ends. An invite they made before works again after it, within its 30 days.",
             "While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.",
+            "While suspended, their listings are off the Market and the map for everyone else, and come back as they were when the suspension lifts. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), finish or cancel a deal they already have, and take their own listings down. They can't start a conversation, a deal or a post.",
             "Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. In those conversations they can reply, edit or delete what they wrote, and react. They keep the beans, and can pass them on once they join. They can take down a listing of their own, from before visitors were stopped from posting. They can't do anything else: they can't post, trade, join a group, go to an event, report, vote, invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep their messages and beans."
           ]
         }
@@ -1834,6 +1956,10 @@
             "**Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.",
             "**Enterprises.** An enterprise counts up to half of each confirmed keeper's known floor towards its own. A keeper who keeps several enterprises shares that half between them."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Each change to these is logged with who made it, and the owners get an alert. When the switch goes on or off, or the known floor moves while it is on, every member is told in a notice from the community; a change to the cap alone tells nobody."
         },
         {
           "type": "h3",
@@ -2044,7 +2170,7 @@
             "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was \"reviewed and kept\". If its author had already taken it down, they are told instead that it \"is no longer up\".",
             "**Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.",
             "**Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.",
-            "To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it."
+            "To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on removing them."
           ]
         },
         {
@@ -2421,7 +2547,7 @@
             "Enough people must vote: at least 3, and at least 30% of members active in the last 30 days (25% for removing someone).",
             "It passes with 60% yes. Removing someone needs 66%; restoring someone needs just over half. A tie fails.",
             "Votes are secret: members and admins see only the totals. See Privacy and what your server can see, for what the server itself keeps.",
-            "Each member can have one open Decision at a time. Frozen and suspended members cannot vote or propose."
+            "Each member can have one open Decision at a time. Frozen and suspended members cannot propose, and cannot vote, with one exception: someone suspended in an emergency still votes on every other Decision while the community votes on removing them, and counts in its turnout. Nobody votes on a Decision to remove them."
           ]
         },
         {
@@ -2461,9 +2587,13 @@
           "type": "ul",
           "items": [
             "They are suspended at once and their role, if any, is set aside.",
-            "A 7-day vote opens: \"Keep the suspension?\". One member, one vote, 60% to keep it.",
-            "If it does not pass, the suspension lifts by itself and their role comes back.",
-            "If it passes, they stay suspended until someone lifts it, and any role it set aside is gone for good.",
+            "While it lasts, their listings are off the Market and the map, and they bring nobody in: no invite, no answer to a request to join, and an invite or paper ticket they made earlier admits nobody. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat) and finish or cancel the deals they have open. Their listings and invites come back as they were when it ends.",
+            "A suspension made when acting on a report is the same suspension, and the same vote opens, with the reason given, or that a report about them was upheld.",
+            "A 7-day vote opens on removing them: \"Remove …?\". It is decided as any removal is: one member, one vote, 25% turnout, 66% to remove. They cannot vote on it, and still vote on every other Decision, so suspending someone cannot swing another vote.",
+            "If it does not pass, or too few vote, the suspension lifts when the vote closes and their role comes back.",
+            "If it passes, they stay suspended through a removal's 7 days' grace, and are then removed (see Removing someone).",
+            "No vote removes an owner or admin: on one of them, the suspension ends when the vote closes, whatever it decides, and their role comes back.",
+            "A \"Keep the suspension?\" vote opened before this version runs to its end as it did.",
             "You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.",
             "The suspended person gets no notification. Tell them yourself.",
             "In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else."
@@ -2483,7 +2613,7 @@
         },
         {
           "type": "p",
-          "text": "No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it. If an admin must go, an owner takes the role away first; after that they are a member like any other."
+          "text": "No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it, not even by the vote that opens when one of them is suspended (above). If an admin must go, an owner takes the role away first; after that they are a member like any other."
         },
         {
           "type": "h2",
@@ -2497,7 +2627,7 @@
           "type": "ul",
           "items": [
             "Halting a removal in its grace period restores the person.",
-            "Halting a \"keep the suspension\" vote lifts the suspension.",
+            "Halting the vote an emergency suspension opened lifts the suspension.",
             "A suspension nobody votes on (on the global community) has **Lift suspension now** instead. It asks for a reason the same way, and lifts the suspension straight away.",
             "**Owner only**: if halting would give someone back an owner or admin role, only an owner can do it. The same goes for lifting such a suspension by hand, and for cutting a grace period short."
           ]
@@ -2513,7 +2643,7 @@
         {
           "type": "ul",
           "items": [
-            "A suspension by Decision takes away the person's role for good. So does an emergency suspension that members vote to keep. An emergency suspension only sets the role aside while its vote is open: if the vote fails, or you lift or halt it first, the role comes back.",
+            "A suspension by Decision takes away the person's role for good. An emergency suspension only sets the role aside while its vote is open: if the vote fails, or you lift or halt it first, the role comes back.",
             "Lifting a suspension by hand is refused while a removal is waiting out its grace period. Halt the removal instead."
           ]
         }
@@ -3962,7 +4092,27 @@
         },
         {
           "type": "p",
-          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
+          "text": "The pin you drop on the map here is the community's place, and the area is that pin and how far the community reaches. **Share Location & Radius** decides who else sees it. On (the default), anyone gets the pin rounded to about a kilometre: the directory and the map on beanpool.org, and your server's own public pages to anyone who asks, so people nearby can find you and nobody starts a second community on top of yours. Off, nobody outside the community gets it at all: the directory is told no area, and your server gives the place only to its members (still to about a kilometre, so their maps start in the right place) and to owners and admins (exactly, here). Turned off, the map on beanpool.org loses your pin at your server's next update (**Publish Now** sends it at once); the community stays listed by name."
+        },
+        {
+          "type": "p",
+          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. To stop your server sending anything, an owner switches **Listed in the BeanPool directory** off under **How this community works**: the **Update Schedule** has no **Never** any more, and a server that had it set to Never was switched to not listed, with a 12-hour schedule for later, when it was updated. The directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
+        },
+        {
+          "type": "h3",
+          "text": "Message requests"
+        },
+        {
+          "type": "p",
+          "text": "**Message Requests** decides what happens to a member's first message to someone who hasn't added them as a friend, written to them, or traded with them. On, it is held as a request until that person accepts it: they can read it, and the sender can write nothing more until they accept. The sender is never told whether it was ignored or whether they were blocked. Messages from owners, admins and moderators, and the chat that comes with a deal, always arrive straight away. A request nobody accepts lapses after 30 days, and the sender's next message is a new request."
+        },
+        {
+          "type": "p",
+          "text": "It is on by default on a global community, where anyone can join with 12 words, and off on a local community, where everyone was let in by someone. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat. One a member ignored stays out of their chats until one of the two writes in it again. Turned on again, a chat the member replied in, or whose sender they added, while it was off stays an ordinary chat; one they never answered is a request again. Like every profile switch, it travels with backups and to standbys."
+        },
+        {
+          "type": "p",
+          "text": "Only an owner can turn it on or off, and the same goes for **Take Requests to Join** beside it: an admin sees both, and saving a change to either is refused. Each change is logged with who made it, the owners get an alert, and every member is told in a notice from the community."
         },
         {
           "type": "h3",
@@ -4940,14 +5090,22 @@
         },
         {
           "type": "h2",
+          "text": "The language people use"
+        },
+        {
+          "type": "p",
+          "text": "The phone app and the web app say which language the member uses BeanPool in on each request to their community, so that when your server turns something down, it says why in that language. Your server reads it for that one answer only: it never saves it, never counts it and never writes it in the log."
+        },
+        {
+          "type": "h2",
           "text": "What your server sends elsewhere"
         },
         {
           "type": "ul",
           "items": [
-            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). Also whether people can ask to join, the day it closes if an owner set one, and, while the community keeps the listing promise, how many owners it has and that its backups are locked and running: never who the owners are. The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
+            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). Also whether people can ask to join, the day it closes if an owner set one, and, while the community keeps the listing promise, how many owners it has and that its backups are locked and running: never who the owners are. The directory is public. Under Node Identity you can switch off the area (then only your members, owners and admins get the community's place from your server), the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it. To stop the app stores' check, put DISABLE_APP_STORE_CHECK=true in .env: phones are then told of no newer app, and the app's floor shows a banner only.",
-            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
+            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\") written in the language the member's phone uses BeanPool in, with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. Because those words are in that language, Expo, Apple and Google can tell which language the phone uses. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
             "Members' Pulse channels are fetched from the sites they link to.",
             "Server alerts, only if an owner sets up a channel of their own (an ntfy topic or a web address) in the Alerts card or in .env: your community's name, what is wrong in plain words, and counts. Never a member's name, key, address or anything anyone wrote (see Updates, health checks and disk space).",
             "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare.",
@@ -4961,6 +5119,10 @@
         {
           "type": "p",
           "text": "Your server keeps a push address for each member's phone, and that address alone is enough to send the phone a notification. The server locks each one with recovery-seal.key, the key it keeps beside its database and never in it (see Backups and replicas). So a copy of the database alone holds no address anyone can use: not state.db, not a snapshot, not a backup that is not locked, not a standby's copy. The running server opens each one only to send to it. Whoever runs the server, or takes it over completely, still has them. Backups, snapshots and copies of the data folder made before the update that brought this hold the addresses in the clear: treat those as carefully as the server itself, and delete them when you can."
+        },
+        {
+          "type": "p",
+          "text": "Beside each push address your server keeps the language that phone uses BeanPool in, so its notifications are written in it: one of the languages BeanPool writes, or nothing, which means English. The phone says it each time it signs up for notifications, when the app starts and when the member picks another language. It is kept in the clear, like whether the phone is Android or iPhone, and goes when the address goes. A standby's copy never has it: a server that takes over writes notifications in English until each phone signs up again, which it does the next time the app starts."
         }
       ]
     },

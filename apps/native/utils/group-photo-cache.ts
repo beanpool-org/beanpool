@@ -32,7 +32,14 @@ export const groupPhotoCache: GroupPhotoCache = {
         // Drawn from memory this once when it can't be kept under a plain name, as a DM photo of an unknown shape is.
         if (!file || !jpeg) return dataUri;
         try { await FileSystem.makeDirectoryAsync(folderOf(groupId)!, { intermediates: true }); } catch {}
-        await FileSystem.writeAsStringAsync(file, jpeg[1], { encoding: 'base64' });
+        try {
+            await FileSystem.writeAsStringAsync(file, jpeg[1], { encoding: 'base64' });
+        } catch {
+            // Not kept (a full disk): the photo opened, so it draws from memory this once. Android writes the file in place,
+            // so part of it may sit under its name: taken off, or the next view would read a cut-off file as kept.
+            await FileSystem.deleteAsync(file, { idempotent: true }).catch(() => { /* the OS trims its cache folder anyway */ });
+            return dataUri;
+        }
         return file;
     },
 };

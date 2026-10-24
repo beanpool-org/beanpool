@@ -202,6 +202,19 @@ describe('a group chat\'s photos: kept by message id in the group\'s own folder,
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
+    it('a photo that opened but can\'t be kept (a full disk) draws from memory this once, and leaves no part of a file under its name', async () => {
+        // Review of #2456: the write's failure answered "Image unavailable" for a photo already opened, and Android's
+        // in-place write can leave a cut-off file that the next view would read as kept.
+        const { g, id, store, line, view, photo } = await photoLine();
+        fetchMock.mockImplementation(async (url: string) => (String(url) === `${NODE}/api/messages/${id}/attachment`
+            ? reply(200, { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' }) : reply(404, {})));
+        const file = `/tmp/cache/chat-images/groups/${g}/${id}.jpg`;
+        vi.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({ exists: false } as any);
+        vi.mocked(FileSystem.writeAsStringAsync).mockRejectedValueOnce(new Error('ENOSPC: no space left on device'));
+        expect(await getDecryptedGroupAttachment(NODE, me, store, { groupId: g, line, view }, groupPhotoCache)).toBe(PHOTO);
+        expect(mockDeleteAsync.mock.calls).toEqual([[file, { idempotent: true }]]);
+    });
+
     it('a 403 from the chat of a group this phone held keys of clears that group\'s folder, and only on a refusal', async () => {
         const held = randomUUID();
         const never = randomUUID();

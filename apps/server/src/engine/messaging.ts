@@ -1238,9 +1238,9 @@ function toGroupChatMessagingError(e: any): Error {
     if (msg === GROUP_NOT_FOUND) return new MessagingError(msg, 404);
     if (msg === GROUP_CHAT_FORBIDDEN || msg === GROUP_CHAT_OBSERVER
         || /disabled|suspended|pruned|closed|Frozen|invalidated|Member not found/.test(msg)) return new MessagingError(msg, 403);
-    // Bad input from the caller, not a refusal of who they are: an oversized line, a photo, metadata that is not JSON, a
-    // reply that names a message in another chat or a system line.
-    if (/empty|too long|Only text|is JSON|sealed under|must be a message id|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
+    // Bad input from the caller, not a refusal of who they are: an oversized line, metadata that is not JSON, a reply that
+    // names a message in another chat or a system line. A photo's refusals are GroupKeyErrors, with their own codes.
+    if (/empty|too long|is JSON|sealed under|must be a message id|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
     return e;
 }
 

@@ -264,6 +264,16 @@ async function main(): Promise<void> {
     assert(admitted.body?.member?.status === 'active' && pushesTo(ray).length === 0 && !inviteLine(await home(ray)),
         `inviting Ray, who had asked, admits him: no invitation push and no line (got ${admitted.body?.member?.status}, ${pushesTo(ray).length})`);
 
+    // A suspended or disabled member gets no line and can't join (GROUP_JOIN_PAUSED), so no push either (#2438 review).
+    for (const status of ['suspended', 'disabled'] as const) {
+        const held = makeMember(status === 'suspended' ? 'Sue' : 'Dex');
+        db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, held.pubKeyHex);
+        expo.length = 0;
+        await invite(garden, cleo, held);
+        await settle();
+        assert(pushesTo(held).length === 0, `a ${status} member invited: no push (got ${pushesTo(held).length})`);
+    }
+
     // ── 6. An invitation wave: the guard stays at its size ─────────────────────────────────────────────────────
     // Straight to the engine, not over HTTPS: the size is what's measured, and 10,000 signed round trips would only be slow.
     const wave = makeGroup('Big Choir', 'invite_only', cleo);

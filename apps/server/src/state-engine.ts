@@ -10764,12 +10764,12 @@ export function groupInvitePushesKept(): number {
  * A new invitation's push, to the member invited and no one else: not the convenor who sent it, not the group's other
  * members. Not to someone who has blocked that convenor (engine/member-blocks.ts: an approach from them comes with no
  * push, as a deal request from them does), nor to a key that can't take the invitation up (a visitor's row joins no
- * group). The lock screen shows the kind's fixed words; who invited them and to which group stay here as the notice's
+ * group; a suspended or disabled member is shown no line and can't join, GROUP_JOIN_PAUSED). The lock screen shows the kind's fixed words; who invited them and to which group stay here as the notice's
  * details, which only they read (GET /api/notices/push/:id), and a tap opens the invitation (the phone's invite landing).
  * The member's chat notifications switch (notify_chat) applies, as for every group push.
  */
 function pushGroupInvite(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole): void {
-    if (!isNodeMember(targetPubkey) || hasBlocked(targetPubkey, convenorPubkey)) return;
+    if (!isNodeMember(targetPubkey) || engine.isSuspendedAccount(db, targetPubkey) || hasBlocked(targetPubkey, convenorPubkey)) return;
     const key = `${groupId}|${targetPubkey}`;
     const now = Date.now();
     const last = groupInvitePushSentAt.get(key);

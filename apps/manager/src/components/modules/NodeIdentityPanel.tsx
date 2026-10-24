@@ -141,8 +141,12 @@ export function NodeIdentityPanel({
                     if (cfg.directoryPushIntervalHours !== undefined || cfg.publishLocation !== undefined) {
                         if (cfg.directoryPushIntervalHours !== undefined) {
                             const parsedHours = Number(cfg.directoryPushIntervalHours);
-                            if (!isNaN(parsedHours) && [1, 6, 12, 24].includes(parsedHours)) {
-                                setDirectoryPushIntervalHours(parsedHours);
+                            if (!isNaN(parsedHours)) {
+                                if ([1, 6, 12, 24].includes(parsedHours)) {
+                                    setDirectoryPushIntervalHours(parsedHours);
+                                } else if (parsedHours === 0) {
+                                    setDirectoryPushIntervalHours(0);
+                                }
                             }
                         }
                         setDirectory('loaded');
@@ -428,7 +432,7 @@ export function NodeIdentityPanel({
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
                     // Only settings the node gave:
-                    ...(directory === 'loaded'
+                    ...(directory === 'loaded' && directoryPushIntervalHours !== 0
                         ? { directoryPushIntervalHours }
                         : {}),
                     // Only an area the node gave: null clears the node's, and an unset pin that never loaded would send it.
@@ -716,6 +720,11 @@ export function NodeIdentityPanel({
                                 disabled={directory !== 'loaded'}
                                 className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             >
+                                {directoryPushIntervalHours === 0 && (
+                                    <option value={0} disabled>
+                                        {t('Not set: choose how often')}
+                                    </option>
+                                )}
                                 <option value={1}>Every 1 hour</option>
                                 <option value={6}>Every 6 hours</option>
                                 <option value={12}>Every 12 hours</option>

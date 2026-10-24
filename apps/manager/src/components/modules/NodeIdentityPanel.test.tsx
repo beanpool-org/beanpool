@@ -1117,8 +1117,8 @@ describe('NodeIdentityPanel Component', () => {
                 url.includes('/api/node/config') && !url.includes('/admin/') ? config() : base(url, init));
         }
         const nodeConfigBody = () => {
-            const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
-            return call ? JSON.parse(call[1].body) : undefined;
+            const calls = (global.fetch as any).mock.calls.filter((c: any[]) => c[0].includes('/api/local/admin/node/config'));
+            return calls.length > 0 ? JSON.parse(calls[calls.length - 1][1].body) : undefined;
         };
 
         it.each([
@@ -1237,6 +1237,37 @@ describe('NodeIdentityPanel Component', () => {
             });
             expect('publishLocation' in nodeConfigBody() || 'publishContactEmail' in nodeConfigBody()).toBe(false);
             expect((global.fetch as any).mock.calls.some((c: any[]) => c[0].includes('/api/local/admin/community-shape'))).toBe(false);
+        });
+
+        it('with 0 stored (old Never), shows "Not set: choose how often" and does not write 12 on save unless picked', async () => {
+            configAnswers(() => Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({
+                    serviceRadius: AREA, directoryPushIntervalHours: 0, lastDirectoryPush: null,
+                }),
+            }));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(document.getElementById('directory-push-interval')).not.toBeDisabled());
+            const select = document.getElementById('directory-push-interval') as HTMLSelectElement;
+            expect(select.value).toBe('0');
+            expect(screen.getByRole('option', { name: /Not set: choose how often/i })).toBeInTheDocument();
+
+            // Saving without picking a schedule does NOT write 12
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()?.directoryPushIntervalHours).toBeUndefined();
+
+            // Picking a schedule writes that schedule
+            await act(async () => {
+                fireEvent.change(select, { target: { value: '6' } });
+            });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()?.directoryPushIntervalHours).toBe(6);
         });
     });
 

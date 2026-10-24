@@ -170,12 +170,31 @@ describe('the root guard while the member is still setting up', () => {
         expect(setupRedirect(['welcome'], WIZARD_PENDING)).toBeNull();
     });
 
-    it('leaves the claim screen with no identity: the server\'s QR on a new phone says an account comes first (Dax, 23 Oct)', () => {
-        // Sent to welcome, the claim was lost and nothing said where to go. The screen claims nothing without an account.
+    it('leaves the claim screen with no identity: the server\'s QR on a new phone opens the claim, which makes the account (Dax, 23 Oct)', () => {
+        // Sent to welcome, the claim was lost and nothing said where to go. The screen makes the account on the member's tap.
         expect(setupRedirect(['claim-community'], NO_IDENTITY)).toBeNull();
         // A join wizard half done still comes first, as for every other root.
         expect(setupRedirect(['claim-community'], WIZARD_PENDING)).toBe('/welcome');
         expect(setupRedirect(['claim-community'], SET_UP)).toBeNull();
+    });
+
+    it('a claim whose answer is not in (its key on the phone, the node may hold it as owner): the claim screen stays, every other root goes to welcome', () => {
+        const CLAIM_OUT = { hasIdentity: true, pendingOnboarding: true, claimOut: true };
+        expect(setupRedirect(['claim-community'], CLAIM_OUT)).toBeNull();
+        expect(setupRedirect(['welcome'], CLAIM_OUT)).toBeNull();
+        for (const segments of [...OTHER_ROOTS, ['recover-identity'], ...PROVIDERS.map((p) => ['auth', p])]) {
+            expect(setupRedirect(segments, CLAIM_OUT), segments.join('/') || '(empty)').toBe('/welcome');
+        }
+        // Once the claim is in, the wizard's other steps are welcome's alone, as every join's.
+        expect(setupRedirect(['claim-community'], { ...CLAIM_OUT, claimOut: false })).toBe('/welcome');
+    });
+
+    it('the root layout reads the claim from the wizard\'s record, inside the flag the guard already waits for', () => {
+        const layout = fs.readFileSync(path.join(APP, '_layout.tsx'), 'utf8');
+        expect(layout).toMatch(/setPendingOnboardingFlag\(!p \? false : claimInFlight\(p\) \? 'claim' : 'wizard'\);/);
+        expect(layout).toMatch(/setupRedirect\(segments, \{ hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim' \}\)/);
+        // No claim kept beside the record any more (#2412's detour): the claim makes the account.
+        expect(layout).not.toMatch(/getPendingClaim|landOnClaim|pendingClaimLanding/);
     });
 
     it('does not act once the member is set up: the node-recognition checks decide, as before', () => {

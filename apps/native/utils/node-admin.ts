@@ -150,6 +150,19 @@ export async function fetchAdminQueue(nodeUrl: string, identity: BeanPoolIdentit
 export type UnlockResult = 'ok' | 'no-device-lock' | 'failed';
 
 /**
+ * Whether this phone has a screen lock at all (fingerprint, face, PIN, pattern or passcode), asked of the phone without a
+ * prompt; null when it won't say. A claim's screen says an owner's phone needs one before the name is typed
+ * (app/claim-community.tsx): {@link requireDeviceUnlock} refuses with `no-device-lock` without one.
+ */
+export async function hasDeviceLock(): Promise<boolean | null> {
+    try {
+        return (await LocalAuthentication.getEnrolledLevelAsync()) !== LocalAuthentication.SecurityLevel.NONE;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * The phone's own unlock. Fails closed: no lock set, or anything unexpected, means no link. So does a pass that reached
  * the app too late to be one given for this request (LocalAuth.timeDoorPrompt: a pass the phone held while the app was
  * away). What it opens is outside the app (a browser, another computer, a server), where App Lock covers nothing.

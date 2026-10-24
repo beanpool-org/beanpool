@@ -135,6 +135,29 @@ async function main() {
         assert(anon.status === 401, `unsigned request is refused (got ${anon.status})`);
         const stranger = await signedGet('/api/node-admin/me', outsider);
         assert(stranger.status === 403, `a key that is not a member is refused (got ${stranger.status})`);
+        // The app's claim owner check reads this code, and no other 403, as "another key owns it" (native node-claim.ts
+        // ownerCheckViaRole): the read gate's refusal (read auth on), and the route's for a key that is no active member.
+        assert(stranger.body?.code === 'not_a_member', `…as no member here, by code (got ${JSON.stringify(stranger.body)})`);
+        const paused = keypair();
+        seedMember(paused.pub, 'hoPaused');
+        db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(paused.pub);
+        const pausedMe = await signedGet('/api/node-admin/me', paused);
+        assert(pausedMe.status === 403 && pausedMe.body?.code === 'not_a_member',
+            `a suspended member gets past the read gate and the route refuses it, as no active member, by code (got ${pausedMe.status} ${JSON.stringify(pausedMe.body)})`);
+        // The owner's own request delivered twice (a network re-sending a GET): the second is the spent nonce's 403, which
+        // says nothing of who is a member, and carries no such code.
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const twice: Record<string, string> = {
+            Accept: 'application/json', 'X-Public-Key': owner.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
+            'X-Signature': signText(owner, `GET\n/api/node-admin/me\n${ts}\n${nonce}\n`),
+        };
+        const first = await fetch(`${BASE}/api/node-admin/me`, { headers: twice });
+        const firstBody = await first.json().catch(() => null) as any;
+        const again = await fetch(`${BASE}/api/node-admin/me`, { headers: twice });
+        const againBody = await again.json().catch(() => null) as any;
+        assert(first.status === 200 && firstBody?.role === 'owner' && again.status === 403 && againBody?.code === undefined,
+            `the owner's request sent twice: owner, then a 403 with no member code (got ${first.status} ${again.status} ${JSON.stringify(againBody)})`);
         const m = await signedGet('/api/node-admin/me', member);
         assert(m.status === 200 && m.body.role === null, 'a plain member is told they hold no role');
         const o = await signedGet('/api/node-admin/me', owner);

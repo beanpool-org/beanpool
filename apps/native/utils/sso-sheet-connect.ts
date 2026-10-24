@@ -72,6 +72,11 @@ export async function connectAndDeposit(options: {
     url?: string | null;
     identity: BeanPoolIdentity;
     /**
+     * `community`: to the community the phone is set to, as a build without a vault does, whatever this build is (an
+     * account a claim made: nothing of ours in its path, components/SsoEnrolSheet.tsx).
+     */
+    copyAt?: 'community';
+    /**
      * The phone's lock, asked before anything starts. The sheet hands it Settings' check (LocalAuth.authenticateUser);
      * null only for a key the join wizard has just made, the member's own new account.
      */
@@ -87,7 +92,7 @@ export async function connectAndDeposit(options: {
     }
     // Closed while the check was up: nothing starts.
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
-    if (signInCopiesAt() === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
+    if (signInCopiesAt() === 'community' || options.copyAt === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
 
     let grant: { ticket: string; nonce: string };
     try {

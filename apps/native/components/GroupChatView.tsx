@@ -38,7 +38,7 @@ import {
 } from '../utils/group-history-unlock';
 import { LockedHistoryRow, LockedHistorySheet, SealedNoticeLine } from './LockedHistory';
 import { anchorUrl } from '../utils/node-post';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -57,7 +57,7 @@ import {
 } from '../utils/db';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri, withinMs } from '../utils/chat-photo';
-import { ChatPhoto, ChatPhotoViewer } from './chat/ChatPhoto';
+import { ChatPhoto, ChatPhotoViewer, ChatWaitingPhoto } from './chat/ChatPhoto';
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
@@ -345,6 +345,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const canPost = !!view?.canPost && !!me;
     // Locked by what this phone has verified, not by the node's word alone: once it held a key, always (finding 4).
     const locked = kind === 'group' && (chatIsLocked(view) || seenLocked);
+    // Photos are sealed on this phone: a locked group chat only, and not while a line is being edited.
+    const photoButton = kind === 'group' && locked && !editingMessage;
 
     // This member changed phones: their own row carries a verified former key (the line-display design's chain).
     const myFormer = useMemo(() => {
@@ -963,14 +965,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     maxLength={GROUP_MESSAGE_MAX}
                     // The phone's own words for what it decided, never the node's notice (finding 4).
                     notice={kind === 'group' ? chatLineWords(groupChatNotice({ nodeSaysLocked: chatIsLocked(view), seenLocked })) : t(CHAT_NOTICE.enterprise)}
-                    // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
-                    placeholder={name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
+                    // A long name wrapped the placeholder to three lines at 320dp; short ones read better named. Beside the photo
+                    // button the box is 48 dp narrower and at 1.3× text even "Message the group…" wraps: the header names the chat.
+                    placeholder={photoButton ? t('Message…') : name.length <= 18 ? t('Message {name}…', { name }) : (kind === 'group' ? t('Message the group…') : t('Message…'))}
                     accessibilityLabel={t('Message {name}', { name })}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
-                    // Photos are sealed on this phone: a locked group chat only, and not while a line is being edited.
-                    onAttach={kind === 'group' && locked && !editingMessage ? pickPhoto : undefined}
+                    onAttach={photoButton ? pickPhoto : undefined}
                     attachment={photo && !editingMessage ? (
-                        <WaitingPhoto uri={photo.uri} styles={chat} color={colors.text.muted} disabled={sending} onRemove={() => setPhoto(null)} />
+                        <ChatWaitingPhoto uri={photo.uri} styles={chat} disabled={sending} onRemove={() => setPhoto(null)} />
                     ) : null}
                 />
             )}
@@ -1021,19 +1023,6 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 />
             )}
         </KeyboardAvoidingView>
-    );
-}
-
-/** The photo waiting above the box: its thumbnail, what Send does with it, and a way to take it off. */
-function WaitingPhoto({ uri, styles, color, disabled, onRemove }: { uri: string; styles: ReturnType<typeof makeChatStyles>; color: string; disabled: boolean; onRemove: () => void }) {
-    return (
-        <View style={styles.stagedPhotoRow}>
-            <Image source={{ uri }} style={styles.stagedPhotoThumb} resizeMode="cover" accessibilityLabel={t('Photo message')} />
-            <Text style={styles.stagedPhotoText}>{t('Add a caption below, or just send the photo.')}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityState={{ disabled }} disabled={disabled} style={styles.stagedPhotoRemove} onPress={onRemove}>
-                <MaterialCommunityIcons name="close-circle" size={24} color={color} />
-            </Pressable>
-        </View>
     );
 }
 

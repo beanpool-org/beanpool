@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
+import type { ChatStyles } from './styles';
 
 const PHOTO_SIDE = 220;
 
@@ -45,6 +46,20 @@ export function ChatPhoto({ photoKey, load, onOpen }: { photoKey: string; load: 
         <Pressable accessibilityRole="button" accessibilityLabel={t('View photo full screen')} onPress={() => onOpen?.(uri)}>
             <Image accessibilityLabel={t('Photo message')} source={{ uri }} style={{ width: PHOTO_SIDE, maxWidth: '100%', aspectRatio: 1, borderRadius: 12 }} resizeMode="cover" />
         </Pressable>
+    );
+}
+
+/** A photo waiting above the box until Send: its thumbnail, what Send does with it, and a way to take it off. */
+export function ChatWaitingPhoto({ uri, styles, disabled, onRemove }: { uri: string; styles: ChatStyles; disabled: boolean; onRemove: () => void }) {
+    const { colors } = useTheme();
+    return (
+        <View style={styles.stagedPhotoRow}>
+            <Image source={{ uri }} style={styles.stagedPhotoThumb} resizeMode="cover" accessibilityLabel={t('Photo message')} />
+            <Text style={styles.stagedPhotoText}>{t('Add a caption below, or just send the photo.')}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('Remove photo')} accessibilityState={{ disabled }} disabled={disabled} style={styles.stagedPhotoRemove} onPress={onRemove}>
+                <MaterialCommunityIcons name="close-circle" size={24} color={colors.text.muted} />
+            </Pressable>
+        </View>
     );
 }
 

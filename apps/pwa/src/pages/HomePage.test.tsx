@@ -3240,6 +3240,53 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(commWide).toHaveTextContent("1 member. You're first. Invite someone.");
     });
 
+    it('local community card with Beans/escrow off: 4 tiles on wide, 2 lines on narrow; no fabricated zero stats', async () => {
+        const noBeansAnswer = answer({}, {
+            community: {
+                name: 'Mullumbimby',
+                members: 81,
+                joined7d: 4,
+                listings: 37,
+                eventsSoon: 3,
+            },
+        });
+
+        // Narrow (cardWidth 288): 2 lines, no trades or pot
+        pageWidth = 320;
+        cardWidth = 288;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(noBeansAnswer));
+        const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const commNarrow = screen.getByTestId('home-card-community');
+        expect(within(commNarrow).getByTestId('home-community-body')).toHaveAttribute('data-layout', 'rows');
+        expect(commNarrow).toHaveTextContent('81 members · 4 joined this week');
+        expect(commNarrow).toHaveTextContent('37 listings · 3 events coming up');
+        expect(commNarrow.textContent).not.toMatch(/trades this month|Commons pot/);
+
+        unmount();
+
+        // Wide (cardWidth 544): 4 tiles, no fabricated zero stats
+        pageWidth = 600;
+        cardWidth = 544;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const commWide = screen.getByTestId('home-card-community');
+        expect(within(commWide).getByTestId('home-community-body')).toHaveAttribute('data-layout', 'tiles');
+        const tiles = within(commWide).getAllByTestId('home-community-tile');
+        expect(tiles).toHaveLength(4);
+        expect(tiles[0]).toHaveTextContent('81');
+        expect(tiles[0]).toHaveTextContent('members');
+        expect(tiles[1]).toHaveTextContent('4');
+        expect(tiles[1]).toHaveTextContent('joined this week');
+        expect(tiles[2]).toHaveTextContent('37');
+        expect(tiles[2]).toHaveTextContent('listings');
+        expect(tiles[3]).toHaveTextContent('3');
+        expect(tiles[3]).toHaveTextContent('events coming up');
+        expect(commWide.textContent).not.toMatch(/trades this month|Commons pot/);
+    });
+
     it('navigation: listing tile opens listing, group line opens chat, Pulse tile opens Pulse, deal opens deal', async () => {
         pageWidth = 600;
         cardWidth = 544;

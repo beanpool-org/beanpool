@@ -825,11 +825,11 @@ function CommunityBody({
 
     const localTiles = [
         { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
-        { figure: formatCount(cm.joined7d ?? 0), label: t('joined this week') },
-        { figure: formatCount(cm.tradesThisMonth ?? 0), label: t('trades this month') },
-        { figure: beansAmount(cm.commonsPot ?? 0), label: t('Commons pot') },
-        { figure: formatCount(cm.listings ?? 0), label: tn(cm.listings ?? 0, 'listing', 'listings') },
-        { figure: formatCount(cm.eventsSoon ?? 0), label: tn(cm.eventsSoon ?? 0, 'event coming up', 'events coming up') },
+        ...(typeof cm.joined7d === 'number' ? [{ figure: formatCount(cm.joined7d), label: t('joined this week') }] : []),
+        ...(typeof cm.tradesThisMonth === 'number' ? [{ figure: formatCount(cm.tradesThisMonth), label: t('trades this month') }] : []),
+        ...(typeof cm.commonsPot === 'number' ? [{ figure: beansAmount(cm.commonsPot), label: t('Commons pot') }] : []),
+        ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
+        ...(typeof cm.eventsSoon === 'number' ? [{ figure: formatCount(cm.eventsSoon), label: tn(cm.eventsSoon, 'event coming up', 'events coming up') }] : []),
     ];
 
     const tiles = isGlobal ? globalTiles : localTiles;
@@ -869,7 +869,7 @@ function CommunityBody({
                             {t("1 member. You're first. Invite someone.")}
                         </p>
                     )}
-                    <div data-testid="home-community-body" data-layout="tiles" className={isGlobal ? "grid grid-cols-3 gap-2 mb-3" : "grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3"}>
+                    <div data-testid="home-community-body" data-layout="tiles" className={isGlobal || tiles.length === 3 ? "grid grid-cols-3 gap-2 mb-3" : tiles.length === 4 ? "grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3" : "grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3"}>
                         {tiles.map((tile, i) => (
                             <div key={i} data-testid="home-community-tile" className="p-2 rounded-xl bg-bg-hover text-center flex flex-col justify-center min-w-0">
                                 <span className="text-base font-bold text-text-primary break-words leading-tight">{tile.figure}</span>

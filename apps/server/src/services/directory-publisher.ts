@@ -150,7 +150,7 @@ export function initDirectoryPublisher(): boolean {
     // A 0 still stored here means that carry didn't run or failed: fail closed, as the old Never did, and send nothing.
     const stored = getNodeConfig().directoryPushIntervalHours;
     if (stored === LEGACY_NEVER_INTERVAL) {
-        console.log('[Directory] 📴 The old schedule "Never" is still stored and was not carried over to Listed off, so nothing is sent. Switch Listed off (or on) under How this community works.');
+        console.log('[Directory] 📴 The old schedule "Never" is still stored and was not carried over to Listed off, so nothing is sent. To be listed, save a schedule (every 1 hour or more) in Node Identity; not to be, switch Listed off under How this community works.');
         return false;
     }
     const intervalHours = isDirectoryPushInterval(stored) ? stored : DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS;

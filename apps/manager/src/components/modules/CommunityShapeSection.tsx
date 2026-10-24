@@ -38,7 +38,7 @@ export function CommunityShapeSection({
 
     // Row expansion: only one row open at a time
     const [openSetting, setOpenSetting] = useState<keyof ShapeSettings | null>(null);
-    const [draftValue, setDraftValue] = useState<any>(null);
+    const [draftValue, setDraftValue] = useState<unknown>(null);
     const [note, setNote] = useState('');
     const [saving, setSaving] = useState(false);
     const [rowError, setRowError] = useState<string | null>(null);
@@ -55,8 +55,8 @@ export function CommunityShapeSection({
                 getTfaSessionToken(activeNode.id),
             );
             setShape(data);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load community shape');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to load community shape');
         } finally {
             setLoading(false);
         }
@@ -70,7 +70,7 @@ export function CommunityShapeSection({
         setSaveSuccess(null);
     }, [activeNode.id, activeNode.url]);
 
-    const handleOpenRow = (settingKey: keyof ShapeSettings, currentValue: any) => {
+    const handleOpenRow = (settingKey: keyof ShapeSettings, currentValue: unknown) => {
         if (!isOwner || shape?.standby) return;
         const lock = shape?.settings[settingKey]?.lock;
         const canOpenWithLock = settingKey === 'listed' && Boolean(
@@ -98,9 +98,9 @@ export function CommunityShapeSection({
         if (settingKey === 'knownFloor') {
             const kf = currentValue as KnownFloorShape;
             setDraftValue({
-                on: kf.on,
-                floor: kf.floor,
-                cap: kf.cap,
+                on: kf?.on ?? false,
+                floor: kf?.floor ?? 0,
+                cap: kf?.cap ?? 0,
             });
         } else {
             setDraftValue(currentValue);
@@ -159,8 +159,8 @@ export function CommunityShapeSection({
                     : t('Saved!'),
             );
             successTimer.schedule(() => setSaveSuccess(null), 4000);
-        } catch (err: any) {
-            setRowError(err.message || 'Failed to save change');
+        } catch (err: unknown) {
+            setRowError(err instanceof Error ? err.message : 'Failed to save change');
         } finally {
             setSaving(false);
         }
@@ -423,78 +423,83 @@ export function CommunityShapeSection({
                     </ShapeRow>
 
                     {/* knownFloor */}
-                    <ShapeRow
-                        id="knownFloor"
-                        icon="🤝"
-                        name={t('Known floor for confirmed members')}
-                        summary={t('An admin confirms a member on the names list; they can then owe up to this while they keep an offer listed.')}
-                        extraLine={t('Cap for one member\'s raise: {cap}.').replace('{cap}', settings.knownFloor.value.cap.toLocaleString('en'))}
-                        displayValue={settings.knownFloor.value.on ? t('On · {floor} Beans').replace('{floor}', settings.knownFloor.value.floor.toLocaleString('en')) : t('Off')}
-                        lock={settings.knownFloor.lock}
-                        isOwner={isOwner && !standby}
-                        isOpen={openSetting === 'knownFloor'}
-                        onToggle={() => handleOpenRow('knownFloor', settings.knownFloor.value)}
-                    >
-                        <div className="space-y-3 pt-2">
-                            <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    id="shape-known-floor-on"
-                                    type="checkbox"
-                                    checked={Boolean(draftValue?.on)}
-                                    onChange={(e) => setDraftValue({ ...draftValue, on: e.target.checked })}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
-                                />
-                                <span>{t('Confirmed members get the known floor')}</span>
-                            </label>
+                        {(() => {
+                            const kfDraft = (draftValue as Partial<KnownFloorShape> | null) ?? null;
+                            return (
+                                <ShapeRow
+                                    id="knownFloor"
+                                    icon="🤝"
+                                    name={t('Known floor for confirmed members')}
+                                    summary={t('An admin confirms a member on the names list; they can then owe up to this while they keep an offer listed.')}
+                                    extraLine={t('Cap for one member\'s raise: {cap}.').replace('{cap}', settings.knownFloor.value.cap.toLocaleString('en'))}
+                                    displayValue={settings.knownFloor.value.on ? t('On · {floor} Beans').replace('{floor}', settings.knownFloor.value.floor.toLocaleString('en')) : t('Off')}
+                                    lock={settings.knownFloor.lock}
+                                    isOwner={isOwner && !standby}
+                                    isOpen={openSetting === 'knownFloor'}
+                                    onToggle={() => handleOpenRow('knownFloor', settings.knownFloor.value)}
+                                >
+                                    <div className="space-y-3 pt-2">
+                                        <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                        <input
+                                                id="shape-known-floor-on"
+                                                type="checkbox"
+                                                checked={Boolean(kfDraft?.on)}
+                                                onChange={(e) => setDraftValue({ ...(kfDraft ?? { floor: 0, cap: 0 }), on: e.target.checked })}
+                                                className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
+                                        />
+                                            <span>{t('Confirmed members get the known floor')}</span>
+                                        </label>
 
-                            {draftValue?.on && (
-                                <div className="space-y-3 pl-6 pt-1">
-                                    <div>
-                                        <label htmlFor="shape-known-floor-floor" className="block text-xs font-bold text-nature-300 mb-1">
-                                            {t('Known floor (Beans)')}
-                                        </label>
-                                        <input
-                                            id="shape-known-floor-floor"
-                                            type="number"
-                                            value={draftValue.floor}
-                                            onChange={(e) => setDraftValue({ ...draftValue, floor: Number(e.target.value) })}
-                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
+                                        {kfDraft?.on && (
+                                            <div className="space-y-3 pl-6 pt-1">
+                                                <div>
+                                                    <label htmlFor="shape-known-floor-floor" className="block text-xs font-bold text-nature-300 mb-1">
+                                                        {t('Known floor (Beans)')}
+                                                    </label>
+                                                    <input
+                                                        id="shape-known-floor-floor"
+                                                        type="number"
+                                                        value={kfDraft.floor ?? 0}
+                                                        onChange={(e) => setDraftValue({ ...(kfDraft ?? { on: true, cap: 0 }), floor: Number(e.target.value) })}
+                                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
+                                                    />
+                                                    <p data-testid="known-floor-hours" className="text-[11px] text-nature-400 mt-1 m-0">
+                                                        {hoursWording(kfDraft.floor || 0)}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="shape-known-floor-cap" className="block text-xs font-bold text-nature-300 mb-1">
+                                                        {t('Cap: the most anyone may owe')}
+                                                    </label>
+                                                    <input
+                                                        id="shape-known-floor-cap"
+                                                        type="number"
+                                                        value={kfDraft.cap ?? 0}
+                                                        onChange={(e) => setDraftValue({ ...(kfDraft ?? { on: true, floor: 0 }), cap: Number(e.target.value) })}
+                                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <RowControls
+                                            onSave={() => handleSave('knownFloor')}
+                                            onCancel={handleCancel}
+                                            consequence={consequenceText}
+                                            note={note}
+                                            onNoteChange={setNote}
+                                            saving={saving}
+                                            error={rowError}
+                                            saveDisabled={
+                                                kfDraft?.on === settings.knownFloor.value.on &&
+                                                kfDraft?.floor === settings.knownFloor.value.floor &&
+                                                kfDraft?.cap === settings.knownFloor.value.cap
+                                            }
                                         />
-                                        <p data-testid="known-floor-hours" className="text-[11px] text-nature-400 mt-1 m-0">
-                                            {hoursWording(draftValue.floor || 0)}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <label htmlFor="shape-known-floor-cap" className="block text-xs font-bold text-nature-300 mb-1">
-                                            {t('Cap: the most anyone may owe')}
-                                        </label>
-                                        <input
-                                            id="shape-known-floor-cap"
-                                            type="number"
-                                            value={draftValue.cap}
-                                            onChange={(e) => setDraftValue({ ...draftValue, cap: Number(e.target.value) })}
-                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
-                                        />
-                                    </div>
                                 </div>
-                            )}
-
-                            <RowControls
-                                onSave={() => handleSave('knownFloor')}
-                                onCancel={handleCancel}
-                                consequence={consequenceText}
-                                note={note}
-                                onNoteChange={setNote}
-                                saving={saving}
-                                error={rowError}
-                                saveDisabled={
-                                    draftValue?.on === settings.knownFloor.value.on &&
-                                    draftValue?.floor === settings.knownFloor.value.floor &&
-                                    draftValue?.cap === settings.knownFloor.value.cap
-                                }
-                            />
-                        </div>
-                    </ShapeRow>
+                                </ShapeRow>
+                            );
+                        })()}
                 </div>
             </div>
 

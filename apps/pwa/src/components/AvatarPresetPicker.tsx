@@ -41,10 +41,10 @@ export function AvatarPresetPicker({
                             type="button"
                             onClick={() => onSelect(uri)}
                             aria-label={buttonLabel}
-                            aria-selected={isSelected}
+                            aria-pressed={isSelected}
                             title={presetName}
                             style={{ flexShrink: 0, width: '44px', height: '44px', borderRadius: '50%' }}
-                            className={`shrink-0 w-11 h-11 rounded-full p-0 overflow-hidden cursor-pointer transition-all border-2 bg-nature-100 dark:bg-nature-800 ${
+                            className={`shrink-0 w-11 h-11 rounded-full p-0 overflow-hidden cursor-pointer transition-all border-2 bg-nature-100 dark:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-nature-900 ${
                                 isSelected
                                     ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-white dark:ring-offset-nature-900 border-emerald-500 scale-105'
                                     : 'border-transparent hover:border-nature-300 dark:hover:border-nature-600 hover:scale-105 opacity-90 hover:opacity-100'
@@ -52,7 +52,8 @@ export function AvatarPresetPicker({
                         >
                             <img
                                 src={resolved}
-                                alt={presetName}
+                                alt=""
+                                aria-hidden="true"
                                 className="w-full h-full object-cover pointer-events-none"
                                 loading="lazy"
                             />

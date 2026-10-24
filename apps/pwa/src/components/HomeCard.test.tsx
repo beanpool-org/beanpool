@@ -36,4 +36,24 @@ describe('HomeCard menu', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
         expect(onHide).toHaveBeenCalled();
     });
+
+    it('prevents header collapse: heading does not shrink and aside container is flexible and constrained', () => {
+        const { container } = render(
+            <HomeCard
+                id="decide"
+                title="Decide"
+                titleAside={<span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">2 Decisions open, the first closes Tue · 2 polls open</span>}
+                menu={{ label: 'Decide', canMoveUp: false, canMoveDown: false, onMove: vi.fn() }}
+            >
+                <p>body</p>
+            </HomeCard>,
+        );
+        const heading = screen.getByRole('heading', { name: 'Decide' });
+        expect(heading.className).toContain('shrink-0');
+        expect(heading.className).not.toContain('min-w-0');
+        const asideContainer = container.querySelector('.flex.items-start.justify-between > div:last-child');
+        expect(asideContainer?.className).toContain('min-w-0');
+        expect(asideContainer?.className).toContain('flex-1');
+        expect(asideContainer?.className).not.toContain('shrink-0');
+    });
 });

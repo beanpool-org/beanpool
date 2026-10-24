@@ -2038,7 +2038,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard
                         key={id}
                         {...common}
-                        titleAside={showOpen ? <span className="text-xs font-normal text-text-secondary">{tn(d.open, '{n} open', '{n} open')}</span> : undefined}
+                        titleAside={showOpen ? <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">{tn(d.open, '{n} open', '{n} open')}</span> : undefined}
                     >
                         <DealsBody d={d} onNavigate={onNavigate} />
                     </HomeCard>
@@ -2111,7 +2111,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <HomeCard
                         key={id}
                         {...common}
-                        titleAside={hasItems ? <span className="text-xs font-normal text-text-secondary">{decideLine(d, now)}</span> : undefined}
+                        titleAside={hasItems ? (
+                            <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">
+                                {decideLine(d, now)}
+                            </span>
+                        ) : undefined}
                     >
                         <DecideBody d={d} now={now} onNavigate={onNavigate} />
                     </HomeCard>

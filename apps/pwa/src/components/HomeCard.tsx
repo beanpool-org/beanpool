@@ -158,12 +158,12 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style 
                 style={{ containerType: 'inline-size', ...style }}
                 className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? 'border-amber-300 dark:border-amber-700' : 'border-border-primary'}`}
             >
-                <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex items-start justify-between gap-2 mb-1 min-w-0">
                     {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}
-                    <h2 id={headingId} tabIndex={-1} className="m-0 min-w-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider text-text-secondary">
+                    <h2 id={headingId} tabIndex={-1} className="m-0 shrink-0 text-[0.7rem] font-extrabold uppercase tracking-wider text-text-secondary">
                         {title}
                     </h2>
-                    <div className="flex items-start gap-1 shrink-0">
+                    <div className="flex items-start justify-end gap-1 min-w-0 flex-1">
                         {titleAside}
                         {menu && <CardMenu title={title} {...menu} />}
                     </div>

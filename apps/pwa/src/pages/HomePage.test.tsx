@@ -3420,5 +3420,39 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(eagerImgs.length).toBe(8);
         expect(lazyImgs.length).toBe(allImgs.length - 8);
     });
+
+    it('Decide card titleAside is constrained and allows wrapping without collapsing heading', async () => {
+        const tuesday = new Date(Date.now() + 3 * 86_400_000).toISOString();
+        const cardsWithLongDecide: HomeAnswer['cards'] = {
+            decide: {
+                open: 2,
+                soonestClosesAt: tuesday,
+                polls: 2,
+                pollsMore: false,
+                items: [
+                    { id: 'dec-1', title: 'Compost bay', closesAt: tuesday, voted: false },
+                    { id: 'dec-2', title: 'Solar roof', closesAt: tuesday, voted: false },
+                ],
+                poll: { id: 'pol-1', title: 'Market on Sundays?', closesAt: tuesday },
+            },
+        };
+        const layout: HomeLayoutV2 = {
+            v: 2,
+            cards: [{ id: 'decide', type: 'decide' }],
+            dismissed: {},
+            updatedAt: null,
+        };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout }, cardsWithLongDecide)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-decide');
+        const heading = within(card).getByRole('heading', { name: 'Decide' });
+        expect(heading.className).toContain('shrink-0');
+        expect(heading.className).not.toContain('min-w-0');
+        const asideText = within(card).getByText(/2 Decisions open.*2 polls open/);
+        expect(asideText.className).toContain('min-w-0');
+        expect(asideText.className).toContain('break-words');
+        expect(asideText.className).toContain('text-right');
+    });
 });
+
 

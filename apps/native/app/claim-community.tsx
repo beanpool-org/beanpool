@@ -52,7 +52,7 @@ type Phase = 'form' | 'unlocking' | 'checking' | 'claiming' | 'done';
 
 export default function ClaimCommunityScreen() {
     const params = useLocalSearchParams<{ node?: string; refused?: string; id?: string; code?: string }>();
-    const { identity } = useIdentity();
+    const { identity, setIdentity } = useIdentity();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -116,10 +116,13 @@ export default function ClaimCommunityScreen() {
     // ── Which key ───────────────────────────────────────────────────────────────────────────────────────
     // Read from the phone (utils/claim-key.ts claimKeyState): the app's identity is set only once the join wizard ends.
     const [phoneKey, setPhoneKey] = useState<ClaimKeyState | null>(null);
+    /** Keys the claim took off the phone here: never read back as the app's account while the app lets go of it. */
+    const releasedKeys = useRef(new Set<string>());
     const refreshPhoneKey = useCallback(async (o: string | null) => {
         const held = await claimKeyState(o);
         // The app's own account when the phone's store can't be read for it: never a second key beside it.
-        setPhoneKey(held.kind === 'none' && identity ? { kind: 'account', identity } : held);
+        const appAccount = identity && !releasedKeys.current.has(identity.publicKey) ? identity : null;
+        setPhoneKey(held.kind === 'none' && appAccount ? { kind: 'account', identity: appAccount } : held);
     }, [identity]);
     useEffect(() => { void refreshPhoneKey(origin); }, [origin, identity, refreshPhoneKey]);
     /** The phone's own account, which claims as it always has. */
@@ -298,7 +301,10 @@ export default function ClaimCommunityScreen() {
         setPhase('form');
         if (cameOff) {
             heldKey.current = null;
+            releasedKeys.current.add(claimedBy.publicKey);
             setReleased(true);
+            // The app loaded that key at its start (a restart while the claim was out): it holds no account now.
+            if (identity && identity.publicKey === claimedBy.publicKey) setIdentity(null);
         }
         // The claim's own key, with no answer: kept, and the member can ask again (Check again).
         const notYet = makesAccount && !cameOff && out.kind === 'check-again';
@@ -393,8 +399,11 @@ export default function ClaimCommunityScreen() {
         if (busy) return;
         void (async () => {
             const key = ownKey ?? heldKey.current;
-            if (origin && key) await releaseClaimKey(origin, key);
+            const removed = !!origin && !!key && await releaseClaimKey(origin, key);
+            if (removed && key) releasedKeys.current.add(key.identity.publicKey);
             heldKey.current = null;
+            // The app loaded that key at its start (a restart while the claim was out): it holds no account now.
+            if (removed && identity && key && identity.publicKey === key.identity.publicKey) setIdentity(null);
             if (router.canGoBack()) router.back();
             else router.replace(account ? '/(tabs)' : '/welcome');
         })();

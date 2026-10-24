@@ -79,7 +79,7 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: ctx, useStyles: (factory: (c: ReturnType<typeof ctx>) => unknown) => factory(ctx()) };
 });
 // One object, as the provider keeps it: the screen asks for membership again whenever it changes.
-const who = vi.hoisted(() => ({ identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'marty' } }));
+const who = vi.hoisted(() => ({ identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'marty' }, setIdentity: vi.fn() }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ start: vi.fn(), busy: false, dialog: null }) }));
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => null) }));
@@ -624,6 +624,45 @@ describe('the claim on a phone with no account makes the account', () => {
             expect(releaseClaimKey).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ createdHere: true }));
             expect(nav.router.back).toHaveBeenCalled();
         });
+    });
+
+    it('after a restart the app holds the claim\'s own key: when Back takes it off, the app lets go of it too', async () => {
+        const own = { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' };
+        (who as { identity: unknown }).identity = own;
+        who.setIdentity.mockClear();
+        try {
+            keys.state = { kind: 'claims', key: { identity: own, createdHere: true }, joinsOut: 0, callsign: 'Ada' };
+            vi.mocked(releaseClaimKey).mockResolvedValueOnce(true);
+            const host = await fromTheQr();
+            // The claim's own key draws the form that makes the account, never the account's.
+            expect(nameField(host)!.value).toBe('Ada');
+            expect(q(host, '[data-testid="claim-makes-account"]')).not.toBeNull();
+            await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+            await act(async () => {});
+            expect(releaseClaimKey).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ identity: own }));
+            expect(who.setIdentity).toHaveBeenCalledWith(null);
+        } finally {
+            (who as { identity: unknown }).identity = signedIn;
+        }
+    });
+
+    it('and when another phone won the race, the same', async () => {
+        const own = { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' };
+        (who as { identity: unknown }).identity = own;
+        who.setIdentity.mockClear();
+        try {
+            keys.state = { kind: 'claims', key: { identity: own, createdHere: true }, joinsOut: 0, callsign: 'Ada' };
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, released: true }));
+            const host = await fromTheQr();
+            vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
+            keys.state = { kind: 'none' };
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(who.setIdentity).toHaveBeenCalledWith(null);
+            expect(host.textContent).toContain('Nothing was made on this phone.');
+        } finally {
+            (who as { identity: unknown }).identity = signedIn;
+        }
     });
 
     it('with an account, as before: a member there types no name, its own key claims, and the owner\'s card is here', async () => {

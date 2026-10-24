@@ -40,6 +40,7 @@ import {
     listYourChats,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import { pendingGroupInvites } from '../engine/group-invites.js';
 import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
     rotateGroupEpoch, storeGroupTopUp,
@@ -148,12 +149,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     // ===================== YOUR GROUPS (decisions 6, 7, 13) =====================
 
     // Every group-like chat the caller is in — their groups, the enterprises they keep (🥖), the events they host
-    // or are Going to (📅) — with the latest message and their unread count. Never anyone else's.
+    // or are Going to (📅) — with the latest message and their unread count. Never anyone else's. Beside them, the
+    // caller's own open invitations to groups (`invites`, engine/group-invites.ts), which are no chat of theirs yet: the
+    // phone's header says so from this read when it asks the node itself (apps/native utils/needs-you.ts).
     router.get('/api/your-groups', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = listYourChats(actor);
+        ctx.body = { ...listYourChats(actor), invites: pendingGroupInvites(actor) };
     });
 
     // ===================== GROUPS API =====================

@@ -63,6 +63,9 @@ export const PUSH_NOTICE_KINDS = {
     'chat.group': { body: word('New message in one of your groups.'), tab: 'chats' },
     'chat.mention': { body: word('You were mentioned in a group.'), tab: 'chats' },
     'group.lead': { body: word('There is news about a group you lead.'), tab: 'chats' },
+    // To the member invited, and no one else (state-engine.ts inviteGroupMember). Home, whose Needs-you line opens the
+    // invitation: they are not in the group's chat yet.
+    'group.invite': { body: word('You were invited to join a group.'), tab: 'home' },
     // Home, whose Needs-you line opens the enterprise: Talk shows nothing of a keepers' vote.
     'decision.open': { body: word('A vote opened in one of your groups.'), tab: 'home' },
     'market.request': { body: word('Someone answered one of your listings.'), tab: 'market' },

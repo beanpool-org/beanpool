@@ -85,10 +85,10 @@ export function coarseHomePoint(point: HomePoint | null | undefined): HomePoint 
  */
 export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null): string {
     const p = coarseHomePoint(point);
-    // `lands=enterprise,group`: this app opens an enterprise's own screen and a chat group's (utils/needs-you.ts
-    // needsTargetHref), so the node may point a keepers' or a group's vote line there and count it (apps/server
-    // routes/home-answer.ts parseLands).
-    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
+    // `lands=enterprise,group,invite`: this app opens an enterprise's own screen, a chat group's and a group invitation's
+    // landing (utils/needs-you.ts needsTargetHref), so the node may point a keepers' or a group's vote line there and
+    // count it, and send the line for the member's open invitations (apps/server routes/home-answer.ts parseLands).
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {
@@ -239,6 +239,14 @@ export function homeForHeader(url: string | null, publicKey: string | null | und
         const timer = setTimeout(finish, Math.max(waitMs, waiting ? HOME_HEADER_WAIT_MS : 0));
         settledListeners.add(listener);
     });
+}
+
+/**
+ * Something Home's answer says has changed since it was read (one of the member's own group invitations, utils/needs-you.ts
+ * isOwnInviteChange): the header no longer draws from it, and reads the node itself until Home's next read lands.
+ */
+export function forgetHomeForHeader(): void {
+    latest = null;
 }
 
 /** Each read as it settles (the header redraws from a new answer). Returns the unsubscribe. */

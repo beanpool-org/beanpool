@@ -10733,10 +10733,55 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
     return res;
 }
 
+/**
+ * How often an invitation to one group pushes the member it names: a convenor who withdraws it and invites them again,
+ * over and over, sends one push an hour, not one each time (as a deal made again does, engine/escrow.ts
+ * REPEAT_DEAL_PUSH_EVERY_MS). The invitation itself is as any other's: on the member's Home and in Commons. In memory: a
+ * restart may send one more.
+ */
+export const REPEAT_GROUP_INVITE_PUSH_EVERY_MS = 60 * 60 * 1000;
+const groupInvitePushSentAt = new Map<string, number>();
+
+/** For a suite: forget when each invitation last pushed, as a restart does. */
+export function resetGroupInvitePushes(): void {
+    groupInvitePushSentAt.clear();
+}
+
+/**
+ * A new invitation's push, to the member invited and no one else: not the convenor who sent it, not the group's other
+ * members. Not to someone who has blocked that convenor (engine/member-blocks.ts: an approach from them comes with no
+ * push, as a deal request from them does), nor to a key that can't take the invitation up (a visitor's row joins no
+ * group). The lock screen shows the kind's fixed words; who invited them and to which group stay here as the notice's
+ * details, which only they read (GET /api/notices/push/:id), and a tap opens the invitation (the phone's invite landing).
+ * The member's chat notifications switch (notify_chat) applies, as for every group push.
+ */
+function pushGroupInvite(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole): void {
+    if (!isNodeMember(targetPubkey) || hasBlocked(targetPubkey, convenorPubkey)) return;
+    const key = `${groupId}|${targetPubkey}`;
+    const now = Date.now();
+    const last = groupInvitePushSentAt.get(key);
+    if (last !== undefined && now - last < REPEAT_GROUP_INVITE_PUSH_EVERY_MS) return;
+    if (groupInvitePushSentAt.size >= 10_000) {
+        for (const [k, t] of groupInvitePushSentAt) if (now - t >= REPEAT_GROUP_INVITE_PUSH_EVERY_MS) groupInvitePushSentAt.delete(k);
+    }
+    groupInvitePushSentAt.set(key, now);
+    const groupName = (db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as { name: string } | undefined)?.name ?? 'A group';
+    dispatchPushNotification(
+        [targetPubkey],
+        convenorPubkey,
+        `👥 ${groupName}`,
+        `${callsignOf(convenorPubkey)} invited you to join${role === 'convenor' ? ' as a convenor' : role === 'observer' ? ' as an observer' : ''}`,
+        { screen: 'invite', groupId },
+        'chat',
+        'group.invite',
+    );
+}
+
 export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member', epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
+    const before = getGroupMemberEngine(db, groupId, targetPubkey);
     // An invitation lets nobody in, so it takes no epoch; inviting someone who had asked admits them, and then the
     // convenor's epoch is an approval's.
     const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role),
@@ -10747,6 +10792,15 @@ export function inviteGroupMember(groupId: string, convenorPubkey: string, targe
     const convenors = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[];
     const recipients = Array.from(new Set([...convenors.map(r => r.member_pubkey), targetPubkey]));
     broadcast({ type: 'group_member_invited', groupId, member: res }, recipients);
+    // Only an invitation this call made: one already open, or someone who had asked and is now admitted, is no new
+    // invitation. After the answer, never inside it: the push is skipped for a member who has blocked the convenor, and
+    // its work in the answer would tell the convenor so by how fast the answer came (#1403 review).
+    if (res.status === 'invited' && before?.status !== 'invited') {
+        setImmediate(() => {
+            try { pushGroupInvite(groupId, convenorPubkey, targetPubkey, res.role); }
+            catch (e: any) { console.warn('[Push] A group invitation push failed:', e?.message ?? e); }
+        });
+    }
     return res;
 }
 

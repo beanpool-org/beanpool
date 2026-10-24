@@ -3259,7 +3259,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/treasury-manage', params: { publicKey: 'ent1', name: 'Mullum Ceramics' } });
     });
 
-    it('enterprise card: latest line shows "to {who}" when amount is negative and names Commons/deal when who is null', async () => {
+    it('enterprise card: latest line shows "to {who}" when amount is negative', async () => {
         const now = Date.now();
         const base = localMember();
         node.answer = {
@@ -3280,14 +3280,13 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         };
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
-        let card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
         expect(card.textContent).toContain('Latest: −20 Beans to Ana');
+    });
 
-        // Commons line (who: null, kind: 'commons')
-        act(() => root?.unmount());
-        host?.remove();
-        root = null;
-        host = null;
+    it('enterprise card: latest line names the Commons when who is null and kind is commons', async () => {
+        const now = Date.now();
+        const base = localMember();
         node.answer = {
             ...base,
             cards: {
@@ -3303,15 +3302,15 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 },
             },
         };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
-        card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
         expect(card.textContent).toContain('Latest: −5 Beans to the Commons');
+    });
 
-        // Deal line (who: null, kind: 'deal', incoming)
-        act(() => root?.unmount());
-        host?.remove();
-        root = null;
-        host = null;
+    it('enterprise card: latest line names a deal when who is null and kind is deal', async () => {
+        const now = Date.now();
+        const base = localMember();
         node.answer = {
             ...base,
             cards: {
@@ -3327,8 +3326,9 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
                 },
             },
         };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
         await render();
-        card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
         expect(card.textContent).toContain('Latest: +50 Beans from a deal');
     });
 

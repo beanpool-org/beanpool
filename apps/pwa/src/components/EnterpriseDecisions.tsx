@@ -78,7 +78,9 @@ export interface GroupDecisionsProps {
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
 export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, onChanged }: GroupDecisionsProps) {
     // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
-    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || t(LINES.someone), [people]);
+    // ⚡ Bolt: O(1) Map lookup for group member names instead of O(P) .find() scans
+    const peopleMap = useMemo(() => new Map(people.map(p => [p.pubkey, p])), [people]);
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => peopleMap.get(pk)?.name || names?.[pk] || t(LINES.someone), [peopleMap]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (

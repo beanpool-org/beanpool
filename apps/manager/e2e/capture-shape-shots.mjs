@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { startServer, launch, openSettings, settle } from './harness.mjs';
 
-const OUT_DIR = '/Users/marty/projects/beanpool/scratch/fable-design/community-shape-s4-shots';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const OUT_DIR = path.resolve(__dirname, '../../../scratch/fable-design/community-shape-s4-shots');
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const WIDTH = 320;

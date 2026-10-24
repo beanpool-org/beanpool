@@ -31,6 +31,11 @@ import type { MessagingCallbacks } from './messaging.js';
 import {
     assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { withheldLine } from './withheld-lines.js';
+import { attachmentKey, getImageStore } from '../storage/image-store.js';
+import { storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
+import { GROUP_PHOTO_MAX_BYTES } from '../config/writer-limits.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -384,7 +389,18 @@ export interface GroupLineIn {
     metadata?: unknown;
     /** The id the line was sealed under, if not passed beside it. */
     clientId?: string;
+    /** 'image' for a photo line, 'text' (or nothing) for words: the node checks it against `attachment`. */
+    type?: unknown;
+    /** A photo line's photo, { data, nonce, mime? }: the JPEG data URI sealed as part 'attachment' (DESIGN-group-chat-photos-fable.md §2.2). */
+    attachment?: unknown;
 }
+
+/** A photo line's photo as the node keeps it: never opened, only checked for its sealed form and its size. */
+interface GroupPhotoIn { data: string; nonce: string; mime: string }
+
+export const GROUP_PHOTO_TOO_LARGE = word('This photo is too large to send. Try another one.');
+export const GROUP_PHOTO_LINE_FORM = "A photo line is sent as type 'image' with its sealed photo, and a text line with none.";
+const PHOTO_MIME = /^image\/[a-z0-9][a-z0-9.+-]{0,63}$/;
 
 /** A sealed line is bound to its message id (core group-crypto.ts): the node stores it under that id or not at all. */
 export const GROUP_LINE_NEEDS_ID = 'A sealed group line is sent with the id it was sealed under (a lower-case UUID v4).';
@@ -419,6 +435,26 @@ export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonc
 }
 
 /**
+ * A line's photo, checked without a key (DESIGN-group-chat-photos-fable.md §2.2): a line sent as type 'image' carries one
+ * and a text line none; it is sealed as a group line is (the group prefix, a 24-byte nonce, strict base64), else
+ * not_encrypted with the words an old app shows; and it is at most GROUP_PHOTO_MAX_BYTES of base64. Null for a text line.
+ */
+function sealedGroupPhotoOf(line: GroupLineIn): GroupPhotoIn | null {
+    const has = line.attachment !== undefined && line.attachment !== null;
+    if ((line.type ?? (has ? 'image' : 'text')) !== (has ? 'image' : 'text')) throw new GroupKeyError(400, 'photo_line_form', GROUP_PHOTO_LINE_FORM);
+    if (!has) return null;
+    const a = line.attachment as { data?: unknown; nonce?: unknown; mime?: unknown };
+    if (typeof a !== 'object' || !isGroupEncryptedPayload({ ciphertext: a.data, nonce: a.nonce })) {
+        throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
+    }
+    const data = a.data as string;
+    if (data.length > GROUP_PHOTO_MAX_BYTES) throw new GroupKeyError(400, 'photo_too_large', GROUP_PHOTO_TOO_LARGE);
+    const mime = a.mime === undefined || a.mime === null || a.mime === '' ? 'image/jpeg' : a.mime;
+    if (typeof mime !== 'string' || !PHOTO_MIME.test(mime)) throw new GroupKeyError(400, 'photo_line_form', "A photo's mime is an image type, such as image/jpeg.");
+    return { data, nonce: a.nonce as string, mime };
+}
+
+/**
  * Post a sealed line in a group's chat. Convenors and members only; observers read. The same author block and client-id
  * idempotency as the other threads; the line must be sealed under the current, non-stale epoch (assertSealedGroupLine).
  * The node stores { epoch, sender, replyToId?, mentions? } beside it, the mentions being the ones the app declared, cut to
@@ -429,6 +465,12 @@ export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonc
  * (DESIGN-group-chat-line-display-fable.md §4; a member's earlier key is named by their succession chain, served as the
  * roster's formerKeys). author_pubkey is for the node's own jobs and is never shown for a sealed line. Every other member
  * in the chat gets a push unless they muted it; a mention gets through a mute.
+ *
+ * A photo line (DESIGN-group-chat-photos-fable.md §2.2) is type 'image' with its photo sealed as part 'attachment' under
+ * the same message key: checked for its form and size (sealedGroupPhotoOf) before the epoch, so a refused photo never
+ * costs the app a re-seal; counted in the day's photo budget after every refusal; and stored where a DM photo is, the
+ * object first and then the message row and the attachment row in one transaction. Its push says "sent a message", as a
+ * text line's does: nothing about it being a photo goes through Apple's or Google's servers.
  */
 export function postGroupThreadMessage(
     cb: MessagingCallbacks,
@@ -441,7 +483,9 @@ export function postGroupThreadMessage(
     assertCanWriteInGroupChat(groupId, authorPubkey);
 
     const declared = metadataObject(line?.metadata);
-    const epoch = assertSealedGroupLine(groupId, line?.ciphertext, line?.nonce, declared);
+    assertSealedGroupLineForm(line?.ciphertext, line?.nonce);
+    const photo = sealedGroupPhotoOf(line);
+    const epoch = assertLineEpochIsCurrent(groupId, declared.epoch);
     clientId = clientId ?? line?.clientId;
     if (typeof clientId !== 'string' || !SEALED_LINE_ID.test(clientId)) throw new Error(GROUP_LINE_NEEDS_ID);
     if (declared.replyToId !== undefined && declared.replyToId !== null && (typeof declared.replyToId !== 'string' || !declared.replyToId.trim())) {
@@ -451,11 +495,10 @@ export function postGroupThreadMessage(
     // A reply quotes a message in THIS chat, never one from another chat and never a system line.
     if (replyToId) assertGroupChatReplyTarget(groupId, replyToId);
 
-    ensureGroupThread(groupId);
-    addParticipant(groupId, authorPubkey, new Date().toISOString());
-
     if (clientId) {
-        const existing = db.prepare('SELECT * FROM messages WHERE id = ?').get(clientId) as any;
+        // A withheld DM line's id too (engine/withheld-lines.ts): its photo is stored under the same key a photo here would
+        // be put under, so an id it holds is taken, never written over.
+        const existing = (db.prepare('SELECT * FROM messages WHERE id = ?').get(clientId) ?? withheldLine(clientId)) as any;
         if (existing) {
             if (existing.author_pubkey === authorPubkey && existing.conversation_id === groupId) {
                 const sender = getMember(db, authorPubkey) as any;
@@ -464,11 +507,19 @@ export function postGroupThreadMessage(
             throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
         }
     }
+    // The day's photo budget and the storage floor: after every refusal of who may write here and the idempotent retry
+    // above, before anything is written (as a DM photo, engine/messaging.ts sendMessage).
+    const photoBytes = photo ? incomingPhotoBytes(photo.data) : 0;
+    if (photo) assertMayStorePhotoBytes(authorPubkey, photoBytes);
+
+    ensureGroupThread(groupId);
+    addParticipant(groupId, authorPubkey, new Date().toISOString());
 
     const mentions = filterDeclaredMentions(groupId, authorPubkey, declared.mentions);
     const msgId = clientId;
     const ciphertext = line.ciphertext;
     const nonce = line.nonce;
+    const type = photo ? 'image' : 'text';
     const timestamp = new Date().toISOString();
     // `replyToId` is stored exactly as a DM stores it, so one component draws a quoted reply in either chat.
     const meta: Record<string, unknown> = { epoch, sender: authorPubkey };
@@ -476,15 +527,26 @@ export function postGroupThreadMessage(
     if (replyToId) meta.replyToId = replyToId;
     const metadata = JSON.stringify(meta);
 
-    db.prepare(`
-        INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp)
-        VALUES (?, ?, ?, ?, ?, 'text', ?, ?)
-    `).run(msgId, groupId, authorPubkey, ciphertext, nonce, metadata, timestamp);
+    // The photo's object first, then both rows in one transaction: a crash or a failed insert leaves an object no row names,
+    // which the storage-health sweep takes once past its grace, and never a row whose photo was never written (a 503 for
+    // good). The id is a checked UUID, so it makes a key; a store that refuses the bytes keeps them in the row.
+    const cols: AttachmentColumns | null = photo ? storeAttachmentColumns(getImageStore(), attachmentKey(msgId), photo.data) : null;
+    db.transaction(() => {
+        db.prepare(`
+            INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(msgId, groupId, authorPubkey, ciphertext, nonce, type, metadata, timestamp);
+        if (photo && cols) {
+            db.prepare('INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)')
+                .run(msgId, cols.data, photo.nonce, photo.mime, cols.storage_key);
+        }
+    })();
+    if (photoBytes > 0) recordStoredPhotoBytes(authorPubkey, photoBytes);
 
     const sender = getMember(db, authorPubkey) as any;
     const msg = toThreadMessage({
         id: msgId, author_pubkey: authorPubkey, author_callsign: sender?.callsign, author_avatar: sender?.avatar_url,
-        ciphertext, nonce, type: 'text', metadata: metadata ?? undefined, timestamp,
+        ciphertext, nonce, type, metadata: metadata ?? undefined, timestamp,
     }, groupId, GROUP_THREAD_REMOVED_TEXT);
 
     broadcastToChat(cb, groupId, msg);
@@ -625,8 +687,9 @@ export function broadcastGroupChatUpdate(cb: MessagingCallbacks, groupId: string
 
 /**
  * A message that arrived through the ordinary POST /api/messages/send. Handed to postGroupThreadMessage, so the rules
- * are identical whichever route a message takes: a sealed line under the current epoch, text only (photos are a later
- * step). An app from before group chats were locked sends `plaintext-v1` here and is told to update.
+ * are identical whichever route a message takes: a sealed line under the current epoch, its words or a sealed photo with
+ * its caption (DESIGN-group-chat-photos-fable.md §2.2). An app from before group chats were locked sends `plaintext-v1`
+ * here and is told to update; none of them can seal a group line at all, so nothing readable arrives by it.
  */
 export function postGroupThreadMessageFromSendRoute(
     cb: MessagingCallbacks,
@@ -635,15 +698,14 @@ export function postGroupThreadMessageFromSendRoute(
     ciphertext: string,
     nonce: string,
     type: string,
-    hasAttachment: boolean,
+    attachment: unknown,
     clientId?: string,
     metadata?: string,
 ): EventThreadMessage {
     if (typeof nonce !== 'string' || !nonce.startsWith(GROUP_NONCE_PREFIX)) throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
-    if (type !== 'text' || hasAttachment) throw new Error(word('Only text can be sent to a group chat'));
     // What this route's metadata carries into the chat: the epoch, a reply, and the mentions the app declared, which the
     // node cuts to active members (§9). Reactions stay the node's to write.
-    return postGroupThreadMessage(cb, groupId, authorPubkey, { ciphertext, nonce, metadata }, clientId);
+    return postGroupThreadMessage(cb, groupId, authorPubkey, { ciphertext, nonce, metadata, type, attachment }, clientId);
 }
 
 /** The `replyToId` a client put in a send's metadata, or undefined. Never throws on malformed JSON. */

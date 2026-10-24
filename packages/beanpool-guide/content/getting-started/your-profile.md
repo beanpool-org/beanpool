@@ -17,6 +17,8 @@ related: privacy, trust-badges, joining, people
 
 In the web app, tap **Edit Profile**, change the photo with **Camera**, **Gallery**, or one of the ready-made pictures, and tap **Save Profile Changes**.
 
+On the phone, your card shows your name in the active community, such as "Your name in Sydney". Pull down to refresh your profile from the community if your name was changed on another device.
+
 You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community, in the phone app), and the short tour of how BeanPool works. In a web browser, set your area in **Settings**, under **Your area**.
 
 ## Before you post

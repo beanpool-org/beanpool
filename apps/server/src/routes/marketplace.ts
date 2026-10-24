@@ -50,6 +50,8 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { ownWithheldLine, withheldAttachmentFor } from '../engine/withheld-lines.js';
+import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from '../engine/group-thread.js';
+import { fromEpochOf } from '../engine/group-keys.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
@@ -219,8 +221,24 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     if (served.bytes !== null) ctx.length = served.bytes;
 });
 
+/**
+ * Whether `viewer` may have the photo of message `id`: they are in its conversation. A group chat's photo goes by the
+ * chat's own bar (DESIGN-group-chat-photos-fable.md §2.4), never the participants mirror: an active member of the group
+ * (groupChatRole), whose first epoch is at or before the line's (groupLineForReader), as its words are served. So a photo
+ * from before someone's membership, or from a gap they were out of the group for, reaches them by no path.
+ */
+function mayReadAttachmentOf(id: string, viewer: string): boolean {
+    const line = db.prepare(`SELECT m.conversation_id AS conv, m.metadata, c.type FROM messages m LEFT JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.id = ?`).get(id) as { conv: string; metadata: string | null; type: string | null } | undefined;
+    if (!line) return false;
+    if (line.type === GROUP_THREAD_TYPE) {
+        return groupChatRole(line.conv, viewer) !== null && groupLineForReader(line.metadata, fromEpochOf(line.conv, viewer));
+    }
+    return !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(line.conv, viewer);
+}
+
 // Lazy-load an encrypted message attachment (image). Returns ciphertext only —
-// the node can't read it; the recipient decrypts with the DM key + nonce.
+// the node can't read it; the recipient decrypts with the DM key + nonce, or a group line's photo with its epoch's key.
 // Only to the people in its conversation, as its words go (GET /api/messages/:conversationId), and a withheld line's
 // to its sender alone: both apps sign this read. Anyone else gets the answer for an id with no photo, so it says neither
 // that the message exists nor that it carries one (its size, its type, the moment it is deleted).
@@ -228,8 +246,7 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     const { id } = ctx.params;
     const viewer = ctx.state.actor as string | undefined;
     // The row first, for the same reason as the photo route above.
-    const inIt = !!viewer && !!db.prepare(`SELECT 1 FROM messages m JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
-        WHERE m.id = ? AND cp.public_key = ?`).get(id, viewer);
+    const inIt = !!viewer && mayReadAttachmentOf(id, viewer);
     const row = inIt ? db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined : undefined;
     if (!row) {
         // The photo of a line kept for its sender alone (engine/withheld-lines.ts): served by its id as a stored one is, from

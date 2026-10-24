@@ -517,8 +517,11 @@ describe("the keepers' Manage tab", () => {
     it("an action that ends the reader's Manage says so at the top of the page they are left on", async () => {
         const wordsOnTop = async (words: string) => {
             expect(await screen.findByText(words)).toBeInTheDocument();
-            expect(byId('manage-panel')).toBeNull();
-            expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+            // The words can be drawn a render before the read that takes Manage away lands: wait for that too.
+            await waitFor(() => {
+                expect(byId('manage-panel')).toBeNull();
+                expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+            });
             before(screen.getByText(words), byId('shopfront-name'), `"${words}", then the page`);
         };
 

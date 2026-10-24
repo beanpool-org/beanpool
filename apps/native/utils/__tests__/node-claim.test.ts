@@ -764,6 +764,85 @@ describe('the claim that makes the account', () => {
         }
     });
 
+    /**
+     * #2433 review (4365576799): a held claim's key that another join takes over (door-key.ts adoptJoinKey) leaves the
+     * claim's record behind without its mark. The guard leaves the claim screen alone for that record still, so a claim
+     * at another address by the same key keeps its screen while its POST is out; welcome drops the record instead of
+     * handing it back to the first claim's screen, where the key reads as an account and nothing ever clears it.
+     */
+    const OTHER = 'https://other.example.org';
+    /** The root guard's first checks, as app/_layout.tsx makes them for a phone whose key the app loaded at its start. */
+    async function guardAt(root: string): Promise<'/welcome' | null> {
+        const { claimInFlight, getPendingOnboarding } = await import('../onboarding-state');
+        const { setupRedirect } = await import('../auth-return');
+        const p = await getPendingOnboarding();
+        const flag = !p ? false : claimInFlight(p) ? 'claim' : 'wizard';
+        return setupRedirect([root], { hasIdentity: true, pendingOnboarding: flag !== false, claimOut: flag === 'claim' });
+    }
+    /** A claim at ORIGIN whose answer was lost: the key and the record kept, counted out. */
+    async function heldClaim() {
+        const key = await drafted();
+        const lost = node(() => { throw new Error('connection reset'); }, [claimed]);
+        expect((await claimWith(key, lost.fetchImpl, noAnswer)).outcome.kind).toBe('check-again');
+        expect(record()).toMatchObject({ step: 'claim', anchorUrl: ORIGIN, freshKey: key.identity.publicKey, joinsOut: 1 });
+        return key;
+    }
+
+    it('a held claim\'s key, claiming another address: the guard leaves that claim\'s screen while its POST is out, and welcome then drops the first claim\'s record', async () => {
+        const { claimKeyState, claimKeyForThisPhone, claimWithKey } = await import('../claim-key');
+        const { clearPendingOnboarding, resumePlan } = await import('../onboarding-state');
+        const key = await heldClaim();
+        // After a restart the guard holds the phone at the claim screen (and welcome), and welcome hands the claim back.
+        expect(await guardAt('claim-community')).toBeNull();
+        expect(await guardAt('(tabs)')).toBe('/welcome');
+        expect(resumePlan(record(), stored())).toMatchObject({ action: 'resume', mode: 'claim', anchorUrl: ORIGIN });
+
+        // Another address on the claim screen: the record is ORIGIN's, so there the key claims as the phone's account.
+        expect(await claimKeyState(OTHER)).toMatchObject({ kind: 'account', identity: { publicKey: key.identity.publicKey } });
+        const asAccount = await claimKeyForThisPhone(OTHER);
+        expect(asAccount).toMatchObject({ createdHere: false, identity: { publicKey: key.identity.publicKey } });
+        const whileOut: Array<{ record: any; guard: string | null }> = [];
+        const atOther = vi.fn(async (url: string, init?: RequestInit) => {
+            if (String(url) !== `${OTHER}/api/local/claim` || init?.method !== 'POST') throw new Error(`unexpected ${url}`);
+            whileOut.push({ record: record(), guard: await guardAt('claim-community') });
+            return json(200, { ok: true, role: 'owner', callsign: 'Ada', again: false });
+        });
+        const out = await claimWithKey({
+            origin: OTHER, key: asAccount, code: CODE, codeId: CODE_ID, salt: SALT, callsign: 'Ada', isOwner: owner, fetchImpl: atOther as any,
+        });
+        expect(out).toMatchObject({ outcome: { kind: 'owner' }, madeHere: false, released: false });
+        // The first claim's mark came off before the POST (the key went to OTHER), and the guard left OTHER's claim
+        // screen where it was while the POST was out.
+        expect(whileOut).toHaveLength(1);
+        expect(whileOut[0].record).toMatchObject({ step: 'claim', flow: 'claim', anchorUrl: ORIGIN });
+        expect(whileOut[0].record).not.toHaveProperty('freshKey');
+        expect(whileOut[0].guard).toBeNull();
+
+        // The next launch: every other screen goes to welcome, which drops the first claim's record instead of handing it
+        // back to ORIGIN's claim screen. The key stays, and the phone is held nowhere.
+        expect(await guardAt('(tabs)')).toBe('/welcome');
+        expect(resumePlan(record(), stored())).toEqual({ action: 'clear' });
+        await clearPendingOnboarding();
+        expect(await guardAt('(tabs)')).toBeNull();
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+    });
+
+    it('a held claim\'s key taken over by an invite join whose redeem fails: welcome drops the claim\'s record, and the key stays', async () => {
+        const { adoptJoinKey } = await import('../door-key');
+        const { resumePlan } = await import('../onboarding-state');
+        const key = await heldClaim();
+        // welcome.tsx handleCreate, before its redeem: the phone's key is about to go to the invite's community.
+        await adoptJoinKey(key.identity.publicKey);
+        expect(record()).toMatchObject({ step: 'claim', flow: 'claim', anchorUrl: ORIGIN });
+        expect(record()).not.toHaveProperty('freshKey');
+        // The redeem failed. Welcome stays, where the member can try again…
+        expect(await guardAt('welcome')).toBeNull();
+        // …and at the next launch welcome drops the claim's record rather than sending the phone back to a claim screen
+        // that reads the key as an account. The key never comes off: no door holds it now.
+        expect(resumePlan(record(), stored())).toEqual({ action: 'clear' });
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+    });
+
     it('a claim whose answer was lost, and an owner check refused for anything but not being a member: the key and the record stay', async () => {
         const { checkOwnClaim } = await import('../claim-key');
         for (const body of OTHER_403S) {

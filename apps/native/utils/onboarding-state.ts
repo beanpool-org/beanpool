@@ -237,6 +237,12 @@ export function keyMadeForThisJoin(record: PendingOnboarding | null | undefined,
  * A claim at step `claim` resumes as mode `claim`: the welcome screen hands it to the claim screen at the record's
  * address and code id, where the node says whether the claim landed (app/claim-community.tsx). A claim record whose
  * address is not one the app would claim at, or a step that is not a claim's, is nothing to resume: it is dropped.
+ *
+ * So is a claim at step `claim` whose record no longer marks the stored key as the claim's own (`freshKey`): another join
+ * has taken that key over (door-key.ts `adoptJoinKey`: an invite join, or a claim at another address with it), or the
+ * phone holds another key. Such a key never comes off the phone, and the claim screen would read it as an account, which
+ * never asks the node whose it is: handed back there, the phone would come back to it at every launch (#2433 review).
+ * The record goes; the key stays.
  */
 export function resumePlan(
     pending: PendingOnboarding | null,
@@ -254,6 +260,7 @@ export function resumePlan(
     const claimOnly: readonly OnboardingStep[] = ['claim', 'ownerCard'];
     const fits = flow === 'claim' ? pending.step !== 'create' && pending.step !== 'globalJoin' : !claimOnly.includes(pending.step);
     if (!fits) return { action: 'clear' };
+    if (flow === 'claim' && pending.step === 'claim' && pending.freshKey !== stored.publicKey) return { action: 'clear' };
     const doorFlow = flow === 'global' || flow === 'claim';
     return {
         action: 'resume',
@@ -281,6 +288,10 @@ export function resumePlan(
  * A claim whose answer the phone has not had yet (step `claim`): its key is on the phone, and the node may hold it as
  * owner. The root guard leaves the claim screen alone for it (auth-return.ts `setupRedirect`, `claimOut`), so the node
  * can say whether the claim landed; every other screen goes to welcome, which hands it back to the claim screen.
+ *
+ * Read from the step alone, the mark too once another join has taken the key over (door-key.ts `adoptJoinKey`): that
+ * join may be a claim at another address, by this key, on the claim screen the guard must not take away while its POST
+ * is out. Welcome, where every other screen goes, drops such a record ({@link resumePlan}), and the phone is held no more.
  */
 export function claimInFlight(record: PendingOnboarding | null | undefined): boolean {
     return record?.flow === 'claim' && record.step === 'claim';

@@ -801,7 +801,8 @@ export default function WelcomeScreen() {
             });
             if (plan.action === 'none') return;
             if (plan.action === 'clear') {
-                // Keypair never made it to storage — nothing to resume.
+                // Nothing to resume: the keypair never made it to storage, or a claim's record whose key another join took
+                // over (resumePlan). The key, if any, stays.
                 await clearPendingOnboarding();
                 return;
             }

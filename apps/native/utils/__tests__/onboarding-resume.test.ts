@@ -111,6 +111,20 @@ describe('resuming a claim that made the account (DESIGN-account-without-global 
         expect(resumePlan(claimOut, STORED, { incomingInvite: 'INV-NEW', paramsInvite: 'INV-NEW' })).toEqual({ action: 'none' });
         expect(resumePlan(claimOut, null)).toEqual({ action: 'clear' });
     });
+
+    it('at its own step, a record that no longer marks the stored key as the claim\'s is dropped, never handed back (#2433 review)', () => {
+        // Another join took the key over (door-key.ts adoptJoinKey takes `freshKey` and `joinsOut` away)…
+        const { freshKey: _fresh, joinsOut: _out, ...adopted } = claimOut;
+        expect(resumePlan(adopted, STORED)).toEqual({ action: 'clear' });
+        // …or the phone holds another key than the one the claim made, or the mark is no key at all.
+        expect(resumePlan(claimOut, { ...STORED, publicKey: 'cd'.repeat(32) })).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...claimOut, freshKey: true as any }, STORED)).toEqual({ action: 'clear' });
+        // The guard leaves the claim screen alone for it until welcome drops it: a claim at another address by the same
+        // key may be out on that screen (node-claim.test, "a held claim's key, claiming another address").
+        expect(claimInFlight(adopted)).toBe(true);
+        // Past the claim's own step the record is the wizard's, mark or none, as before.
+        expect(resumePlan({ ...adopted, step: 'profileSetup', redeemed: true }, STORED)).toMatchObject({ action: 'resume', mode: 'profileSetup', flow: 'claim' });
+    });
 });
 
 describe('resuming an invite join, as before', () => {

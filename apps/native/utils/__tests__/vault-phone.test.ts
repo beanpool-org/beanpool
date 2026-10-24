@@ -747,7 +747,14 @@ describe('the source: only a build without a vault asks a community for a nonce,
         expect(callers.map(c => c.rel)).toEqual(['utils/sso-sheet-connect.ts']);
         const connect = src('utils/sso-sheet-connect.ts');
         expect(body(connect, 'connectAtCommunity')).toMatch(/startSsoSignIn\(/);
-        expect(body(connect, 'connectAndDeposit')).toMatch(/if \(signInCopiesAt\(\) === 'community'\) return connectAtCommunity\(/);
+        // Or, whatever the build, for an account a claim made (DESIGN-account-without-global-fable.md §2.2, Marty 24 Oct: no
+        // copy at our key vault, nothing of ours in a self-hosted community's first owner's path): the one sheet that asks
+        // for it is Safety Backup's, and only for a claim.
+        expect(body(connect, 'connectAndDeposit')).toMatch(/if \(signInCopiesAt\(\) === 'community' \|\| options\.copyAt === 'community'\) return connectAtCommunity\(/);
+        const askers = sources().filter(({ src: s }) => /copyAt=\{/.test(s)).map(c => c.rel);
+        expect(askers).toEqual(['app/welcome.tsx']);
+        expect(src('app/welcome.tsx').match(/copyAt=\{[^}]*\}/g)).toEqual(["copyAt={joinFlow === 'claim' ? 'community' : undefined}", "copyAt={joinFlow === 'claim' ? 'community' : undefined}"]);
+        // The second is Safety Backup's protection panel: its words say where that copy is (#2433 review r4366342448).
         // The deposit at the community: only for a sign-in bound to the community's nonce (no vault ticket).
         const enrol = src('utils/keeper-enrolment.ts');
         expect(body(enrol, 'enrolSsoKeeper')).toMatch(/'ticket' in input \? enrolAtVault\(input\) : enrolAtCommunity\(input\)/);

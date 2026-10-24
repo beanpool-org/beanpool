@@ -1573,7 +1573,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
         return (
             <div
-                className="h-full max-w-4xl mx-auto w-full flex flex-col"
+                className="h-full max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full flex flex-col"
                 style={dragActive ? { outline: '2px dashed var(--accent)', outlineOffset: '-4px' } : undefined}
                 onDragEnter={acceptsDrop ? (e) => {
                     if (!dragCarriesFile(e.dataTransfer)) return;
@@ -1641,7 +1641,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             // The phone's header (GroupChatView openOwner): a group's chat opens its group info, an
                             // enterprise's thread its enterprise page (its id is the enterprise's key, as the phone's
                             // treasury-detail). A group chat's id IS the group's id (lib/api.ts Conversation), compared
-                            // in lower case (lib/group-hold groupIdKey). A DM header stays as it was.
+                            // in lower case (lib/group-hold groupIdKey). A DM header opens the person's public profile
+                            // or the enterprise's page (matching the phone's public-profile route).
                             const ownerTab = activeConv.type === 'group_thread' ? 'group'
                                 : (activeConv.type as string) === 'enterprise_thread' ? 'enterprise' : null;
                             const ownerId = ownerTab === 'group' ? groupIdKey(activeConv.id) : activeConv.id;
@@ -1661,14 +1662,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </span>
                                 </>
                             );
-                            // A request waiting for this member: the sender's profile one tap away (design §4.5).
-                            if (requestMode === 'to-me' && peerPubkey && onOpenProfile) {
+                            if (activeConv.type === 'dm' && peerPubkey && onOpenProfile) {
                                 return (
                                     <button
                                         type="button"
-                                        data-testid="request-header-profile"
+                                        data-testid={requestMode === 'to-me' ? 'request-header-profile' : 'dm-header-profile'}
                                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
                                         onClick={() => onOpenProfile(peerPubkey)}
+                                        // The visible name first, so speech input matches it (review of #1979, X2).
                                         aria-label={t("{name}, see {name}'s profile", { name: title })}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
@@ -2082,9 +2083,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <div
                                 key={msg.id}
                                 id={`msg-${msg.id}`}
+                                className="max-w-[85%] md:max-w-[70%]"
                                 style={{
                                     alignSelf: isMe ? 'flex-end' : 'flex-start',
-                                    maxWidth: '85%',
                                     position: 'relative',
                                     display: 'flex',
                                     flexDirection: 'column',
@@ -2794,7 +2795,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     };
 
     return (
-        <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
+        <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
             {/* Wraps: at 320px with 1.3x text, Groups' two buttons go under the title rather than squeeze it. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                 <h2 style={{ fontSize: '1.3rem', margin: 0 }}>{t('💬 Messages')}</h2>

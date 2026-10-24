@@ -22,6 +22,7 @@ export function SsoEnrolSheet({
     provider = Platform.OS === 'ios' ? 'apple' : 'google',
     identity: passedIdentity,
     askPhoneLock = true,
+    copyAt,
 }: {
     visible: boolean;
     onClose: () => void;
@@ -35,12 +36,18 @@ export function SsoEnrolSheet({
      * words to it. False only for a key the join wizard has just made, the member's own new account (welcome.tsx).
      */
     askPhoneLock?: boolean;
+    /**
+     * `community`: the copy goes to the community the phone is set to, whatever the build, never to BeanPool's key vault.
+     * For an account a claim made (app/welcome.tsx, DESIGN-account-without-global-fable.md §2.2): nothing of ours in a
+     * self-hosted community's first owner's path (Marty, 24 Oct). Otherwise where this build keeps copies.
+     */
+    copyAt?: 'community';
 }): React.JSX.Element | null {
     const { colors } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors), [colors]);
     const PROVIDER_NAME = SSO_PROVIDER_NAMES[provider];
-    /** Where this build keeps the copy (utils/vault.ts `signInCopiesAt`): fixed when the app is built. */
-    const atVault = hasVault();
+    /** Where this build keeps the copy (utils/vault.ts `signInCopiesAt`): fixed when the app is built, unless `copyAt` says. */
+    const atVault = hasVault() && copyAt !== 'community';
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
     /** `saving`: the provider is done and the deposit is going ahead, so no Cancel (utils/sso-sheet-connect.ts). */
@@ -92,6 +99,7 @@ export function SsoEnrolSheet({
                 provider,
                 url,
                 identity,
+                ...(copyAt ? { copyAt } : {}),
                 phoneLock: askPhoneLock ? () => authenticateUser(t('Confirm authentication to link a sign-in to your account.')) : null,
                 // The provider is done: Cancel comes down, and the deposit goes ahead.
                 onSignedIn: async () => {

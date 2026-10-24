@@ -52,7 +52,12 @@ export interface TableHashes {
  * 6: posts gains the three repeating-event columns, event_rsvps occurrence_at, and event_reminders_sent is keyed on the
  * date (REPLICA_FORMAT 12). Raised for the same reason as 4.
  */
-export const TABLE_HASHES_VERSION = 6;
+/**
+ * 7: shops gains photo_ref, and shop_photos holds each shop's banner (DESIGN-shops-round3-enterprise-shopfront-fable.md §0
+ * row 4). Raised for the same reason as 4: a standby updated before its main server hashes `shops` over one more column,
+ * and `shop_photos` too.
+ */
+export const TABLE_HASHES_VERSION = 7;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

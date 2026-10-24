@@ -13,6 +13,7 @@ import {
     CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY,
     PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY,
 } from './storage-keys';
+import { forgetNoticeCounts } from './notice-counts';
 import { Platform } from 'react-native';
 import { communitySwitched } from './community-switch';
 import { namesPinSecretName } from './names-list';
@@ -535,6 +536,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     await storage.removeItem(CANONICAL_PROFILE_STORE_KEY);
     await storage.removeItem('pending_profile_avatar');
     await storage.removeItem('pending_profile_sync');
+    await storage.removeItem('pending_profile_sync_anchor');
     await storage.removeItem('beanpool_offer_draft');
     // The List sheet's "in your shop" choice beside that draft (utils/shop-choice.ts SHOP_CHOICE_KEY): kept per community, so
     // the next account there would get a false "not in your shop" or a shop it never asked for (#2372 review).
@@ -542,6 +544,9 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     await storage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
     await storage.removeItem(PUSH_REGISTERED_AT_STORE_KEY);
     await storage.removeItem(PUSH_REGISTRATIONS_DUE_STORE_KEY);
+    // How many notices each community sent this account since it was last open (utils/notice-counts.ts), after any count
+    // under way (the switch above starts one).
+    await forgetNoticeCounts(storage);
     await storage.removeItem(FAV_CATEGORIES_STORE_KEY);
     // A town typed in "Find your community" says where the member lives (utils/typed-place.ts).
     await storage.removeItem(TYPED_PLACE_STORE_KEY);
@@ -581,11 +586,11 @@ export async function wipeIdentity(): Promise<void> {
     // finds none.
     await forgetAllPulseTokens();
 
-    // A wiped device has no half-finished join wizard to resume, nor a claim waiting for its account.
+    // A wiped device has no half-finished join wizard to resume, nor a claim code an older build kept at rest (#2412).
     try {
-        const { clearPendingOnboarding, clearPendingClaim } = require('./onboarding-state');
+        const { clearPendingOnboarding, forgetOldPendingClaim } = require('./onboarding-state');
         await clearPendingOnboarding();
-        await clearPendingClaim();
+        await forgetOldPendingClaim();
     } catch {}
 
     try {

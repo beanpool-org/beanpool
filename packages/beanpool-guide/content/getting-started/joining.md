@@ -13,6 +13,8 @@ related: home, finding-a-community, your-12-words, your-profile, communities, ho
 
 No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can, or, in a community where only the admins invite, its admins. See "Finding a community near you".
 
+Installing a community server? On the phone app, its claim makes your account: no invite, and nothing from the BeanPool project.
+
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
 ## Joining with an invite

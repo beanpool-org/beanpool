@@ -3,16 +3,21 @@
  * boot wrote on the server. Opened only for a node that answered GET /api/local/claim `unclaimed: true`: from the
  * `beanpool://claim?node=…[&id=…][&code=…]` link (the terminal QR `beanpool claim` prints, the manager's unclaimed card),
  * from Find a community's address check, or with no server yet from "Set up a new community server" (Find a community,
- * Start a community: components/SetUpServerRow.tsx), where Scan the code reads the server's QR before its address is
- * known. utils/node-claim.ts has the steps and the reasons; the code never leaves the phone. On a phone with no account
- * yet (the QR scanned before one was made) it offers "Make my account": the claim waits on the phone for the account
- * (utils/onboarding-state.ts PendingClaim) and the root guard comes back here with it once the account is made.
+ * Start a community: components/SetUpServerRow.tsx) and the first screen's "Installed BeanPool on a server? Claim it",
+ * where Scan the code reads the server's QR before its address is known. utils/node-claim.ts has the steps and the
+ * reasons; the code never leaves the phone.
+ *
+ * On a phone with no account the claim makes it (DESIGN-account-without-global-fable.md §2.2): a self-hosted community's
+ * first owner needs nothing of ours. The name is typed here, and at the tap, after the phone's unlock, a key is made for
+ * this phone and written to it just before the claim goes (utils/claim-key.ts); then the join wizard's photo, 12 words and
+ * How it Works, and the owner's card last (app/welcome.tsx). A phone with an account claims with it, exactly as before;
+ * a key another join made on this phone, whose 12 words it has never shown, claims the same way and then takes that wizard.
  *
  * One column at 320dp and 1.3× font, 48dp targets, as settings-signin.tsx. The full address is shown wrapped, never
  * truncated: it is the one thing a phishing server cannot make look right.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Modal, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
@@ -29,23 +34,26 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { assertPlainNodeAddress, plainOriginOf } from '../utils/node-url';
-import { requireDeviceUnlock, NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
+import { hasDeviceLock, requireDeviceUnlock, NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
-    claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimCommunity, claimNodeOrigin,
-    claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeAddresses, type ClaimStatus,
+    claimCodeDigits, claimCodeFromDigits, claimCodeFromScan, claimNodeOrigin,
+    claimSuccessActions, ownerCheckViaRole, readClaimStatus, readNodeAddresses, type ClaimOutcome, type ClaimStatus,
 } from '../utils/node-claim';
 import { CLAIM_CODE_PLACEHOLDER, claimLinkFromScan, parseClaimLink } from '../utils/claim-link';
-import { clearPendingClaim, handOverPendingClaim, setPendingClaim } from '../utils/onboarding-state';
+import {
+    checkOwnClaim, claimKeyForThisPhone, claimKeyState, claimWithKey, finishClaim, releaseClaimKey, type ClaimKeyState,
+} from '../utils/claim-key';
+import type { JoinKey } from '../utils/door-key';
+import type { BeanPoolIdentity } from '../utils/identity';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 
 export { ErrorBoundary };
 
-type Phase = 'form' | 'unlocking' | 'checking' | 'done';
+type Phase = 'form' | 'unlocking' | 'checking' | 'claiming' | 'done';
 
 export default function ClaimCommunityScreen() {
     const params = useLocalSearchParams<{ node?: string; refused?: string; id?: string; code?: string }>();
-    const { identity } = useIdentity();
-    const manage = useManageNode();
+    const { identity, setIdentity } = useIdentity();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -75,6 +83,11 @@ export default function ClaimCommunityScreen() {
         secondaryText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
         error: { fontSize: 15, color: colors.feedback.danger.fg, marginTop: 12, lineHeight: 21 },
         note: { fontSize: 15, color: colors.text.body, marginTop: 12, lineHeight: 21 },
+        // A card on the page for what the member must know before going on: a claim not confirmed yet, no screen lock.
+        // Body ink on the card, as every card reads in light and dark.
+        card: { marginTop: 16, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card },
+        cardTitle: { fontSize: 15, fontWeight: '700', color: colors.text.heading, lineHeight: 21 },
+        cardText: { fontSize: 15, color: colors.text.body, marginTop: 4, lineHeight: 21 },
         busyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16 },
         scanWrap: { flex: 1, backgroundColor: '#000' },
         scanClose: { position: 'absolute', top: 48, right: 16, width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
@@ -101,15 +114,46 @@ export default function ClaimCommunityScreen() {
 
     useEffect(() => { if (origin) loadStatus(origin); }, [origin, loadStatus]);
 
+    // ── Which key ───────────────────────────────────────────────────────────────────────────────────────
+    // Read from the phone (utils/claim-key.ts claimKeyState): the app's identity is set only once the join wizard ends.
+    const [phoneKey, setPhoneKey] = useState<ClaimKeyState | null>(null);
+    /** Keys the claim took off the phone here: never read back as the app's account while the app lets go of it. */
+    const releasedKeys = useRef(new Set<string>());
+    const refreshPhoneKey = useCallback(async (o: string | null) => {
+        const held = await claimKeyState(o);
+        // The app's own account when the phone's store can't be read for it: never a second key beside it.
+        const appAccount = identity && !releasedKeys.current.has(identity.publicKey) ? identity : null;
+        setPhoneKey(held.kind === 'none' && appAccount ? { kind: 'account', identity: appAccount } : held);
+    }, [identity]);
+    useEffect(() => { void refreshPhoneKey(origin); }, [origin, identity, refreshPhoneKey]);
+    /** The phone's own account, which claims as it always has. */
+    const account = phoneKey?.kind === 'account' ? phoneKey.identity : null;
+    /** The claim's own key, on the phone from an earlier tap (a refusal, or a restart while its answer was out). */
+    const ownKey = phoneKey?.kind === 'claims' ? phoneKey.key : null;
+    /** No account on the phone, or the claim's own: the claim makes the account, with the name typed here. */
+    const makesAccount = phoneKey !== null && phoneKey.kind !== 'account';
+    /** A key made at a tap that never reached the phone (the claim stopped before it was written): used again next tap. */
+    const heldKey = useRef<JoinKey | null>(null);
+    const manage = useManageNode(account);
+
     useEffect(() => {
-        if (!origin || !identity) return;
+        if (!origin || !account) { setIsMember(null); return; }
         let alive = true;
-        fetchMembership(origin, { publicKey: identity.publicKey, privateKey: identity.privateKey })
+        fetchMembership(origin, { publicKey: account.publicKey, privateKey: account.privateKey })
             .then(async r => (r.ok ? (await r.json())?.isMember === true : false))
             .catch(() => false)
             .then(m => { if (alive) setIsMember(m); });
         return () => { alive = false; };
-    }, [origin, identity]);
+    }, [origin, account]);
+
+    // An owner's phone needs a screen lock (DESIGN §3.8): said before the name is typed, never only after the tap.
+    const [lockSet, setLockSet] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!makesAccount) return;
+        let alive = true;
+        hasDeviceLock().then(l => { if (alive) setLockSet(l); });
+        return () => { alive = false; };
+    }, [makesAccount]);
 
     const checkAddress = () => {
         const o = claimNodeOrigin(addressInput);
@@ -130,19 +174,33 @@ export default function ClaimCommunityScreen() {
     const [callsign, setCallsign] = useState('');
     const [phase, setPhase] = useState<Phase>('form');
     const [error, setError] = useState<string | null>(null);
+    /** The claim's answer never came, or the node's owner check didn't answer: it may have landed (DESIGN §2.2 check-again). */
+    const [unconfirmed, setUnconfirmed] = useState(false);
+    /** Another key owns the community, and the key the claim made came off the phone again: nothing was made here. */
+    const [released, setReleased] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false);
+
+    // The name kept with the claim's own key, after a restart: the member typed it before.
+    useEffect(() => {
+        if (phoneKey?.kind === 'claims') setCallsign(c => c || phoneKey.callsign);
+    }, [phoneKey]);
 
     // A link made for an older code: its code is no good here. Keyed on the link itself, so a scan that brings the same
     // older code again is emptied again.
     const staleLink = status?.kind === 'unclaimed' && !!linkId && linkId !== status.codeId;
     useEffect(() => { if (staleLink && link.code) setDigits(''); }, [staleLink, link]);
 
-    // The server's name, cleaned (node-claim.ts cleanClaimName), or the address's host when nothing was left of it.
+    // The server's name, cleaned (claim-link.ts cleanClaimName), or the address's host when nothing was left of it.
     const name = (status && 'communityName' in status && status.communityName) || 'this community';
     /** The server's name for the screen's words, or null where the server gave none (the claim keeps `name`). */
     const named = (status && 'communityName' in status && status.communityName) || null;
+    /** The name kept for the owner's card at the wizard's end, whatever the status says by then. */
+    const namedAtClaim = useRef<string | null>(null);
+    if (named) namedAtClaim.current = named;
+    /** The name for a server that has an owner by now: its status names nobody, so the one it gave before. */
+    const knownName = named ?? namedAtClaim.current;
 
     const paste = async () => {
         const text = (await Clipboard.getStringAsync().catch(() => '')) || '';
@@ -199,9 +257,12 @@ export default function ClaimCommunityScreen() {
 
     // ── The claim ───────────────────────────────────────────────────────────────────────────────────────
     const code = claimCodeFromDigits(digits);
-    const needsCallsign = isMember === false;
+    const needsCallsign = makesAccount || isMember === false;
     const callsignOk = !needsCallsign || callsign.trim().length >= 2;
-    const canClaim = phase === 'form' && status?.kind === 'unclaimed' && !!code && callsignOk && !!identity && isMember !== null;
+    // The phone's account claims once the node said whether it is a member there; a new account needs only its name.
+    const keyReady = makesAccount || (!!account && isMember !== null);
+    const canClaim = phase === 'form' && status?.kind === 'unclaimed' && !!code && callsignOk && keyReady;
+    const busy = phase === 'unlocking' || phase === 'checking' || phase === 'claiming';
 
     const [isAnchor, setIsAnchor] = useState(false);
     const [hasAddress, setHasAddress] = useState<boolean | null>(null);
@@ -218,31 +279,104 @@ export default function ClaimCommunityScreen() {
         setPhase('done');
     };
 
+    /**
+     * Where a claim's answer takes the member (DESIGN §2.2 "The answers"). `wordsUnseen`: the key's 12 words have never been
+     * shown on this phone (utils/claim-key.ts `ClaimedWithKey`): a key the claim made, or one another join made here.
+     */
+    const afterClaim = async (o: string, out: ClaimOutcome, claimedBy: BeanPoolIdentity, wordsUnseen: boolean, cameOff: boolean) => {
+        if (out.kind === 'owner') {
+            // The phone's established account: the owner's card, as always.
+            if (!wordsUnseen) { await afterOwner(o); return; }
+            // The account the claim made, or another join's key: the join wizard's photo, 12 words, How it Works and the
+            // owner's card, from the record finishClaim writes (app/welcome.tsx resumes it), so the words come before the
+            // owner is sent anywhere. One welcome, never this screen under it.
+            heldKey.current = null;
+            try {
+                await finishClaim(o, claimedBy, namedAtClaim.current, out.callsign);
+            } catch (e: any) {
+                // The node has this phone's key as its owner, and the key is on the phone: only the wizard's next step
+                // couldn't be written. Said, and the claim can be tapped again (the node answers it as the claim was).
+                setPhase('form');
+                setError(e?.message ? keyLineWords(e.message) : t("This phone couldn't save the claim. Try again."));
+                return;
+            }
+            if (router.canDismiss()) router.dismissAll();
+            router.replace('/welcome');
+            return;
+        }
+        setPhase('form');
+        if (cameOff) {
+            heldKey.current = null;
+            releasedKeys.current.add(claimedBy.publicKey);
+            setReleased(true);
+            // The app loaded that key at its start (a restart while the claim was out): it holds no account now.
+            if (identity && identity.publicKey === claimedBy.publicKey) setIdentity(null);
+        }
+        // The claim's own key, with no answer: kept, and the member can ask again (Check again).
+        const notYet = makesAccount && !cameOff && out.kind === 'check-again';
+        setUnconfirmed(notYet);
+        setError(notYet || cameOff ? null : claimOutcomeWords(out, name));
+        await refreshPhoneKey(o);
+        if (out.kind === 'code-changed') { setDigits(''); loadStatus(o); }
+        if (out.kind === 'already-claimed') loadStatus(o);
+    };
+
     const claim = async () => {
-        if (!canClaim || !origin || !identity || status?.kind !== 'unclaimed' || !code) return;
+        if (!canClaim || !origin || status?.kind !== 'unclaimed' || !code) return;
+        const o = origin;
         setError(null);
         setPhase('unlocking');
-        // The phone's lock asks in the member's language, the same English node-admin.ts writes when given none.
+        // The phone's lock asks in the member's language, the same English node-admin.ts writes when given none. With
+        // no screen lock nothing is made: the lock is the owner's factor (D2).
         const unlock = await requireDeviceUnlock(name, t("Confirm it's you to manage {name}", { name }));
         if (unlock === 'no-device-lock') {
             setPhase('form');
-            Alert.alert(t('Set a screen lock first'), keyLineWords(NO_DEVICE_LOCK_MESSAGE));
+            Alert.alert(t('Set a screen lock first'), makesAccount
+                ? t("An owner's phone needs a screen lock. Set one in your phone's settings, then try again.")
+                : keyLineWords(NO_DEVICE_LOCK_MESSAGE));
             return;
         }
         if (unlock !== 'ok') { setPhase('form'); return; }
         setPhase('checking');
-        const out = await claimCommunity({
-            origin, identity, code, codeId: status.codeId, salt: status.salt,
-            callsign: needsCallsign ? callsign : '', isOwner: ownerCheckViaRole,
+        // The key (DESIGN §2.2 step 2): the phone's own when it has one, never a second; else the claim's own; else a new
+        // one, in memory until the claim is about to go (utils/claim-key.ts).
+        const key: JoinKey = account ? { identity: account, createdHere: false } : await claimKeyForThisPhone(o, ownKey ?? heldKey.current);
+        if (key.createdHere) heldKey.current = key;
+        const result = await claimWithKey({
+            origin: o, key, code, codeId: status.codeId, salt: status.salt,
+            callsign: key.createdHere || makesAccount ? callsign.trim() : needsCallsign ? callsign : '',
+            isOwner: ownerCheckViaRole,
+            onSending: () => setPhase('claiming'),
         });
-        // A claim kept for this account ("Make my account") is spent, or can no longer be: taken off the phone.
-        if (out.kind === 'owner' || out.kind === 'already-claimed' || out.kind === 'code-changed') await clearPendingClaim();
-        if (out.kind === 'owner') { await afterOwner(origin); return; }
-        setPhase('form');
-        setError(claimOutcomeWords(out, name));
-        if (out.kind === 'code-changed') { setDigits(''); loadStatus(origin); }
-        if (out.kind === 'already-claimed') loadStatus(origin);
+        await afterClaim(o, result.outcome, result.identity, result.wordsUnseen, result.released);
     };
+
+    /** Check again: did a claim by the claim's own key land? Asked of the node (utils/claim-key.ts checkOwnClaim). */
+    const checkAgain = async () => {
+        if (!origin || !ownKey || busy) return;
+        const o = origin;
+        setError(null);
+        setPhase('checking');
+        const { outcome, released: cameOff } = await checkOwnClaim(o, ownKey, ownerCheckViaRole);
+        // A server that still has no owner: the claim never reached it, and the form is there to try again.
+        if (outcome.kind === 'error') {
+            setPhase('form');
+            setUnconfirmed(false);
+            setError(claimOutcomeWords(outcome, name));
+            await loadStatus(o);
+            return;
+        }
+        await afterClaim(o, outcome, ownKey.identity, true, cameOff);
+    };
+
+    // The claim's own key, back after a restart (welcome hands it here) to a server that has an owner now: whose? Asked
+    // once, by itself; Check again asks again.
+    const askedOnArrival = useRef(false);
+    useEffect(() => {
+        if (askedOnArrival.current || status?.kind !== 'claimed' || phoneKey?.kind !== 'claims' || phase !== 'form') return;
+        askedOnArrival.current = true;
+        void checkAgain();
+    });
 
     const makeMine = async () => {
         if (!origin || switching) return;
@@ -263,27 +397,31 @@ export default function ClaimCommunityScreen() {
         }
     };
 
-    // ── No account yet ──────────────────────────────────────────────────────────────────────────────────
-    // The server's QR scanned on a phone with no account (Dax, 23 Oct 2026: it opened the first screen and the claim was
-    // lost). The claim is kept for the account the phone makes (utils/onboarding-state.ts PendingClaim), the first screen
-    // opens to make it, and once it is made the root guard lands back here with the claim (utils/member-landing.ts
-    // landOnClaim). Nothing is claimed until the member taps "Claim and become owner" then.
-    const makeAccount = async () => {
-        await setPendingClaim({ node: origin, codeId: linkId || null, code: linkCode || null });
-        router.replace('/welcome');
-    };
-
-    // A claim kept for this phone's account goes once the screen is up with the account: the claim is in this screen's
-    // route from here, and the guard's landing from welcome, which brought it, is the tabs again however the member leaves
-    // (the system back, the app closed: PR #2412 review). Before the account it goes on Back, and when the server already
-    // has an owner. One claim waits at a time; the QR opens it again.
+    // ── Leaving ─────────────────────────────────────────────────────────────────────────────────────────
+    // While the claim is out, nothing: its answer decides, and no request of it waits for ever (utils/node-claim.ts
+    // CLAIM_REQUEST_TIMEOUT_MS). Otherwise the claim's own key comes off the phone, with its record, only when no claim
+    // it signed can have landed (utils/claim-key.ts releaseClaimKey): a key the node may hold as owner stays, and the
+    // next launch comes back here with it. The phone's own account never comes off.
     const leave = () => {
-        void clearPendingClaim();
-        if (router.canGoBack()) router.back();
-        else router.replace('/(tabs)');
+        if (busy) return;
+        void (async () => {
+            const key = ownKey ?? heldKey.current;
+            const removed = !!origin && !!key && await releaseClaimKey(origin, key);
+            if (removed && key) releasedKeys.current.add(key.identity.publicKey);
+            heldKey.current = null;
+            // The app loaded that key at its start (a restart while the claim was out): it holds no account now.
+            if (removed && identity && key && identity.publicKey === key.identity.publicKey) setIdentity(null);
+            if (router.canGoBack()) router.back();
+            else router.replace(account ? '/(tabs)' : '/welcome');
+        })();
     };
-    useEffect(() => { if (identity) void handOverPendingClaim(); }, [identity]);
-    useEffect(() => { if (identity && status?.kind === 'claimed') void clearPendingClaim(); }, [identity, status]);
+    // Android's back button too: the same way out, so a key the claim made never stays behind by another door.
+    const leaveRef = useRef(leave);
+    leaveRef.current = leave;
+    useEffect(() => {
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => { leaveRef.current(); return true; });
+        return () => sub.remove();
+    }, []);
 
     // ── Screens ─────────────────────────────────────────────────────────────────────────────────────────
     const header = (
@@ -298,23 +436,22 @@ export default function ClaimCommunityScreen() {
         </View>
     );
 
-    let body: React.ReactNode;
-    if (!identity && status?.kind !== 'claimed') {
-        body = (
-            <>
-                <Text style={styles.title}>{named ? t('Claim {name}', { name: named }) : t('Claim a community')}</Text>
-                {origin ? <Text style={styles.address} selectable>{origin}</Text> : null}
-                <Text style={styles.lead} testID="claim-no-account">
-                    {linkCode
-                        ? t('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here, with the code filled in.')
-                        : t('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here.')}
-                </Text>
-                <Pressable style={styles.primary} onPress={makeAccount} accessibilityRole="button" testID="claim-make-account">
-                    <Text style={styles.primaryText}>{t('Make my account')}</Text>
+    // The claim's own key may be the node's owner already: said with Check again, wherever the screen is.
+    const showUnconfirmed = unconfirmed || (phoneKey?.kind === 'claims' && phoneKey.joinsOut > 0 && status?.kind !== 'unclaimed' && !busy);
+    const unconfirmedCard = showUnconfirmed ? (
+        <View style={styles.card} testID="claim-unconfirmed" accessibilityLiveRegion="polite">
+            <Text style={styles.cardTitle}>{t("We couldn't confirm the claim yet. It may have worked.")}</Text>
+            <Text style={styles.cardText}>{t('Your account is kept on this phone until the server answers.')}</Text>
+            <View style={styles.actions}>
+                <Pressable style={styles.secondary} onPress={checkAgain} disabled={busy} accessibilityRole="button" testID="claim-check-again">
+                    <Text style={styles.secondaryText}>{t('Check again')}</Text>
                 </Pressable>
-            </>
-        );
-    } else if (!origin) {
+            </View>
+        </View>
+    ) : null;
+
+    let body: React.ReactNode;
+    if (!origin) {
         body = (
             <>
                 <Text style={styles.title}>{t('Claim a community')}</Text>
@@ -386,6 +523,33 @@ export default function ClaimCommunityScreen() {
                 <Text style={styles.note}>{t('Asking the server…')}</Text>
             </View>
         );
+    } else if (status.kind === 'claimed' && released) {
+        // Another phone won the race (DESIGN §3.3): the key this claim made came off again. The phone is as it was.
+        body = (
+            <>
+                <Text style={styles.title} testID="claim-someone-owns">{knownName ? claimOutcomeWords({ kind: 'already-claimed' }, knownName) : t('Someone already owns this community.')}</Text>
+                <Text style={styles.address} selectable>{origin}</Text>
+                <Text style={styles.note}>{t('Nothing was made on this phone.')}</Text>
+                <Pressable style={styles.primary} onPress={leave} accessibilityRole="button">
+                    <Text style={styles.primaryText}>{t('Back')}</Text>
+                </Pressable>
+            </>
+        );
+    } else if (status.kind === 'claimed' && phoneKey?.kind === 'claims') {
+        // The claim's own key, and the server has an owner now: whose is being asked (above), or couldn't be told.
+        body = (
+            <>
+                <Text style={styles.title}>{knownName ? t('Claim {name}', { name: knownName }) : t('Claim this community')}</Text>
+                <Text style={styles.address} selectable>{origin}</Text>
+                {busy ? (
+                    <View style={styles.busyRow}>
+                        <ActivityIndicator />
+                        <Text style={styles.note}>{t('Asking the server…')}</Text>
+                    </View>
+                ) : unconfirmedCard}
+                {error ? <Text style={styles.error} selectable>{error}</Text> : null}
+            </>
+        );
     } else if (status.kind === 'claimed') {
         body = (
             <>
@@ -399,6 +563,7 @@ export default function ClaimCommunityScreen() {
             <>
                 <Text style={styles.title}>{t('Claim a community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
+                {unconfirmedCard}
                 <Text style={styles.error}>
                     {status.kind === 'no-code' ? t('This server has no claim code. Restart it to make one.')
                         : status.kind === 'busy'
@@ -417,12 +582,23 @@ export default function ClaimCommunityScreen() {
             </>
         );
     } else {
-        const busy = phase !== 'form';
         body = (
             <>
                 <Text style={styles.title}>{named ? t('Claim {name}', { name: named }) : t('Claim this community')}</Text>
                 <Text style={styles.address} selectable>{origin}</Text>
                 <Text style={styles.lead}>{t('This community has no owner yet. Its one-time code is on its server.')}</Text>
+                {makesAccount ? (
+                    <>
+                        {/* What the tap does, before anything is typed (DESIGN §4). Nothing is made by reading the screen. */}
+                        <Text style={styles.lead} testID="claim-makes-account">
+                            {named
+                                ? t('Claiming makes your BeanPool account on this phone, and makes it the owner of {name}.', { name: named })
+                                : t('Claiming makes your BeanPool account on this phone, and makes it the owner of this community.')}
+                        </Text>
+                        <Text style={styles.lead} testID="claim-only-yours">{t('Only claim a server you installed yourself.')}</Text>
+                    </>
+                ) : null}
+                {unconfirmedCard}
                 {staleLink ? <Text style={styles.note}>{t('The server made a new code since this link. Read the code on the server again.')}</Text> : null}
 
                 <Text style={styles.label}>{t('Claim code')}</Text>
@@ -454,6 +630,13 @@ export default function ClaimCommunityScreen() {
                     </Pressable>
                 </View>
 
+                {makesAccount && lockSet === false ? (
+                    <View style={styles.card} testID="claim-no-lock">
+                        <Text style={styles.cardTitle}>{t('Set a screen lock first')}</Text>
+                        <Text style={styles.cardText}>{t("An owner's phone needs a screen lock. Set one in your phone's settings, then try again.")}</Text>
+                    </View>
+                ) : null}
+
                 {needsCallsign ? (
                     <>
                         <Text style={styles.label}>{t('Your name here')}</Text>
@@ -467,15 +650,22 @@ export default function ClaimCommunityScreen() {
                             editable={!busy}
                             accessibilityLabel={t('Your callsign')}
                         />
+                        {makesAccount ? (
+                            <Text style={styles.hint} testID="claim-name-hint">
+                                {named
+                                    ? t('How people in {name} will see you. You can change it later.', { name: named })
+                                    : t('How people in this community will see you. You can change it later.')}
+                            </Text>
+                        ) : null}
                     </>
                 ) : null}
 
                 {error ? <Text style={styles.error} selectable>{error}</Text> : null}
 
-                {phase === 'checking' ? (
+                {phase === 'checking' || phase === 'claiming' ? (
                     <View style={styles.busyRow}>
                         <ActivityIndicator />
-                        <Text style={styles.note}>{t('Checking the code…')}</Text>
+                        <Text style={styles.note}>{phase === 'claiming' ? t('Claiming…') : t('Checking the code…')}</Text>
                     </View>
                 ) : (
                     <Pressable

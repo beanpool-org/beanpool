@@ -12,6 +12,8 @@ import {
 } from '../utils/guide';
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityRow, type CommunityStatus } from '../utils/use-communities';
+import { useNoticeCounts } from '../utils/use-notice-counts';
+import { noticeCountFor } from '../utils/notice-counts';
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
@@ -52,9 +54,15 @@ const STATUS_TEXT: Record<CommunityStatus | 'none', WordKey> = {
 const BEANPOOL_NAME = 'BeanPool';
 const WEBSITE_NAME = 'beanpool.org';
 
-// What TalkBack reads for a saved community's row: its name, its state, and whether it is the one in use.
-const savedRowLabel = (name: string, state: string, isCurrent: boolean) =>
-    (isCurrent ? t('{name}, {state}, in use', { name, state }) : t('{name}, {state}', { name, state }));
+// What TalkBack reads for a saved community's row: its name, its state, whether it is the one in use, and how many
+// notices it sent since it was last open (its number on the row).
+const savedRowLabel = (name: string, state: string, isCurrent: boolean, notices = 0) => {
+    const row = isCurrent ? t('{name}, {state}, in use', { name, state }) : t('{name}, {state}', { name, state });
+    return notices > 0 ? t('{row}, {notices}', { row, notices: tn(notices, '{n} new notification', '{n} new notifications') }) : row;
+};
+
+/** A row's number as drawn: up to 99, then "99+", as the tab bar's. */
+const countText = (n: number) => (n > 99 ? '99+' : String(n));
 
 // English writes one form for both counts ("synced 1s ago", "synced 5s ago"); a language with more forms has them.
 function syncedAgo(at: number | null): string | null {
@@ -75,6 +83,8 @@ export default function BeanPoolSheet() {
     const insets = useSafeAreaInsets();
     const { guide, source } = useGuide();
     const communities = useCommunities();
+    // The notices each other community sent since it was last open, counted on this phone (utils/notice-counts.ts).
+    const noticeCounts = useNoticeCounts();
     const status: CommunityStatus | 'none' = communities.active === null ? 'none'
         : communities.current?.status ?? 'checking';
     const [query, setQuery] = useState('');
@@ -109,6 +119,9 @@ export default function BeanPoolSheet() {
         rowSubCurrent: { color: colors.text.body }, // text.secondary is 4.22 on the dark sage tint
         rowPressed: { backgroundColor: colors.surface.subtle },
         guestTag: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, flexShrink: 0 },
+        // A row's number of notices: the chat list's unread pill, grown with the member's text size.
+        countBadge: { minWidth: 22, minHeight: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.accent.fill, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+        countText: { color: colors.text.onAccent, fontSize: 12, fontWeight: '800' },
         cta: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, marginTop: 12 },
         ctaGuest: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
         ctaNone: { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border },
@@ -207,6 +220,13 @@ export default function BeanPoolSheet() {
         </Pressable>
     );
 
+    // A saved row's number of notices since it was last open; nothing at 0. TalkBack reads it in the row's label.
+    const renderCount = (n: number) => (n > 0 ? (
+        <View style={styles.countBadge} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+            <Text style={styles.countText}>{countText(n)}</Text>
+        </View>
+    ) : null);
+
     // The global community's row: the saved row's shape when the phone has one, else its own (earth, chevron). Its second
     // line up to two at 320 dp and 1.3× (DESIGN-global-entry §B.3). Called, not a component: this is the row that changes
     // while the member looks at it (each ping, the door, the probe), and a component made in here would be a new one on each
@@ -216,6 +236,8 @@ export default function BeanPoolSheet() {
         // A saved row keeps the saved rows' dot while its state is being asked (a member's own row never flashes the door's
         // earth); the earth is for a row whose line is about the door.
         const dot = !!saved && (globalEntry === 'member' || globalEntry === 'checking');
+        // Its number, as the saved rows beside it show theirs: only a saved row the phone isn't on now has notices counted.
+        const notices = saved && !isCurrent ? noticeCountFor(noticeCounts, saved.url) : 0;
         return (
             <Pressable
                 key={saved?.url ?? 'global'}
@@ -233,7 +255,7 @@ export default function BeanPoolSheet() {
                 // The saved row is read as the saved rows beside it: the name it shows, then a member's connection (what the
                 // dot's colour says) or what its line says, and in use; a switch to the one in use does nothing.
                 accessibilityLabel={saved
-                    ? savedRowLabel(saved.name, globalEntry === 'member' ? t(STATUS_TEXT[saved.status]) : globalState, isCurrent)
+                    ? savedRowLabel(saved.name, globalEntry === 'member' ? t(STATUS_TEXT[saved.status]) : globalState, isCurrent, notices)
                     : t('Global community, {state}', { state: globalState })}
                 accessibilityHint={isCurrent ? undefined : globalHint}
                 testID="global-community-row"
@@ -251,6 +273,7 @@ export default function BeanPoolSheet() {
                         It shows only while the global community can't be reached, so the row grows instead. */}
                     {!!globalAside && <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]}>{globalAside}</Text>}
                 </View>
+                {renderCount(notices)}
                 {isCurrent
                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />
                     : saved?.status === 'guest' ? <Text style={styles.guestTag}>{t('Guest')}</Text>
@@ -314,6 +337,7 @@ export default function BeanPoolSheet() {
                     {communities.rows.map((r, i) => {
                         if (r === globalSaved) return renderGlobalRow(r, i === 0);
                         const isCurrent = r.url === communities.active;
+                        const notices = isCurrent ? 0 : noticeCountFor(noticeCounts, r.url);
                         return (
                             <Pressable
                                 key={r.url}
@@ -324,7 +348,7 @@ export default function BeanPoolSheet() {
                                 disabled={communities.switching}
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isCurrent }}
-                                accessibilityLabel={savedRowLabel(r.name, t(STATUS_TEXT[r.status]), isCurrent)}
+                                accessibilityLabel={savedRowLabel(r.name, t(STATUS_TEXT[r.status]), isCurrent, notices)}
                                 accessibilityHint={isCurrent ? undefined : t('Switches to this community. Long press to remove it.')}
                             >
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
@@ -332,6 +356,7 @@ export default function BeanPoolSheet() {
                                     <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={1}>{r.name}</Text>
                                     <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={1}>{r.url.replace(/^https?:\/\//, '')}</Text>
                                 </View>
+                                {renderCount(notices)}
                                 {isCurrent
                                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />
                                     : r.status === 'guest' && <Text style={styles.guestTag}>{t('Guest')}</Text>}

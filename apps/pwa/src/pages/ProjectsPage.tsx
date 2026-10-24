@@ -395,7 +395,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* min-w-0 and break-words: a longer language's title and button wrap where they are, never off a 320 px screen.
                     The button is not min-w-0 (max 50 %, so a longer language's word still breaks), and the row has no gap
                     beside it, as before: English's "Commons" and "Propose" both stay whole at 320 px with 1.3x text. */}
-                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
+                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
                     <div className="min-w-0">
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> <span className="min-w-0 break-words">{t('The Commons')}</span>
@@ -439,7 +439,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </div>
 
                 {toolsHere && onNavigate && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full min-w-0 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full min-w-0 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
                         <ToolRow icon="🧰" title={t('Tools')} state={t('Things you can do on your own')} onClick={() => onNavigate('tools')} testId="commons-tools-row" />
                     </div>
                 )}
@@ -447,13 +447,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real.
                     Drawn only on the Groups tab (where the enterprise list lives on a local node), so Decide opens at its own content. */}
                 {enterprisesMode === 'preview' && activeSection === 'groups' && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
                         <CommonsPreview enterprises={true} onOpenEnterprise={onOpenTreasury} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                     </div>
                 )}
                 {/* Commons Pool & Available Governance Credits */}
                 {(enterprisesMode !== 'preview' || showsOwnVoiceCredits) && (
-                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     {enterprisesMode !== 'preview' && (
                         <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${!showsOwnVoiceCredits ? 'col-span-2' : ''}`}>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
@@ -488,7 +488,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             <div className="sticky top-0 z-40 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
-                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
                     {SECTION_TABS.map(tab => (
                         <button
                             key={tab.key}
@@ -518,7 +518,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             <div className="px-4 pb-3 empty:hidden" data-testid="commons-filters">
                 {/* Filter Controls: Groups Category */}
                 {activeSection === 'groups' && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
                         <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
                             {GROUP_CHIPS.filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
                                 <button
@@ -539,7 +539,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             </div>
 
             {activeSection === 'decide' ? (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full">
                     <DecideSection
                         decisions={effectiveDecisions}
                         myPoolVoting={effectiveMyPoolVoting}
@@ -568,7 +568,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </div>
             ) : (
                 <>
-                <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
+                <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full">
                     <div className="p-3 bg-white dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl text-xs text-nature-800 dark:text-nature-300 leading-relaxed">
                         <Sentence
                             text={t('👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.')}
@@ -577,7 +577,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                 </div>
                 {showChatGroups && (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
 
                     {loadingGroups ? (
                         <div className="py-12 text-center text-sm text-nature-600 dark:text-nature-400">{t('Loading groups...')}</div>
@@ -686,7 +686,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                     )
                 ) : (
-                    <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
                         {filteredEnterprises.map(t => <EnterpriseCard key={t.publicKey} treasury={t} onOpen={onOpenTreasury} />)}
                 </div>
                 )}
@@ -825,12 +825,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </div>
                             )}
 
-                            {/* Photo / Avatar upload */}
+                            {/* Its logo, the one picture made with it (its avatar). Its banner is its shop's photo, which a keeper
+                                chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
                             <div>
-                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                    {t('Cover Photo / Avatar (Optional)')}
+                                <label htmlFor="propose-logo" className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                    {t('Logo (optional)')}
                                 </label>
+                                <p className="m-0 mb-1 text-xs text-nature-400">{t('Its banner photo is chosen later, in Manage.')}</p>
                                 <input
+                                    id="propose-logo"
                                     type="file"
                                     accept="image/*"
                                     onChange={handlePhotoUpload}

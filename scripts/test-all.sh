@@ -270,6 +270,11 @@ run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwri
 # keyboard focus. Canaries of each known shape must fail first, so a check gone blind fails too. No node; about 30 s.
 run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && pnpm --filter @beanpool/pwa dark-class-check'
 
+# Wide-screen responsive layout checks in headless Chromium (PR #2440).
+# apps/pwa/e2e/wide-pages-check.mjs renders pages via Vite and Chromium, verifying card widths
+# and tool photo constraints across desktop viewports. No node; about 10 s.
+run_check "pwa_wide_pages" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && pnpm --filter @beanpool/pwa wide-pages-check'
+
 # The group-history screens on a phone (the group-history-after-rekey design, section 7): apps/native/e2e/locked-history-320.mjs
 # renders the real components through react-native-web in Chromium at 320 wide with 1.3x text, light and dark, and fails on
 # a sideways scroll, cut text, a button under 48dp or text under 4.5:1. Same browser as above, from the PWA's Playwright.

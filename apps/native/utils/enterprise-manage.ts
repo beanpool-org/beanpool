@@ -6,17 +6,17 @@
  *
  * - Who may open it: a keeper of it (not suspended), or whoever the node says leads it or is a node admin
  *   (`isLeadOrSoleKeeperOrAdmin`), whose keeper requests and season controls they are.
- * - Its face as one form with one Save: any keeper its About, logo, kind and how we deal; the lead (its sole keeper, or a
- *   node admin) its name and purpose, which the others read with the sentence why. Only what changed is sent, each to
- *   its own route (the face to PUT /api/treasury/:t/profile, its kind and how we deal to its shop), the face first.
- *   A node admin who keeps none of it gets its name, purpose, About and logo only: its shop's routes take its keepers
- *   only (apps/server routes/shops.ts enterpriseOwner), so its kind and how we deal aren't theirs to change.
+ * - Its face as one form with one Save: any keeper its About, logo, kind, how we deal and banner photo; the lead (its sole
+ *   keeper, or a node admin) its name and purpose, which the others read with the sentence why. Only what changed is
+ *   sent, each to its own route (the face to PUT /api/treasury/:t/profile, its kind, how we deal and banner photo to its
+ *   shop), the face first. A node admin who keeps none of it gets its name, purpose, About and logo only: its shop's
+ *   routes take its keepers only (apps/server routes/shops.ts enterpriseOwner), so its kind, how we deal and banner
+ *   photo aren't theirs to change.
  * - Featured: its live Offers in its shop, six at most on the shelf (core SHOP_FEATURED_MAX), as the node counts them;
  *   and its live Offers not in its shop yet, which can't be featured until they are put in. Its keepers' only, as the
  *   feature and shop routes are.
  *
- * Not here: the banner (the node keeps no photo for a shop yet) and the tool shelves (the phone opens a tool as the
- * member only): each is said in the PR that built this.
+ * Not here: the tool shelves (the phone opens a tool as the member only), said in the PR that built this.
  */
 import { SHOP_FEATURED_MAX, isShopKind, t, type ShopKind } from '@beanpool/core';
 import { offersToAdd, type EnterpriseFaceChanges, type MyShopChanges, type ShopListing } from './shop';
@@ -44,7 +44,7 @@ export function notKeeperLine(project: boolean): string {
     return project ? t('Only its collaborators manage this project.') : t('Only its keepers manage this enterprise.');
 }
 
-/** Its face as the form holds it: the words as typed, its kind, and a new logo once one is picked. */
+/** Its face as the form holds it: the words as typed, its kind, and a new logo or banner photo once one is picked. */
 export interface FaceForm {
     name: string;
     purpose: string;
@@ -53,6 +53,8 @@ export interface FaceForm {
     howToDeal: string;
     /** A new picture (the phone's small copy), or null: its logo stays. */
     logo: string | null;
+    /** Its banner: a new photo (the phone's 800 px copy), null to take it down; absent: it stays as its shop has it. */
+    banner?: string | null;
 }
 
 const words = (v: unknown): string => (typeof v === 'string' ? v : '');
@@ -79,9 +81,9 @@ export interface FaceSave {
 
 /**
  * What changed between the form as read and as typed, trimmed as the node stores it. Its name and purpose only when
- * `lead` (the node refuses anyone else them); its kind and how we deal only when `keeper` (its shop's routes take its
- * keepers only, never a node admin who keeps none of it); an empty How we deal clears it; a new logo goes as the
- * picture picked.
+ * `lead` (the node refuses anyone else them); its kind, how we deal and its banner photo only when `keeper` (its shop's
+ * routes take its keepers only, never a node admin who keeps none of it); an empty How we deal clears it; a new logo goes
+ * as the picture picked; a banner photo picked goes as the photo, and one taken down as none.
  */
 export function faceSaveOf(before: FaceForm, draft: FaceForm, lead: boolean, keeper = true): FaceSave {
     const face: EnterpriseFaceChanges = {};
@@ -93,6 +95,7 @@ export function faceSaveOf(before: FaceForm, draft: FaceForm, lead: boolean, kee
     if (draft.logo) face.avatar = draft.logo;
     if (keeper && draft.kind !== before.kind) shop.kind = draft.kind;
     if (keeper && changed(draft.howToDeal, before.howToDeal)) shop.howToDeal = draft.howToDeal.trim() || null;
+    if (keeper && draft.banner !== undefined) shop.photo = draft.banner;
     return { face, shop };
 }
 
@@ -122,8 +125,8 @@ export function faceOnRead(form: FaceState, read: FaceForm): FaceState {
 
 /**
  * The form once `sent` was saved (`typed` the form as Save was pressed): what was sent is what the node holds now, and
- * each field of it the keeper hasn't changed since is that, so the next read takes the node's (faceOnRead). A logo sent
- * is the node's: the form holds no picture to send again. A field not sent stays as typed.
+ * each field of it the keeper hasn't changed since is that, so the next read takes the node's (faceOnRead). A logo or a
+ * banner photo sent is the node's: the form holds no picture to send again. A field not sent stays as typed.
  */
 export function faceAfterSave(form: FaceState, typed: FaceForm, sent: FaceSave): FaceState {
     const stored: Partial<FaceForm> = {};
@@ -135,6 +138,7 @@ export function faceAfterSave(form: FaceState, typed: FaceForm, sent: FaceSave):
     const draft = { ...form.draft };
     for (const k of FACE_WORDS) if (k in stored && form.draft[k] === typed[k]) (draft as Record<string, unknown>)[k] = stored[k];
     if (sent.face.avatar !== undefined && form.draft.logo === typed.logo) draft.logo = null;
+    if (sent.shop.photo !== undefined && form.draft.banner === typed.banner) delete draft.banner;
     return { before: { ...form.before, ...stored }, draft };
 }
 

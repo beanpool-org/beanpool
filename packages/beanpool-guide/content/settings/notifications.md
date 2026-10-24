@@ -3,7 +3,7 @@ slug: notifications
 title: Notifications
 summary: Choose which alerts reach your phone, and when events remind you.
 help: Choose which alerts reach you, and when events remind you.
-related: mute, messages, my-deals, events, holiday-mode, the-top-bar
+related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communities
 ---
 
 ## Choosing your alerts
@@ -37,7 +37,7 @@ BeanPool never asks for your 12 words or a password in an alert.
 
 Each alert carries your community's signature, made for you alone. BeanPool checks it before doing anything:
 
-- **It checks out:** BeanPool asks your community what the alert was about and opens it, if it's from the community you're in. An alert from another of your communities opens BeanPool where you left off: switch to that community to see it.
+- **It checks out:** BeanPool asks your community what the alert was about and opens it. If the alert is from another of your communities on this phone, BeanPool first switches to that community, just as tapping it under **Your communities** does, and opens the alert there. If you are partway through joining a community, BeanPool stays where you are. If that community no longer recognises your account, you see what it says instead of the alert.
 - **It doesn't:** BeanPool opens nothing and tells you once: "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification."
 
 While BeanPool is open, an alert that doesn't check out isn't shown at all, and neither is one you've already seen.
@@ -47,6 +47,12 @@ Your phone shows an alert's words before BeanPool can check them. So someone who
 An alert from a community you've removed from this phone does nothing either.
 
 If your community's server hasn't been updated yet, its alerts carry no signature. BeanPool shows them in general words ("There is news from your community.") and, when you tap one, opens where you left off.
+
+## Numbers on your other communities
+
+On the phone, tap the bean at the top left. Under **Your communities**, a small number beside a community shows how many alerts it has sent you since you last had it open. The number goes as soon as you switch to that community. The community you're in never shows one.
+
+Your phone counts these itself, from alerts it has checked: those that arrive while BeanPool is open, those still waiting on your phone when you open BeanPool, and those you tap. It never asks your other communities anything to work them out. An alert you cleared from your phone before opening BeanPool isn't counted.
 
 ## Notices when BeanPool checks in
 

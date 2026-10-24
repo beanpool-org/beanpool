@@ -249,7 +249,7 @@ describe('every write of the phone\'s key, by file', () => {
         // A new caller is looked at here: does it check the phone's account first, and is a replace ever confirmed?
         expect(writers.sort()).toEqual([
             'app/welcome.tsx',          // createIdentity, only when Welcome read no account (handleCreate)
-            'utils/global-join.ts',     // commitJoinKey, keepJoinedIdentity: the stored key or none
+            'utils/door-key.ts',        // commitDoorKey, keepJoinedIdentity (every door's: the global door's, the claim's): the stored key or none
             'utils/identity.ts',
             'utils/rekey-redeem.ts',    // finishRekey: the key it made, only onto no account
             'utils/restore-account.ts', // saveRestoredAccount, after clearToRestore asked the member

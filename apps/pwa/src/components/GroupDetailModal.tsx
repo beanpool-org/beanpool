@@ -641,7 +641,7 @@ export function GroupDetailModal({
                                     data-testid="group-accept-invite"
                                     onClick={handleJoin}
                                     disabled={actionLoading}
-                                    className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                    className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {t('Accept invitation')}
                                 </button>
@@ -650,7 +650,7 @@ export function GroupDetailModal({
                                     data-testid="group-decline-invite"
                                     onClick={handleDecline}
                                     disabled={actionLoading}
-                                    className="w-full mt-2 py-2.5 px-4 rounded-xl text-bp-ink-accent font-semibold text-sm hover:bg-bp-chip-accent-tint transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                    className="w-full mt-2 py-3 min-h-[44px] px-4 rounded-xl text-bp-ink-accent font-semibold text-sm hover:bg-bp-chip-accent-tint transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {t('Decline invitation')}
                                 </button>

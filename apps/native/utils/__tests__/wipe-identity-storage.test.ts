@@ -46,6 +46,9 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_push_registered_at: JSON.stringify(['https://test.beanpool.org']),
             // A registration of this key still due there (push-registrations.ts): never tried for another key.
             beanpool_push_registrations_due: JSON.stringify([{ publicKey: 'ab'.repeat(32), community: 'https://test.beanpool.org', refusals: 0, retryAt: 0 }]),
+            // How many notices each community sent this account since it was last open (notice-counts.ts): the next
+            // account's rows would show the numbers of notices that were never its own.
+            beanpool_notice_counts: JSON.stringify({ 'https://test.beanpool.org': { n: 2, seen: { ['0'.repeat(32)]: 1 } } }),
             // A cache about every member, not this one: stays.
             [`bp_tier_${'cd'.repeat(32)}`]: '2',
             some_ui_pref: 'dark',

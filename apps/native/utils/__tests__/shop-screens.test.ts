@@ -93,6 +93,14 @@ vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s
 vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn(), launchCameraAsync: vi.fn(), requestCameraPermissionsAsync: vi.fn() }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'photo-ref' }));
+// The banner's picker: the photo the member chose, already the phone's 800 px copy; or none; or one it can't read.
+const bannerPick = vi.hoisted(() => ({ next: 'data:image/jpeg;base64,/9j/BBBB' as string | null | Error }));
+vi.mock('../banner-photo', () => ({
+    pickBannerPhoto: async () => {
+        if (bannerPick.next instanceof Error) throw bannerPick.next;
+        return bannerPick.next;
+    },
+}));
 vi.mock('expo-file-system/legacy', () => ({ documentDirectory: '/tmp/doc/', getInfoAsync: vi.fn(async () => ({ exists: false })), readAsStringAsync: vi.fn(), deleteAsync: vi.fn(), makeDirectoryAsync: vi.fn(), copyAsync: vi.fn(), moveAsync: vi.fn() }));
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -143,6 +151,8 @@ vi.mock('../db', () => ({
             if (!node.shop) node.shop = { id: 'shop-1', name: null, ownerName: ME.callsign, kind: null, blurb: null, howToDeal: null, paused: false, backOn: null };
             const s = node.shop;
             for (const k of ['name', 'kind', 'blurb', 'howToDeal'] as const) if (body[k] !== undefined) s[k] = typeof body[k] === 'string' && !body[k].trim() ? null : body[k];
+            // Its banner: the node keeps the photo and answers its keyed address (engine/shops.ts memberShop photoUrl).
+            if (body.photo !== undefined) (s as Record<string, unknown>).photoUrl = body.photo ? `/api/shops/${s.id}/photo?v=ab12cd34&k=KEY` : null;
             const moved: string[] = [];
             if (body.paused === true && !s.paused) { s.paused = true; for (const l of node.listings) if (l.shopId === s.id && l.status === 'active') { l.status = 'paused'; moved.push(l.id); } }
             if (body.paused === false && s.paused) { s.paused = false; s.backOn = null; for (const l of node.listings) if (l.shopId === s.id && l.status === 'paused') { l.status = 'active'; moved.push(l.id); } }
@@ -339,6 +349,29 @@ describe('Your shop (app/shop/mine.tsx)', () => {
             act(() => root.unmount());
             root = createRoot(host);
         }
+    });
+
+    it('its banner photo: chosen, it goes on its own as the 800 px copy; Remove takes it down; one unread says so', async () => {
+        aShopWithThings();
+        bannerPick.next = 'data:image/jpeg;base64,/9j/BBBB';
+        await draw(createElement(YourShopScreen));
+        expect(byTestId('shop-field-banner')).not.toBeNull();
+        expect(byTestId('shop-banner-remove')).toBeNull();
+        await click('shop-field-banner');
+        expect(node.log.filter((r) => r.method === 'PUT')).toEqual([{ method: 'PUT', path: '/api/shops/mine', body: { photo: 'data:image/jpeg;base64,/9j/BBBB' } }]);
+        expect(byTestId('shop-banner-remove')).not.toBeNull();
+        atTheFloor();
+        await click('shop-banner-remove');
+        expect(node.log.filter((r) => r.method === 'PUT').at(-1)).toEqual({ method: 'PUT', path: '/api/shops/mine', body: { photo: null } });
+        expect(byTestId('shop-banner-remove')).toBeNull();
+        const puts = node.log.filter((r) => r.method === 'PUT').length;
+        bannerPick.next = null;
+        await click('shop-field-banner');
+        bannerPick.next = new Error('could not decode');
+        await click('shop-field-banner');
+        expect(node.log.filter((r) => r.method === 'PUT').length).toBe(puts);
+        expect(byTestId('shop-banner-error')).not.toBeNull();
+        bannerPick.next = 'data:image/jpeg;base64,/9j/BBBB';
     });
 
     it('in English: "<name>\'s shop" for a shop with no name of its own, and the counts in words', async () => {

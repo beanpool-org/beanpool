@@ -61,7 +61,8 @@ export default function GroupInviteLanding() {
     // null = still asking (or could not load them: the faces row is simply left out).
     const [members, setMembers] = useState<GroupMemberItem[] | null>(null);
     const [membersFailed, setMembersFailed] = useState(false);
-    const [busy, setBusy] = useState(false);
+    // Which of the two is on its way, so the spinner shows on the button that was tapped; both are held meanwhile.
+    const [busy, setBusy] = useState<false | 'join' | 'decline'>(false);
     const alive = useRef(true);
     useEffect(() => () => { alive.current = false; }, []);
 
@@ -101,7 +102,7 @@ export default function GroupInviteLanding() {
             router.replace(chatHref({ kind: 'group', conversationId: g.id, name: g.name }) as any);
             return;
         }
-        setBusy(true);
+        setBusy('join');
         try {
             await joinGroupApi(g.id, { joinPolicy: g.joinPolicy, viewerStatus });
             hapticSuccess();
@@ -128,7 +129,7 @@ export default function GroupInviteLanding() {
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Decline'), style: 'destructive', onPress: async () => {
-                    setBusy(true);
+                    setBusy('decline');
                     const failed = (e?: any) => Alert.alert(t('Could not decline'),
                         e?.message ? chatLineWords(e.message) : t('Could not reach the node. Try again when you have signal.'));
                     try {
@@ -262,15 +263,16 @@ export default function GroupInviteLanding() {
                 </View>
 
                 <Pressable
-                    style={[styles.primaryBtn, (!action?.enabled || busy) && styles.btnDisabled]}
+                    style={[styles.primaryBtn, (!action?.enabled || !!busy) && styles.btnDisabled]}
                     onPress={act}
-                    disabled={!action?.enabled || busy}
+                    disabled={!action?.enabled || !!busy}
                     accessibilityRole="button"
                     accessibilityLabel={action ? action.label : t('Loading')}
                     accessibilityHint={action?.note || (viewerStatus === 'active' ? t('Opens the group chat') : t('Joins the group and opens its chat'))}
-                    accessibilityState={{ disabled: !action?.enabled || busy, busy: busy || loadingGroup }}
+                    accessibilityState={{ disabled: !action?.enabled || !!busy, busy: busy === 'join' || loadingGroup }}
+                    testID="invite-landing-join"
                 >
-                    {busy || !action
+                    {busy === 'join' || !action
                         ? <ActivityIndicator color={colors.text.inverse} />
                         : <Text style={styles.primaryText} numberOfLines={1}>{action.label}</Text>}
                 </Pressable>
@@ -279,9 +281,12 @@ export default function GroupInviteLanding() {
                     <Text style={styles.secondaryText}>{t('Not now')}</Text>
                 </Pressable>
                 {viewerStatus === 'invited' && (
-                    <Pressable style={styles.secondaryBtn} onPress={decline} disabled={busy} accessibilityRole="button"
-                        accessibilityState={{ disabled: busy }} testID="invite-landing-decline">
-                        <Text style={styles.declineText}>{t('Decline invitation')}</Text>
+                    <Pressable style={[styles.secondaryBtn, !!busy && styles.btnDisabled]} onPress={decline} disabled={!!busy} accessibilityRole="button"
+                        accessibilityLabel={t('Decline invitation')}
+                        accessibilityState={{ disabled: !!busy, busy: busy === 'decline' }} testID="invite-landing-decline">
+                        {busy === 'decline'
+                            ? <ActivityIndicator color={colors.text.muted} />
+                            : <Text style={styles.declineText}>{t('Decline invitation')}</Text>}
                     </Pressable>
                 )}
             </ScrollView>

@@ -84,6 +84,7 @@ export function formatCommunityName(raw?: string | null): string | null {
 export function KeeperProtectionPanel({
     protection,
     communityName,
+    copyAt,
     onProtectSso,
     onDisconnectSso,
     hasWords,
@@ -103,6 +104,11 @@ export function KeeperProtectionPanel({
      * recovery on a node that holds nothing for them. Unused with a vault, whose one copy covers every community.
      */
     communityName?: string;
+    /**
+     * Where this copy is, when it isn't where the build keeps copies: 'community' for an account a claim made (Marty, 24 Oct:
+     * no copy at our key vault in a self-hosted community's first owner's path), as SsoEnrolSheet's copyAt deposits it.
+     */
+    copyAt?: 'community';
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
 }): React.JSX.Element {
@@ -114,7 +120,7 @@ export function KeeperProtectionPanel({
 
     // Where this build keeps the copy (utils/vault.ts `signInCopiesAt`). One copy at the key vault covers every
     // community, so there the heading names none; without a vault each community keeps its own, so it names this one.
-    const atVault = hasVault();
+    const atVault = hasVault() && copyAt !== 'community';
     const community = atVault ? null : formatCommunityName(communityName);
     const coveredHeading = community ? t("🛡️ You're covered on {community}", { community }) : t("🛡️ You're covered");
     const copyOpeners = atVault ? t(PANEL_WORDS.vaultCopyOpeners) : t(PANEL_WORDS.signInCopyOpeners);

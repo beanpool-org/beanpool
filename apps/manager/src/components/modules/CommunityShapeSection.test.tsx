@@ -197,7 +197,8 @@ describe('CommunityShapeSection — 320 px layout & role access', () => {
         mockShapeApi(shape);
 
         const { container } = render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
-        await waitFor(() => expect(screen.getByTestId('community-shape-section')).toBeInTheDocument());
+        // The section is there while it loads too: wait for the loaded header, never the box.
+        await screen.findByText('🧭');
 
         // Header and role hint
         expect(screen.getByText('🧭')).toBeInTheDocument();
@@ -585,7 +586,8 @@ describe('CommunityShapeSection — Accessibility (Finding 5)', () => {
         mockShapeApi(shape);
 
         render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
-        await waitFor(() => expect(screen.getByTestId('community-shape-section')).toBeInTheDocument());
+        // The section is there while it loads too: wait for the loaded header, never the box.
+        await screen.findByText('🧭');
 
         const joinHeaderBtn = screen.getByRole('button', { name: /Who can join/i });
         expect(joinHeaderBtn).toHaveAttribute('aria-expanded', 'false');
@@ -606,8 +608,10 @@ describe('CommunityShapeSection — Accessibility (Finding 5)', () => {
         mockShapeApi(shape);
 
         render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
-        await waitFor(() => expect(screen.getByTestId('community-shape-section')).toBeInTheDocument());
+        // The section is there while it loads too: wait for the loaded header, never the box.
+        await screen.findByText('🧭');
 
         expect(screen.queryByRole('button', { name: /Who can join/i })).toBeNull();
+        expect(screen.getAllByText(/Who can join/i).length).toBeGreaterThan(0);
     });
 });

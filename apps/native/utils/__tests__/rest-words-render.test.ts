@@ -89,12 +89,12 @@ vi.mock('../names-debts', async (importOriginal) => ({
     payTheCommons: vi.fn(async () => debt.pay),
 }));
 /** The node, for a group's landing. */
-const grp = vi.hoisted(() => ({ group: undefined as any, members: [] as any[], error: null as null | Error, joinError: null as null | Error, left: [] as string[][] }));
+const grp = vi.hoisted(() => ({ group: undefined as any, members: [] as any[], error: null as null | Error, joinError: null as null | Error, left: [] as string[][], leaveGate: null as null | Promise<void> }));
 vi.mock('../db', () => ({
     getGroupForLanding: vi.fn(async () => { if (grp.error) throw grp.error; return grp.group; }),
     getGroupActiveMembers: vi.fn(async () => grp.members),
     joinGroupApi: vi.fn(async () => { if (grp.joinError) throw grp.joinError; return {}; }),
-    leaveGroupApi: vi.fn(async (groupId: string, pk: string) => { grp.left.push([groupId, pk]); return true; }),
+    leaveGroupApi: vi.fn(async (groupId: string, pk: string) => { grp.left.push([groupId, pk]); if (grp.leaveGate) await grp.leaveGate; return true; }),
     getMyPosts: vi.fn(async () => []),
 }));
 vi.mock('../../components/useYourGroups', () => ({ yourGroupsStore: { refresh: () => {} } }));
@@ -155,6 +155,7 @@ beforeEach(() => {
     grp.error = null;
     grp.joinError = null;
     grp.left = [];
+    grp.leaveGate = null;
     oneWay.record = { url: 'https://global.example', joinedAt: Date.now() - 86_400_000, done: null };
     oneWay.vault = false;
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
@@ -389,6 +390,30 @@ describe("a group's invite landing in the pseudo-locale", () => {
         grp.group = { ...GROUP, viewerStatus: 'active' };
         await renderIn('xx', createElement(GroupInviteLanding));
         expect(host.querySelector('[data-testid="invite-landing-decline"]')).toBeNull();
+    });
+
+    it('while a decline is on its way, Decline shows it and Join is only held, never shown as joining', async () => {
+        nav.params = { id: 'g1', invited: '1' };
+        grp.group = GROUP;
+        grp.members = MEMBERS;
+        let let_go!: () => void;
+        grp.leaveGate = new Promise<void>((r) => { let_go = r; });
+        await renderIn('xx', createElement(GroupInviteLanding));
+        await click(host.querySelector('[data-testid="invite-landing-decline"]'), 'Decline invitation');
+        let sent!: Promise<void>;
+        await act(async () => { sent = Promise.resolve(alerts.buttons.find(b => b.text === xx('Decline'))?.onPress?.()).then(() => {}); });
+        expect(grp.left).toEqual([['g1', who.identity.publicKey]]);
+        const decline = host.querySelector('[data-testid="invite-landing-decline"]')!;
+        const join = host.querySelector('[data-testid="invite-landing-join"]')!;
+        // The spinner is on Decline, the button that was tapped; Join keeps its words and is held.
+        expect(decline.querySelector('[data-spinner]')).not.toBeNull();
+        expect(join.querySelector('[data-spinner]')).toBeNull();
+        expect(join.textContent).not.toBe('');
+        const { joinGroupApi } = await import('../db');
+        const joinsBefore = vi.mocked(joinGroupApi).mock.calls.length;
+        await act(async () => { (join as HTMLElement).click(); });
+        expect(vi.mocked(joinGroupApi).mock.calls.length).toBe(joinsBefore);
+        await act(async () => { let_go(); await sent; });
     });
 
     it('the states that are not the group: unreachable, unavailable, an invitation withdrawn', async () => {

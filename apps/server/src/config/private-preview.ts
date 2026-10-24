@@ -104,8 +104,8 @@ export const VISITOR_OPEN_ROUTES: readonly { path: RegExp; why: string }[] = [
 /**
  * The images the apps load unsigned (an `<img>`, expo-image: neither can sign), each served only to a URL carrying the
  * member-only key for that one image as it is now: a member's face (engine/avatar-keys.ts, keyed on every node in a
- * preview), a listing's or event's photo (engine/photo-keys.ts, every listing's keyed in a preview) and a group's picture
- * (keyed on every node). The node hands those URLs only to readers who may see them, and in a preview that is members
+ * preview), a listing's or event's photo (engine/photo-keys.ts, every listing's keyed in a preview), a group's picture and
+ * a shop's banner (each keyed on every node). The node hands those URLs only to readers who may see them, and in a preview that is members
  * alone. So in a preview such a request passes the gates only with a key that is right for the image it names
  * (KeyedImageChecks, from https-server.ts); without one, or with another image's, it gets the preview's sentence like
  * any other visitor's read. Then the route checks the key again and serves the bytes. GET and HEAD only.
@@ -115,12 +115,14 @@ export interface KeyedImageChecks {
     avatar: (pubkey: string, k: unknown) => boolean;
     postPhoto: (postId: string, orderNum: number, k: unknown) => boolean;
     groupPicture: (groupId: string, k: unknown) => boolean;
+    shopPhoto: (shopId: string, k: unknown) => boolean;
 }
 
 export const KEYED_IMAGE_ROUTES: readonly { path: RegExp; why: string }[] = [
     { path: /^\/api\/avatar\/([^/]+)\/?$/, why: 'a member\'s face, with the key for that face (engine/avatar-keys.ts)' },
     { path: /^\/api\/marketplace\/posts\/([^/]+)\/photos\/([^/]+)\/?$/, why: 'a listing\'s or event\'s photo, with the key for that photo (engine/photo-keys.ts)' },
     { path: /^\/api\/groups\/([^/]+)\/picture\/?$/, why: 'a group\'s picture, with the key for that picture (engine/avatar-keys.ts)' },
+    { path: /^\/api\/shops\/([^/]+)\/photo\/?$/, why: 'a shop\'s banner, with the key for that photo (engine/avatar-keys.ts)' },
 ];
 
 function decoded(part: string): string | null {
@@ -140,6 +142,8 @@ export function opensKeyedImage(method: string, rawPath: string, k: unknown, che
     }
     m = KEYED_IMAGE_ROUTES[2].path.exec(rawPath);
     if (m) { const id = decoded(m[1]); return id !== null && checks.groupPicture(id, k); }
+    m = KEYED_IMAGE_ROUTES[3].path.exec(rawPath);
+    if (m) { const id = decoded(m[1]); return id !== null && checks.shopPhoto(id, k); }
     return false;
 }
 

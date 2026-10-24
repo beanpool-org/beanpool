@@ -217,19 +217,19 @@ describe('Wide screen layout: Chat (Group and DM)', () => {
             <MessagesPage identity={testIdentity} openConversationId="c1" />
         );
 
-        // Verify conversation view container has wide-screen classes
-        const convContainer = container.querySelector('.max-w-4xl') as HTMLElement;
-        expect(convContainer).not.toBeNull();
-        expect(convContainer.className).toContain('max-w-4xl');
-        expect(convContainer.className).toContain('lg:max-w-6xl');
-        expect(convContainer.className).toContain('xl:max-w-7xl');
-
         // Wait for message element to appear in rendered DOM and verify reading width cap
         const bubble = await waitFor(() => {
             const el = container.querySelector('#msg-m1') as HTMLElement;
             expect(el).not.toBeNull();
             return el;
         });
+
+        // Verify the open conversation's own container (not the list's) has wide-screen classes
+        const convContainer = bubble.closest('.max-w-4xl') as HTMLElement;
+        expect(convContainer).not.toBeNull();
+        expect(convContainer.className).toContain('max-w-4xl');
+        expect(convContainer.className).toContain('lg:max-w-6xl');
+        expect(convContainer.className).toContain('xl:max-w-7xl');
 
         expect(bubble.className).toContain('max-w-[85%]');
         expect(bubble.className).toContain('md:max-w-[70%]');

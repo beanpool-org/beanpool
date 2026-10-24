@@ -35,6 +35,14 @@ const browser = await chromium.launch();
 const failures = [];
 const measurements = {};
 
+// A missing element (or a photo that never loaded) measures 0 px everywhere, which
+// would pass every "never narrower" comparison: fail it instead.
+function requireMeasured(key, widths) {
+    for (const [name, width] of Object.entries(widths)) {
+        if (!(width > 0)) failures.push(`${name} at ${key} measured ${width}px: element missing or not drawn`);
+    }
+}
+
 try {
     // 1. Measure reference widths at 320px phone (100% and 130%)
     for (const scale of TEXT_SCALES) {
@@ -64,6 +72,7 @@ try {
         });
 
         measurements[key] = { pulseWidth, enterpriseWidth, toolPhotoWidth };
+        requireMeasured(key, { pulseWidth, enterpriseWidth, toolPhotoWidth });
         console.log(`Reference phone ${key}: Pulse=${pulseWidth.toFixed(1)}px, Enterprise=${enterpriseWidth.toFixed(1)}px, ToolPhoto=${toolPhotoWidth.toFixed(1)}px`);
         await context.close();
     }
@@ -100,6 +109,7 @@ try {
             });
 
             measurements[key] = { pulseWidth, enterpriseWidth, toolPhotoWidth };
+            requireMeasured(key, { pulseWidth, enterpriseWidth, toolPhotoWidth });
             console.log(`Window ${key}: Pulse=${pulseWidth.toFixed(1)}px (ref: ${ref.pulseWidth.toFixed(1)}px), Enterprise=${enterpriseWidth.toFixed(1)}px (ref: ${ref.enterpriseWidth.toFixed(1)}px), ToolPhoto=${toolPhotoWidth.toFixed(1)}px`);
 
             // Check: Pulse card never narrower than at 320px phone

@@ -307,7 +307,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     }, [members, searchQuery, identity.publicKey, blockedSet]);
 
     return (
-        <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
+        <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
             {/* Sub-nav pills */}
             <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label={t('People navigation')}>
                 {SUB_VIEWS.map(v => (

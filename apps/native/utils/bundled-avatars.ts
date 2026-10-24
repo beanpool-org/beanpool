@@ -79,7 +79,8 @@ export const BUNDLED_AVATARS: BundledAvatar[] = AVATAR_PRESETS.map((p) => ({
  * Resolve a bundled avatar ID to its require'd image source.
  * Returns null if the ID doesn't match any bundled avatar.
  */
-export function resolveBundledAvatar(id: string): ImageSourcePropType | null {
+export function resolveBundledAvatar(id: string | null | undefined): ImageSourcePropType | null {
+    if (!id || typeof id !== 'string') return null;
     const cleaned = id.replace('bundled://', '').split('?')[0];
-    return SOURCES[cleaned] ?? null;
+    return Object.prototype.hasOwnProperty.call(SOURCES, cleaned) ? SOURCES[cleaned] : null;
 }

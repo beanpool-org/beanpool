@@ -154,6 +154,7 @@ vi.mock('../../utils/shop', async (importOriginal) => {
 
 import ProposeProjectModal from '../../app/propose-project';
 import { ManageFace } from '../../components/shopfront/Manage';
+import { resolveBundledAvatar } from '../bundled-avatars';
 
 describe('enterprise logo presets (phone)', () => {
     let host: HTMLDivElement;
@@ -300,5 +301,16 @@ describe('enterprise logo presets (phone)', () => {
 
         expect(faceChanges.calls).toHaveLength(1);
         expect(faceChanges.calls[0].face.avatar).toBe('bundled://sun');
+    });
+
+    it('resolveBundledAvatar safely handles null, undefined, non-strings, and prototype properties', () => {
+        expect(resolveBundledAvatar(null)).toBeNull();
+        expect(resolveBundledAvatar(undefined)).toBeNull();
+        expect(resolveBundledAvatar('' as any)).toBeNull();
+        expect(resolveBundledAvatar(123 as any)).toBeNull();
+        expect(resolveBundledAvatar('bundled://toString')).toBeNull();
+        expect(resolveBundledAvatar('bundled://valueOf')).toBeNull();
+        expect(resolveBundledAvatar('bundled://constructor')).toBeNull();
+        expect(resolveBundledAvatar('bundled://sun')).toBeTruthy();
     });
 });

@@ -3300,7 +3300,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             enterprise: {
                 id: 'e1',
                 name: 'Local Food Coop',
-                lifecycle: 'unbounded',
+                lifecycle: 'bounded',
                 keepers: 4,
                 requests: 1,
                 others: 0,

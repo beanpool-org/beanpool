@@ -691,7 +691,7 @@ function DecideBody({
 }: {
     d: NonNullable<HomeCards['decide']>;
     now: number;
-    onNavigate: (page: string) => void;
+    onNavigate: (page: string, contextId?: string) => void;
 }) {
     const items = d.items ?? [];
     if (items.length === 0 && !d.poll) {

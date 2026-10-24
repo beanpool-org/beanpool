@@ -878,6 +878,96 @@ describe('the claim that makes the account', () => {
         expect(stored()?.publicKey).toBe(key.identity.publicKey);
     });
 
+    /**
+     * #2433 review (4365854503): a key whose 12 words this phone has never shown claims as the phone's account when the
+     * record marks it as another join's (an invite's, or a claim's held at another address). Once in, it goes through the
+     * claim's finish and wizard, which show the words, never the owner's card alone (app/claim-community.tsx afterClaim
+     * follows `wordsUnseen`). The key that claims is the same one (DESIGN §2.2 step 2).
+     */
+    const ownerAnswer = (again = false) => () => json(200, { ok: true, role: 'owner', callsign: 'Ada', again });
+    /** A claim at OTHER by the phone's key, as the claim screen sends it there: the POST answered `post`, a status read after a lost one. */
+    async function claimAtOther(post: () => Response | Promise<Response>, isOwner: OwnerCheck = owner) {
+        const { claimKeyForThisPhone, claimWithKey } = await import('../claim-key');
+        const asAccount = await claimKeyForThisPhone(OTHER);
+        expect(asAccount.createdHere).toBe(false);
+        const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+            if (String(url) !== `${OTHER}/api/local/claim`) throw new Error(`unexpected ${url}`);
+            return init?.method === 'POST' ? post() : claimed();
+        });
+        return claimWithKey({ origin: OTHER, key: asAccount, code: CODE, codeId: CODE_ID, salt: SALT, callsign: 'Ada', isOwner, fetchImpl: fetchImpl as any });
+    }
+
+    it('a held claim\'s key, in at another address: its words were never shown, so the claim\'s finish takes it to the wizard and Safety Backup', async () => {
+        const { claimKeyState, finishClaim } = await import('../claim-key');
+        const { resumePlan } = await import('../onboarding-state');
+        const key = await heldClaim();
+        expect(await claimKeyState(OTHER)).toMatchObject({ kind: 'account', identity: { publicKey: key.identity.publicKey } });
+        const out = await claimAtOther(ownerAnswer());
+        expect(out).toMatchObject({ outcome: { kind: 'owner', callsign: 'Ada' }, madeHere: false, wordsUnseen: true, released: false });
+        expect(out.identity.publicKey).toBe(key.identity.publicKey);
+        // The screen's finish for it: the anchor is this address, and the wizard's record names the key as new.
+        await finishClaim(OTHER, out.identity, 'Bean Town', 'Ada');
+        expect(phone.async.get('beanpool_anchor_url')).toBe(OTHER);
+        expect(record()).toEqual({
+            step: 'profileSetup', flow: 'claim', inviteCode: '', anchorUrl: OTHER, callsign: 'Ada', redeemed: true,
+            newKey: key.identity.publicKey, joinDoor: 'words', communityName: 'Bean Town',
+        });
+        // Welcome resumes it at Your Photo, then Safety Backup shows this key's words as the member's own new ones.
+        expect(resumePlan(record(), stored())).toMatchObject({ action: 'resume', mode: 'profileSetup', flow: 'claim', anchorUrl: OTHER, newKey: true, joinDoor: 'words' });
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+    });
+
+    it('an invite join\'s key whose redeem failed, claiming: its words were never shown either, so the same', async () => {
+        const { createIdentity } = await import('../identity');
+        const { recordJoinKeyMade, resumePlan } = await import('../onboarding-state');
+        const { claimKeyState, finishClaim } = await import('../claim-key');
+        // welcome.tsx handleCreate: Next made the key and said so in the record, then the redeem failed.
+        const made = await createIdentity('Ada');
+        await recordJoinKeyMade({ inviteCode: 'INV-AAAA-BBBB', anchorUrl: 'https://invited.example.org', callsign: 'Ada' }, made.publicKey);
+        expect(record()).toMatchObject({ step: 'create', redeemed: false, newKey: made.publicKey });
+        expect(await claimKeyState(OTHER)).toMatchObject({ kind: 'account', identity: { publicKey: made.publicKey } });
+        const out = await claimAtOther(ownerAnswer());
+        expect(out).toMatchObject({ outcome: { kind: 'owner' }, madeHere: false, wordsUnseen: true, released: false });
+        expect(out.identity.publicKey).toBe(made.publicKey);
+        await finishClaim(OTHER, out.identity, 'Bean Town', 'Ada');
+        expect(record()).toMatchObject({ step: 'profileSetup', flow: 'claim', anchorUrl: OTHER, redeemed: true, newKey: made.publicKey, joinDoor: 'words' });
+        expect(resumePlan(record(), stored())).toMatchObject({ action: 'resume', mode: 'profileSetup', flow: 'claim', newKey: true });
+        expect(stored()?.publicKey).toBe(made.publicKey);
+    });
+
+    it('the phone\'s established account (no record, or a join of its own that never made the key): the owner\'s card as before, nothing written', async () => {
+        const { importIdentity, draftIdentity } = await import('../identity');
+        const account = await draftIdentity('Marty');
+        await importIdentity(account);
+        let out = await claimAtOther(ownerAnswer());
+        expect(out).toMatchObject({ outcome: { kind: 'owner' }, madeHere: false, wordsUnseen: false, released: false });
+        expect(record()).toBeNull();
+        expect(phone.async.get('beanpool_anchor_url')).toBeUndefined();
+        // The account part-way through an invite join of its own: the key was the phone's before it (no `newKey`).
+        const invite = { step: 'create', inviteCode: 'INV-AAAA-BBBB', anchorUrl: 'https://invited.example.org', callsign: 'Marty', redeemed: false };
+        phone.async.set(RECORD, JSON.stringify(invite));
+        out = await claimAtOther(ownerAnswer(true));
+        expect(out).toMatchObject({ outcome: { kind: 'owner' }, madeHere: false, wordsUnseen: false });
+        expect(record()).toEqual(invite);
+    });
+
+    it('a held claim\'s key at another address: after a wrong code, or a lost answer, the next tap still knows its words were never shown', async () => {
+        const { resumePlan } = await import('../onboarding-state');
+        const key = await heldClaim();
+        // A wrong code: the first claim's door mark comes off (the key went to OTHER), and the mark of its words stays.
+        expect(await claimAtOther(() => json(403, { code: 'claim_wrong_code' }))).toMatchObject({ outcome: { kind: 'wrong-code' }, wordsUnseen: true });
+        expect(record()).toMatchObject({ step: 'claim', flow: 'claim', anchorUrl: ORIGIN, newKey: key.identity.publicKey });
+        expect(record()).not.toHaveProperty('freshKey');
+        expect(record()).not.toHaveProperty('joinsOut');
+        // The right code, its answer lost, and the node can't say who owns it: check again…
+        expect(await claimAtOther(() => { throw new Error('connection reset'); }, noAnswer)).toMatchObject({ outcome: { kind: 'check-again' }, wordsUnseen: true });
+        // …and the retry, answered as the claim was: in, and still a key whose words were never shown.
+        expect(await claimAtOther(ownerAnswer(true))).toMatchObject({ outcome: { kind: 'owner' }, madeHere: false, wordsUnseen: true });
+        // No key came off, and the first claim's record still drops at welcome: the hold ends there.
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        expect(resumePlan(record(), stored())).toEqual({ action: 'clear' });
+    });
+
     it('a claim whose answer was lost, and an owner check refused for anything but not being a member: the key and the record stay', async () => {
         const { checkOwnClaim } = await import('../claim-key');
         for (const body of OTHER_403S) {

@@ -110,7 +110,7 @@ vi.mock('../claim-key', () => ({
     claimKeyForThisPhone: vi.fn(async (_origin: string, held: unknown) => held
         ?? (who.identity ? { identity: who.identity, createdHere: false } : { identity: { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: '' }, createdHere: true })),
     claimWithKey: vi.fn(async (req: { key: { identity: object; createdHere: boolean }; callsign: string }) => ({
-        outcome: { kind: 'owner', callsign: null }, identity: { ...req.key.identity, callsign: req.callsign }, madeHere: req.key.createdHere, released: false,
+        outcome: { kind: 'owner', callsign: null }, identity: { ...req.key.identity, callsign: req.callsign }, madeHere: req.key.createdHere, wordsUnseen: req.key.createdHere, released: false,
     })),
     checkOwnClaim: vi.fn(async () => ({ outcome: { kind: 'owner', callsign: null }, released: false })),
     finishClaim: vi.fn(async (_o: string, identity: object) => identity),
@@ -501,7 +501,7 @@ describe('the claim on a phone with no account makes the account', () => {
             expect(back.press!()).toBe(true);
             expect(releaseClaimKey).not.toHaveBeenCalled();
             expect(nav.router.back).not.toHaveBeenCalled();
-            await act(async () => { answer({ outcome: { kind: 'wrong-code' }, identity: req.key.identity, madeHere: true, released: false }); });
+            await act(async () => { answer({ outcome: { kind: 'wrong-code' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }); });
             await act(async () => {});
         });
     });
@@ -528,7 +528,7 @@ describe('the claim on a phone with no account makes the account', () => {
         await withNoAccount(async () => {
             nav.router.canDismiss.mockReturnValueOnce(true);
             vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({
-                outcome: { kind: 'owner', callsign: 'Ada 2' }, identity: { ...req.key.identity, callsign: 'Ada' }, madeHere: true, released: false,
+                outcome: { kind: 'owner', callsign: 'Ada 2' }, identity: { ...req.key.identity, callsign: 'Ada' }, madeHere: true, wordsUnseen: true, released: false,
             }));
             const host = await fromTheQr();
             await type(nameField(host)!, 'Ada');
@@ -545,7 +545,7 @@ describe('the claim on a phone with no account makes the account', () => {
 
     it('no answer: the account stays on the phone, the screen says so, and Check again asks the node', async () => {
         await withNoAccount(async () => {
-            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'check-again' }, identity: req.key.identity, madeHere: true, released: false }));
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'check-again' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }));
             const host = await fromTheQr();
             await type(nameField(host)!, 'Ada');
             await act(async () => { button(host, 'Claim and become owner')!.click(); });
@@ -566,7 +566,7 @@ describe('the claim on a phone with no account makes the account', () => {
     it('Check again: in → the wizard', async () => {
         await withNoAccount(async () => {
             keys.state = { kind: 'claims', key: { identity: { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' }, createdHere: true }, joinsOut: 1, callsign: 'Ada' };
-            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'check-again' }, identity: req.key.identity, madeHere: true, released: false }));
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'check-again' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }));
             const host = await fromTheQr();
             // The name the claim kept, typed before a restart.
             expect(nameField(host)!.value).toBe('Ada');
@@ -596,7 +596,7 @@ describe('the claim on a phone with no account makes the account', () => {
 
     it('another phone won the race: Someone already owns Beans Town, nothing was made here, and Back', async () => {
         await withNoAccount(async () => {
-            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, released: true }));
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: true }));
             const host = await fromTheQr();
             await type(nameField(host)!, 'Ada');
             vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
@@ -612,7 +612,7 @@ describe('the claim on a phone with no account makes the account', () => {
 
     it('a wrong code: the words, the key kept for another try; Back, or Android\'s back, leaves through the key rule', async () => {
         await withNoAccount(async () => {
-            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'wrong-code' }, identity: req.key.identity, madeHere: true, released: false }));
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'wrong-code' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }));
             const host = await fromTheQr();
             await type(nameField(host)!, 'Ada');
             await act(async () => { button(host, 'Claim and become owner')!.click(); });
@@ -652,7 +652,7 @@ describe('the claim on a phone with no account makes the account', () => {
         who.setIdentity.mockClear();
         try {
             keys.state = { kind: 'claims', key: { identity: own, createdHere: true }, joinsOut: 0, callsign: 'Ada' };
-            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, released: true }));
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: true }));
             const host = await fromTheQr();
             vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
             keys.state = { kind: 'none' };
@@ -678,5 +678,21 @@ describe('the claim on a phone with no account makes the account', () => {
         await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
         await act(async () => {});
         expect(vi.mocked(releaseClaimKey).mock.calls.every(([, key]) => !(key as { createdHere: boolean }).createdHere)).toBe(true);
+    });
+
+    it('an account whose 12 words this phone has never shown (another join made the key): in → the claim\'s finish and the wizard, never the owner\'s card alone (#2433 review)', async () => {
+        nav.router.canDismiss.mockReturnValueOnce(true);
+        vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({
+            outcome: { kind: 'owner', callsign: 'marty' }, identity: req.key.identity, madeHere: false, wordsUnseen: true, released: false,
+        }));
+        const host = await fromTheQr();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        // The phone's own key claims, never a second one; once in, the words come first.
+        expect(vi.mocked(claimWithKey).mock.calls[0][0]).toMatchObject({ key: { createdHere: false, identity: { publicKey: signedIn.publicKey } } });
+        expect(finishClaim).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ publicKey: signedIn.publicKey }), 'Beans Town', 'marty');
+        expect(nav.router.dismissAll).toHaveBeenCalled();
+        expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
+        expect(host.textContent).not.toContain('You own Beans Town');
     });
 });

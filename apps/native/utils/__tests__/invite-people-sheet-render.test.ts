@@ -164,10 +164,14 @@ describe('InvitePeopleSheet member statuses and accessibility', () => {
             onClose: () => {},
         });
 
-        // 1. Labels
+        // 1. Labels and key prefixes under names to disambiguate same/similar names
         expect(text()).toContain('In the group');
         expect(text()).toContain('Invited');
         expect(text()).toContain('Asked to join');
+        expect(text()).toContain(ALICE.slice(0, 8));
+        expect(text()).toContain(BOB.slice(0, 8));
+        expect(text()).toContain(CHARLIE.slice(0, 8));
+        expect(text()).toContain(DAVE.slice(0, 8));
 
         const aliceBtn = buttonFor('Alice');
         const bobBtn = buttonFor('Bob');

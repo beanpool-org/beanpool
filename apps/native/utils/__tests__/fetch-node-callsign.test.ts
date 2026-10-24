@@ -77,4 +77,38 @@ describe("a restore asks its community for the account's name, signed by the key
         fetchMock.mockResolvedValueOnce(reply(403, { error: 'This key was replaced by a new one' }));
         expect(await fetchNodeCallsign(NODE, publicKeyHex, privateKeyHex)).toBeNull();
     });
+
+    it('refuses cleartext http to a public host (NAT-4 policy), returning null without fetching', async () => {
+        const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(WORDS);
+        // 203.0.113.7 is a public IP, so http:// is blocked
+        expect(await fetchNodeCallsign('http://203.0.113.7:8080', publicKeyHex, privateKeyHex)).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses unauthenticated requests when private key cannot be resolved, returning null without fetching', async () => {
+        const { publicKeyHex } = await mnemonicToKeypair(WORDS);
+        expect(await fetchNodeCallsign(NODE, publicKeyHex, undefined)).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('times out and returns null when node fetch aborts or hangs', async () => {
+        const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(WORDS);
+        fetchMock.mockImplementationOnce((_url: string, init?: any) => {
+            return new Promise((_resolve, reject) => {
+                if (init?.signal) {
+                    init.signal.addEventListener('abort', () => reject(new Error('The operation was aborted')));
+                }
+            });
+        });
+
+        vi.useFakeTimers();
+        try {
+            const promise = fetchNodeCallsign(NODE, publicKeyHex, privateKeyHex);
+            await vi.advanceTimersByTimeAsync(8500);
+            const res = await promise;
+            expect(res).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

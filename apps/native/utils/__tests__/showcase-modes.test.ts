@@ -16,6 +16,7 @@ const OFF = { beans: false, escrow: false, enterprises: false, decisions: false,
 const GLOBAL = readNodeProfile({ profile: 'global', features: { ...OFF, showcase: true } })!;
 const GLOBAL_BEFORE = readNodeProfile({ profile: 'global', features: { ...OFF } })!;
 const LOCAL_OFF = readNodeProfile({ profile: 'local', features: { beans: false, showcase: false } })!;
+const LOCAL_ALL_OFF = readNodeProfile({ profile: 'local', features: { beans: false, decisions: false, showcase: false } })!;
 const LOCAL = readNodeProfile({ profile: 'local', features: { beans: true } })!;
 
 describe('the showcase switch', () => {
@@ -25,10 +26,11 @@ describe('the showcase switch', () => {
         expect(readNodeProfile({ features: { showcase: 'yes' } })!.features.showcase).toBeUndefined();
     });
 
-    it('hiddenTabsFor: none under showcase; Commons and Ledger hidden where Beans are off without it', () => {
+    it('hiddenTabsFor: none under showcase; Ledger hidden where Beans are off without it, Commons too if Decisions are off', () => {
         expect(hiddenTabsFor(GLOBAL.features)).toEqual([]);
         expect(hiddenTabsFor(GLOBAL_BEFORE.features)).toEqual(['projects', 'ledger']);
-        expect(hiddenTabsFor(LOCAL_OFF.features)).toEqual(['projects', 'ledger']);
+        expect(hiddenTabsFor(LOCAL_OFF.features)).toEqual(['ledger']);
+        expect(hiddenTabsFor(LOCAL_ALL_OFF.features)).toEqual(['projects', 'ledger']);
         expect(hiddenTabsFor(LOCAL.features)).toEqual([]);
         expect(hiddenTabsFor(null)).toEqual([]);
     });

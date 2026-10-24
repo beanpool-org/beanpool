@@ -12,6 +12,7 @@
 
 import { t, word } from '@beanpool/core';
 import type { NodeFeatures } from './node-profile';
+import type { DecisionTouch, DecisionEffect } from './db';
 
 function beansShown(features: NodeFeatures | null | undefined): boolean {
     return features?.beans !== false;
@@ -64,4 +65,51 @@ export const NO_BEANS_GUIDE_CARD = {
 /** The line under the step's title, in the member's language. */
 export function howItWorksSubtitle(features: NodeFeatures | null | undefined): string {
     return beansShown(features) ? t('A quick look at this community economy.') : t('A quick look at this community.');
+}
+
+/*
+ * Proposing a community Decision (components/ProposeDecisionModal.tsx).
+ * Where Beans are off, the Commons has nothing to grant or write off (decisions-engine.ts:440),
+ * so the pool touch is omitted, credit and enterprise-keeper actions are dropped, and the
+ * title placeholder carries a neutral example.
+ */
+
+/** The decision touches offered on this node. */
+export function decisionTouchesFor(features: NodeFeatures | null | undefined): DecisionTouch[] {
+    return beansShown(features) ? ['member', 'pool'] : ['member'];
+}
+
+/** The decision effects offered for a touch on this node. */
+export function decisionEffectsFor(touch: DecisionTouch, features: NodeFeatures | null | undefined): DecisionEffect[] {
+    if (touch === 'pool') {
+        return beansShown(features) ? ['grant_enterprise', 'grant_hardship', 'write_off_deficit'] : [];
+    }
+    if (beansShown(features)) {
+        return [
+            'remove_member',
+            'suspend_member',
+            'unsuspend_member',
+            'reinstate_member',
+            'freeze_credit',
+            'unfreeze_credit',
+            'grant_voucher',
+            'revoke_voucher',
+            'remove_lead_keeper',
+        ];
+    }
+    return [
+        'remove_member',
+        'suspend_member',
+        'unsuspend_member',
+        'reinstate_member',
+        'grant_voucher',
+        'revoke_voucher',
+    ];
+}
+
+/** The proposal title placeholder, in the member's language. */
+export function proposeTitlePlaceholder(features: NodeFeatures | null | undefined): string {
+    return beansShown(features)
+        ? t('e.g. Grant 200 beans to the Tool Library')
+        : t('e.g. Community proposal');
 }

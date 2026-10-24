@@ -143,3 +143,46 @@ describe('the phone propose-a-Decision form names projects and enterprises (§3.
         }
     });
 });
+
+describe('the phone propose form on a Beans-off community ({ beans: false, decisions: true })', () => {
+    beforeEach(() => {
+        act(() => {
+            root.render(createElement(ProposeDecisionModal, {
+                isOpen: true, onClose: () => { }, onCreated: () => { },
+                identity: { publicKey: ME, callsign: 'Me' }, commonsBalance: 0, treasuries: [], members: [],
+                features: { beans: false, decisions: true },
+            }) as unknown as Parameters<Root['render']>[0]);
+        });
+    });
+
+    it('offers only member touch and accepted kinds, no Beans placeholder or words, no pool debt box', () => {
+        expect(button('Commons Pool')).toBeFalsy();
+        expect(button('Member')).toBeTruthy();
+
+        // Allowed member effects are present
+        expect(radio('Remove Member')).toBeTruthy();
+        expect(radio('Suspend Member')).toBeTruthy();
+        expect(radio('Unsuspend Member')).toBeTruthy();
+        expect(radio('Reinstate Member')).toBeTruthy();
+        expect(radio('Grant Voucher')).toBeTruthy();
+        expect(radio('Revoke Voucher')).toBeTruthy();
+
+        // Refused effects are absent
+        expect(radio('Freeze Credit')).toBeFalsy();
+        expect(radio('Unfreeze Credit')).toBeFalsy();
+        expect(radio('Remove a lead keeper or project leader')).toBeFalsy();
+        expect(radio('Give Beans to a project or enterprise')).toBeFalsy();
+        expect(radio("Pay off a project's or enterprise's debt")).toBeFalsy();
+
+        // Placeholder does not mention Beans
+        expect(container.querySelector('input[placeholder*="bean"]')).toBeFalsy();
+
+        // When Remove Member is selected, no Commons pool debt box is rendered
+        click(radio('Remove Member'));
+        expect(container.querySelector('[data-testid="removal-debt-write-off-box"]')).toBeFalsy();
+        expect(text()).not.toMatch(/Commons pool, which holds \d+ beans/i);
+
+        // No Beans words anywhere on the sheet
+        expect(text()).not.toMatch(/\bbeans?\b/i);
+    });
+});

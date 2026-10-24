@@ -20,7 +20,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import {
     commonsSections, commonsSectionFor, commonsHeading, findGroupsInTalk, FIND_GROUPS_HREF,
     groupKindChips, commonsGroupRows, commonsGroupsEmpty, type GroupKind,
-    commonsPlusStartsProject,
+    commonsPlusStartsProject, enterprisesOn,
 } from '../commons-sections';
 import type { GroupItem } from '../db';
 import { decisionsOn, readNodeProfile, type NodeFeatures } from '../node-profile';
@@ -189,6 +189,50 @@ describe('the screens go through the helpers (source check)', () => {
         return lines.slice(i, end + 1).join('\n');
     }
 
+    it('Beans off + Decisions on: Commons tab stays for Decide + Groups, no enterprises or projects', () => {
+        const offDecide = { beans: false, decisions: true };
+        expect(commonsSections(offDecide)).toEqual(['decide', 'groups']);
+        expect(enterprisesOn(offDecide)).toBe(false);
+        expect(groupKindChips(offDecide)).toEqual([]);
+        expect(findGroupsInTalk(offDecide)).toBe(false);
+        expect(commonsHeading(offDecide)).toEqual({
+            title: 'Commons',
+            description: 'Community decisions and groups. Propose binding actions and vote on what matters.',
+        });
+        expect(commonsPlusStartsProject('groups', 'projects', offDecide)).toBe(false);
+        expect(commonsPlusStartsProject('groups', 'enterprises', offDecide)).toBe(false);
+        expect(commonsPlusStartsProject('groups', 'chat', offDecide)).toBe(false);
+        expect(commonsPlusStartsProject('decide', 'all', offDecide)).toBe(false);
+
+        // Even if enterprises are not explicitly false in features, beans: false drops them
+        const beansOffOnly = { beans: false };
+        expect(commonsSections(beansOffOnly)).toEqual(['decide', 'groups']);
+        expect(enterprisesOn(beansOffOnly)).toBe(false);
+        expect(groupKindChips(beansOffOnly)).toEqual([]);
+        expect(findGroupsInTalk(beansOffOnly)).toBe(false);
+    });
+
+    it('Beans off + Decisions off: unchanged (Commons tab hidden, Groups only, groups via Talk)', () => {
+        const allOff = { beans: false, decisions: false };
+        expect(commonsSections(allOff)).toEqual(['groups']);
+        expect(enterprisesOn(allOff)).toBe(false);
+        expect(groupKindChips(allOff)).toEqual([]);
+        expect(findGroupsInTalk(allOff)).toBe(true);
+        expect(commonsHeading(allOff)).toEqual({
+            title: 'Groups',
+            description: 'Find a group to join, or start your own with +.',
+        });
+    });
+
+    it('Talk: "Find groups" offered only where Commons tab is hidden', () => {
+        expect(findGroupsInTalk(GLOBAL)).toBe(true);
+        expect(findGroupsInTalk({ beans: false, decisions: false })).toBe(true);
+        expect(findGroupsInTalk({ beans: false, decisions: true })).toBe(false);
+        expect(findGroupsInTalk({ beans: false })).toBe(false);
+        for (const [, f] of AS_BEFORE) expect(findGroupsInTalk(f)).toBe(false);
+        expect(findGroupsInTalk({ ...GLOBAL, showcase: true })).toBe(false);
+    });
+
     it('Talk: "Find groups" beside "New group" where findGroupsInTalk says, and both links to FIND_GROUPS_HREF', () => {
         const src = read('app/(tabs)/chats.tsx');
         expect(src).toContain('const findGroups = findGroupsInTalk(nodeProfile?.features);');
@@ -216,6 +260,7 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).not.toContain('Enterprises Section');
         expect(block(src, '{sections.length > 1 && (')).toContain("accessibilityLabel={t('Groups Section')}");
         expect(src).toContain('const kindChips = groupKindChips(reader.effective);');
+        expect(src).toContain('yourGroupsLive.items === null ? null : yourGroups');
         expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);');
         expect(src).toContain("data={activeSection === 'decide' ? [] : groupRows}");
         expect(src).toContain('const heading = commonsHeading(reader.effective);');
@@ -228,8 +273,8 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).toContain("decisionsOn(features) ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,");
         expect(src).toContain('...mergeNeeds(votes, null, now, features)');
         expect(src).not.toContain('getDecisions(');
-        // Home's rule for a vote's landing, the one its own lines follow (mergeNeeds): Decisions on, and Beans on.
-        expect(read('utils/home-cards.ts')).toContain("export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;");
+        // Home's rule for a vote's landing, the one its own lines follow (mergeNeeds): Decisions on.
+        expect(read('utils/home-cards.ts')).toContain("export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false;");
     });
 
     it("the header's 🛡️ words are told whether the node has Decisions, so an emergency suspension isn't called a vote where there is none", () => {

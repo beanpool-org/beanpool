@@ -20,6 +20,8 @@ import {
     type DecisionEffect,
     createDecision,
 } from '../utils/db';
+import { beansOn, type NodeFeatures } from '../utils/node-profile';
+import { decisionTouchesFor, decisionEffectsFor, proposeTitlePlaceholder } from '../utils/beans-off';
 import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { signedRequestWords } from './signed-request-lines';
@@ -32,6 +34,7 @@ interface Props {
     commonsBalance: number;
     members?: Array<{ publicKey: string; callsign?: string; balance?: number }>;
     treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
+    features?: NodeFeatures | null;
 }
 
 /** What a Decision can touch and do: word() keys, shown through t(). */
@@ -90,24 +93,41 @@ export function ProposeDecisionModal({
     commonsBalance,
     members = [],
     treasuries = [],
+    features,
 }: Props) {
     const { colors } = useTheme();
+    const showsBeans = beansOn(features);
+    const availableTouches = useMemo(() => TOUCH_OPTIONS.filter(opt => decisionTouchesFor(features).includes(opt.id)), [features]);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [touches, setTouches] = useState<DecisionTouch>('member');
+    const availableEffects = useMemo(() => (EFFECTS_BY_TOUCH[touches] || []).filter(eff => decisionEffectsFor(touches, features).includes(eff.id)), [touches, features]);
     const [effect, setEffect] = useState<DecisionEffect>('suspend_member');
     const [subject, setSubject] = useState('');
     const [enterprisePubkey, setEnterprisePubkey] = useState('');
     const [grantAmount, setGrantAmount] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
+    // Keep touches valid for available options
+    useEffect(() => {
+        if (!availableTouches.some(t => t.id === touches) && availableTouches.length > 0) {
+            setTouches(availableTouches[0].id);
+        }
+    }, [availableTouches, touches]);
+
     // Reset effect when touch changes
     useEffect(() => {
-        const available = EFFECTS_BY_TOUCH[touches];
-        if (available && available.length > 0) {
-            setEffect(available[0].id);
+        if (availableEffects.length > 0) {
+            setEffect(availableEffects[0].id);
         }
     }, [touches]);
+
+    // Keep effect valid when available effects change
+    useEffect(() => {
+        if (availableEffects.length > 0 && !availableEffects.some(e => e.id === effect)) {
+            setEffect(availableEffects[0].id);
+        }
+    }, [availableEffects, effect]);
 
 
     // ⚡ Bolt: Pre-compute member map indexed by publicKey and callsign for O(1) lookups
@@ -430,7 +450,7 @@ export function ProposeDecisionModal({
                         {/* What it touches */}
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('What does this decision touch? (§3.6)'))}</Text>
                         <View style={styles.segmentRow}>
-                            {TOUCH_OPTIONS.map(opt => (
+                            {availableTouches.map(opt => (
                                 <Pressable
                                     key={opt.id}
                                     accessibilityRole="button"
@@ -453,7 +473,7 @@ export function ProposeDecisionModal({
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('Title'))}</Text>
                         <TextInput
                             style={styles.input}
-                            placeholder={t('e.g. Grant 200 beans to the Tool Library')}
+                            placeholder={proposeTitlePlaceholder(features)}
                             placeholderTextColor={colors.text.muted}
                             value={title}
                             onChangeText={setTitle}
@@ -473,7 +493,7 @@ export function ProposeDecisionModal({
                         {/* Effect Selector */}
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('Select Specific Effect'))}</Text>
                         <View accessibilityRole="radiogroup" accessibilityLabel={t('Governance effect')}>
-                            {EFFECTS_BY_TOUCH[touches].map(eff => (
+                            {availableEffects.map(eff => (
                                 <Pressable
                                     key={eff.id}
                                     accessibilityRole="radio"
@@ -584,7 +604,7 @@ export function ProposeDecisionModal({
                         )}
 
                         {/* Removal Ballot Special §3.8 Warning Box */}
-                        {effect === 'remove_member' && (
+                        {showsBeans && effect === 'remove_member' && (
                             <View style={styles.removalWarningBox} testID="removal-debt-write-off-box">
                                 <Text style={styles.removalWarningTitle}>{inCapitalsOf(t('Mandatory Debt Disclosure (§3.8)'))}</Text>
                                 <Text style={styles.debtLineText} testID="removal-debt-write-off-line">
@@ -598,7 +618,9 @@ export function ProposeDecisionModal({
                             <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                             <Text style={styles.noBondText}>
                                 <Sentence
-                                    text={t('{bond} Open to members who have completed a trade, and to node admins. Open for 7 days. Closes and executes automatically.')}
+                                    text={showsBeans
+                                        ? t('{bond} Open to members who have completed a trade, and to node admins. Open for 7 days. Closes and executes automatically.')
+                                        : t('{bond} Open for 7 days. Closes and executes automatically.')}
                                     parts={{ bond: <Text style={{ fontWeight: '700' }}>{t('No bond required.')}</Text> }}
                                 />
                             </Text>

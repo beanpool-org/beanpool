@@ -17,6 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 import {
     groupPostPrice, groupPostPriceInvalid, groupPostMissingFields, howItWorksSubtitle, NO_BEANS_GUIDE_CARD, talkSort,
+    decisionTouchesFor, decisionEffectsFor, proposeTitlePlaceholder,
 } from '../beans-off';
 import { beansOn, readNodeProfile, type NodeFeatures } from '../node-profile';
 
@@ -227,4 +228,66 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(src).toContain('...groupPostPrice(credits, priceType, nodeProfile?.features),');
         expect(src).not.toContain('credits: Number(credits) || 0,');
     });
+
+    it('Propose Decision: no Commons pool debt line when Beans are off, and features passed', () => {
+        const src = read('components/ProposeDecisionModal.tsx');
+        expect(src).toContain("{showsBeans && effect === 'remove_member' && (");
+        expect(src).toContain('decisionTouchesFor');
+        expect(src).toContain('decisionEffectsFor');
+    });
+
+    it('DecideSection: no Commons pool debt line on removal card when Beans are off', () => {
+        const src = read('components/DecideSection.tsx');
+        expect(src).toContain("{showsBeans && item.effect === 'remove_member' && (");
+    });
+
+    it('Commons (projects.tsx): passes features to ProposeDecisionModal and DecideSection', () => {
+        const src = read('app/(tabs)/projects.tsx');
+        expect(src).toContain('<ProposeDecisionModal');
+        expect(src).toContain('features={reader.effective}');
+        expect(src).toContain('<DecideSection');
+    });
+});
+
+describe('the propose form on Beans off (utils/beans-off.ts)', () => {
+    it('Beans off: offers only member touches and non-Beans effects, neutral placeholder', () => {
+        expect(decisionTouchesFor(GLOBAL)).toEqual(['member']);
+        const memberEffects = decisionEffectsFor('member', GLOBAL);
+        expect(memberEffects).toEqual([
+            'remove_member',
+            'suspend_member',
+            'unsuspend_member',
+            'reinstate_member',
+            'grant_voucher',
+            'revoke_voucher',
+        ]);
+        expect(memberEffects).not.toContain('freeze_credit');
+        expect(memberEffects).not.toContain('unfreeze_credit');
+        expect(memberEffects).not.toContain('remove_lead_keeper');
+        expect(decisionEffectsFor('pool', GLOBAL)).toEqual([]);
+        expect(proposeTitlePlaceholder(GLOBAL)).not.toMatch(/bean/i);
+    });
+
+    for (const [name, f] of BEANS_ON) {
+        it(`Beans on (${name}): offers all touches, all effects, original placeholder`, () => {
+            expect(decisionTouchesFor(f)).toEqual(['member', 'pool']);
+            expect(decisionEffectsFor('member', f)).toEqual([
+                'remove_member',
+                'suspend_member',
+                'unsuspend_member',
+                'reinstate_member',
+                'freeze_credit',
+                'unfreeze_credit',
+                'grant_voucher',
+                'revoke_voucher',
+                'remove_lead_keeper',
+            ]);
+            expect(decisionEffectsFor('pool', f)).toEqual([
+                'grant_enterprise',
+                'grant_hardship',
+                'write_off_deficit',
+            ]);
+            expect(proposeTitlePlaceholder(f)).toBe('e.g. Grant 200 beans to the Tool Library');
+        });
+    }
 });

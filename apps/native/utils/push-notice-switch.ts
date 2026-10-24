@@ -21,10 +21,30 @@
 import type { NoticeRoute } from './push-notice-check';
 import { countNotice } from './notice-counts';
 import { openAfterLanding } from './member-landing';
+import { SAVED_NODES_STORE_KEY } from './storage-keys';
 
 interface Storage {
     getItem(key: string): Promise<string | null>;
     setItem(key: string, value: string): Promise<void>;
+}
+
+const bare = (url: string) => url.trim().replace(/\/+$/, '');
+
+/**
+ * The address the phone saved `community` under, as the BeanPool sheet's row switches to it: a pin's address has no
+ * trailing slash, and a saved one may (Settings keeps a pasted `https://x.org/` as it is), so switching to the pin's would
+ * save the community a second time (#2436 review). The pin's own address when none matches or the list can't be read.
+ */
+async function savedAddressOf(storage: Storage, community: string): Promise<string> {
+    try {
+        const raw = await storage.getItem(SAVED_NODES_STORE_KEY);
+        const saved: unknown = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(saved)) return community;
+        const hit = saved.find((n): n is { url: string } => typeof n?.url === 'string' && bare(n.url) === bare(community));
+        return hit ? hit.url : community;
+    } catch {
+        return community;
+    }
 }
 
 export interface NoticeSwitchDeps {
@@ -57,7 +77,7 @@ export async function openNoticeIn(community: string, id: string, route: () => P
         }
         // Asked of that community while the phone moves; its answer is wanted only before the bounce.
         const landing = route().catch((): NoticeRoute => '/(tabs)');
-        await deps.switchTo(community, async () => {
+        await deps.switchTo(await savedAddressOf(deps.storage, community), async () => {
             const answer = await deps.recheck().catch(() => 'unknown');
             // The guard lets the member in only for these (app/_layout.tsx); any other answer holds them where it does, and
             // the notice is left for nobody.

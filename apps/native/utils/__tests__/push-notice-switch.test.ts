@@ -243,6 +243,16 @@ describe('a verified tap for another community the phone keeps: the phone moves 
         expect(takeNoticeWarning()).toBe(false);
     });
 
+    it('a community saved with a trailing slash: the switch uses the saved address, so no second row appears (#2436 review r4366867289)', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM, alias: 'Mullum' }, { url: `${BYRON}/`, alias: 'Byron' }]));
+        const data = byron.notice(kim.publicKey, { screen: 'post', postId: POST_ID });
+        expect(await tap(push(data))).toMatchObject({ kind: 'open', community: BYRON, active: false });
+        expect(mem.async.get(ANCHOR)).toBe(`${BYRON}/`);
+        const saved = JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) as string) as { url: string; alias?: string }[];
+        expect(saved.map((n) => n.url)).toEqual([MULLUM, `${BYRON}/`]);
+        expect(saved.find((n) => n.url === `${BYRON}/`)?.alias).toBe('Byron');
+    });
+
     it('Byron can\'t say where (down, or it forgot the notice): the tab for the notice\'s kind, after the same switch', async () => {
         communities.delete(BYRON);
         await tap(push(byron.notice(kim.publicKey, {}, 'chat.message')));

@@ -13,7 +13,7 @@ import path from 'node:path';
 import { PulsePage } from './PulsePage';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getPulseFeed, getConversationMessages, getConversations, getMembers, type PulseFeedItem } from '../lib/api';
+import { getPulseFeed, getConversationMessages, getConversations, type PulseFeedItem } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 

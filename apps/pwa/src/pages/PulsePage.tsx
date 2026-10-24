@@ -233,7 +233,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
     }
 
     return (
-        <div className="max-w-2xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
             {/* Header: Title, subtitle, refresh & channels actions */}
             <div className="mb-4">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-1">
@@ -412,21 +412,23 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     </div>
                 )
             ) : (
-                <div className="space-y-4">
-                    {visibleItems.map(item => (
-                        <PulseFeedCard
-                            key={item.id}
-                            item={item}
-                            currentPubkey={identity?.publicKey}
-                            onMute={handleMute}
-                            onDelete={handleDelete}
-                            onOpenProfile={onOpenProfile}
-                        />
-                    ))}
+                <div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {visibleItems.map(item => (
+                            <PulseFeedCard
+                                key={item.id}
+                                item={item}
+                                currentPubkey={identity?.publicKey}
+                                onMute={handleMute}
+                                onDelete={handleDelete}
+                                onOpenProfile={onOpenProfile}
+                            />
+                        ))}
+                    </div>
 
                     {/* Pagination / Load more */}
                     {nextCursor && (
-                        <div className="pt-2 text-center">
+                        <div className="pt-4 text-center">
                             <button
                                 type="button"
                                 onClick={handleLoadMore}

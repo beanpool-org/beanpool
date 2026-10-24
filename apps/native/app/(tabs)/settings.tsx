@@ -626,7 +626,8 @@ export default function SettingsScreen() {
     };
     const [holidayMode, setHolidayMode] = useState(false);
     const [holidayLoading, setHolidayLoading] = useState(false);
-    const [editCallsign, setEditCallsign] = useState(identity?.callsign || '');
+    // Never the device-wide name: the loader fills it from this community's record (see knownCallsignRef).
+    const [editCallsign, setEditCallsign] = useState('');
     const [avatar, setAvatar] = useState<string | null>(null);
     // The photo the member picked in THIS session, and nothing else. `avatar` above is what the
     // card DISPLAYS — after a sync it is the node's own `/api/avatar/…` URL, and when the node
@@ -648,41 +649,64 @@ export default function SettingsScreen() {
     const [loading, setLoading] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
-    const modeRef = React.useRef(mode);
-    modeRef.current = mode;
-    
+    // The name this community holds for this key, as last read: its own answer, else the cached row. The
+    // Callsign field starts from it, and a Save sends a name only when the field differs from it, so a bio or
+    // contact Save never renames the member here.
+    const knownCallsignRef = React.useRef('');
+    // What the member has touched since the editor opened. The editor shares its fields with the card, and the
+    // loader below runs on its own (on focus, on a pull, when the identity changes): it refreshes what is not
+    // being edited and never puts back what the member is typing.
+    const editedRef = React.useRef({ callsign: false, bio: false, contact: false, avatar: false });
+    // Bumped by every load and every Save. A probe that answers after a newer load or a Save started is stale.
+    const profileLoadSeqRef = React.useRef(0);
+
+    React.useEffect(() => {
+        editedRef.current = { callsign: false, bio: false, contact: false, avatar: false };
+        setEditCallsign(knownCallsignRef.current);
+    }, [mode]);
+
     // Reads the profile from whichever node we are currently anchored to. `getDb()` is
     // keyed on `beanpool_anchor_url`, so this always resolves against the active node's
     // database without needing to be told which one that is.
     const loadProfileForCurrentNode = React.useCallback(async () => {
         if (!identity?.publicKey) return;
+        const seq = ++profileLoadSeqRef.current;
+        const showCommunityName = (name: string | null) => {
+            setNodeCallsign(name);
+            knownCallsignRef.current = name ?? '';
+            if (!editedRef.current.callsign) setEditCallsign(name ?? '');
+        };
         try {
             const profile = await getMemberProfile(identity.publicKey);
             const canonical = await getCanonicalProfile().catch(() => null);
             // Assign unconditionally. Setting this only when the node knows us would
             // leave the previous node's name on the card (and in the purge gate) after
             // switching to a node that has no profile for this key.
-            setNodeCallsign(profile?.callsign || null);
+            showCommunityName(profile?.callsign || null);
+            const edited = editedRef.current;
             {
                 if (profile) {
                     const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
-                    setAvatar(cleaned || canonical?.avatar || null);
-                    if (profile.callsign && modeRef.current !== 'profile') {
-                        setEditCallsign(profile.callsign);
+                    if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
+                    if (!edited.bio) {
+                        if (profile.bio) setBio(profile.bio);
+                        else if (canonical?.bio) setBio(canonical.bio);
                     }
-                    if (profile.bio) setBio(profile.bio);
-                    else if (canonical?.bio) setBio(canonical.bio);
-                    if (profile.contact_value) setContact(profile.contact_value);
-                    else if (canonical?.contactValue) setContact(canonical.contactValue);
-                    if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
-                    else if (canonical?.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                    if (!edited.contact) {
+                        if (profile.contact_value) setContact(profile.contact_value);
+                        else if (canonical?.contactValue) setContact(canonical.contactValue);
+                        if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
+                        else if (canonical?.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                    }
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 } else if (canonical) {
-                    if (canonical.avatar) setAvatar(canonical.avatar);
-                    if (canonical.bio) setBio(canonical.bio);
-                    if (canonical.contactValue) setContact(canonical.contactValue);
-                    if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                    if (canonical.avatar && !edited.avatar) setAvatar(canonical.avatar);
+                    if (canonical.bio && !edited.bio) setBio(canonical.bio);
+                    if (!edited.contact) {
+                        if (canonical.contactValue) setContact(canonical.contactValue);
+                        if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                    }
                     if (canonical.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }
@@ -698,13 +722,19 @@ export default function SettingsScreen() {
                 if (remoteName) {
                     const activeAnchor = await getAnchorUrl().catch(() => null);
                     if (activeAnchor !== targetUrl) return;
+                    // An offline edit waiting to be sent wins until it is. The node still holds the old name, and
+                    // writing it into the row here is what pillar-sync's retry would then publish.
+                    if (await AsyncStorage.getItem('pending_profile_sync') === 'true') return;
+                    // A newer load, or a Save, started while this one waited: its answer may predate the Save.
+                    if (seq !== profileLoadSeqRef.current) return;
 
                     if (remoteName !== profile?.callsign) {
-                        setNodeCallsign(remoteName);
-                        if (modeRef.current !== 'profile') setEditCallsign(remoteName);
+                        showCommunityName(remoteName);
+                        // No photo: a portable one in this row reads as an unsent offline pick to the catch-up publish
+                        // (avatar-value.ts), which would post it over a newer photo the node holds. The card already
+                        // falls back to canonical, and COALESCE keeps whatever the row had.
                         await updateMemberProfile(identity.publicKey, {
                             callsign: remoteName,
-                            avatar_url: profile?.avatar_url ?? (canonical?.avatar ? canonical.avatar : undefined),
                             bio: profile?.bio ?? canonical?.bio,
                             contact_value: profile?.contact_value ?? canonical?.contactValue,
                             contact_visibility: profile?.contact_visibility ?? (canonical?.contactVisibility as any),
@@ -1132,10 +1162,15 @@ export default function SettingsScreen() {
     async function handleUpdateCallsign() {
         if (!identity) return;
         const newCallsign = editCallsign.trim();
-        if (newCallsign.length < 2) {
+        // The field started from this community's record. Left as it is, the Save is not a rename and sends no
+        // name at all (the node keeps the one it has). With no record known yet the member has to give one.
+        const knownCallsign = knownCallsignRef.current.trim();
+        const renames = !knownCallsign || newCallsign !== knownCallsign;
+        if (renames && newCallsign.length < 2) {
             Alert.alert(t('Error'), t('Callsign must be at least 2 characters.'));
             return;
         }
+        profileLoadSeqRef.current++;
         setLoading(true);
         try {
             // Push the profile (callsign, avatar, bio, contact) to the node FIRST so it can
@@ -1154,8 +1189,8 @@ export default function SettingsScreen() {
                     publicKey: identity.publicKey,
                     bio: bio.trim(),
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
-                    callsign: newCallsign,
                 };
+                if (renames) payloadObj.callsign = newCallsign;
                 // The one shared rule decides, so this Save cannot disagree with the wizard or
                 // with the pending-sync retry. It sends a photo picked in this session, else a
                 // pick an earlier offline save parked and nothing has managed to publish yet;
@@ -1235,7 +1270,8 @@ export default function SettingsScreen() {
             // The card renders nodeCallsign, so it would keep showing the pre-edit name
             // until the screen remounted if we didn't move it here too.
             setNodeCallsign(newCallsign);
-            if (newCallsign !== identity.callsign) {
+            knownCallsignRef.current = newCallsign;
+            if (renames && newCallsign !== identity.callsign) {
                 const updated = await updateCallsign(newCallsign);
                 if (updated) setIdentity(updated);
             }
@@ -1689,11 +1725,13 @@ export default function SettingsScreen() {
             contentContainerStyle={[styles.content, { paddingBottom: 48 }]}
             bottomOffset={16}
             refreshControl={
+                // Also inside the profile editor: the loader refreshes only the fields the member has not touched.
                 <RefreshControl
                     refreshing={refreshing}
                     onRefresh={handleRefresh}
                     tintColor={colors.brand.primary}
                     colors={[colors.brand.primary]}
+                    progressBackgroundColor={colors.surface.card}
                 />
             }
         >
@@ -2347,7 +2385,7 @@ export default function SettingsScreen() {
                     <TextInput
                         style={styles.input}
                         value={editCallsign}
-                        onChangeText={setEditCallsign}
+                        onChangeText={(v) => { editedRef.current.callsign = true; setEditCallsign(v); }}
                         maxLength={32}
                         accessibilityLabel={t("Callsign")}
                     />
@@ -2356,7 +2394,7 @@ export default function SettingsScreen() {
                     <TextInput
                         style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
                         value={bio}
-                        onChangeText={setBio}
+                        onChangeText={(v) => { editedRef.current.bio = true; setBio(v); }}
                         multiline
                         maxLength={200}
                         placeholder={t("A short bio about yourself...")}
@@ -2368,7 +2406,7 @@ export default function SettingsScreen() {
                     <TextInput
                         style={styles.input}
                         value={contact}
-                        onChangeText={setContact}
+                        onChangeText={(v) => { editedRef.current.contact = true; setContact(v); }}
                         // The node refuses a longer one (#1493), and a refused save would keep the background profile sync retrying.
                         maxLength={CONTACT_VALUE_LIMIT.chars}
                         placeholder={t("Phone, email, or WhatsApp")}
@@ -2390,7 +2428,7 @@ export default function SettingsScreen() {
                                     <Pressable
                                         key={opt.value}
                                         style={[styles.visibilityOption, isActive && styles.visibilityOptionActive]}
-                                        onPress={() => setContactVisibility(opt.value)}
+                                        onPress={() => { editedRef.current.contact = true; setContactVisibility(opt.value); }}
                                         accessibilityRole="button"
                                         accessibilityState={{ selected: isActive }}
                                     >
@@ -3243,6 +3281,7 @@ export default function SettingsScreen() {
                 onClose={() => setShowAvatarPicker(false)}
                 onSelectImage={(uri) => {
                     const cleaned = (uri && uri !== 'null' && uri !== 'undefined' && uri.trim() !== '') ? uri : null;
+                    editedRef.current.avatar = true;
                     setAvatar(cleaned);
                     setAvatarPickedThisSession(cleaned);
                 }}

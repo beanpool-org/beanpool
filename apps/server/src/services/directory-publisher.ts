@@ -1,7 +1,7 @@
 import { getDirectoryInfo, getNodeConfig, updateNodeConfig, getNodeRole } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getProfileSwitches } from '../config/node-profile.js';
-import { isDirectoryPushInterval, DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
+import { isDirectoryPushInterval, DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS, LEGACY_NEVER_INTERVAL } from '../config/community-settings.js';
 import { getP2PNode, getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 import { listingFields, PROMISE_GAP_MESSAGES, type ListingFields, type PromiseGap, type PromiseStatus } from '../engine/directory-promise.js';
@@ -147,7 +147,12 @@ export function initDirectoryPublisher(): boolean {
     }
     // The schedule, whole hours from 1 (the route takes only those); anything else stored reads as the default. Its old
     // 0, Never, is carried over to Listed off at boot and at a kept record's install (config/community-shape-upgrade.ts).
+    // A 0 still stored here means that carry didn't run or failed: fail closed, as the old Never did, and send nothing.
     const stored = getNodeConfig().directoryPushIntervalHours;
+    if (stored === LEGACY_NEVER_INTERVAL) {
+        console.log('[Directory] 📴 The old schedule "Never" is still stored and was not carried over to Listed off, so nothing is sent. Switch Listed off (or on) under How this community works.');
+        return false;
+    }
     const intervalHours = isDirectoryPushInterval(stored) ? stored : DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS;
 
     // Convert hours to milliseconds

@@ -309,9 +309,11 @@ async function main() {
     // ── 5. Disabled publisher check ───────────────────────────────────────
     // Listed off (How this community works) is the one way not to be listed: the schedule's 0, Never, is gone (S3). A
     // stored 0 is carried over to Listed off at boot (config/community-shape-upgrade.ts), before the publisher starts;
-    // one that is there all the same is no schedule, and reads as the default.
+    // one that is there all the same means the carry didn't run or failed: it fails closed, so nothing is sent.
     updateNodeConfig({ directoryPushIntervalHours: 0 });
-    assert(initDirectoryPublisher() === true, 'a stored interval that is no schedule (the old 0) reads as the default: the publisher runs');
+    assert(initDirectoryPublisher() === false, 'a stored old 0 (Never) the carry-over did not translate sets no timer: it fails closed');
+    updateNodeConfig({ directoryPushIntervalHours: 7.5 });
+    assert(initDirectoryPublisher() === true, 'any other stored value that is no schedule reads as the default: the publisher runs');
     setSwitchOverride('publishToDirectory', false);
     assert(initDirectoryPublisher() === false, 'with Listed off no timer is set: this is how a community is not listed');
     setSwitchOverride('publishToDirectory', true);

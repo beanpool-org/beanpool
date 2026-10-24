@@ -3205,6 +3205,41 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(tiles[2]).toHaveTextContent('listings');
     });
 
+    it('one-member community shows founder line on W3 node at both narrow and wide widths', async () => {
+        const soloAnswer = answer({}, {
+            community: {
+                name: 'New Town',
+                members: 1,
+                listings: 0,
+                tradesThisMonth: 0,
+                joined7d: 1,
+                eventsSoon: 0,
+                commonsPot: 0,
+            },
+        });
+
+        // Narrow (cardWidth 288)
+        pageWidth = 320;
+        cardWidth = 288;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(soloAnswer));
+        const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const commNarrow = screen.getByTestId('home-card-community');
+        expect(commNarrow).toHaveTextContent("1 member. You're first. Invite someone.");
+
+        unmount();
+
+        // Wide (cardWidth 544)
+        pageWidth = 600;
+        cardWidth = 544;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const commWide = screen.getByTestId('home-card-community');
+        expect(commWide).toHaveTextContent("1 member. You're first. Invite someone.");
+    });
+
     it('navigation: listing tile opens listing, group line opens chat, Pulse tile opens Pulse, deal opens deal', async () => {
         pageWidth = 600;
         cardWidth = 544;

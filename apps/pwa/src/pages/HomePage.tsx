@@ -838,7 +838,8 @@ function CommunityBody({
     const globalLine2 = typeof cm.communities === 'number' ? tn(cm.communities, '{n} community listed', '{n} communities listed', { n: formatCount(cm.communities) }) : null;
     const globalLine3 = typeof cm.listings === 'number' ? tn(cm.listings, '{n} listing', '{n} listings', { n: formatCount(cm.listings) }) : null;
 
-    const localLine1 = (cm.members === 1 && !isVisitor && !hasDetailedStats)
+    const isSolo = cm.members === 1 && !isVisitor;
+    const localLine1 = isSolo
         ? t("1 member. You're first. Invite someone.")
         : [
             tn(cm.members, '{n} member', '{n} members'),
@@ -862,14 +863,21 @@ function CommunityBody({
     return (
         <div>
             {wide && hasDetailedStats ? (
-                <div data-testid="home-community-body" data-layout="tiles" className={isGlobal ? "grid grid-cols-3 gap-2 mb-3" : "grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3"}>
-                    {tiles.map((tile, i) => (
-                        <div key={i} data-testid="home-community-tile" className="p-2 rounded-xl bg-bg-hover text-center flex flex-col justify-center min-w-0">
-                            <span className="text-base font-bold text-text-primary break-words leading-tight">{tile.figure}</span>
-                            <span className="text-[0.7rem] text-text-secondary break-words leading-tight">{tile.label}</span>
-                        </div>
-                    ))}
-                </div>
+                <>
+                    {isSolo && (
+                        <p className="m-0 mb-3 text-sm text-text-primary break-words">
+                            {t("1 member. You're first. Invite someone.")}
+                        </p>
+                    )}
+                    <div data-testid="home-community-body" data-layout="tiles" className={isGlobal ? "grid grid-cols-3 gap-2 mb-3" : "grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3"}>
+                        {tiles.map((tile, i) => (
+                            <div key={i} data-testid="home-community-tile" className="p-2 rounded-xl bg-bg-hover text-center flex flex-col justify-center min-w-0">
+                                <span className="text-base font-bold text-text-primary break-words leading-tight">{tile.figure}</span>
+                                <span className="text-[0.7rem] text-text-secondary break-words leading-tight">{tile.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </>
             ) : hasDetailedStats ? (
                 <div data-testid="home-community-body" data-layout="rows" className="mb-2">
                     <p className="m-0 text-sm text-text-primary break-words">{line1}</p>

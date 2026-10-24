@@ -17,7 +17,7 @@
  * - **A restart keeps them** ({@link NOTICE_COUNTS_STORE_KEY}); the account leaving the phone takes them with it
  *   (identity.ts `wipeIdentityScopedStorage`), and a community the phone forgets takes its own.
  *
- * Writes are ordered against each other here; nothing else writes that key but the wipe.
+ * Writes are ordered against each other here, the wipe's ({@link forgetNoticeCounts}) too; nothing else writes that key.
  */
 import { PUSH_NOTICE_CLOCK_SKEW_SECONDS, PUSH_NOTICE_LIFETIME_SECONDS } from '@beanpool/core';
 import { communityAddress } from './push-pins';
@@ -175,6 +175,18 @@ export async function readNoticeCounts(storage: Pick<Storage, 'getItem'>): Promi
 export function noticeCountFor(counts: Record<string, number>, url: string): number {
     const at = communityAddress(url);
     return (at && counts[at]) || 0;
+}
+
+/**
+ * The account leaves the phone (identity.ts `wipeIdentityScopedStorage`): its counts go, after any change under way, so
+ * none lands after them and brings them back. Never throws.
+ */
+export function forgetNoticeCounts(storage: { removeItem(key: string): Promise<void> }): Promise<void> {
+    const next = writes.then(() => storage.removeItem(NOTICE_COUNTS_STORE_KEY)).then(changed).catch((e) => {
+        console.warn('[Notices] The counts of notices could not be removed', e);
+    });
+    writes = next;
+    return next;
 }
 
 /**

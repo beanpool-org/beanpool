@@ -27,7 +27,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, pushCommunityTag, pushNoticeBytes, pushNoticeWords, type PushNoticeKind } from '@beanpool/core';
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../push-notice-check';
 import {
-    clearActiveCount, countNotice, noticeCountFor, NOTICE_COUNTS_STORE_KEY, onNoticeCounts, readNoticeCounts, watchNoticeCounts,
+    clearActiveCount, countNotice, forgetNoticeCounts, noticeCountFor, NOTICE_COUNTS_STORE_KEY, onNoticeCounts, readNoticeCounts,
+    watchNoticeCounts,
 } from '../notice-counts';
 import { communitySwitched } from '../community-switch';
 import { PUSH_PINS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -228,6 +229,18 @@ describe('the numbers are the phone\'s own, kept in its storage', () => {
         const notice = await check.verifiedNotice(push(data), { storage, recipient: kim.publicKey });
         await again.countNotice(storage, notice!.community, notice!.id);
         expect(await again.readNoticeCounts(storage)).toEqual({ [BYRON]: 1, [OLDTOWN]: 1 });
+    });
+
+    it('the account leaving the phone takes them, after any count under way, so none comes back', async () => {
+        await receive(push(byron.notice(kim.publicKey)));
+        const removable = { ...storage, removeItem: async (key: string) => { mem.delete(key); } };
+        // Sign Out's switch starts a clear, and a notice is being counted, as the wipe removes the numbers.
+        const counting = countNotice(storage, OLDTOWN, oldtown.notice(kim.publicKey).i);
+        const clearing = clearActiveCount(storage);
+        await forgetNoticeCounts(removable);
+        await Promise.all([counting, clearing]);
+        expect(mem.has(NOTICE_COUNTS_STORE_KEY)).toBe(false);
+        expect(await counts()).toEqual({});
     });
 
     it('a community the phone forgets takes its number with it', async () => {

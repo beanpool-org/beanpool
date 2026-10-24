@@ -66,8 +66,8 @@ if (!isExpoGo) {
         Notifications = require('expo-notifications');
         // While the app is open, a push shows only when its own community signed it for this account and it is new;
         // an unsigned one from a community that signs nothing yet shows with fixed words; anything else is dropped
-        // (utils/push-notice-check.ts). The app's own notices show as they are.
-        // Each one its own community signed is counted for that community, unless it is the one in use.
+        // (utils/push-notice-check.ts). The app's own notices show as they are. Each one its own community signed is
+        // counted for that community, unless it is the one in use (utils/notice-counts.ts).
         Notifications?.setNotificationHandler({
             handleNotification: async (notification) => {
                 const recipient = (await loadIdentity().catch(() => null))?.publicKey ?? null;

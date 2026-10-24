@@ -49,7 +49,7 @@ export { ErrorBoundary };
  * refusal leaves everything as it was.
  */
 export default function JoinOpenDoorScreen() {
-    const { then: thenParam, from: fromParam, node: nodeParam } = useLocalSearchParams<{ then?: string; from?: string; node?: string }>();
+    const { then: thenParam, from: fromParam, node: nodeParam } = useLocalSearchParams<{ then?: string | string[]; from?: string | string[]; node?: string | string[] }>();
     const door = doorNodeFromParam(nodeParam);
     // An address the screen refuses is never swapped for another community's door: the screen says so, and asks nothing.
     if (!door) return <RefusedDoor />;
@@ -128,7 +128,7 @@ function RefusedDoor() {
     );
 }
 
-function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; thenParam?: string; fromParam?: string }) {
+function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; thenParam?: string | string[]; fromParam?: string | string[] }) {
     const { colors } = useTheme();
     const { recheck } = useNodeStatus();
     const insets = useSafeAreaInsets();
@@ -182,7 +182,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
      * this route in spellings no intercept can all know, and only that Join leaves the mark (utils/open-door.ts takeDoorTap).
      * Read once, as the door opens.
      */
-    const [fromParam] = useState(() => (door.global || takeDoorTap(door.url) ? fromRoute : FROM_LINK));
+    const [fromParam] = useState(() => (door.global || takeDoorTap(door.url) ? (Array.isArray(fromRoute) ? fromRoute[0] : fromRoute) : FROM_LINK));
     /**
      * A link opened this door (utils/global-link.ts, `from=link`): the 12-words work, which is signed by the key on this phone
      * and sent to the door's community, waits for the member's first tap here. A link only opens a screen.

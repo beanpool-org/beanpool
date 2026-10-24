@@ -9,8 +9,11 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import React from 'react';
 import { PulsePage } from './PulsePage';
 import { MessagesPage } from './MessagesPage';
+import { ProjectsPage } from './ProjectsPage';
+import { ToolsPage } from './ToolsPage';
+import { ChannelsPage } from './ChannelsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getPulseFeed, getConversationMessages, getConversations, type PulseFeedItem } from '../lib/api';
+import { getPulseFeed, getConversationMessages, getConversations, getTreasuries, type PulseFeedItem, type Treasury } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 
@@ -21,6 +24,17 @@ if (typeof window !== 'undefined' && window.HTMLElement) {
 
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn(() => () => {}),
+}));
+
+vi.mock('../lib/visitor-lobby-gate', () => ({
+    communityInfoOnce: vi.fn(async () => ({
+        memberCount: 3,
+        postCount: 0,
+        transactionCount: 0,
+        commonsBalance: 0,
+        profile: 'local',
+        features: {},
+    })),
 }));
 
 vi.mock('../lib/blocklist', () => ({
@@ -49,9 +63,23 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getPulseNudges: vi.fn().mockResolvedValue({ nudges: [] }),
     getConversations: vi.fn().mockResolvedValue({ conversations: [] }),
     getConversationMessages: vi.fn().mockResolvedValue({ messages: [] }),
+    getTreasuries: vi.fn().mockResolvedValue({ treasuries: [] }),
+    getDecisions: vi.fn().mockResolvedValue({ decisions: [], myPoolVoting: null }),
+    getCommonsBalance: vi.fn().mockResolvedValue({ balance: 0 }),
+    getAllMembers: vi.fn().mockResolvedValue([]),
+    getBalance: vi.fn().mockResolvedValue({
+        balance: 0,
+        floor: 0,
+        commonsBalance: 0,
+        earnedCredit: 0,
+        callsign: 'Marty',
+        keeperOf: [],
+        tier: 'contributor',
+    }),
     getCommunityMembers: vi.fn().mockResolvedValue([]),
     getMembers: vi.fn().mockResolvedValue([]),
     getMyMarketplaceTransactions: vi.fn().mockResolvedValue([]),
+    getGroups: vi.fn().mockResolvedValue({ groups: [] }),
     markConversationReadApi: vi.fn().mockResolvedValue({ success: true }),
     getGroupChat: vi.fn().mockResolvedValue({ chat: null }),
 }));
@@ -78,12 +106,29 @@ const pulseItem: PulseFeedItem = {
     publishedAt: '2026-10-23T12:00:00.000Z',
 };
 
+const mockEnterprise: Treasury = {
+    publicKey: 'pk-enterprise-1',
+    name: 'Castlemaine Sourdough Guild',
+    callsign: 'sourdough',
+    purpose: 'Community bakery and sourdough education',
+    balance: 500,
+    creditLine: 0,
+    liveOffers: 2,
+    goalAmount: 1000,
+    currentAmount: 500,
+    deadlineAt: null,
+    lifecycle: 'continuous',
+    status: 'active',
+    avatar: null,
+};
+
 beforeEach(() => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetGroupChatLockStoreForTest();
     vi.mocked(getPulseFeed).mockReset();
     vi.mocked(getConversations).mockReset();
     vi.mocked(getConversationMessages).mockReset();
+    vi.mocked(getTreasuries).mockReset();
 });
 
 afterEach(() => {
@@ -190,4 +235,82 @@ describe('Wide screen layout: Chat (Group and DM)', () => {
         expect(bubble.className).toContain('md:max-w-[70%]');
     });
 });
+
+describe('Wide screen layout: Commons, Tools, and Channels container pins', () => {
+    it('Commons enterprise grid uses container-driven auto-fill minmax rule instead of lg:grid-cols-3', async () => {
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [mockEnterprise] });
+        render(<ProjectsPage identity={testIdentity} onOpenTreasury={vi.fn()} />);
+
+        const enterpriseTitle = await screen.findByText('Castlemaine Sourdough Guild');
+        const grid = enterpriseTitle.closest('.grid') as HTMLElement;
+        expect(grid).not.toBeNull();
+        expect(grid.className).toContain('grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))]');
+        expect(grid.className).not.toContain('lg:grid-cols-3');
+        expect(grid.className).not.toContain('xl:grid-cols-3');
+        expect(grid.className).toContain('max-w-lg');
+        expect(grid.className).toContain('xl:max-w-7xl');
+    });
+
+    it('Tools page containers preserve max-w-xl reading width (not widened to 6xl)', async () => {
+        // 1. ToolsList container
+        const { unmount } = render(
+            <ToolsPage
+                identity={testIdentity}
+                open={{ id: null, screen: 'main', key: null }}
+                onOpen={vi.fn()}
+                onClose={vi.fn()}
+                onComposer={vi.fn()}
+                onGuide={vi.fn()}
+                onAddHomeCard={vi.fn()}
+            />
+        );
+
+        const intro = screen.getByText('Things you can do on your own, that make your community stronger.');
+        const listContainer = intro.parentElement as HTMLElement;
+        expect(listContainer.className).toContain('max-w-xl');
+        expect(listContainer.className).not.toContain('xl:max-w-6xl');
+        expect(listContainer.className).not.toContain('md:max-w-3xl');
+        expect(listContainer.className).not.toContain('lg:max-w-5xl');
+        unmount();
+
+        // 2. ToolView container (open tool)
+        const { container: viewContainer } = render(
+            <ToolsPage
+                identity={testIdentity}
+                open={{ id: 'things', screen: 'main', key: null }}
+                onOpen={vi.fn()}
+                onClose={vi.fn()}
+                onComposer={vi.fn()}
+                onGuide={vi.fn()}
+                onAddHomeCard={vi.fn()}
+            />
+        );
+
+        const toolContainer = viewContainer.querySelector('.max-w-xl') as HTMLElement;
+        expect(toolContainer).not.toBeNull();
+        expect(toolContainer.className).toContain('max-w-xl');
+        expect(toolContainer.className).not.toContain('xl:max-w-6xl');
+        expect(toolContainer.className).not.toContain('md:max-w-3xl');
+        expect(toolContainer.className).not.toContain('lg:max-w-5xl');
+    });
+
+    it('Channels page container preserves max-w-2xl form width (not widened to 6xl)', async () => {
+        const { container } = render(
+            <ChannelsPage
+                identity={testIdentity}
+                onBack={vi.fn()}
+                onViewFeed={vi.fn()}
+                onSharePost={vi.fn()}
+            />
+        );
+
+        const formContainer = container.firstElementChild as HTMLElement;
+        expect(formContainer).not.toBeNull();
+        expect(formContainer.className).toContain('max-w-2xl');
+        expect(formContainer.className).not.toContain('xl:max-w-6xl');
+        expect(formContainer.className).not.toContain('md:max-w-4xl');
+        expect(formContainer.className).not.toContain('lg:max-w-5xl');
+    });
+});
+
 

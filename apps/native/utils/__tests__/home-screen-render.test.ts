@@ -3181,3 +3181,542 @@ describe('Home in the pseudo-locale: every word on it came through t() (words S3
         expect(document.body.textContent).toContain('New in the Market');
     });
 });
+
+describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 dp and 1.3x text)', () => {
+    it('deals card: draws up to 3 deal rows with title, counterparty, waiting status and relative time, and All deals link', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                deals: {
+                    open: 2,
+                    waiting: 1,
+                    waitingOnMe: null,
+                    items: [
+                        { txId: 't1', postId: 'p1', title: 'Sourdough', with: 'Ana', waitsOnMe: true, at: iso(now - 2 * H) },
+                        { txId: 't2', postId: 'p2', title: 'Mend clothes', with: 'Kofi', waitsOnMe: false, at: iso(now - 24 * H) },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(document.querySelector('[data-testid="home-card-deals"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-deal-t1"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-deal-t2"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-deal-t1"]')!.textContent).toContain('Sourdough · with Ana');
+        expect(document.querySelector('[data-testid="home-deal-t1"]')!.textContent).toContain('waiting on you');
+        expect(document.querySelector('[data-testid="home-deal-t2"]')!.textContent).toContain('Mend clothes · with Kofi');
+        expect(document.querySelector('[data-testid="home-deal-t2"]')!.textContent).toContain('waiting on them');
+        expect(document.querySelector('[data-testid="home-deals-all"]')).not.toBeNull();
+
+        // Tapping deal row opens the deal
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-deal-t1"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/post/[id]', params: { id: 'p1', txId: 't1' } });
+
+        // Tapping All deals opens deals tab in market
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-deals-all"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { tab: 'deals' } });
+    });
+
+    it('enterprise card: draws lifecycle, balance & keepers, month figures, latest line, and requests waiting', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 3,
+                    others: 0,
+                    lifecycle: 'ongoing',
+                    keepers: 3,
+                    balance: 340,
+                    month: { trades: 5, in: 120, out: 60 },
+                    latest: { amount: 12, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Mullum Ceramics · enterprise');
+        expect(card.textContent).toContain('Balance 340 Beans · 3 keepers');
+        expect(card.textContent).toContain('This month: 5 trades · +120 in · −60 out');
+        expect(card.textContent).toContain('Latest: +12 Beans from Ana');
+        expect(card.textContent).toContain('3 requests to approve');
+
+        // Requests row opens manage
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-enterprise-requests"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/treasury-manage', params: { publicKey: 'ent1', name: 'Mullum Ceramics' } });
+    });
+
+    it('enterprise card: latest line shows "to {who}" when amount is negative', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    lifecycle: 'ongoing',
+                    keepers: 2,
+                    balance: 200,
+                    latest: { amount: -20, at: iso(now - 2 * H), kind: 'member', who: 'Ana' },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('Latest: −20 Beans to Ana');
+    });
+
+    it('enterprise card: latest line names the Commons when who is null and kind is commons', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    keepers: 2,
+                    balance: 180,
+                    latest: { amount: -5, at: iso(now - 1 * H), kind: 'commons', who: null },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('Latest: −5 Beans to the Commons');
+    });
+
+    it('enterprise card: latest line names a deal when who is null and kind is deal', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    keepers: 2,
+                    balance: 230,
+                    latest: { amount: 50, at: iso(now - 30 * 60_000), kind: 'deal', who: null },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('Latest: +50 Beans from a deal');
+    });
+
+    it('decide card: draws open decisions with closesIn and voting status, poll, and Decide link', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                decide: {
+                    open: 1,
+                    soonestClosesAt: iso(now + 9 * H),
+                    polls: 1,
+                    pollsMore: false,
+                    items: [
+                        { id: 'd1', title: 'Compost bay', closesAt: iso(now + 9 * H), voted: false },
+                    ],
+                    poll: { id: 'poll1', title: 'Market on Sundays?', closesAt: iso(now + 24 * H) },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-decide"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Compost bay');
+        expect(card.textContent).toContain('Not yet');
+        expect(card.textContent).toContain('Poll: Market on Sundays?');
+        expect(document.querySelector('[data-testid="home-decide-all"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-decide-d1"]')!.getAttribute('aria-label')).toBe('Compost bay. closes in 8 hours, Not yet. Opens Decide.');
+        expect(document.querySelector('[data-testid="home-decide-poll"]')!.getAttribute('aria-label')).toBe('Poll: Market on Sundays? closes tomorrow. Opens the poll.');
+
+        // Tapping decision opens Commons -> Decide
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-decide-d1"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
+
+        // Tapping poll opens poll post
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-decide-poll"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/post/[id]', params: { id: 'poll1' } });
+    });
+
+    it('decide card: draws "N polls open" line and links to Market Polls when more than one poll is open alongside first poll', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                decide: {
+                    open: 1,
+                    soonestClosesAt: iso(now + 9 * H),
+                    polls: 3,
+                    pollsMore: false,
+                    items: [
+                        { id: 'd1', title: 'Compost bay', closesAt: iso(now + 9 * H), voted: false },
+                    ],
+                    poll: { id: 'poll1', title: 'Market on Sundays?', closesAt: iso(now + 24 * H) },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-decide"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Poll: Market on Sundays?');
+        expect(card.textContent).toContain('3 polls open');
+
+        const pollsRow = document.querySelector('[data-testid="home-decide-polls"]') as HTMLElement;
+        expect(pollsRow).not.toBeNull();
+        expect(pollsRow.getAttribute('aria-label')).toBe('3 polls open. Opens the polls, in the Market.');
+
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { pollsRow.click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { filter: 'polls' } });
+    });
+
+    it('groups card: draws each group\'s last line, and a locked group line opens the chat', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                groups: {
+                    total: 2,
+                    items: [
+                        {
+                            id: 'g1', kind: 'group', name: 'Garden Group', unread: 4, muted: false,
+                            last: { who: 'Ana', at: iso(now - 2 * H), text: 'Who has a ladder?' },
+                        },
+                        {
+                            id: 'g2', kind: 'group', name: 'Secret Group', unread: 0, muted: false,
+                            last: { who: 'Kofi', at: iso(now - 1 * H), text: '🔒 Message', locked: { ciphertext: 'c', nonce: 'n', metadata: null } },
+                        },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-groups"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Garden Group · 4 new');
+        expect(card.textContent).toContain('Ana');
+        expect(card.textContent).toContain('Who has a ladder?');
+        expect(card.textContent).toContain('Secret Group · quiet');
+        expect(card.textContent).toContain('🔒 Message');
+
+        // A locked group line opens the chat
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-group-g2"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g2', group: '1' } });
+    });
+
+    it('beans card: draws balance, room, this month trades/in/out, and tier badge', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                beans: {
+                    balance: -35,
+                    room: 165,
+                    tier: 'Resident',
+                    activated: true,
+                    frozen: false,
+                    month: { trades: 3, in: 40, out: 25, fees: 0, more: false },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-beans"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('−35 Beans · room to spend 165');
+        expect(card.textContent).toContain('This month: 3 trades · +40 in · −25 out');
+        expect(card.textContent).toContain('Resident');
+    });
+
+    it('beans card: shows partial indicator when month.more is set so partial totals are never presented as complete', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                beans: {
+                    balance: 150,
+                    room: 250,
+                    tier: 'Resident',
+                    activated: true,
+                    frozen: false,
+                    month: { trades: 200, in: 1200, out: 800, fees: 0, more: true },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-beans"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('This month (partial): 200 trades · +1,200 in · −800 out');
+    });
+
+    it('community card: draws narrow rows on local community (members/joined, trades/commons, listings/events)', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                community: {
+                    name: 'Mullumbimby',
+                    members: 81,
+                    joined7d: 4,
+                    tradesThisMonth: 23,
+                    commonsPot: 310,
+                    listings: 37,
+                    eventsSoon: 3,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-community"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('81 members · 4 joined this week');
+        expect(card.textContent).toContain('23 trades this month · Commons pot 310 Beans');
+        expect(card.textContent).toContain('37 listings · 3 events coming up');
+    });
+
+    it('pulse card: draws up to 4 items with publishedAt formatted in relative time', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                pulse: {
+                    items: [
+                        { id: 'q1', title: 'Post 1', thumbnailUrl: null, platform: 'youtube', callsign: 'Studio A', category: 'art', url: null, publishedAt: iso(now - 3 * H) },
+                        { id: 'q2', title: 'Post 2', thumbnailUrl: null, platform: 'youtube', callsign: 'Studio B', category: 'music', url: null, publishedAt: iso(now - 5 * H) },
+                        { id: 'q3', title: 'Post 3', thumbnailUrl: null, platform: 'youtube', callsign: 'Studio C', category: 'food', url: null, publishedAt: iso(now - 24 * H) },
+                        { id: 'q4', title: 'Post 4', thumbnailUrl: null, platform: 'youtube', callsign: 'Studio D', category: 'eco', url: null, publishedAt: iso(now - 48 * H) },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-pulse"]')!;
+        expect(card).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-pulse-q1"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-pulse-q2"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-pulse-q3"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-pulse-q4"]')).not.toBeNull();
+        expect(card.textContent).toContain('by Studio A · 3h ago');
+        expect(document.querySelector('[data-testid="home-pulse-q1"]')!.getAttribute('aria-label')).toBe('Post 1, by Studio A, 3h ago. Opens the Pulse.');
+    });
+
+    it('deals card: nullable counterparty renders cleanly without "with" and a11y has no double periods', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                deals: {
+                    open: 1,
+                    waiting: 1,
+                    waitingOnMe: null,
+                    items: [
+                        { postId: 'p1', txId: 't1', title: 'Sourdough', with: null, waitsOnMe: true, at: iso(now - 10 * 60_000) },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const row = document.querySelector('[data-testid="home-deal-t1"]')!;
+        expect(row.textContent).toContain('Sourdough');
+        expect(row.textContent).not.toContain('with');
+        expect(row.getAttribute('aria-label')).toBe('Sourdough. waiting on you · 10m ago. Opens the deal.');
+    });
+
+    it('deals card: deleted listing with empty title renders label fallback without dangling with or blank row', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                deals: {
+                    open: 2,
+                    waiting: 1,
+                    waitingOnMe: null,
+                    items: [
+                        { postId: 'p1', txId: 't1', title: '', with: 'Ana', waitsOnMe: true, at: iso(now - 10 * 60_000) },
+                        { postId: 'p2', txId: 't2', title: '', with: null, waitsOnMe: false, at: iso(now - 30 * 60_000) },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const row1 = document.querySelector('[data-testid="home-deal-t1"]')!;
+        expect(row1.textContent).toContain('Deal · with Ana');
+
+        const row2 = document.querySelector('[data-testid="home-deal-t2"]')!;
+        expect(row2.textContent).toContain('Deal');
+    });
+
+    it('enterprise card: omits balance when Beans are disabled', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    lifecycle: 'ongoing',
+                    keepers: 2,
+                    balance: undefined,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('2 keepers');
+        expect(card.textContent).not.toContain('Balance');
+        expect(card.textContent).not.toContain('0 Beans');
+        const balRow = document.querySelector('[data-testid="home-enterprise-balance"]')!;
+        expect(balRow.getAttribute('aria-label')).toBe('2 keepers. Opens the enterprise.');
+    });
+
+    it('decide card: omits Decide link when only poll is active, and poll a11y does not duplicate closes', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                decide: {
+                    open: 0,
+                    soonestClosesAt: null,
+                    polls: 1,
+                    pollsMore: false,
+                    items: [],
+                    poll: { id: 'poll1', title: 'Sunday market?', closesAt: iso(now + 24 * H) },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(document.querySelector('[data-testid="home-decide-poll"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-decide-all"]')).toBeNull();
+        const pollRow = document.querySelector('[data-testid="home-decide-poll"]')!;
+        expect(pollRow.getAttribute('aria-label')).not.toContain('Closes closes');
+        expect(pollRow.getAttribute('aria-label')).toContain('closes tomorrow');
+        expect(pollRow.getAttribute('aria-label')).toBe('Poll: Sunday market? closes tomorrow. Opens the poll.');
+    });
+
+    it('beans card: frozen member sees spending paused warning even when month is present', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                beans: {
+                    balance: 50,
+                    room: 100,
+                    tier: 'Resident',
+                    activated: true,
+                    frozen: true,
+                    month: { trades: 2, in: 20, out: 10, fees: 0, more: false },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-beans"]')!;
+        expect(card.textContent).toContain('Spending is paused for now. You can still receive and sell.');
+        expect(card.textContent).toContain('This month: 2 trades · +20 in · −10 out');
+    });
+
+    it('community card: sole founder sees first-member onboarding prompt', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                community: {
+                    name: 'New Community',
+                    members: 1,
+                    joined7d: 1,
+                    commonsPot: 0,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-community"]')!;
+        expect(card.textContent).toContain("1 member. You're first. Invite someone.");
+        expect(document.querySelector('[data-testid="home-community-row-members"]')).toBeNull();
+    });
+
+    it('community card: worldwide community draws directory count on row 2', async () => {
+        const base = globalMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                community: {
+                    name: 'The worldwide community',
+                    members: 1200,
+                    communities: 42,
+                    listings: 500,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const row2 = document.querySelector('[data-testid="home-community-row-trades"]')!;
+        expect(row2).not.toBeNull();
+        expect(row2.textContent).toBe('42 communities listed');
+    });
+});

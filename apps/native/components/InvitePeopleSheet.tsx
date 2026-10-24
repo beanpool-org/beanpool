@@ -233,7 +233,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                                     <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.publicKey} callsign={item.callsign} size={36} />
                                     <View style={styles.nameCol}>
                                         <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
-                                        <Text style={styles.keyPrefix} numberOfLines={1}>{item.publicKey.slice(0, 8)}</Text>
+                                        <Text style={styles.keyPrefix} numberOfLines={1}>{(item.publicKey ?? '').slice(0, 8)}</Text>
                                     </View>
                                     {already && <Text style={styles.already}>{t('In the group')}</Text>}
                                     {isInvited && <Text style={styles.already}>{t('Invited')}</Text>}

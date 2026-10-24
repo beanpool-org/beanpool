@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommunityShapeSection } from './CommunityShapeSection';
 import {
@@ -544,5 +544,38 @@ describe('CommunityShapeSection — Audit log', () => {
         expect(logBlock).toHaveTextContent('@ada (owner)');
         expect(logBlock).toHaveTextContent('Who can join: any member invites → only admins invite');
         expect(logBlock).toHaveTextContent('“Summer visitors”');
+    });
+});
+
+describe('CommunityShapeSection — Accessibility (Finding 5)', () => {
+    it('row headers are real buttons with aria-expanded, and Who can join is a radiogroup', async () => {
+        const shape = makeDefaultShape();
+        mockShapeApi(shape);
+
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('community-shape-section')).toBeInTheDocument());
+
+        const joinHeaderBtn = screen.getByRole('button', { name: /Who can join/i });
+        expect(joinHeaderBtn).toHaveAttribute('aria-expanded', 'false');
+
+        // Opening row updates aria-expanded
+        fireEvent.click(joinHeaderBtn);
+        expect(joinHeaderBtn).toHaveAttribute('aria-expanded', 'true');
+
+        // Who can join options are in a radiogroup with accessible label
+        const radiogroup = screen.getByRole('radiogroup', { name: /Who can join/i });
+        expect(radiogroup).toBeInTheDocument();
+        const radios = within(radiogroup).getAllByRole('radio');
+        expect(radios).toHaveLength(3);
+    });
+
+    it('row headers are not buttons for read-only admin viewers', async () => {
+        const shape = makeDefaultShape();
+        mockShapeApi(shape);
+
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('community-shape-section')).toBeInTheDocument());
+
+        expect(screen.queryByRole('button', { name: /Who can join/i })).toBeNull();
     });
 });

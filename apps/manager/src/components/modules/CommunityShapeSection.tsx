@@ -3,6 +3,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 import { getTfaSessionToken } from '../../lib/node-client';
+import { useTimeout } from '../../lib/use-timeout';
 import { t } from '../../lib/fresh-proof';
 import {
     type Shape,
@@ -41,6 +42,7 @@ export function CommunityShapeSection({
     const [saving, setSaving] = useState(false);
     const [rowError, setRowError] = useState<string | null>(null);
     const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+    const successTimer = useTimeout();
 
     const loadShape = async () => {
         setLoading(true);
@@ -155,7 +157,7 @@ export function CommunityShapeSection({
                     ? t('Saved, and every member is told.')
                     : t('Saved!'),
             );
-            setTimeout(() => setSaveSuccess(null), 4000);
+            successTimer.schedule(() => setSaveSuccess(null), 4000);
         } catch (err: any) {
             setRowError(err.message || 'Failed to save change');
         } finally {
@@ -257,7 +259,8 @@ export function CommunityShapeSection({
                         onToggle={() => handleOpenRow('join', settings.join.value)}
                     >
                         <div className="space-y-3 pt-2">
-                            <div className="space-y-2">
+                            <fieldset className="space-y-2 border-0 p-0 m-0" role="radiogroup" aria-label={t('Who can join')}>
+                                <legend className="sr-only">{t('Who can join')}</legend>
                                 {(['members', 'admins', 'paused'] as const).map((opt) => (
                                     <label key={opt} className="flex items-start gap-2.5 text-xs text-white cursor-pointer select-none">
                                         <input
@@ -274,7 +277,7 @@ export function CommunityShapeSection({
                                         </div>
                                     </label>
                                 ))}
-                            </div>
+                            </fieldset>
                             <RowControls
                                 onSave={() => handleSave('join')}
                                 onCancel={handleCancel}
@@ -1080,42 +1083,59 @@ function ShapeRow({
     const isLocked = Boolean(lock);
     const canExpand = isOwner && (!isLocked || Boolean(allowExpandWithLock)) && !serverBadge;
 
+    const headerContent = (
+        <>
+            <div className="flex items-start justify-between gap-2 flex-wrap min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base select-none shrink-0" aria-hidden="true">{icon}</span>
+                    <span className="text-xs font-bold text-white break-words">{name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                    <span data-testid={`shape-val-${id}`} className="text-xs font-medium text-white break-words">
+                        {displayValue}
+                    </span>
+                    {serverBadge && (
+                        <span className="text-[10px] text-nature-400 bg-nature-900 border border-nature-800 px-1.5 py-0.5 rounded break-words text-right">
+                            {serverBadge}
+                        </span>
+                    )}
+                    {canExpand && (
+                        <span className="text-nature-400 text-xs font-mono select-none" aria-hidden="true">
+                            {isOpen ? '▲' : '›'}
+                        </span>
+                    )}
+                </div>
+            </div>
+            <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{summary}</p>
+            {extraLine && (
+                <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{extraLine}</p>
+            )}
+        </>
+    );
+
     return (
         <div
             data-testid={`shape-row-${id}`}
             className="p-3.5 sm:p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-2 transition-all"
         >
-            <div
-                data-testid={`shape-expand-${id}`}
-                onClick={canExpand ? onToggle : undefined}
-                className={`min-h-[48px] space-y-1.5 ${canExpand ? 'cursor-pointer hover:opacity-90' : ''}`}
-            >
-                <div className="flex items-start justify-between gap-2 flex-wrap min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-base select-none shrink-0" aria-hidden="true">{icon}</span>
-                        <span className="text-xs font-bold text-white break-words">{name}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                        <span data-testid={`shape-val-${id}`} className="text-xs font-medium text-white break-words">
-                            {displayValue}
-                        </span>
-                        {serverBadge && (
-                            <span className="text-[10px] text-nature-400 bg-nature-900 border border-nature-800 px-1.5 py-0.5 rounded break-words text-right">
-                                {serverBadge}
-                            </span>
-                        )}
-                        {canExpand && (
-                            <span className="text-nature-400 text-xs font-mono select-none" aria-hidden="true">
-                                {isOpen ? '▲' : '›'}
-                            </span>
-                        )}
-                    </div>
+            {canExpand ? (
+                <button
+                    type="button"
+                    data-testid={`shape-expand-${id}`}
+                    aria-expanded={isOpen}
+                    onClick={onToggle}
+                    className="w-full text-left bg-transparent border-0 p-0 m-0 min-h-[48px] space-y-1.5 cursor-pointer hover:opacity-90 focus:outline-none focus-visible:ring-1 focus-visible:ring-terra-500 rounded"
+                >
+                    {headerContent}
+                </button>
+            ) : (
+                <div
+                    data-testid={`shape-expand-${id}`}
+                    className="min-h-[48px] space-y-1.5"
+                >
+                    {headerContent}
                 </div>
-                <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{summary}</p>
-                {extraLine && (
-                    <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{extraLine}</p>
-                )}
-            </div>
+            )}
 
             {/* Lock Line */}
             {lock && (

@@ -90,8 +90,9 @@ export function HomeScreen({
     }, [shape, activeNode?.id, activeNode?.url]);
 
     const shapeCardText = useMemo(() => {
-        if (!communityShape) return null;
-        const s = communityShape.settings;
+        // An answer without the four settings (a node on an older build, an error body) draws no line: Home must still render.
+        const s = communityShape?.settings;
+        if (!s?.join || !s.beans || !s.decisions || !s.knocks) return null;
         const joinText =
             s.join.value === 'members'
                 ? 'any member invites'

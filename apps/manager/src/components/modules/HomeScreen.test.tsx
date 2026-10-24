@@ -337,6 +337,15 @@ describe('HomeScreen Component', () => {
             fireEvent.click(card);
             expect(onNavigate).toHaveBeenCalledWith('shape');
         });
+
+        it('an answer without the settings (an older node, an error body) draws no line and Home still renders', () => {
+            for (const shape of [{}, { settings: {} }, { settings: { join: { value: 'members' } } }] as any[]) {
+                const { unmount } = render(<HomeScreen {...defaultProps} shape={shape} />);
+                expect(screen.queryByTestId('home-community-shape-card')).toBeNull();
+                expect(screen.getByText('Action Required')).toBeInTheDocument();
+                unmount();
+            }
+        });
     });
 });
 

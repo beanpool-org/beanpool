@@ -513,11 +513,6 @@ describe('ApplianceSection Component', () => {
                 method: 'POST',
                 body: JSON.stringify({
                     password: mockProfile.adminPassword,
-                    publishLocation: true,
-                    publishMembers: true,
-                    publishContactEmail: false,
-                    publishContactPhone: false,
-                    publishHealth: true,
                     directoryPushIntervalHours: 12,
                     serviceRadius: null,
                 }),

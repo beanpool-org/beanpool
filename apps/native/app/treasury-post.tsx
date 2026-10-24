@@ -274,7 +274,15 @@ export default function TreasuryPostScreen() {
                     ) : null}
 
                     <View style={styles.footer}>
-                        <Pressable style={styles.submitBtn} onPress={handleSubmit} disabled={submitting} accessibilityRole="button">
+                        <Pressable
+                            style={styles.submitBtn}
+                            onPress={handleSubmit}
+                            disabled={submitting}
+                            accessibilityRole="button"
+                            accessibilityLabel={submitting ? (isNeed ? t('Posting need...') : t('Posting offer...')) : (isNeed ? t('POST NEED') : t('POST OFFER'))}
+                            accessibilityHint={isNeed ? t('Posts tender for enterprise') : t('Posts offer in Market')}
+                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                        >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (

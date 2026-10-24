@@ -202,3 +202,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-09 - Add dynamic accessibilityLabel, hint, and busy state to old words unlock submit button
 **Learning:** Unlock buttons in message history recovery flows whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without accessible text feedback when busy unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
 **Action:** Supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` on message recovery submit buttons rendering `ActivityIndicator` when busy.
+
+## 2027-01-16 - Add dynamic accessibilityLabel, hint, and busy state to treasury post submit button
+**Learning:** Submit buttons in enterprise offer/need posting flows whose text child is conditionally replaced by an ActivityIndicator during submission leave screen reader users without feedback during async operations unless dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled: submitting, busy: submitting }}` are provided.
+**Action:** Supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` on enterprise posting submit buttons rendering `ActivityIndicator` when submitting.

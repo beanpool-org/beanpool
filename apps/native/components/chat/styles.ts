@@ -124,6 +124,16 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
         borderTopWidth: 1, borderTopColor: colors.surface.subtle, backgroundColor: colors.surface.card,
     },
     attachBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+    // The composer's own photo button (a group chat's): a 48 dp target that the box, not Send, gives way to at 320 dp.
+    composerAttachBtn: { flexShrink: 0, width: 48, height: 48, marginLeft: -8, justifyContent: 'center', alignItems: 'center' },
+    // A photo waiting to go, above the box: its thumbnail, a line, and a way to take it off.
+    stagedPhotoRow: {
+        flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 8,
+        borderTopWidth: 1, borderTopColor: colors.surface.subtle, backgroundColor: colors.surface.card,
+    },
+    stagedPhotoThumb: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surface.subtle },
+    stagedPhotoText: { flex: 1, minWidth: 0, fontSize: 13, color: colors.text.secondary },
+    stagedPhotoRemove: { flexShrink: 0, width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
     input: {
         flex: 1, minWidth: 0, backgroundColor: colors.surface.subtle, borderWidth: 1,
         borderColor: theme === 'dark' ? colors.border.default : palette.slate300, borderRadius: 20,

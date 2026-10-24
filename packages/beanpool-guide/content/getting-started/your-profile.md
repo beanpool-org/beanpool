@@ -12,10 +12,10 @@ related: privacy, trust-badges, joining, people
 - Change what you like:
 - **Callsign** is the name people see.
 - **Bio** is a few words about you, up to 200 characters.
-- Tap the photo to change it.
+- Tap the photo to change it: choose a photo or one of the ready-made pictures.
 - Tap **Save Profile**.
 
-In the web app, tap **Edit Profile**, change the photo with **Camera** or **Gallery**, and tap **Save Profile Changes**.
+In the web app, tap **Edit Profile**, change the photo with **Camera**, **Gallery**, or one of the ready-made pictures, and tap **Save Profile Changes**.
 
 On the phone, your card shows your name in the active community, such as "Your name in Sydney". Pull down to refresh your profile from the community if your name was changed on another device.
 

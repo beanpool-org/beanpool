@@ -235,6 +235,7 @@ describe('EventChat: the way back to the event (A4)', () => {
     });
 });
 
+// The community's server reads an event's chat by design, so it takes no photo (DESIGN-group-chat-photos-fable.md §4).
 describe('EventChat: an event chat carries no photos', () => {
     function pictureClipboard() {
         const file = new File([new Uint8Array(1)], 'screenshot.png', { type: 'image/png' });
@@ -258,7 +259,7 @@ describe('EventChat: an event chat carries no photos', () => {
         fireEvent.paste(composer, { clipboardData: pictureClipboard() });
 
         expect(await screen.findByTestId('event-chat-image-notice'))
-            .toHaveTextContent('Photos can only be sent in direct messages');
+            .toHaveTextContent("Photos can't be sent in this chat: the community's server can read it.");
         expect(api.postEventChatMessage).not.toHaveBeenCalled();
     });
 
@@ -269,7 +270,7 @@ describe('EventChat: an event chat carries no photos', () => {
         fireEvent.drop(composer, { dataTransfer: pictureClipboard() });
 
         expect(await screen.findByTestId('event-chat-image-notice'))
-            .toHaveTextContent('Photos can only be sent in direct messages');
+            .toHaveTextContent("Photos can't be sent in this chat: the community's server can read it.");
         expect(api.postEventChatMessage).not.toHaveBeenCalled();
     });
 
@@ -393,7 +394,7 @@ describe('EventChat: the no-photos line does not stay pinned', () => {
         const composer = await screen.findByLabelText('Message everyone going');
         fireEvent.paste(composer, { clipboardData: pictureClipboard() });
         expect(await screen.findByTestId('event-chat-image-notice'))
-            .toHaveTextContent('Photos can only be sent in direct messages');
+            .toHaveTextContent("Photos can't be sent in this chat: the community's server can read it.");
         return composer;
     }
 
@@ -429,7 +430,7 @@ describe('EventChat: the no-photos line does not stay pinned', () => {
 
         expect(await screen.findByText('Node said no.')).toBeInTheDocument();
         expect(screen.getByTestId('event-chat-image-notice'))
-            .toHaveTextContent('Photos can only be sent in direct messages');
+            .toHaveTextContent("Photos can't be sent in this chat: the community's server can read it.");
     });
 
     it('moving to another event drops it', async () => {

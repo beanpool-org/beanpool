@@ -95,6 +95,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid' }));
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/' }));
+// The photo button's picker and encoder (a locked group chat's photos): nothing here picks one.
+vi.mock('expo-image-picker', () => ({ requestCameraPermissionsAsync: vi.fn(), launchCameraAsync: vi.fn(), launchImageLibraryAsync: vi.fn() }));
+vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => null) }));
 // The screen's two readable sends refuse as utils/db refuses them (GX1, GX4 and GD2 measure the refusals themselves).
 const refusal = vi.hoisted(() => ({ make: (): Error => new Error('unset') }));

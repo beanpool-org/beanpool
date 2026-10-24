@@ -51,7 +51,12 @@ import {
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
-import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
+import {
+    sendSealedGroupLine, editSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
+    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT,
+} from './group-chat-lines';
+import { groupPhotoCache, forgetGroupPhotos, forgetRemovedGroupPhotos } from './group-photo-cache';
+import type { GroupLineView, ServedGroupLine } from './group-line-display';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
 import { SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, sayOutsideShop, shopChoiceFor } from './shop-choice';
@@ -6355,13 +6360,28 @@ export async function editMessage(conversationId: string, messageId: string, new
 }
 
 /**
+ * A chat the node reads by design (an event's, an enterprise's thread) takes no photo (DESIGN-group-chat-photos-fable.md
+ * §4). Translated where it is shown (utils/chat-line-words.ts).
+ */
+const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "Photos can't be sent in this chat.";
+
+/**
  * Send an image in a DM (NAT-1 attachments). The image is E2E-encrypted with the
  * DM key and uploaded as a separate blob (lazy-loaded), so the node only ever holds
- * ciphertext and the message feed stays light. DM-only — encryption requires a peer key.
+ * ciphertext and the message feed stays light.
+ *
+ * A group's chat goes as a group's photo (postGroupChatPhoto), decided by this phone's own key memory first: once it held
+ * the group's keys, sealed under the keyring's epoch whatever the row says, never DM-sealed to whoever the node lists
+ * (DESIGN-group-chat-photos-fable.md §5 S3). An event's or an enterprise's chat is refused, nothing sent.
  */
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
     const database = await getDb();
-    if (await isNodeReadableConversation(conversationId) || await isHeldGroupChat(conversationId)) throw new Error('Photos can only be sent in direct messages.');
+    // Asked first: a conversation not on this phone yet is asked of the node, and a held group's row is written group_thread.
+    const nodeReadable = await isNodeReadableConversation(conversationId);
+    const groupChat = await isHeldGroupChat(conversationId)
+        || (nodeReadable && (await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]))?.type === 'group_thread');
+    if (groupChat) return postGroupChatPhoto(conversationId, { dataUri, caption, replyToId: replyToIdOf(metadata) });
+    if (nodeReadable) throw new Error(PHOTOS_NOT_IN_THIS_CHAT_TEXT);
     // The picture and its caption are locked, or neither goes (DmNotLockedError). Both are sealed to the message's own
     // id, which goes to the node with them, each as its own part, so neither can stand in for the other.
     const dmCtx = await requireDmKeyContext(conversationId);
@@ -6449,6 +6469,12 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     } catch {
         return null;
     }
+}
+
+/** A group photo line's photo for GroupChatView: opened on this phone, kept in the group's folder (groupPhotoCache). */
+export async function getDecryptedGroupPhoto(groupId: string, line: ServedGroupLine, view: GroupLineView): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return getDecryptedGroupAttachment(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, line, view }, groupPhotoCache);
 }
 
 /** A list of keys as a set to compare: each lower-cased, once, sorted. */
@@ -8352,6 +8378,8 @@ export async function leaveGroupApi(groupId: string, memberPubkey: string, onPro
         } catch (dbErr) {
             console.warn('[SQLite] Failed to remove group member locally:', dbErr);
         }
+        // I left: the group's photos this phone opened go with its chat (DESIGN-group-chat-photos-fable.md §2.4).
+        if (memberPubkey === identity.publicKey) await forgetGroupPhotos(ring.groupId);
     }
     return Boolean(res?.success);
 }
@@ -8400,9 +8428,44 @@ export async function fetchYourGroups(): Promise<import('./your-groups').YourCha
 export async function getGroupChat(groupId: string, limit = 50, offset = 0): Promise<any> {
     const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`);
     const body = await res.json().catch(() => ({}));
-    // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read.
-    if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
+    // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read. A phone that
+    // held the group's keys then takes the group's opened photos off, as the words are no longer served to it (§2.4).
+    if (!res.ok) {
+        if ((res.status === 403 || res.status === 404) && await isHeldGroupChat(groupId).catch(() => false)) await forgetGroupPhotos(groupId);
+        throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
+    }
+    forgetRemovedGroupPhotos(groupId, body?.messages);
     return body;
+}
+
+/**
+ * Send a photo in a group's chat (DESIGN-group-chat-photos-fable.md §2.2): its caption sealed as part 'body' and the photo
+ * as part 'attachment' under the line's one message key and the keyring's epoch, both sealed again on a 409
+ * (utils/group-chat-lines.ts sendSealedGroupLine). Only ever sealed: a known DM is refused before any key is asked; when the
+ * node serves no keys, a group this phone held keys of is refused in the phone's lock words, and one it never held is
+ * refused with an old node's notice (a node from before locked chats, §2.6) or as a chat it isn't in. Nothing goes then.
+ */
+export async function postGroupChatPhoto(
+    groupId: string, photo: { dataUri: string; caption: string; clientId?: string; replyToId?: string | null },
+    lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
+): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    try {
+        return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
+            groupId, text: photo.caption, photo: photo.dataUri, clientId: photo.clientId || Crypto.randomUUID(), replyToId: photo.replyToId,
+            after: lock?.after, mentionCandidates: lock?.mentionCandidates, progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
+        });
+    } catch (e) {
+        // A 404 is an old node (no keys route) or a new one refusing this phone the group: never a reason to send it readable.
+        if (e instanceof GroupKeysRequestError && e.status === 404) {
+            if (await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+            if (await nodeChatIsUnlocked(groupId)) throw new GroupChatKeyError(GROUP_CHAT_OLD_NODE_NOTICE, 'refused');
+            throw new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+        }
+        throw e;
+    }
 }
 
 /**

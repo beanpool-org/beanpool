@@ -517,8 +517,11 @@ describe("the keepers' Manage tab", () => {
     it("an action that ends the reader's Manage says so at the top of the page they are left on", async () => {
         const wordsOnTop = async (words: string) => {
             expect(await screen.findByText(words)).toBeInTheDocument();
-            expect(byId('manage-panel')).toBeNull();
-            expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+            // The words can be drawn a render before the read that takes Manage away lands: wait for that too.
+            await waitFor(() => {
+                expect(byId('manage-panel')).toBeNull();
+                expect(screen.queryByRole('tab', { name: 'Manage' })).toBeNull();
+            });
             before(screen.getByText(words), byId('shopfront-name'), `"${words}", then the page`);
         };
 
@@ -538,7 +541,7 @@ describe("the keepers' Manage tab", () => {
         fireEvent.click(within(panel).getByRole('button', { name: 'Step down as a keeper' }));
         await wordsOnTop('You have stepped down as a keeper.');
         // Step down sits far down Manage: the page goes back up to the words.
-        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+        await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0 }));
         cleanup();
 
         // Finalising a wind-up releases every keeper (the node deletes them all), so it ends the lead's Manage too.
@@ -557,7 +560,7 @@ describe("the keepers' Manage tab", () => {
         fireEvent.click(found(ACTIONS.find((a) => a.what === 'finalise the wind-up')!, panel) as HTMLElement);
         fireEvent.click(within(panel).getByRole('button', { name: 'Finalise Wind-Up' }));
         await wordsOnTop('Wind-up finalised. Swept 40 🫘 to Commons and released keepers.');
-        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+        await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0 }));
     });
 
     describe('its face, with one Save', () => {

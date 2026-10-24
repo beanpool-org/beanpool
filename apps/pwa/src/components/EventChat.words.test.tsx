@@ -70,7 +70,7 @@ describe('an event chat in the pseudo-locale', () => {
         fireEvent.paste(screen.getByLabelText(xx('Message everyone going')), {
             clipboardData: { files: [file], items: [{ kind: 'file', type: 'image/png', getAsFile: () => file }], types: ['Files'] },
         });
-        expect(await screen.findByText(xx('Photos can only be sent in direct messages'))).toBeInTheDocument();
+        expect(await screen.findByText(xx("Photos can't be sent in this chat: the community's server can read it."))).toBeInTheDocument();
         expect(bypassing(document.body, { others: OTHERS, said })).toEqual([]);
     });
 

@@ -11,6 +11,7 @@ import { updateMemberProfile, getMemberProfile, registerMember } from '../lib/ap
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { OnboardingGuide } from './OnboardingGuide';
 
 type Step = 'name' | 'avatar' | 'guide';
@@ -188,6 +189,10 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                                     {t('🖼️ Gallery')}
                                 </button>
                             </div>
+                            <AvatarPresetPicker
+                                selected={avatar}
+                                onSelect={(uri) => setAvatar(uri)}
+                            />
                         </div>
                         {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button

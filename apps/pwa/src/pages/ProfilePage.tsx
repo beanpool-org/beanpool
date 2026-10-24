@@ -6,9 +6,10 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { updateMemberProfile, getMemberProfile, type MemberProfile } from '../lib/api';
+import { updateMemberProfile, getMemberProfile } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, ARCHETYPES, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
 
@@ -197,6 +198,10 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                         {t('🖼️ Gallery')}
                     </button>
                 </div>
+                <AvatarPresetPicker
+                    selected={avatar}
+                    onSelect={(uri) => setAvatar(uri)}
+                />
                 {avatar && (
                     <button
                         onClick={() => setAvatar(null)}

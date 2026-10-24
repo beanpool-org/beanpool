@@ -410,6 +410,18 @@ describe('CommunityShapeSection — Folded fixes from PR #2415 review', () => {
         expect(normalConsequence).toMatch(/You can't switch Beans off once anyone has traded\./);
     });
 
+    it('getConsequenceSentence returns unpause consequence when changing from paused', () => {
+        const pausedShape = makeDefaultShape({
+            join: { value: 'paused', configured: 'paused', source: 'owner', lock: null },
+        });
+        expect(getConsequenceSentence('join', 'admins', pausedShape)).toMatch(
+            /New members will be taken again: only owners and admins can make invites and answer requests to join\./
+        );
+        expect(getConsequenceSentence('join', 'members', pausedShape)).toMatch(
+            /New members will be taken again: every member can make invites and answer requests to join\./
+        );
+    });
+
     it('Folded fix 2: updateCommunityShape refuses multiple changes in one request', async () => {
         await expect(
             updateCommunityShape('https://node.test', 'pw', { beans: false, knownFloor: { on: false } } as any)

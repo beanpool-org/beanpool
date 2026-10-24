@@ -233,16 +233,18 @@ export function getConsequenceSentence(
     switch (setting) {
         case 'join': {
             const v = targetValue as JoinState;
+            const wasPaused = s.join.value === 'paused' || s.join.configured === 'paused';
+            if (wasPaused && (v === 'members' || v === 'admins')) {
+                return unpauseConsequence(v);
+            }
             if (v === 'admins') {
-                return t('Members will stop being able to make invites or answer requests to join. Codes already made still work until they expire, 30 days after they were made. A paper ticket a member made will no longer let anyone in.');
+                return doorChangeConsequence('members', 'admins');
             }
             if (v === 'paused') {
                 return t("Nobody new will join until you change this. Codes already made won't work while it's paused.");
             }
             if (v === 'members') {
-                return s.join.configured === 'paused'
-                    ? t('Every member will be able to make invites and answer requests to join again.')
-                    : t('Every member will be able to make invites and answer requests to join again.');
+                return doorChangeConsequence('admins', 'members');
             }
             return '';
         }

@@ -143,7 +143,7 @@ describe('the header reading the node itself (Home\'s answer not fresh): one rul
         expect(hiddenTabsFor(profile.features)).not.toContain('projects');
         expect(decideOnNode(profile.features)).toBe(true);
         await renderHeader();
-        expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise,group']);
+        expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise,group,invite']);
         expect(voteIcon()).not.toBeNull();
         await act(async () => { (voteIcon()!.closest('button') as HTMLElement).click(); });
         expect(nav.push).toHaveBeenCalledWith({ pathname: '/(tabs)/projects', params: { section: 'decide' } });

@@ -455,7 +455,7 @@ describe('CommunityShapeSection — Locks and Refusals (409)', () => {
             await waitFor(() => {
                 const call = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
                 expect(call).toBeDefined();
-                expect(JSON.parse(call[1].body)).toMatchObject({
+                expect(JSON.parse(call![1].body)).toMatchObject({
                     changes: { listed: false },
                 });
             });

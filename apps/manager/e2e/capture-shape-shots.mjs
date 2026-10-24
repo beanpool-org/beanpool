@@ -87,7 +87,73 @@ try {
             await context.close();
         }
 
-        // 4. Admin view (read-only with reason and no controls)
+        // 4. Listed row with lock, expanded showing switch and reasons beside it
+        {
+            const { context, page } = await openSettings(browser, origin, {
+                width: WIDTH,
+                height: 800,
+                textScale: 1.3,
+                screen: { tab: 'shape' },
+                colorScheme: theme,
+                overrides: {
+                    '/api/local/admin/community-shape': (json) => ({
+                        ...json,
+                        settings: {
+                            ...json.settings,
+                            listed: {
+                                value: false,
+                                configured: true,
+                                source: 'owner',
+                                lock: {
+                                    code: 'held_back',
+                                    why: 'Held back: this community has no name of its own yet. Set one in Node Identity to be listed.',
+                                },
+                            },
+                        },
+                    }),
+                },
+            });
+            if (!isDark) {
+                await page.evaluate(() => document.documentElement.classList.remove('dark'));
+            }
+            await page.waitForSelector('[data-testid="community-shape-section"]', { timeout: 10000 });
+            await settle(page);
+            const listedRow = page.getByTestId('shape-row-listed');
+            await listedRow.scrollIntoViewIfNeeded();
+            const expandBtn = page.getByTestId('shape-expand-listed');
+            await expandBtn.click();
+            await page.waitForSelector('[data-testid="shape-row-listed"] input[type="checkbox"]', { timeout: 5000 });
+            await settle(page);
+            const file = path.join(OUT_DIR, `shape-listed-locked-${theme}.png`);
+            await listedRow.screenshot({ path: file });
+            console.log(`Saved ${file}`);
+            await context.close();
+        }
+
+        // 5. Changes list
+        {
+            const { context, page } = await openSettings(browser, origin, {
+                width: WIDTH,
+                height: 800,
+                textScale: 1.3,
+                screen: { tab: 'shape' },
+                colorScheme: theme,
+            });
+            if (!isDark) {
+                await page.evaluate(() => document.documentElement.classList.remove('dark'));
+            }
+            await page.waitForSelector('[data-testid="community-shape-section"]', { timeout: 10000 });
+            await settle(page);
+            const auditLog = page.getByTestId('shape-audit-log');
+            await auditLog.scrollIntoViewIfNeeded();
+            await settle(page);
+            const file = path.join(OUT_DIR, `shape-changes-${theme}.png`);
+            await auditLog.screenshot({ path: file });
+            console.log(`Saved ${file}`);
+            await context.close();
+        }
+
+        // 6. Admin view (read-only with reason and no controls)
         {
             const { context, page } = await openSettings(browser, origin, {
                 width: WIDTH,
@@ -110,7 +176,7 @@ try {
             await context.close();
         }
 
-        // 5. Home Card
+        // 7. Home Card
         {
             const { context, page } = await openSettings(browser, origin, {
                 width: WIDTH,

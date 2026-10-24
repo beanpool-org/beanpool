@@ -79,9 +79,10 @@
         </ul>
         <p>A grant can be for no more than the Commons holds now plus what came into it in the last 30 days. A bigger one is refused when you start it.</p>
         <h2>Who can start a Decision</h2>
-        <p>Any active member whose credit is not frozen, and who has traded in the market or was given a trust badge by an admin. A vouch on its own is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.</p>
+        <p>Any active member whose credit is not frozen, and who has traded in the market. A trust badge or a vouch is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.</p>
         <h2>Who can vote</h2>
         <p>Any active member whose credit is not frozen, and who joined <strong>before</strong> the Decision opened. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.</p>
+        <p>Nobody votes on a Decision to remove them, and they are not counted in its turnout. A member an admin has suspended still votes on every other Decision while the community votes on removing them, and is counted in their turnout, so suspending someone cannot change a vote (see &quot;Emergency suspension&quot;).</p>
         <h2>How votes count</h2>
         <ul>
             <li>Decisions about a member: <strong>one member, one vote</strong>. Yes or No.</li>
@@ -123,15 +124,18 @@
             <li>After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.</li>
             <li>A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.</li>
             <li>When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.</li>
-            <li>The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote cannot take that away; the app says so if you try. An owner can take an admin's role away first, and after that they are a member like any other.</li>
+            <li>The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote someone proposes cannot take that away; the app says so if you try. Nor does the vote that opens when one of them is suspended (see below). An owner can take an admin's role away first, and after that they are a member like any other.</li>
         </ul>
         <h2>Emergency suspension</h2>
         <p>An admin can suspend a member at once, for example to stop harm. They must give a reason that members can read.</p>
         <ul>
-            <li>At the same moment, a 7-day Decision opens: &quot;Keep this suspension?&quot;.</li>
-            <li>It needs the usual turnout and 60% Yes.</li>
-            <li>If it does not pass, or too few people vote, the suspension lifts by itself.</li>
+            <li>At the same moment, a 7-day Decision opens on removing them: &quot;Remove …?&quot;. An admin acting on a report can suspend the same way, and the same Decision opens.</li>
+            <li>While it lasts, the member's listings are off the Market and the map, and they can't invite anyone or answer a request to join. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), and finish or cancel deals they already have. It all comes back when the suspension ends.</li>
+            <li>It is decided as any removal is: 25% turnout and 66% Yes. The suspended member cannot vote on it, and still votes on every other Decision.</li>
+            <li>If it passes, they stay suspended for the 7 days of a removal's wait, and are then removed (see &quot;Removing a member&quot;).</li>
+            <li>If it does not pass, or too few people vote, the suspension lifts when the vote closes.</li>
             <li>An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.</li>
+            <li>An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the suspension ends when it closes, and they keep their role.</li>
         </ul>
         <p>On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.</p>
         <h2>What admins can and cannot do</h2>
@@ -193,7 +197,7 @@
             <li><a href="groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
             <li><a href="people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 153.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 154.</p>
     </main>
 </body>
 </html>

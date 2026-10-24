@@ -13,8 +13,11 @@
  *      wizard's record moves on and the anchor is the community. On the node: that key is a member, node_roles says owner,
  *      the code is burned (claim-code.txt gone, K and the salt gone).
  *   2. The same claim again, with the same key: answered as the claim was (`again`), and nothing new on the node.
- *   3. A second phone with no account claims too: 409, the owner check says it is no member there (403), and the key it
- *      made comes off it with its record. The node still has one owner.
+ *   3. A second phone with no account claims too: 409, the owner check says it is no member there (403 `not_a_member`),
+ *      and the key it made comes off it with its record. The node still has one owner.
+ *   4. The first phone back at its claim with the answer lost (a restart before the finish), and its owner check delivered
+ *      twice by the network: the phone reads the second answer, the node's refusal of a nonce already spent (403), which
+ *      says nothing of who owns it. The owner's key and its record stay; asked again, the node says owner (#2433 review).
  * Nothing else is contacted: the phone's fetch is held to this node's address, the global community and the key vault
  * included.
  */
@@ -49,7 +52,7 @@ vi.mock('expo-secure-store', () => ({
 
 import { loadIdentity } from '../identity';
 import { ownerCheckViaRole, readClaimStatus } from '../node-claim';
-import { claimKeyForThisPhone, claimWithKey, finishClaim } from '../claim-key';
+import { checkOwnClaim, claimKeyForThisPhone, claimWithKey, finishClaim } from '../claim-key';
 import { getPendingOnboarding } from '../onboarding-state';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 
@@ -68,6 +71,10 @@ const sent: { method: string; path: string; status: number }[] = [];
 const elsewhere: string[] = [];
 /** The node takes the next claim, and its answer never reaches the phone (a dropped connection on the way back). */
 let loseNextClaimAnswer = false;
+/** The next owner check reaches the node twice, the same signed request, and the phone reads the second answer. */
+let resendNextOwnerCheck = false;
+/** What the node answered each owner check (GET /api/node-admin/me) the phone read. */
+const ownerCheckAnswers: unknown[] = [];
 
 function control<T = any>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
     const id = nextId++;
@@ -123,13 +130,23 @@ beforeAll(async () => {
             throw new TypeError(`Network request failed: the phone contacted ${href}`);
         }
         const { signal: _signal, ...rest } = init ?? {};
-        const res = await realFetch(input, rest);
+        let res = await realFetch(input, rest);
         const path = new URL(href).pathname;
         sent.push({ method: String(init?.method ?? 'GET'), path, status: res.status });
         if (loseNextClaimAnswer && path === '/api/local/claim' && init?.method === 'POST') {
             loseNextClaimAnswer = false;
             await res.text();
             throw new TypeError('Network request failed');
+        }
+        if (path === '/api/node-admin/me') {
+            if (resendNextOwnerCheck) {
+                // A network that sends a GET again after a reset connection: the same headers, so the same nonce.
+                resendNextOwnerCheck = false;
+                await res.text();
+                res = await realFetch(input, rest);
+                sent.push({ method: 'GET', path, status: res.status });
+            }
+            ownerCheckAnswers.push(await res.clone().json().catch(() => null));
         }
         return res;
     }) as typeof fetch;
@@ -159,6 +176,8 @@ let codeId = '';
 /** What the first phone read and typed: the code, and the salt its status gave. */
 let code = '';
 let salt = '';
+/** The first phone as the claim left it before the finish: the owner's key, and the claim's record still out. */
+let claimOutPhone: { async: Map<string, string>; secure: Map<string, string> } | null = null;
 
 describe('a self-hosted community\'s first owner, on a phone with no account, needs nothing of ours', () => {
     it('1. the claim makes the account: the key on the phone before the POST, the answer lost, the node asked, owner; the code burned', async () => {
@@ -196,6 +215,7 @@ describe('a self-hosted community\'s first owner, on a phone with no account, ne
         expect(stored).toMatchObject({ publicKey: owner, callsign: 'Olive' });
         expect(stored?.mnemonic).toHaveLength(12);
         expect(await getPendingOnboarding()).toMatchObject({ step: 'claim', flow: 'claim', anchorUrl: URL_BASE, freshKey: owner, joinsOut: 1, claimCodeId: codeId });
+        claimOutPhone = { async: new Map(mem.async), secure: new Map(mem.secure) };
 
         const kept = await finishClaim(URL_BASE, out.identity, status.communityName, null);
         expect(kept.publicKey).toBe(owner);
@@ -253,6 +273,8 @@ describe('a self-hosted community\'s first owner, on a phone with no account, ne
         });
         expect(out).toMatchObject({ outcome: { kind: 'already-claimed' }, madeHere: true, released: true });
         expect(sent.slice(before).map(s => `${s.method} ${s.path} ${s.status}`)).toEqual(['POST /api/local/claim 409', 'GET /api/node-admin/me 403']);
+        // The node's own refusal of a key that is no member there, the one 403 the owner check reads as another owner's.
+        expect(ownerCheckAnswers.at(-1)).toMatchObject({ code: 'not_a_member' });
         // This phone is as it was before the scan.
         expect(await loadIdentity()).toBeNull();
         expect(await getPendingOnboarding()).toBeNull();
@@ -260,6 +282,38 @@ describe('a self-hosted community\'s first owner, on a phone with no account, ne
         // The node: one owner, the first phone's; the second key is no member.
         expect(await sql('SELECT member_pubkey FROM node_roles WHERE role = ?', ['owner'])).toEqual([{ member_pubkey: owner }]);
         expect(await sql('SELECT COUNT(*) AS n FROM members WHERE public_key = ?', [key.identity.publicKey])).toEqual([{ n: 0 }]);
+        mem.async = firstPhone.async;
+        mem.secure = firstPhone.secure;
+    }, STEP_MS);
+
+    it('4. the owner\'s check delivered twice: the second answer is a spent nonce\'s, no answer, and the owner\'s key stays', async () => {
+        const firstPhone = { async: new Map(mem.async), secure: new Map(mem.secure) };
+        // The first phone as the claim left it, its answer lost: the app restarted before the finish.
+        expect(claimOutPhone).not.toBeNull();
+        mem.async = new Map(claimOutPhone!.async);
+        mem.secure = new Map(claimOutPhone!.secure);
+        await control('limiters');
+        const key = { identity: (await loadIdentity())!, createdHere: true };
+        expect(key.identity.publicKey).toBe(owner);
+        const record = await getPendingOnboarding();
+        expect(record).toMatchObject({ step: 'claim', flow: 'claim', freshKey: owner, joinsOut: 1 });
+
+        resendNextOwnerCheck = true;
+        const before = sent.length;
+        expect(await checkOwnClaim(URL_BASE, key, ownerCheckViaRole)).toEqual({ outcome: { kind: 'check-again' }, released: false });
+        expect(sent.slice(before).map(s => `${s.method} ${s.path} ${s.status}`)).toEqual([
+            'GET /api/local/claim 200', 'GET /api/node-admin/me 200', 'GET /api/node-admin/me 403',
+        ]);
+        // The phone read the node's refusal of the spent nonce: not its refusal of a non-member.
+        expect(ownerCheckAnswers.at(-1)).toMatchObject({ error: 'Replay detected: nonce already used' });
+        expect(ownerCheckAnswers.at(-1)).not.toHaveProperty('code');
+        // The owner's key is still on the phone, with the claim's record: nothing came off.
+        expect((await loadIdentity())?.publicKey).toBe(owner);
+        expect(await getPendingOnboarding()).toEqual(record);
+
+        // Asked again (Check again): the node says owner.
+        expect(await checkOwnClaim(URL_BASE, key, ownerCheckViaRole)).toEqual({ outcome: { kind: 'owner', callsign: null }, released: false });
+        expect((await loadIdentity())?.publicKey).toBe(owner);
         mem.async = firstPhone.async;
         mem.secure = firstPhone.secure;
     }, STEP_MS);

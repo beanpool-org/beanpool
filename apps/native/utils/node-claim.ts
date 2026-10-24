@@ -287,11 +287,20 @@ export async function readNodeHasAddress(origin: string, fetchImpl: Fetch = fetc
 }
 
 /**
+ * The node's refusal of a key that is no member there (apps/server engine/members.ts NOT_A_MEMBER_CODE): its read gate's,
+ * for a key with no member row, and node-admin.ts's, for one that is no active member.
+ */
+const NOT_A_MEMBER = 'not_a_member';
+
+/**
  * {@link OwnerCheck} through the signed role lookup the app already uses (`GET /api/node-admin/me`, node-admin.ts). Only
- * the node saying so is "someone else owns it": a role that is not owner, or 403 (not a member here). Anything else is no
- * answer ("check again"): a 429 or a 5xx, a 401 for the phone's clock, a 421 for a host the node's names don't take yet,
- * an older node's 404. A claim's own key comes off the phone on "someone else owns it" (utils/claim-key.ts), so a key
- * the node may hold as owner is never taken for someone else's.
+ * the node saying so is "someone else owns it": a role it names that is not owner, or its refusal of a key that is no
+ * member there (403 `not_a_member`). Anything else is no answer ("check again"): a 429 or a 5xx, a 401 for the phone's
+ * clock, a 421 for a host the node's names don't take yet, an older node's 404, a 2xx that names no role, and every other
+ * 403, which the signature check gives for reasons that say nothing about who owns the node (a nonce already spent by
+ * the same request sent twice, a signature it couldn't check, a replaced or closed key). A claim's own key comes off the
+ * phone on "someone else owns it" (utils/claim-key.ts), so a key the node may hold as owner is never taken for someone
+ * else's.
  */
 export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
     try {
@@ -299,10 +308,14 @@ export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
-        if (res.status === 403) return 'not-owner';
+        if (res.status === 403) {
+            const refusal = await res.json().catch(() => null) as { code?: unknown } | null;
+            return refusal?.code === NOT_A_MEMBER ? 'not-owner' : null;
+        }
         if (!res.ok) return null;
         const body = await res.json().catch(() => null) as { role?: unknown } | null;
-        if (!body) return null;
+        // The node names the role, or none (null).
+        if (!body || !(typeof body.role === 'string' || body.role === null)) return null;
         return body.role === 'owner' ? 'owner' : 'not-owner';
     } catch {
         return null;

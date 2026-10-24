@@ -397,7 +397,13 @@ describe('the owner check after a lost answer', () => {
 
     it('owner → owner; another role or none → not owner; 429 or 5xx → no answer', async () => {
         const cases: Array<[number, unknown, string | null]> = [
-            [200, { role: 'owner' }, 'owner'], [200, { role: 'admin' }, 'not-owner'], [403, {}, 'not-owner'],
+            [200, { role: 'owner' }, 'owner'], [200, { role: 'admin' }, 'not-owner'], [200, { role: null }, 'not-owner'],
+            // The node's refusal of a key that is no member there, the route's and the read gate's (apps/server
+            // routes/node-admin.ts, https-server.ts): not a member, so not the owner.
+            [403, { error: 'Not an active member of this community', code: 'not_a_member' }, 'not-owner'],
+            [403, { error: 'Read access requires a member identity', code: 'not_a_member' }, 'not-owner'],
+            // A 403 that says nothing of who is a member, and a 2xx that names no role: no answer (#2433 review).
+            [403, {}, null], [200, {}, null],
             [429, {}, null], [503, {}, null],
         ];
         for (const [status, body, want] of cases) {
@@ -721,6 +727,74 @@ describe('the claim that makes the account', () => {
                 return json(status, { error: 'nope' });
             }) as any);
             expect(await ownerCheckViaRole(ORIGIN, identity), String(status)).toBeNull();
+            spy.mockRestore();
+        }
+    });
+
+    /**
+     * The 403s the node's signature check gives before any route (apps/server engine/member-signature.ts, https-server.ts)
+     * say nothing of who owns the node. A spent nonce comes back to a request delivered twice (the nonce is fixed per
+     * request, and a network may send a GET again after a reset connection), so it can be the owner's own key that is
+     * refused (#2433 review).
+     */
+    const OTHER_403S: unknown[] = [
+        { error: 'Replay detected: nonce already used' },
+        { error: 'Invalid cryptographic signature' },
+        { error: 'Signature validation failed' },
+        { error: 'This key was replaced by a new one, so this community no longer accepts it. Use the device or the 12 words that hold the new key.', code: 'key_invalidated' },
+        { error: 'This key’s account in this community was closed, so the community no longer accepts it.', code: 'account_closed' },
+        { error: 'Access denied by Gateway Admin IP allowlist' },
+        { error: 'nope' },
+        {},
+        null,
+    ];
+    /** The owner check's GET /api/node-admin/me, answered `me` (and the request-signing lookup it may make first). */
+    const answerOwnerCheck = (me: () => Response) => vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+        if (String(url).endsWith('/api/community/info')) return json(200, { requestSigning: 2 });
+        if (String(url).endsWith('/api/node-admin/me')) return me();
+        throw new Error(`unexpected ${url}`);
+    }) as any);
+
+    it('the owner check: a 403 that is not the node\'s refusal of a non-member is no answer, never "someone else"', async () => {
+        const identity = { publicKey: PUB, privateKey: SEED };
+        for (const body of OTHER_403S) {
+            const spy = answerOwnerCheck(() => (body === null ? new Response('<html>Forbidden</html>', { status: 403 }) : json(403, body)));
+            expect(await ownerCheckViaRole(ORIGIN, identity), JSON.stringify(body)).toBeNull();
+            spy.mockRestore();
+        }
+    });
+
+    it('a claim whose answer was lost, and an owner check refused for anything but not being a member: the key and the record stay', async () => {
+        const { checkOwnClaim } = await import('../claim-key');
+        for (const body of OTHER_403S) {
+            const why = JSON.stringify(body);
+            phone.async.clear(); phone.secure.clear();
+            // The claim lands, its answer lost; the node says it has an owner now, and the owner check is refused.
+            const key = await drafted();
+            const lost = node(() => { throw new Error('connection reset'); }, [claimed]);
+            let spy = answerOwnerCheck(() => (body === null ? new Response('<html>Forbidden</html>', { status: 403 }) : json(403, body)));
+            const out = await claimWith(key, lost.fetchImpl, ownerCheckViaRole);
+            expect(out, why).toMatchObject({ outcome: { kind: 'check-again' }, madeHere: true, released: false });
+            expect(stored()?.publicKey, why).toBe(key.identity.publicKey);
+            expect(record(), why).toMatchObject({ step: 'claim', flow: 'claim', freshKey: key.identity.publicKey, joinsOut: 1 });
+            // The POST's own 409, then the same refusal: no answer either.
+            const refused = node(() => json(409, { code: 'claim_already_claimed' }));
+            expect(await claimWith({ identity: stored(), createdHere: true }, refused.fetchImpl, ownerCheckViaRole), why)
+                .toMatchObject({ outcome: { kind: 'check-again' }, released: false });
+            // Check again, the same refusal: kept.
+            const later = node(() => { throw new Error('no POST'); }, [claimed]);
+            expect(await checkOwnClaim(ORIGIN, { identity: stored(), createdHere: true }, ownerCheckViaRole, later.fetchImpl), why)
+                .toEqual({ outcome: { kind: 'check-again' }, released: false });
+            expect(stored()?.publicKey, why).toBe(key.identity.publicKey);
+            expect(record(), why).toMatchObject({ step: 'claim', freshKey: key.identity.publicKey });
+            spy.mockRestore();
+            // And when the node says the key is no member there, another key owns it: the key comes off.
+            spy = answerOwnerCheck(() => json(403, { error: 'Read access requires a member identity', code: 'not_a_member' }));
+            const last = node(() => { throw new Error('no POST'); }, [claimed]);
+            expect(await checkOwnClaim(ORIGIN, { identity: stored(), createdHere: true }, ownerCheckViaRole, last.fetchImpl), why)
+                .toEqual({ outcome: { kind: 'already-claimed' }, released: true });
+            expect(stored(), why).toBeNull();
+            expect(record(), why).toBeNull();
             spy.mockRestore();
         }
     });

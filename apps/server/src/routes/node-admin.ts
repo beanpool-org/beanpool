@@ -22,6 +22,7 @@ import { getAdminQueue } from '../engine/admin-queue.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { issueBreakGlassCode } from '../admin-key-auth.js';
 import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR } from '../engine/member-signature.js';
+import { NOT_A_MEMBER_CODE } from '../engine/members.js';
 import type { RouteDeps } from './types.js';
 
 export function createNodeAdminRoutes(_deps: RouteDeps): Router {
@@ -36,10 +37,12 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
             return null;
         }
         // A visitor's row is answered as a key with no row is: a role it holds from before the visitors' rule acts for nothing.
+        // The code, as the read gate's (https-server.ts), is what the app's owner check reads (native node-claim.ts
+        // ownerCheckViaRole): a key that is no active member here owns nothing here.
         const member = getMember(actor);
         if (!member || member.status !== 'active' || isVisitorKey(actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Not an active member of this community' };
+            ctx.body = { error: 'Not an active member of this community', code: NOT_A_MEMBER_CODE };
             return null;
         }
         return actor;

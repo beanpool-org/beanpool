@@ -105,6 +105,9 @@ describe('Wide screen layout: The Pulse', () => {
         expect(feedContainer.className).toContain('grid-cols-1');
         expect(feedContainer.className).toMatch(/md:grid-cols-2|sm:grid-cols-2/);
         expect(feedContainer.className).toMatch(/lg:grid-cols-3|xl:grid-cols-3/);
+
+        // Pulse feed card should not have justify-between on root article (detaches author header from thumbnail in grid stretch)
+        expect(article.className).not.toContain('justify-between');
     });
 });
 

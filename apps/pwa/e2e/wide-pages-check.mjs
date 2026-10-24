@@ -8,6 +8,7 @@
  * 3. Captures screenshots of Pulse, Commons, Tools, Channels, and Chat
  *    at 768, 1024, 1280, 1600 and at 320 @ 130% text, in light and dark themes (<= 900px crops).
  */
+/* global console, process, document */
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +19,6 @@ const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(PWA_DIR);
 const SHOTS_DIR = path.join(PWA_DIR, 'e2e', 'shots', 'wide-pages');
 
-const WINDOW_WIDTHS = [320, 768, 1024, 1280, 1600];
 const TEXT_SCALES = [1.0, 1.3];
 const PAGES = ['pulse', 'commons', 'tools', 'channels', 'chat'];
 

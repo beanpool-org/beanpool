@@ -13,9 +13,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem
 vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(), deleteItemAsync: vi.fn() }));
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { checkGroupCryptoVectors } from '@beanpool/core/group-line-vectors';
-import { groupCryptoForVectors, sealLine, openLine, makeKeySuccession, walkKeySuccession, type FormerKey } from '../group-chat-crypto';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import {
+    checkGroupCryptoVectors, checkGroupPhotoVector, GROUP_PHOTO_VECTOR, GROUP_VECTOR_GROUP, GROUP_VECTOR_KEY_HEX, GROUP_VECTOR_PEOPLE, GROUP_VECTOR_RECORD,
+    type GroupLineVector,
+} from '@beanpool/core/group-line-vectors';
+import {
+    groupCryptoForVectors, sealLine, openLine, makeKeySuccession, walkKeySuccession, groupMessageKey, openGroupLineWithMessageKey, GroupLineNotVerifiedError,
+    type FormerKey, type GroupLinePart,
+} from '../group-chat-crypto';
 import {
     groupLineView, searchShownLines, earlierKeyDetails, GROUP_LINE_FORMER_MEMBER, GROUP_LINE_NOT_IN_GROUP, GROUP_LINE_UNVERIFIED_NAME,
     GROUP_LINE_UNVERIFIED_TEXT, GROUP_LINE_UNVERIFIED_DETAILS, GROUP_LINE_WAITING_KEY_TEXT, type DisplayRosterRow, type GroupLineDisplayContext,
@@ -72,6 +78,24 @@ function ctx(roster: DisplayRosterRow[], over: Partial<GroupLineDisplayContext> 
 describe('the phone\'s crypto door runs core\'s frozen vectors', () => {
     it('checkGroupCryptoVectors passes against utils/group-chat-crypto.ts', () => {
         checkGroupCryptoVectors(groupCryptoForVectors);
+    });
+
+    it('the photo pair (caption and photo under one message key) re-makes, opens and refuses through the door', () => {
+        checkGroupPhotoVector(groupCryptoForVectors);
+    });
+
+    it("the phone's own openLine opens a group photo's caption and photo, refuses the photo as words; one message key opens both", () => {
+        const { caption, photo } = GROUP_PHOTO_VECTOR;
+        const key = hexToBytes(GROUP_VECTOR_KEY_HEX);
+        const ref = (v: GroupLineVector, part: GroupLinePart = v.part) => ({
+            groupId: GROUP_VECTOR_GROUP, epoch: GROUP_VECTOR_RECORD.epoch, senderPubHex: GROUP_VECTOR_PEOPLE[v.from].publicKey,
+            messageId: v.messageId, part, replyToId: v.replyToId ?? null,
+        });
+        expect(openLine(caption.payload, ref(caption), key)).toEqual({ text: caption.text, after: caption.after });
+        expect(openLine(photo.payload, ref(photo), key)).toEqual({ text: photo.text, after: null });
+        expect(() => openLine(photo.payload, ref(photo, 'body'), key)).toThrow(GroupLineNotVerifiedError);
+        const mk = groupMessageKey(key, photo.messageId);
+        expect([caption, photo].map((v) => openGroupLineWithMessageKey(v.payload, ref(v), mk).text)).toEqual([caption.text, photo.text]);
     });
 });
 

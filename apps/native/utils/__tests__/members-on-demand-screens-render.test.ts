@@ -122,6 +122,8 @@ vi.mock('expo-file-system/legacy', () => ({
 }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
+// A locked group chat's photo button (GroupChatView): nothing here picks one.
+vi.mock('expo-image-picker', () => ({ requestCameraPermissionsAsync: vi.fn(), launchCameraAsync: vi.fn(), launchImageLibraryAsync: vi.fn() }));
 vi.mock('expo-apple-authentication', () => ({}));
 vi.mock('expo-web-browser', () => ({ openAuthSessionAsync: vi.fn(), maybeCompleteAuthSession: () => {} }));
 vi.mock('expo-linking', () => ({ createURL: (p: string) => `beanpool://${p}`, openURL: vi.fn() }));

@@ -27,6 +27,24 @@ import { samplePoolVoting } from './showcase/sample-screens';
 import { signedRequestWords } from './signed-request-lines';
 
 /**
+ * The question Decide's button and the Commons "+" ask before a Decision can be proposed, whole, in the member's language.
+ * With Beans on, a member proposes once they have completed a trade (or as a node admin). With Beans off no trade can be made,
+ * so the node lets only its admins propose (checkProposalStanding), and nothing may ask for a trade. True when it refused.
+ */
+export function proposeRefusal(canPropose: boolean, hasOpenDecision: boolean, beans: boolean): boolean {
+    if (!canPropose) {
+        if (beans) Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
+        else Alert.alert(t('Only Admins Propose Here'), t('On this community, only node admins can propose a Decision.'));
+        return true;
+    }
+    if (hasOpenDecision) {
+        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
+        return true;
+    }
+    return false;
+}
+
+/**
  * What a Decision does, what it touches and where it ended, as the node names them: word() keys, shown through t(). A
  * name this build doesn't know is shown as the node wrote it (an effect title-cased, a status in capitals, as always).
  * The tables' own names only (a "constructor" is not one).
@@ -687,14 +705,16 @@ export function DecideSection({
             {/* OPEN DECISIONS VIEW */}
             {activeView === 'open' && (
                 <>
-                    {/* Propose Decision Banner (a completed trade or a node admin; 1 open per author; no bond) */}
+                    {/* Propose Decision Banner (a completed trade or a node admin, admins only with Beans off; 1 open per author; no bond) */}
                     <View style={styles.proposeBanner}>
                         <View style={styles.proposeHeaderRow}>
                             <Text style={styles.proposeTitle}>{t('🌱 Propose Community Action')}</Text>
                             <Text style={{ fontSize: 12, color: colors.text.muted }}>{t('No bond required')}</Text>
                         </View>
                         <Text style={styles.proposeDesc}>
-                            {t('Binding decisions execute automatically upon passing (§3.7). Open to members who have completed a trade, and to node admins.')}
+                            {showsBeans
+                                ? t('Binding decisions execute automatically upon passing (§3.7). Open to members who have completed a trade, and to node admins.')
+                                : t('Binding decisions execute automatically upon passing (§3.7). On this community, only node admins propose them.')}
                         </Text>
                         {preview ? (
                             <LocalCommunityMark variant="action" feature="decisions" label={t('+ Propose a Decision')} />
@@ -704,14 +724,7 @@ export function DecideSection({
                                 accessibilityLabel={t('Propose a Community Decision')}
                                 style={[styles.proposeBtn, (!canPropose || hasOpenDecision) && styles.proposeBtnDisabled]}
                                 onPress={() => {
-                                    if (!canPropose) {
-                                        Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
-                                        return;
-                                    }
-                                    if (hasOpenDecision) {
-                                        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
-                                        return;
-                                    }
+                                    if (proposeRefusal(canPropose, hasOpenDecision, showsBeans)) return;
                                     onOpenPropose();
                                 }}
                             >
@@ -722,7 +735,9 @@ export function DecideSection({
                         )}
                         {!preview && !canPropose && (
                             <Text style={styles.gateWarning}>
-                                {t('⚠️ You can propose once you have completed a trade.')}
+                                {showsBeans
+                                    ? t('⚠️ You can propose once you have completed a trade.')
+                                    : t('⚠️ On this community, only node admins can propose a Decision.')}
                             </Text>
                         )}
                         {!preview && canPropose && hasOpenDecision && (

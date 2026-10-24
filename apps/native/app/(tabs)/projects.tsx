@@ -10,7 +10,7 @@ import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
 import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
-import { DecideSection } from '../../components/DecideSection';
+import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
@@ -42,19 +42,6 @@ const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
 };
 const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
 const named = (table: Readonly<Record<string, WordKey>>, name: string, asWritten: string) => (own(table, name) ? t(table[name]) : asWritten);
-
-/** The question the + and Decide's button ask before a Decision can be proposed: whole, in the member's language. */
-function proposeRefusal(canPropose: boolean, hasOpenDecision: boolean): boolean {
-    if (!canPropose) {
-        Alert.alert(t('Complete a Trade First'), t('You can propose a Decision once you have completed a trade.'));
-        return true;
-    }
-    if (hasOpenDecision) {
-        Alert.alert(t('Limit Reached'), t('You already have an open decision (limit 1 open decision per author).'));
-        return true;
-    }
-    return false;
-}
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -574,7 +561,7 @@ export default function ProjectsScreen() {
                                 balanceState={balanceState}
                                 onRefresh={loadData}
                                 onOpenPropose={() => {
-                                    if (proposeRefusal(canProposeDecision, hasOpenDecision)) return;
+                                    if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
                                     setShowProposeDecision(true);
                                 }}
                                 canPropose={canProposeDecision}
@@ -691,7 +678,7 @@ export default function ProjectsScreen() {
                         ]);
                         return;
                     }
-                    if (proposeRefusal(canProposeDecision, hasOpenDecision)) return;
+                    if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
                     setShowProposeDecision(true);
                 }}
             >

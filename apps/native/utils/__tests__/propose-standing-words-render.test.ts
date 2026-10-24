@@ -158,3 +158,63 @@ describe('removal card Commons pool debt line', () => {
         expect(text()).toMatch(/Commons pool/i);
     });
 });
+
+describe('Beans off: only node admins propose, and nothing asks for a trade nobody can make (#2434 review r4366787637)', () => {
+    const decide = (canPropose: boolean, beans: boolean) => createElement(DecideSection, {
+        decisions: [],
+        myPoolVoting: null,
+        identity: { publicKey: ME },
+        balanceState: { earnedCredit: 0, commons: 0 },
+        activeView: 'open',
+        onChangeView: () => {},
+        onRefresh: async () => {},
+        onOpenPropose: () => {},
+        canPropose,
+        hasOpenDecision: false,
+        features: { beans, decisions: true },
+    });
+    const alert = async () => vi.mocked((await import('react-native')).Alert.alert);
+
+    it('a member who is not an admin reads that only node admins propose here, and no trade', async () => {
+        await render(decide(false, false));
+        expect(text()).toContain('Binding decisions execute automatically upon passing (§3.7). On this community, only node admins propose them.');
+        expect(text()).toContain('⚠️ On this community, only node admins can propose a Decision.');
+        expect(text()).not.toMatch(/trade/i);
+    });
+
+    it('their Propose button says the same, never "Complete a Trade First"', async () => {
+        const a = await alert();
+        a.mockClear();
+        await render(decide(false, false));
+        act(() => { (host.querySelector('[aria-label="Propose a Community Decision"]') as HTMLElement).click(); });
+        expect(a).toHaveBeenCalledWith('Only Admins Propose Here', 'On this community, only node admins can propose a Decision.');
+    });
+
+    it('an admin sees no trade words either', async () => {
+        await render(decide(true, false));
+        expect(text()).not.toMatch(/trade/i);
+    });
+
+    it('the propose form\'s notice names admins only', async () => {
+        await render(createElement(ProposeDecisionModal, {
+            isOpen: true, onClose: () => {}, onCreated: () => {},
+            identity: { publicKey: ME, callsign: 'Me' }, commonsBalance: 0, treasuries: [], members: [],
+            features: { beans: false, decisions: true },
+        }));
+        expect(text()).toContain('No bond required. Open to node admins on this community. Open for 7 days. Closes and executes automatically.');
+        expect(text()).not.toMatch(/trade/i);
+    });
+
+    it('the shared refusal: Beans off → admins only; Beans on → a completed trade, as before', async () => {
+        const { proposeRefusal } = await import('../../components/DecideSection');
+        const a = await alert();
+        a.mockClear();
+        expect(proposeRefusal(false, false, false)).toBe(true);
+        expect(a).toHaveBeenLastCalledWith('Only Admins Propose Here', 'On this community, only node admins can propose a Decision.');
+        expect(proposeRefusal(false, false, true)).toBe(true);
+        expect(a).toHaveBeenLastCalledWith('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
+        expect(proposeRefusal(true, true, false)).toBe(true);
+        expect(a).toHaveBeenLastCalledWith('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
+        expect(proposeRefusal(true, false, false)).toBe(false);
+    });
+});

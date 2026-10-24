@@ -618,7 +618,9 @@ export function ProposeDecisionModal({
                             <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                             <Text style={styles.noBondText}>
                                 <Sentence
-                                    text={t('{bond} Open to members who have completed a trade, and to node admins. Open for 7 days. Closes and executes automatically.')}
+                                    text={showsBeans
+                                        ? t('{bond} Open to members who have completed a trade, and to node admins. Open for 7 days. Closes and executes automatically.')
+                                        : t('{bond} Open to node admins on this community. Open for 7 days. Closes and executes automatically.')}
                                     parts={{ bond: <Text style={{ fontWeight: '700' }}>{t('No bond required.')}</Text> }}
                                 />
                             </Text>

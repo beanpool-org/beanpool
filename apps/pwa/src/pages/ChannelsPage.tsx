@@ -191,7 +191,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
     const chosen = platformMeta(platform);
 
     return (
-        <div className="max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
+        <div className="max-w-2xl mx-auto p-4 sm:p-6 pb-24 min-h-full">
             {/* Header */}
             <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-nature-200 dark:border-nature-800">
                 <button

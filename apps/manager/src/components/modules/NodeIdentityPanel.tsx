@@ -69,31 +69,10 @@ export function NodeIdentityPanel({
     const lookupRef = useRef<AddressLookup | null>(null);
     const searchWrapperRef = useRef<HTMLDivElement>(null);
 
-    // Directory publishing flags. They come from the node config read, and only from an answer that carries them: a private
-    // preview answers anyone it doesn't give the whole config the service area alone, and the defaults below saved back
-    // switched "Share Location & Radius" on again. Until they load, or if they can't, the switches and the schedule are
-    // closed and Save leaves them all out, as it does the contacts.
+    // Directory publishing schedule. It comes from the node config read.
     const [directory, setDirectory] = useState<'loading' | 'loaded' | 'failed'>('loading');
-    const [publishLocation, setPublishLocation] = useState(true);
-    const [publishMembers, setPublishMembers] = useState(true);
-    // Off unless the node says the owner turned each on: a contact is published only by an owner's choice.
-    const [publishContactEmail, setPublishContactEmail] = useState(false);
-    const [publishContactPhone, setPublishContactPhone] = useState(false);
-    const [publishHealth, setPublishHealth] = useState(true);
     const [directoryPushIntervalHours, setDirectoryPushIntervalHours] = useState(12);
     const [lastDirectoryPush, setLastDirectoryPush] = useState<number | string | null>(null);
-
-    // "Ask to join" (G6): null until the node says it takes requests to join at all (a node from before G6 doesn't).
-    const [acceptKnocks, setAcceptKnocks] = useState<boolean | null>(null);
-    // Message requests (the server's engine/dm-requests.ts): null until the node says it has the setting.
-    const [dmRequests, setDmRequests] = useState<boolean | null>(null);
-    // Both are how this community works, changed only there (POST /api/local/admin/community-shape: an owner's, logged and
-    // told to every member), so Save sends one only when it differs from what the node said. The page "How this community
-    // works" takes these two boxes over (slice S4).
-    const loadedSwitches = useRef<{ knocks: boolean | null; dmRequests: boolean | null }>({ knocks: null, dmRequests: null });
-    const [openKnocks, setOpenKnocks] = useState<number | null>(null);
-    // Who answers a request to join follows who may invite (`door`, set under People & Safety → Invites & QR).
-    const [onlyAdminsAnswer, setOnlyAdminsAnswer] = useState(false);
 
     // Actions & status
     const [saving, setSaving] = useState(false);
@@ -159,15 +138,16 @@ export function NodeIdentityPanel({
                     } else {
                         setArea('failed');
                     }
-                    if (cfg.publishLocation !== undefined) {
-                        setPublishLocation(Boolean(cfg.publishLocation));
-                        if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
-                        setPublishContactEmail(cfg.publishContactEmail === true);
-                        setPublishContactPhone(cfg.publishContactPhone === true);
-                        if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
+                    if (cfg.directoryPushIntervalHours !== undefined || cfg.publishLocation !== undefined) {
                         if (cfg.directoryPushIntervalHours !== undefined) {
                             const parsedHours = Number(cfg.directoryPushIntervalHours);
-                            setDirectoryPushIntervalHours(!isNaN(parsedHours) ? parsedHours : 12);
+                            if (!isNaN(parsedHours)) {
+                                if ([1, 6, 12, 24].includes(parsedHours)) {
+                                    setDirectoryPushIntervalHours(parsedHours);
+                                } else if (parsedHours === 0) {
+                                    setDirectoryPushIntervalHours(0);
+                                }
+                            }
                         }
                         setDirectory('loaded');
                     } else {
@@ -175,24 +155,6 @@ export function NodeIdentityPanel({
                     }
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);
-                    }
-                    setOnlyAdminsAnswer(cfg.door === 'admins');
-                    if (typeof cfg.dmRequests === 'boolean') {
-                        setDmRequests(cfg.dmRequests);
-                        loadedSwitches.current.dmRequests = cfg.dmRequests;
-                    }
-                    if (typeof cfg.acceptKnocks === 'boolean') {
-                        setAcceptKnocks(cfg.acceptKnocks);
-                        loadedSwitches.current.knocks = cfg.acceptKnocks;
-                        // How many are waiting is the operator's only, so it is its own admin read.
-                        const knocksUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/knocks');
-                        const knocksRes = await fetch(knocksUrl, {
-                            headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                        }).catch(() => null);
-                        if (knocksRes && knocksRes.ok && mounted) {
-                            const knocks = await knocksRes.json().catch(() => ({}));
-                            if (typeof knocks.open === 'number') setOpenKnocks(knocks.open);
-                        }
                     }
                 } else if (mounted) {
                     setDirectory('failed');
@@ -469,9 +431,9 @@ export function NodeIdentityPanel({
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
                     ...passwordField(nodeCredential(activeNode)),
-                    // Only settings the node gave: switches that never loaded would write the form's defaults over its own.
-                    ...(directory === 'loaded'
-                        ? { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, directoryPushIntervalHours }
+                    // Only settings the node gave:
+                    ...(directory === 'loaded' && directoryPushIntervalHours !== 0
+                        ? { directoryPushIntervalHours }
                         : {}),
                     // Only an area the node gave: null clears the node's, and an unset pin that never loaded would send it.
                     ...(area === 'loaded'
@@ -484,27 +446,11 @@ export function NodeIdentityPanel({
                 }),
             });
 
-            // 3. Requests to join and message requests, where one changed: How this community works, the one place they
-            // change. An admin's is refused there in the node's words (an owner's choice).
-            const shapeChanges = {
-                ...(acceptKnocks !== null && acceptKnocks !== loadedSwitches.current.knocks ? { knocks: acceptKnocks } : {}),
-                ...(dmRequests !== null && dmRequests !== loadedSwitches.current.dmRequests ? { dmRequests } : {}),
-            };
-            let shapeRes: Response | null = null;
-            if (Object.keys(shapeChanges).length > 0) {
-                shapeRes = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-shape'), {
-                    method: 'POST',
-                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), changes: shapeChanges }),
-                });
-                if (shapeRes.ok) loadedSwitches.current = { knocks: acceptKnocks, dmRequests };
-            }
-
-            if (identityRes.ok && configRes.ok && (!shapeRes || shapeRes.ok)) {
+            if (identityRes.ok && configRes.ok) {
                 setSaveStatus({ text: 'Saved!', isError: false });
                 onRefreshDiag();
             } else {
-                const failingRes = !identityRes.ok ? identityRes : !configRes.ok ? configRes : shapeRes!;
+                const failingRes = !identityRes.ok ? identityRes : configRes;
                 const errData = await failingRes.json().catch(() => ({}));
                 setSaveStatus({
                     text: errData.totpRequired
@@ -521,14 +467,13 @@ export function NodeIdentityPanel({
     };
 
     const lastPublishedText = useMemo(() => {
-        if (directoryPushIntervalHours === 0) return 'Disabled';
         if (!lastDirectoryPush) return 'Never';
         try {
             return new Date(lastDirectoryPush).toLocaleString();
         } catch {
             return 'Never';
         }
-    }, [directoryPushIntervalHours, lastDirectoryPush]);
+    }, [lastDirectoryPush]);
 
     return (
         <div className="p-4 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-6 max-w-2xl w-full mx-auto font-sans">
@@ -775,7 +720,11 @@ export function NodeIdentityPanel({
                                 disabled={directory !== 'loaded'}
                                 className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             >
-                                <option value={0}>Never (Disabled)</option>
+                                {directoryPushIntervalHours === 0 && (
+                                    <option value={0} disabled>
+                                        {t('Not set: choose how often')}
+                                    </option>
+                                )}
                                 <option value={1}>Every 1 hour</option>
                                 <option value={6}>Every 6 hours</option>
                                 <option value={12}>Every 12 hours</option>
@@ -811,136 +760,6 @@ export function NodeIdentityPanel({
                         </p>
                     )}
 
-                    {/* Checkbox Toggles */}
-                    <div className="space-y-3 pt-2">
-                        <div>
-                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    id="publish-location"
-                                    type="checkbox"
-                                    checked={publishLocation}
-                                    onChange={(e) => setPublishLocation(e.target.checked)}
-                                    disabled={directory !== 'loaded'}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
-                                />
-                                <span>📍 Share Location &amp; Radius</span>
-                            </label>
-                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                {t('On: anyone can see roughly where your community is (to about a kilometre) and how far it reaches, on the map at beanpool.org and in the directory, so people nearby can find you and nobody starts a second community in your area. Off: only your members see it.')}
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    id="publish-members"
-                                    type="checkbox"
-                                    checked={publishMembers}
-                                    onChange={(e) => setPublishMembers(e.target.checked)}
-                                    disabled={directory !== 'loaded'}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
-                                />
-                                <span>👥 Share Member Count</span>
-                            </label>
-                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Shows the total number of users registered on your node to demonstrate community strength.
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    id="publish-contact-email"
-                                    type="checkbox"
-                                    checked={publishContactEmail}
-                                    onChange={(e) => setPublishContactEmail(e.target.checked)}
-                                    disabled={directory !== 'loaded'}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
-                                />
-                                <span>📧 Share Email in Directory</span>
-                            </label>
-                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Off unless you turn it on. Puts the Contact Email below in the public directory and on the map at beanpool.org, where anyone can read it, so people outside the community can ask you for an invite.
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    id="publish-contact-phone"
-                                    type="checkbox"
-                                    checked={publishContactPhone}
-                                    onChange={(e) => setPublishContactPhone(e.target.checked)}
-                                    disabled={directory !== 'loaded'}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
-                                />
-                                <span>📞 Share Phone in Directory</span>
-                            </label>
-                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Off unless you turn it on. Puts the Contact Phone below in the public directory and on the map at beanpool.org, where anyone can read it.
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                <input
-                                    id="publish-health"
-                                    type="checkbox"
-                                    checked={publishHealth}
-                                    onChange={(e) => setPublishHealth(e.target.checked)}
-                                    disabled={directory !== 'loaded'}
-                                    className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500 disabled:opacity-50"
-                                />
-                                <span>🖥️ Share Node Health &amp; Version</span>
-                            </label>
-                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                This information is <strong>not published</strong> on the website. It is used exclusively by the BeanPool development team for diagnostics, network health monitoring, and improving the protocol.
-                            </p>
-                        </div>
-
-                        {acceptKnocks !== null && (
-                            <div>
-                                <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                    <input
-                                        id="accept-knocks"
-                                        type="checkbox"
-                                        checked={acceptKnocks}
-                                        onChange={(e) => setAcceptKnocks(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
-                                    />
-                                    <span>🚪 Take Requests to Join</span>
-                                </label>
-                                <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                    People who find your community on the global node can ask to join, with a short message. {onlyAdminsAnswer
-                                        ? 'Only owners and admins can answer, since only they invite here (People & Safety → Invites & QR → Who may invite).'
-                                        : 'Any member can answer by inviting them.'} Turned off, nobody can ask, and members don&apos;t see requests.
-                                </p>
-                                {openKnocks !== null && (
-                                    <p id="open-knocks" className="text-[11px] text-nature-300 ml-6 mt-1 leading-normal">
-                                        {openKnocks === 0 ? 'No requests waiting.' : `${openKnocks} ${openKnocks === 1 ? 'request' : 'requests'} waiting for an answer.`}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-
-                        {dmRequests !== null && (
-                            <div>
-                                <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
-                                    <input
-                                        id="dm-requests"
-                                        type="checkbox"
-                                        checked={dmRequests}
-                                        onChange={(e) => setDmRequests(e.target.checked)}
-                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
-                                    />
-                                    <span>💬 Message Requests</span>
-                                </label>
-                                <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                    A member&apos;s first message to someone who hasn&apos;t added them, written to them or traded with them waits under Requests until that person accepts. On by default on the global community. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat.
-                                </p>
-                            </div>
-                        )}
-                    </div>
                 </div>
 
                 {/* Community Contacts */}
@@ -948,7 +767,7 @@ export function NodeIdentityPanel({
                     <div>
                         <h4 className="text-sm font-bold text-white m-0">Community Contacts</h4>
                         <p className="text-xs text-nature-400 mt-0.5 m-0">
-                            The name is public. The email and phone stay private unless you turn each on under Directory Publishing; then anyone can read it.
+                            The name is public. The email and phone stay private unless you turn each on under How this community works; then anyone can read it.
                         </p>
                         {contacts === 'failed' && (
                             <p id="contacts-not-loaded" role="status" className="text-[11px] text-amber-300 mt-1 m-0 leading-normal">

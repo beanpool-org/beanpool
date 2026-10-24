@@ -10,7 +10,7 @@ import { ReturnLinks, type ReturnLinksValue } from './ReturnLinks';
 
 /** Every section the manager draws. A tab saved by an older version that is not here (the copilot's 'ai') is ignored. */
 export const TAB_IDS = [
-    'home', 'people', 'economy', 'bulletin', 'appliance', 'overview', 'analytics', 'gateway', 'members', 'topology', 'invites',
+    'home', 'shape', 'people', 'economy', 'bulletin', 'appliance', 'overview', 'analytics', 'gateway', 'members', 'topology', 'invites',
     'onboarding', 'logs',
 ] as const;
 export type TabId = typeof TAB_IDS[number];
@@ -27,6 +27,7 @@ export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'of
 /** The single-node Settings sections, in menu order. lib/manual.test.ts reads the ids from this list. */
 export const singleNodeNavItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
     { id: 'home', label: 'Home', icon: '⚡' },
+    { id: 'shape', label: 'How it works', icon: '🧭' },
     { id: 'people', label: 'People & Safety', icon: '👥' },
     { id: 'economy', label: 'Shared Projects & Economy', icon: '🏛️' },
     { id: 'bulletin', label: 'Bulletin & News', icon: '📢' },

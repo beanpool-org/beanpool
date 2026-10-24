@@ -30,14 +30,15 @@
  *   - `private_preview`: the preview makes the door `admins`, takes no requests to join, shuts the open door and shows
  *     visitors nothing (private-preview.ts, door.ts, lockToPrivatePreview).
  *   - `invites_off`: no requests to join without invites (lockKnocksToInvites).
- *   - `beans_off`: no known floor without Beans (the engine's dial; setKnownFloorSettings refuses 409 `no_beans`).
- *   - `profile`: the open door and no invites leave no door to choose (doorSettingRefusal, 409 `door_set_by_profile`);
+ *   - `beans_off`: no known floor without Beans (the engine's dial reads off; the owner route refuses a change to it,
+ *     409 `beans_off`).
+ *   - `profile`: the open door and no invites leave no door to choose (the owner route refuses a join, 409 `profile`);
  *     Beans stay off while the open door is set on, since the first Bean that moved would shut it for good (lockToLedger);
  *     and the global kind is never a place in the directory (design §2.3), so Listed is its kind's there.
  *   - `server_env`: set in this server's env (the preview, connections, DIRECTORY_UNLISTED).
  *   - `held_back`: set to be listed, but nothing is sent (directory-publisher.ts: no name of its own, the address
- *     service's probation). `schedule_never`: set to be listed, but the update schedule is Never, so it is sent only when
- *     someone presses Publish Now (pushDirectoryNow reads no schedule).
+ *     service's probation). Listed is the one way not to be listed: the update schedule has no Never since slice S3
+ *     (a stored one was carried over to Listed off: config/community-shape-upgrade.ts).
  *   - `auth_hatch_open`: ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false open what only members should read.
  *   - `open_membership`: members on demand stays on while the whole directory is closed (lockOnDemandToOpenMembership).
  *   - `standby`: a standby never publishes to the directory.
@@ -81,7 +82,7 @@ import { adminActorName, COMMUNITY_ADMIN } from '../engine/admin-actor-name.js';
 export type ShapeSource = 'owner' | 'profile' | 'default' | 'server';
 
 export const SHAPE_LOCK_CODES = [
-    'ledger_moved', 'private_preview', 'invites_off', 'beans_off', 'profile', 'server_env', 'held_back', 'schedule_never',
+    'ledger_moved', 'private_preview', 'invites_off', 'beans_off', 'profile', 'server_env', 'held_back',
     'auth_hatch_open', 'open_membership', 'standby',
 ] as const;
 export type ShapeLockCode = (typeof SHAPE_LOCK_CODES)[number];
@@ -219,7 +220,6 @@ const LOCK_WORDS = {
         + (fromOverrides ? "this server's own rows set that (nodeProfile.openJoin, nodeProfile.invites)" : `this server's kind (${profile}) sets that`)
         + '. Whoever runs the server changes it.',
     onTheServer: (env: string) => `Set on the server (${env}). ${ASK_THE_SERVER}`,
-    scheduleNever: 'Set to be listed, but the directory update schedule is Never: it is sent only when someone presses Publish Now under Node Identity. Choose a schedule there to keep it listed.',
     pauseBesideOpenDoor: (setBy: string, words: boolean) =>
         `New members can't be paused here: anyone can also join through the open door, with ${words ? '12 secret words or a sign-in' : 'a sign-in'}, `
         + `and a pause would leave that door taking everyone. ${setBy} sets it: whoever runs the server shuts it first (nodeProfile.openJoin = false).`,
@@ -462,7 +462,7 @@ export function readShape(): Shape {
         knownFloor,
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
-        listed: listed(kind, standby, cfg, s, rows.directory, sourceOf('publishToDirectory')),
+        listed: listed(kind, standby, cfg, s, sourceOf('publishToDirectory')),
         shareLocation: share('publishLocation'),
         shareMemberCount: share('publishMembers'),
         shareEmail: share('publishContactEmail'),
@@ -483,23 +483,22 @@ export function readShape(): Shape {
 
 /**
  * Listed: whether the directory is sent this community's entry, as the publisher decides at each push (and its timer, at
- * the schedule): the switch, then DIRECTORY_UNLISTED, the schedule's Never, and the hold-backs (directoryHeldBack). A
- * standby sends nothing (the publisher asks that first); it is named only where the switch is on, so a standby whose
- * switch is off says what its main server's shape says. It never says the main server publishes: that server's env and
+ * the schedule): the switch, then DIRECTORY_UNLISTED and the hold-backs (directoryHeldBack). A standby sends nothing
+ * (the publisher asks that first); it is named only where the switch is on, so a standby whose switch is off says what
+ * its main server's shape says. It never says the main server publishes: that server's env and
  * hold-backs are its own. On the global kind it is the kind's (design §2.3), whatever the switch: the value stays what
  * the publisher does, and the lock says no owner changes it there.
  */
-function listed(kind: NodeProfile, standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, directory: Directory, source: ShapeSource): ShapeSetting<boolean> {
-    const run = listedAsPublished(standby, cfg, s, directory, source);
+function listed(kind: NodeProfile, standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, source: ShapeSource): ShapeSetting<boolean> {
+    const run = listedAsPublished(standby, cfg, s, source);
     return kind === 'global' ? { ...run, lock: lock('profile', LOCK_WORDS.listedByKind(kind)) } : run;
 }
 
-function listedAsPublished(standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, directory: Directory, source: ShapeSource): ShapeSetting<boolean> {
+function listedAsPublished(standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, source: ShapeSource): ShapeSetting<boolean> {
     const base = { configured: cfg.publishToDirectory, source };
     if (!s.publishToDirectory) return { ...base, value: false, lock: null };
     if (standby) return { ...base, value: false, lock: lock('standby', LOCK_WORDS.standbyListed) };
     if (directoryUnlistedByEnv()) return { ...base, value: false, lock: lock('server_env', HELD_BACK_UNLISTED_MESSAGE) };
-    if (directory.directoryPushIntervalHours === 0) return { ...base, value: false, lock: lock('schedule_never', LOCK_WORDS.scheduleNever) };
     const held = directoryHeldBack();
     if (held) return { ...base, value: false, lock: lock(held === 'unlisted' ? 'server_env' : 'held_back', HELD_BACK_WORDS[held]) };
     return { ...base, value: true, lock: null };

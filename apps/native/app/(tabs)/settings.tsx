@@ -1192,8 +1192,11 @@ export default function SettingsScreen() {
                 };
                 // An offline rename still waiting for pillar-sync's retry is a rename too: this Save may retire that retry
                 // (retireParkedPickAfterPublish), so it carries the name the member chose, or the node keeps the old one
-                // and the next answer from the community writes it back (#2439 review).
-                const pendingRename = (await AsyncStorage.getItem('pending_profile_sync')) === 'true' && newCallsign.length >= 2;
+                // and the next answer from the community writes it back (#2439 review). Only in the community the rename
+                // was made for: the flag is one for the phone, and another community's name is not this one's to send.
+                const pendingRename = (await AsyncStorage.getItem('pending_profile_sync')) === 'true'
+                    && (await AsyncStorage.getItem('pending_profile_sync_anchor')) === url
+                    && newCallsign.length >= 2;
                 if (renames || pendingRename) payloadObj.callsign = newCallsign;
                 // The one shared rule decides, so this Save cannot disagree with the wizard or
                 // with the pending-sync retry. It sends a photo picked in this session, else a
@@ -1241,6 +1244,9 @@ export default function SettingsScreen() {
 
             if (offline) {
                 await AsyncStorage.setItem('pending_profile_sync', 'true');
+                // Which community the rename waiting here is for (read by the next online Save, above).
+                if (url) await AsyncStorage.setItem('pending_profile_sync_anchor', url);
+                else await AsyncStorage.removeItem('pending_profile_sync_anchor');
                 // Park the session pick NEXT TO the flag, not only in the members row. The row
                 // is the retry's only other source for it, and the first members sync to land
                 // before the retry succeeds replaces it with the node's own URL — after which

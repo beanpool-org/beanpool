@@ -586,6 +586,26 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(mockDb.remoteCallsign).toBe('Marty Renamed');
     });
 
+    it('a rename waiting to sync in one community is never sent from a Save in another (#2439 Sonnet note: the flag is device-wide)', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+        expect(store.map.get('pending_profile_sync')).toBe('true');
+
+        // The member is now in another community, and saves there without touching the name.
+        store.map.set('beanpool_anchor_url', 'https://other.example.net');
+        const { updates } = mockNode();
+        await press('✏️ Edit');
+        await press('Save Profile');
+        const sent = updates.at(-1);
+        expect(sent, 'the Save reached the other community').toBeDefined();
+        expect(sent.callsign).toBeUndefined();
+    });
+
     it.each([
         ['no row yet (a community this phone has not synced)', null],
         ['a row with no photo', { public_key: KEY, callsign: 'Old Stale Marty', avatar_url: null }],

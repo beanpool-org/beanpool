@@ -535,6 +535,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     await storage.removeItem(CANONICAL_PROFILE_STORE_KEY);
     await storage.removeItem('pending_profile_avatar');
     await storage.removeItem('pending_profile_sync');
+    await storage.removeItem('pending_profile_sync_anchor');
     await storage.removeItem('beanpool_offer_draft');
     // The List sheet's "in your shop" choice beside that draft (utils/shop-choice.ts SHOP_CHOICE_KEY): kept per community, so
     // the next account there would get a false "not in your shop" or a shop it never asked for (#2372 review).

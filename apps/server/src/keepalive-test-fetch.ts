@@ -18,6 +18,12 @@ export async function localFetch(input: string | URL | Request, init?: RequestIn
     if (performance.now() - lastSettledAt > 4_000) await new Promise((r) => setTimeout(r, 100));
     try {
         return await fetch(input, init);
+    } catch (e: any) {
+        if (e?.cause?.code === 'ECONNRESET' || e?.code === 'ECONNRESET') {
+            await new Promise((r) => setTimeout(r, 100));
+            return await fetch(input, init);
+        }
+        throw e;
     } finally {
         lastSettledAt = performance.now();
     }

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lending and borrowing — BeanPool members' guide</title>
+    <meta name="description" content="The Tool shed keeps what you own and might lend, and who has it. List a thing in the Market, lend it outside BeanPool, and see what is out.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../help.html">Help</a>
+                <a href="../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#market">Market</a></p>
+        <h1>Lending and borrowing</h1>
+        <p class="lede">The Tool shed keeps what you own and might lend, and who has it. List a thing in the Market, lend it outside BeanPool, and see what is out.</p>
+        <h2>Opening the Tool shed</h2>
+        <p>Open the <strong>Commons</strong> tab, tap <strong>Tools</strong>, then <strong>Tool shed</strong>. If you put the Tool shed on your Home, its card opens it too.</p>
+        <p>The first time, it asks how you start. <strong>I already do this</strong> goes straight in. <strong>I'm starting out</strong> shows a few examples and links to this page.</p>
+        <h2>Your things</h2>
+        <p>Tap <strong>Add a thing</strong>. Give it a name. The rest is up to you: a photo, a category, its condition, what it is worth if it is lost or broken, how you lend it, the longest loan in days, and a note only you see.</p>
+        <ul>
+            <li>The photo stays on your phone (in the web app, in this browser). It goes to the Market only with a listing you post.</li>
+            <li><strong>If it's lost or broken</strong> is in your own words and money, like &quot;$120&quot; or &quot;like for like&quot;. It is settled between you and the borrower. BeanPool never holds or collects it.</li>
+            <li><strong>Your own note</strong> is for you: where it lives, a serial number.</li>
+        </ul>
+        <p>The list shows your newest things first, each with where it is: <strong>On your shelf</strong>, <strong>In your shop</strong>, <strong>Out on a loan</strong>, or <strong>With</strong> the person you lent it to. <strong>All</strong>, <strong>In your shop</strong>, <strong>Out</strong> and <strong>On your shelf</strong> narrow the list.</p>
+        <p>The Tool shed has room for some hundreds of things. It counts the room they take, not how many there are, so long notes and terms take more of it. Under <strong>Add a thing</strong> it says about how many more fit, going by the things you have. When it is full, it says so and keeps nothing new until you delete something or shorten some notes. Deleting a thing gives back all the room it took. A community server that hasn't been updated yet keeps half as much, and while the copy on your server is on, the Tool shed counts the room against that. If you switch the copy on with more than that server keeps, nothing changes: it says about how many things to delete first. Or leave the copy off, and your things stay on your phone (in the web app, in this browser) with all their room.</p>
+        <h2>Lending it through BeanPool</h2>
+        <p>Open a thing and tap <strong>List in your shop</strong>. On the phone, pick a fee first: <strong>Free</strong>, <strong>Beans per day</strong>, <strong>Beans per week</strong> or <strong>A fixed number of Beans</strong> (where Beans are off, it is free), then tap <strong>Go on to post</strong>. <strong>Put this in your shop</strong> is ticked there unless your shop is closed for now (see &quot;Your Shop&quot;). The Offer form opens with the thing's name, photo and how you lend it. Check it and tap <strong>Post</strong>. Nothing is posted before that, and if your community asks for a profile photo first, the form says so.</p>
+        <p>Then open the thing again, tap <strong>Link it to your Offer</strong> and pick the Offer you posted. Now the Tool shed knows it is in your shop.</p>
+        <p>Where your community's price guide has something like it, the thing says what the guide suggests a day or a week. Free is fine too.</p>
+        <p>Someone who wants to borrow it asks through the Offer, as for any Offer, and you agree it in the deal (see &quot;A deal step by step&quot;). While it is out, the thing says <strong>Out on a loan</strong>. When the deal is finished, its Offer is finished too, so the thing says <strong>Its Offer has gone from the Market</strong>. Tap <strong>List it again</strong> to post a new one, or <strong>Forget it</strong> to keep it on your shelf.</p>
+        <p><strong>Take out of your shop</strong> pauses its Offer. <strong>Put back in your shop</strong> puts the same Offer back in the Market.</p>
+        <p>A thing taken out of your shop can have its Offer back in the Market without the Tool shed: you put it back up in the Market itself, or you reopened a shop that was holding it. The thing then says <strong>Its Offer is up in the Market again</strong>: tap <strong>Put back in your shop</strong> and the Tool shed shows it in your shop too. If someone borrows it meanwhile, it says <strong>Out on a loan</strong> and is in <strong>Loans</strong>.</p>
+        <p>If your shop is closed for now, nothing goes back in it until you reopen it: <strong>Put back in your shop</strong> says so, and changes nothing. <strong>Take out of your shop</strong> is not there while it is closed. A thing you lend outside BeanPool or delete while it is closed keeps its Offer off the Market when you reopen, and so does one you took out before you closed it.</p>
+        <h2>Lending it outside BeanPool</h2>
+        <p>Tap <strong>Lent to someone outside BeanPool</strong>. Write who has it and when it should be back: in 3, 7, 14 or 30 days, or no date. If it is in your shop, its Offer is paused while it is away.</p>
+        <p>When it comes home, tap <strong>It's back</strong>. If it was in your shop, its Offer goes back in the Market. If your shop is closed for now, the thing comes home taken out of your shop instead: tap <strong>Put back in your shop</strong> once you reopen.</p>
+        <p>On the phone, the Tool shed reminds you when something lent outside BeanPool is due back. You can turn that off in the Tool shed's <strong>Settings</strong> (the <strong>…</strong> at the top).</p>
+        <h2>Loans</h2>
+        <p><strong>Loans</strong> lists everything of yours that is out, or that someone has asked to borrow, with anything overdue first. Tap one to open it.</p>
+        <h2>Where it is kept</h2>
+        <p>The Tool shed is kept on your phone (in the web app, in this browser), with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could. You can turn the copy off in the Tool shed's <strong>Settings</strong>, and <strong>Remove my data</strong> there takes everything in it away.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="your-shop.html"><strong>Your Shop</strong><span>A front window on your own account, for the Offers you choose, under one name.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>When a deal goes wrong</strong><span>Cancelling a deal, and what happens when you cannot agree.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 154.</p>
+    </main>
+</body>
+</html>

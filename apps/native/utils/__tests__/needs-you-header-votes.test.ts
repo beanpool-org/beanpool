@@ -138,8 +138,19 @@ async function renderHeader() {
 const voteIcon = () => document.querySelector('[data-icon="vote-outline"]');
 
 describe('the header reading the node itself (Home\'s answer not fresh): one rule for votes (PR #1483 review 4166559525)', () => {
-    it('a local node with Beans off and Decisions on (Commons hidden): no Decisions asked, no vote icon, nothing opens the hidden tab', async () => {
+    it('a local node with Beans off and Decisions on (Commons kept for Decide): vote is asked for, shown, and opens Commons → Decide', async () => {
         profile.features = { beans: false, decisions: true };
+        expect(hiddenTabsFor(profile.features)).not.toContain('projects');
+        expect(decideOnNode(profile.features)).toBe(true);
+        await renderHeader();
+        expect(homeAsks()).toEqual(['/api/home?cards=needs&lands=enterprise,group']);
+        expect(voteIcon()).not.toBeNull();
+        await act(async () => { (voteIcon()!.closest('button') as HTMLElement).click(); });
+        expect(nav.push).toHaveBeenCalledWith({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
+    });
+
+    it('a local node with Beans off and Decisions off (Commons hidden): no Decisions asked, no vote icon, nothing opens the hidden tab', async () => {
+        profile.features = { beans: false, decisions: false };
         expect(hiddenTabsFor(profile.features)).toContain('projects');
         await renderHeader();
         expect(db.getDecisions).not.toHaveBeenCalled();
@@ -149,8 +160,18 @@ describe('the header reading the node itself (Home\'s answer not fresh): one rul
         expect(nav.push.mock.calls.map(([to]) => to.pathname).filter((p: string) => p.startsWith('/(tabs)/projects'))).toEqual([]);
     });
 
-    it('the same node, drawn from Home\'s answer or from its own read: the same icons, so none comes and goes with the answer\'s age', async () => {
+    it('the same node with Beans off and Decisions on, drawn from Home\'s answer or from its own read: the same icons', async () => {
         profile.features = { beans: false, decisions: true };
+        const vote = { kind: 'vote' as const, count: 1, accent: true, label: 'Vote closes in 5 hours', target: { to: 'decide' as const } };
+        const fromHome = mergeNeeds([vote], null, Date.now(), profile.features).map(e => e.kind);
+        await renderHeader();
+        const own = Array.from(document.querySelectorAll('[data-icon]')).map(i => i.getAttribute('data-icon'));
+        expect(fromHome).toEqual(['vote']);
+        expect(own).toContain('vote-outline');
+    });
+
+    it('the same node with Beans off and Decisions off, drawn from Home\'s answer or from its own read: no vote icon in either', async () => {
+        profile.features = { beans: false, decisions: false };
         const vote = { kind: 'vote' as const, count: 1, accent: true, label: 'Vote closes in 5 hours', target: { to: 'decide' as const } };
         const fromHome = mergeNeeds([vote], null, Date.now(), profile.features).map(e => e.kind);
         await renderHeader();

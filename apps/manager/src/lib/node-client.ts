@@ -180,11 +180,8 @@ export async function forgetStandby(
 export interface GatewayConfig {
     corsAllowedOrigins: string[];
     adminIpAllowlist: string[];
+    /** servePwa off: a headless node. Its four old switches are gone (the server refuses a save naming one). */
     features: {
-        marketplace: boolean;
-        messaging: boolean;
-        federation: boolean;
-        invites: boolean;
         servePwa: boolean;
     };
     rateLimiting: {

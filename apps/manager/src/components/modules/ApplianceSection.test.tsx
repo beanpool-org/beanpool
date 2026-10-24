@@ -29,7 +29,7 @@ const mockDiag: DiagnosticsResponse = {
 };
 
 const mockGateway: GatewayConfig = {
-    features: { marketplace: true, messaging: true, federation: true, invites: true, servePwa: true },
+    features: { servePwa: true },
     corsAllowedOrigins: ['*'],
     rateLimiting: { enabled: true, maxRequestsPerMinute: 60 },
     adminIpAllowlist: [],
@@ -513,11 +513,6 @@ describe('ApplianceSection Component', () => {
                 method: 'POST',
                 body: JSON.stringify({
                     password: mockProfile.adminPassword,
-                    publishLocation: true,
-                    publishMembers: true,
-                    publishContactEmail: false,
-                    publishContactPhone: false,
-                    publishHealth: true,
                     directoryPushIntervalHours: 12,
                     serviceRadius: null,
                 }),

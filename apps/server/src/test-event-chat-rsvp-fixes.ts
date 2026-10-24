@@ -116,16 +116,19 @@ async function main(): Promise<void> {
     // ── E5: a series between its date's end and the minute roll ──
     {
         const host = member('FfRlHost'), ivy = member('FfIvy');
-        // The series is Saturdays at 18:00 in Brisbane (UTC+10, no daylight saving): the NEXT date is the first Saturday whose 18:00
-        // there is still ahead, so the date before it has always passed. Counted in UTC, 'the Saturday before' was today, still to come,
-        // for the ten hours each Saturday before 08:00Z (17 Oct, CI red on every PR).
+        // The series is Saturdays 18:00–19:00 in Brisbane (UTC+10, no daylight saving): the NEXT date is the first Saturday whose 19:00
+        // there is still ahead, so the date before it has always ENDED. Counted in UTC, 'the Saturday before' was today, still to come,
+        // for the ten hours each Saturday before 08:00Z (17 Oct, CI red on every PR). Counted from 18:00, it was today, still running,
+        // from 08:00Z to 09:00Z each Saturday, and the server rightly kept it (24 Oct, main red).
         const now = new Date();
         const brisbane = new Date(now.getTime() + 10 * HOUR);
         let satMs = Date.UTC(brisbane.getUTCFullYear(), brisbane.getUTCMonth(), brisbane.getUTCDate() + ((6 - brisbane.getUTCDay()) + 7) % 7);
-        if (satMs + 8 * HOUR <= now.getTime()) satMs += 7 * DAY; // that Saturday's 18:00 in Brisbane (08:00Z) has passed
+        if (satMs + 9 * HOUR <= now.getTime()) satMs += 7 * DAY; // that Saturday's 19:00 in Brisbane (09:00Z) has passed
         const sat = new Date(satMs);
         const ymd = sat.toISOString().slice(0, 10), prev = new Date(sat.getTime() - 7 * DAY).toISOString().slice(0, 10);
-        const s = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff weekly', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartLocal: `${ymd}T18:00`, eventEndLocal: `${ymd}T19:00`, eventTz: 'Australia/Brisbane', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA' } });
+        // A new event must start ahead, so while that date is running it is made on the one after; its dates are set below.
+        const made = satMs + 8 * HOUR <= now.getTime() ? new Date(satMs + 7 * DAY).toISOString().slice(0, 10) : ymd;
+        const s = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff weekly', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartLocal: `${made}T18:00`, eventEndLocal: `${made}T19:00`, eventTz: 'Australia/Brisbane', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA' } });
         const id = s.body?.post?.id;
         const endMs = Date.now() - 20_000;
         db.prepare('UPDATE posts SET event_start_at=?, event_end_at=?, event_start_local=?, event_end_local=? WHERE id=?').run(new Date(endMs - HOUR).toISOString(), new Date(endMs).toISOString(), `${prev}T18:00`, `${prev}T19:00`, id);

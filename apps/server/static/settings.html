@@ -776,7 +776,6 @@
                         <div>
                             <label style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Update Schedule</label>
                             <select id="directory-push-interval" style="padding: 0.4rem; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 0.85rem; width: 120px;">
-                                <option value="0">Never (Disabled)</option>
                                 <option value="1">Every 1 hour</option>
                                 <option value="6">Every 6 hours</option>
                                 <option value="12" selected>Every 12 hours</option>
@@ -1161,7 +1160,7 @@
             <div class="glass" data-tab="network" style="margin-top: 1rem;">
                 <h3>🛡️ Gateway Configuration (Self-Protection)</h3>
                 <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
-                    Configure bootstrap CORS origin rules, admin IP allowlists, rate limiting, and subsystem feature toggles.
+                    Configure bootstrap CORS origin rules, admin IP allowlists, rate limiting, and whether this node serves the web app.
                 </p>
 
                 <div class="field">
@@ -1188,20 +1187,8 @@
                     </div>
                 </div>
 
-                <h4 style="font-size: 0.85rem; color: #94a3b8; margin: 1rem 0 0.5rem 0;">Subsystem Feature Toggles</h4>
+                <h4 style="font-size: 0.85rem; color: #94a3b8; margin: 1rem 0 0.5rem 0;">Web App</h4>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
-                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" id="gw-feat-marketplace" checked> Marketplace Subsystem
-                    </label>
-                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" id="gw-feat-messaging" checked> Messaging Subsystem
-                    </label>
-                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" id="gw-feat-federation" checked> Federation Subsystem
-                    </label>
-                    <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
-                        <input type="checkbox" id="gw-feat-invites" checked> Invites Subsystem
-                    </label>
                     <label style="font-size: 0.8rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.5rem;">
                         <input type="checkbox" id="gw-feat-pwa" checked> Serve Bundled PWA
                     </label>
@@ -1486,19 +1473,6 @@
                     <button class="btn btn-outline" onclick="loadCommonsData()" style="flex:1;">🔄 Refresh</button>
                 </div>
 
-                <!-- Circulation Rate -->
-                <hr style="border-color:#1e293b;margin:0 0 1rem 0;">
-                <h4 style="font-size:0.95rem;margin-bottom:0.5rem;">💰 Circulation Rate</h4>
-                <p style="font-size:0.75rem;color:#64748b;margin-bottom:0.75rem;">The base rate at which idle credits flow back to the commons pool each epoch. Progressive scaling (0.5% – 2.5%) applies automatically based on balance.</p>
-                <div class="field">
-                    <label>Base Circulation Rate</label>
-                    <input type="number" id="th-circulationRate" step="0.001">
-                </div>
-                <div style="display:flex;gap:0.5rem;">
-                    <button class="btn btn-primary" id="save-commons-thresholds-btn" style="flex:1;">💾 Save</button>
-                    <button class="btn btn-outline" id="reset-commons-thresholds-btn" style="flex:1;">↩️ Defaults</button>
-                </div>
-                <div class="status-msg" id="commons-thresholds-status"></div>
 
             </div>
 

@@ -8,7 +8,7 @@
  * off lists no projects or enterprises. Groups are on every node. With Groups the only section left, the screen is the
  * groups list, titled so, and with no switcher.
  *
- * Where Beans are off the Commons tab is hidden (node-profile.ts hiddenTabsFor), so Talk's Groups view offers
+ * Where Beans and Decisions are both off the Commons tab is hidden (node-profile.ts hiddenTabsFor), so Talk's Groups view offers
  * "Find groups", which opens this screen on Groups. Everywhere else the Commons tab is the way there, and Talk is as it
  * was.
  */
@@ -31,8 +31,9 @@ export function commonsSections(
     return shown;
 }
 
-/** Whether this node lists projects and enterprises among its groups. A node that says nothing does. */
+/** Whether this node lists projects and enterprises among its groups. A node that says nothing does. None with Beans off. */
 export function enterprisesOn(features: NodeFeatures | null | undefined): boolean {
+    if (features?.beans === false) return false;
     return features?.enterprises !== false;
 }
 

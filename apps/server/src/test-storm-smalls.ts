@@ -219,15 +219,18 @@ async function thresholds(): Promise<void> {
         ['a negative number of days', `{"inactiveMemberDays":-5}`],
         ['Infinity (1e999)', `{"inactiveMemberDays":1e999}`],
         ['half a day', `{"inactiveMemberDays":7.5}`],
-        ['a rate over 1', `{"circulationRate":3}`],
+        // The circulation rate's "a rate over 1" was this one's until S3 took that rate away (read by nothing): an amount is
+        // the bound that is not a count of days.
+        ['an amount below 0', `{"sybilFunnelMinAmount":-1}`],
     ] as const) {
         const r = await post(raw);
         assert(r.status === 400 && typeof r.body?.error === 'string' && getLocalConfig().thresholds?.inactiveMemberDays === before
-            && getLocalConfig().thresholds?.circulationRate !== 3,
+            && getLocalConfig().thresholds?.sybilFunnelMinAmount !== -1,
             `${what} is refused, 400, and nothing saved (${show(r)})`);
     }
-    const ok = await post(`{"inactiveMemberDays":45,"circulationRate":0.01}`);
-    assert(ok.status === 200 && ok.body?.thresholds?.inactiveMemberDays === 45 && getLocalConfig().thresholds?.inactiveMemberDays === 45,
+    const ok = await post(`{"inactiveMemberDays":45,"sybilFunnelMinAmount":0.5}`);
+    assert(ok.status === 200 && ok.body?.thresholds?.inactiveMemberDays === 45 && getLocalConfig().thresholds?.inactiveMemberDays === 45
+        && ok.body?.thresholds?.sybilFunnelMinAmount === 0.5,
         `a value in range is saved (${show(ok)})`);
     const skipped = await post(`{"inactiveMemberDays":null}`);
     assert(skipped.status === 200 && skipped.body?.thresholds?.inactiveMemberDays === 45, `an emptied field (null) is left out, as before (${show(skipped)})`);

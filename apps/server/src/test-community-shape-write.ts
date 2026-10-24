@@ -273,7 +273,7 @@ async function main(): Promise<void> {
     let told = alerts.slice(aMark);
     assert(told.length === 1 && told[0].key === 'sec.settings' && told[0].detail.includes('Who can join') && told[0].actor === owenPk && told[0].actorRole === 'owner',
         `the owners are alerted, sec.settings, naming the setting (${JSON.stringify(told)})`);
-    let notices = noticesSince(nMark);
+    const notices = noticesSince(nMark);
     const wantBody = `${SENT('only the admins invite people now.')}\n\nFrom the owners: “Summer visitors”`;
     assert(notices.length === keepers().length && isDeepStrictEqual(notices.map((n) => n.recipient).sort(), keepers())
         && notices.every((n) => n.title === 'How this community works has changed' && n.body === wantBody && JSON.parse(n.data).kind === 'community_shape'),

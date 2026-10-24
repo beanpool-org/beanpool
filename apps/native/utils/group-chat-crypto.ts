@@ -3,8 +3,8 @@
  * scratch/global-node/DESIGN-group-chat-encryption-fable.md §7, §15, Marty's pick 9).
  *
  * Today each function here is core's @noble code (packages/beanpool-core/src/group-crypto.ts), the same bytes the node
- * checks and the web app will send, pinned by core's vectors (checkGroupCryptoVectors runs against THIS module in
- * utils/__tests__/group-chat-crypto.test.ts). Slice 0's emulator timing is still owed; if it shows a 200-member rotation
+ * checks and the web app will send, pinned by core's vectors (checkGroupCryptoVectors and checkGroupPhotoVector run against
+ * THIS module in utils/__tests__/group-line-display.test.ts). Slice 0's emulator timing is still owed; if it shows a 200-member rotation
  * over ~5 s on an API-26 phone, react-native-quick-crypto (X25519 and Ed25519 through JSI) goes in HERE, behind the same
  * names, with the vectors proving both agree. No caller imports @beanpool/core's group functions directly.
  *

@@ -125,6 +125,7 @@ export default function ShopPageScreen() {
                             ownerKey={shop.ownerPublicKey}
                             logoUrl={logo}
                             kind={shop.kind}
+                            bannerPhoto={shop.photoUrl}
                             fallbackEmoji="🏪"
                             lines={[kindSinceLine(shop.kind, sinceLine(shop.openedAt)), shop.paused ? shopStateLine(shop) : null]}
                         />

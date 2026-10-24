@@ -31,6 +31,8 @@ export interface MyShop {
     /** Closed for now, and the day it says it is back (YYYY-MM-DD), if it says one. */
     paused: boolean;
     backOn: string | null;
+    /** Its banner photo's address on its community (keyed, `/api/shops/<id>/photo?…`), or null: none, or a node from before banners. */
+    photoUrl: string | null;
 }
 
 /** Home's "Your shop and tools" as the node sends it (`cards.shop`, apps/server routes/home-answer.ts ShopHomeCard). */
@@ -46,6 +48,8 @@ export interface MyShopChanges {
     howToDeal?: string | null;
     paused?: boolean;
     backOn?: string | null;
+    /** Its banner: a photo (the phone's 800 px copy, utils/banner-photo.ts), or null to take it down. */
+    photo?: string | null;
 }
 
 /** The fourteen kinds (core SHOP_KINDS), each an emoji and its words. A kind picks the tools shown and gates nothing. */
@@ -92,6 +96,7 @@ export function readShop(raw: unknown): MyShop | null {
         counts: { things: count(c.things), available: count(c.available), toBorrow: count(c.toBorrow), toBuy: count(c.toBuy), out: count(c.out), newThisWeek: count(c.newThisWeek) },
         paused: s.paused === true,
         backOn: typeof s.backOn === 'string' && DAY.test(s.backOn) ? s.backOn : null,
+        photoUrl: text(s.photoUrl),
     };
 }
 

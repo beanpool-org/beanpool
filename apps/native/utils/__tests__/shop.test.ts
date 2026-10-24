@@ -79,8 +79,11 @@ describe('a shop as the node sends it, read tolerantly', () => {
     it('keeps what the phone draws, and nothing it can\'t trust', () => {
         expect(readShop(SHOP)).toEqual({
             id: 'shop-1', name: "Dave's Tool Shed", ownerName: 'Dave', kind: 'tools', blurb: 'Drills and ladders.', howToDeal: 'Front gate.',
-            counts: COUNTS, paused: false, backOn: null,
+            counts: COUNTS, paused: false, backOn: null, photoUrl: null,
         });
+        // Its banner photo's address, as the node gave it (keyed); none sent, or empty, is none.
+        expect(readShop({ ...SHOP, photoUrl: '/api/shops/shop-1/photo?v=ab&k=K' })?.photoUrl).toBe('/api/shops/shop-1/photo?v=ab&k=K');
+        expect(readShop({ ...SHOP, photoUrl: '' })?.photoUrl).toBeNull();
         // A kind no build knows is none; counts missing or odd are 0; a back-on day that is no day is none.
         expect(readShop({ ...SHOP, kind: 'weapons', counts: { things: 'many' }, backOn: 'soon' })).toMatchObject({
             kind: null, counts: { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 }, backOn: null,

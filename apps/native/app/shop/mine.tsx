@@ -4,8 +4,10 @@
  * shop is a front window on their own account: the Offers they put in it, under one name, and all its Beans are theirs.
  *
  * - None yet: what a shop is, and Open my shop (a PUT with nothing in it: named "<their name>'s shop" until they name it).
- * - Open: its title, kind and counts; its four fields (Name · Kind · About · How I deal), each tappable, in any order,
- *   none required; what is in it now, each opening its listing; "Add my live Offers"; the way to the tools.
+ * - Open: its title, kind and counts; its fields (Name · Kind · About · How I deal · Banner photo), each tappable, in any
+ *   order, none required; what is in it now, each opening its listing; "Add my live Offers"; the way to the tools. The
+ *   banner photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4) goes up as the phone's 800 px copy
+ *   (utils/banner-photo.ts) with a tap, and comes down with Remove.
  * - Close for now (optionally back on a day): its Offers come off the Market and wait; one tap reopens it. Close my shop:
  *   its Offers stay in the Market on their own (the default) or end. Neither while a deal on one of its things is open:
  *   the node's sentence is shown, with the way to the deals.
@@ -32,8 +34,9 @@ import {
     addOffersToMyShop, changeMyShop, closeMyShop, offersToAdd, readMyLiveOffers, readMyShop, readShopListings, shopKindLabel, shopStateLine,
     shopTitle, type MyShop, type MyShopChanges, type MyShopRead, type ShopListing,
 } from '../../utils/shop';
+import { pickBannerPhoto } from '../../utils/banner-photo';
 
-type Where = 'screen' | 'text' | 'kind' | 'pause' | 'close' | 'add';
+type Where = 'screen' | 'text' | 'kind' | 'banner' | 'pause' | 'close' | 'add';
 
 /**
  * A refusal as the screen shows it: the node's own sentence when it answered, else ours. An answer without the node's
@@ -112,6 +115,19 @@ export default function YourShopScreen() {
 
     const saveText = async (text: string | null) => {
         if (editing && await change({ [editing]: text }, 'text')) setEditing(null);
+    };
+    /** A banner photo picked, as the phone's 800 px copy, goes up on its own; none picked changes nothing. */
+    const pickBanner = async () => {
+        if (busy) return;
+        setRefusal(null);
+        let photo: string | null;
+        try {
+            photo = await pickBannerPhoto();
+        } catch {
+            setRefusal({ where: 'banner', message: t("That picture couldn't be read. Try another.") });
+            return;
+        }
+        if (photo) await change({ photo }, 'banner');
     };
     const pickKind = async (kind: ShopKind | null) => {
         if (await change({ kind }, 'kind')) setSheet(null);
@@ -235,6 +251,15 @@ export default function YourShopScreen() {
                             <ToolRow title={t('Kind')} state={kindWords ?? t('Not chosen yet')} onPress={() => { setRefusal(null); setSheet('kind'); }} testID="shop-field-kind" />
                             <ToolRow title={t('About')} state={shop.blurb ?? notSet} onPress={() => { setRefusal(null); setEditing('blurb'); }} testID="shop-field-blurb" />
                             <ToolRow title={t('How I deal')} state={shop.howToDeal ?? notSet} onPress={() => { setRefusal(null); setEditing('howToDeal'); }} testID="shop-field-howToDeal" />
+                            {/* Its banner: one photo across the top of its shopfront, put up or changed with a tap, on its own. */}
+                            <ToolRow title={t('Banner photo')} state={shop.photoUrl ? t('Members see it across the top of your shop') : t('Not chosen yet')}
+                                onPress={() => { void pickBanner(); }} testID="shop-field-banner" />
+                            {shop.photoUrl ? (
+                                <ToolButtons>
+                                    <ToolButton text={t('Remove the banner photo')} disabled={busy} onPress={() => { void change({ photo: null }, 'banner'); }} testID="shop-banner-remove" />
+                                </ToolButtons>
+                            ) : null}
+                            {refusedAt('banner') ? <Text style={[s.note, { color: colors.feedback.danger.fg }]} testID="shop-banner-error">{refusal!.message}</Text> : null}
                         </ToolSection>
 
                         <ToolSection title={t('In your shop')} testID="shop-listings">

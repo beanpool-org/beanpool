@@ -7,6 +7,8 @@ export interface AvatarPresetPickerProps {
     onSelect: (presetUri: string) => void;
     label?: string;
     className?: string;
+    /** The heading's colour classes; a container with its own fixed background (the always-dark propose modal) sets them. */
+    headingClassName?: string;
 }
 
 export function AvatarPresetPicker({
@@ -14,11 +16,12 @@ export function AvatarPresetPicker({
     onSelect,
     label,
     className = '',
+    headingClassName = 'text-nature-600 dark:text-nature-400',
 }: AvatarPresetPickerProps) {
     const heading = label ?? t('Or choose an avatar:');
     return (
         <div className={`mt-3 ${className}`}>
-            <p className="m-0 mb-2 text-xs font-semibold text-nature-600 dark:text-nature-400">
+            <p className={`m-0 mb-2 text-xs font-semibold ${headingClassName}`}>
                 {heading}
             </p>
             <div

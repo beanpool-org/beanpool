@@ -8,7 +8,7 @@
  * - Picking a photo file still works across all forms (800 px).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { ProjectsPage } from './ProjectsPage';
 import { EnterpriseManage } from '../components/EnterpriseManage';
 import { ProfilePage } from './ProfilePage';
@@ -134,6 +134,40 @@ describe('enterprise logo presets (web)', () => {
         });
     });
 
+    describe('Propose Enterprise modal: the deciding review of 1e784a87', () => {
+        const openPropose = async () => {
+            render(<ProjectsPage identity={mockIdentity} />);
+            fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
+            fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
+            return screen.getByRole('dialog');
+        };
+
+        it("the picker's heading takes the dark modal's readable colour, never the light-card one", async () => {
+            const dialog = await openPropose();
+            const heading = within(dialog).getByText('Or choose an avatar:');
+            expect(heading.className).toContain('text-nature-400');
+            expect(heading.className).not.toContain('text-nature-600');
+        });
+
+        it('a preset chosen while a photo is still resizing stays, and the form stops waiting', async () => {
+            let finish!: (v: string) => void;
+            vi.spyOn(photoResize, 'resizePhotoFile').mockImplementation(() => new Promise((r) => { finish = r; }));
+            const dialog = await openPropose();
+            fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
+            fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Seed Hub' } });
+            fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Seed saving' } });
+            const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+            fireEvent.change(fileInput, { target: { files: [new File(['x'], 'slow.jpg', { type: 'image/jpeg' })] } });
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Select Leaf avatar' }));
+            await act(async () => { finish('data:image/jpeg;base64, U0xPVw=='); });
+            const submit = within(dialog).getByRole('button', { name: /Propose Enterprise/i });
+            expect(submit).not.toBeDisabled();
+            fireEvent.click(submit);
+            await waitFor(() => expect(api.createEnterprise).toHaveBeenCalledTimes(1));
+            expect(vi.mocked(api.createEnterprise).mock.calls[0][0].avatar).toBe('bundled://leaf');
+        });
+    });
+
     describe('EnterpriseManage logo edit', () => {
         it('offers preset avatars in Manage logo row; picking a preset sends bundled://<id>', async () => {
             render(<EnterpriseManage treasury="t-key" detail={sampleTreasuryDetail} onSaved={vi.fn()} />);
@@ -151,6 +185,21 @@ describe('enterprise logo presets (web)', () => {
             // Save
             fireEvent.click(within(manageForm).getByRole('button', { name: 'Save' }));
 
+            await waitFor(() => expect(api.changeEnterpriseFace).toHaveBeenCalledTimes(1));
+            expect(vi.mocked(api.changeEnterpriseFace)).toHaveBeenCalledWith('t-key', expect.objectContaining({ avatar: 'bundled://sun' }));
+        });
+
+        it('a preset chosen while a logo photo is still resizing stays (the deciding review of 1e784a87)', async () => {
+            let finish!: (v: string) => void;
+            vi.spyOn(photoResize, 'resizePhotoFile').mockImplementation(() => new Promise((r) => { finish = r; }));
+            render(<EnterpriseManage treasury="t-key" detail={sampleTreasuryDetail} onSaved={vi.fn()} />);
+            const manageForm = screen.getByTestId('manage-face');
+            fireEvent.change(within(manageForm).getByTestId('manage-face-logo-input'), { target: { files: [new File(['x'], 'slow.jpg', { type: 'image/jpeg' })] } });
+            fireEvent.click(within(manageForm).getByRole('button', { name: 'Select Sun avatar' }));
+            await act(async () => { finish('data:image/jpeg;base64, U0xPVw=='); });
+            const save = within(manageForm).getByRole('button', { name: 'Save' });
+            expect(save).not.toBeDisabled();
+            fireEvent.click(save);
             await waitFor(() => expect(api.changeEnterpriseFace).toHaveBeenCalledTimes(1));
             expect(vi.mocked(api.changeEnterpriseFace)).toHaveBeenCalledWith('t-key', expect.objectContaining({ avatar: 'bundled://sun' }));
         });

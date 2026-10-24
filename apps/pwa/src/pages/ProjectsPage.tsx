@@ -855,7 +855,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 )}
                                 <AvatarPresetPicker
                                     selected={newPhotos[0]}
-                                    onSelect={(uri) => setNewPhotos([uri])}
+                                    headingClassName="text-nature-400"
+                                    onSelect={(uri) => {
+                                        // A photo still being resized must not land over the preset chosen after it.
+                                        photoPick.current++;
+                                        setPreparingPhoto(false);
+                                        setNewPhotos([uri]);
+                                    }}
                                 />
                             </div>
 

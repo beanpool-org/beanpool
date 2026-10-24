@@ -38,7 +38,7 @@ import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
-import { PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { PROTOCOL_CONSTANTS, word } from '@beanpool/core';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -442,10 +442,16 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         }
     }
     // Whole hours up to what the publisher's timer can hold (config/community-settings.ts isDirectoryPushInterval): past
-    // it, below zero or a sliver of an hour, the timer fires every millisecond at the directory registry.
+    // it, below zero or a sliver of an hour, the timer fires every millisecond at the directory registry. 0 was Never, a
+    // second way not to be listed: Listed under How this community works is the one now (design §3.3, §6.3).
+    if (directoryPushIntervalHours === 0) {
+        ctx.status = 400;
+        ctx.body = { error: word('0 is no longer a schedule: switch Listed off under How this community works.'), code: 'bad_interval' };
+        return;
+    }
     if (directoryPushIntervalHours !== undefined && !isDirectoryPushInterval(directoryPushIntervalHours)) {
         ctx.status = 400;
-        ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
+        ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 1 to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}`, code: 'bad_interval' };
         return;
     }
     console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours });

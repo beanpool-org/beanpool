@@ -173,15 +173,13 @@ export interface LocalConfig {
     } | null;
 }
 
+/**
+ * Health heuristics an owner or admin may tune (POST /api/admin/thresholds). Nothing here moves Beans: demurrage is
+ * core's protocol constants. The circulation rate and its epoch that were here were read by nothing (design
+ * scratch/fable-design/DESIGN-community-shape-settings-fable.md Q10): gone, so no dial reads as a fee it isn't. A stored
+ * one is never read (getThresholds), and leaves the file at the next save.
+ */
 export interface Thresholds {
-    // Credit
-    circulationRate: number;    // Base monthly decay rate (unused with brackets, kept for legacy UI)
-    circulationEpochDays: number; // Days per epoch month (default: 30)
-    
-    // Legacy mapping support
-    demurrageRate?: number;
-    demurrageEpochDays?: number;
-
     // Health flags
     washTradingWindowHours: number;  // Window for wash trading detection (default: 24)
     washTradingMinTxns: number;      // Min txns in window to flag (default: 4)
@@ -354,18 +352,7 @@ export function getLocalConfig(): LocalConfig {
     // whole (writeFileAtomic); one that doesn't was broken some other way, and never reads as a new install.
     if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
     const read = parseConfigFile(CONFIG_PATH);
-    const raw = 'config' in read ? read.config : (restoredCopyStillApplies() ?? restoreFromBackup(read.error));
-
-    // Backward compatibility for demurrage -> circulation renaming
-    if (raw.thresholds) {
-        if (raw.thresholds.demurrageRate !== undefined && raw.thresholds.circulationRate === undefined) {
-            raw.thresholds.circulationRate = raw.thresholds.demurrageRate;
-        }
-        if (raw.thresholds.demurrageEpochDays !== undefined && raw.thresholds.circulationEpochDays === undefined) {
-            raw.thresholds.circulationEpochDays = raw.thresholds.demurrageEpochDays;
-        }
-    }
-    return raw;
+    return 'config' in read ? read.config : (restoredCopyStillApplies() ?? restoreFromBackup(read.error));
 }
 
 /**
@@ -824,8 +811,6 @@ export function copyPasswordRemembered(password: string): boolean {
 // ===================== THRESHOLDS =====================
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
-    circulationRate: 0.005,
-    circulationEpochDays: 30,
     washTradingWindowHours: 24,
     washTradingMinTxns: 4,
     inactiveMemberDays: 30,
@@ -842,9 +827,7 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
  * JSON `1e999` parses to, and the config file then keeps as `null` — made the check silently count nothing
  * (FABLE-sec-input LOW F3, 2026-10-01).
  */
-export const THRESHOLD_LIMITS: Record<Exclude<keyof Thresholds, 'demurrageRate' | 'demurrageEpochDays'>, { min: number; max: number; whole: boolean }> = {
-    circulationRate: { min: 0, max: 1, whole: false },
-    circulationEpochDays: { min: 1, max: 3650, whole: true },
+export const THRESHOLD_LIMITS: Record<keyof Thresholds, { min: number; max: number; whole: boolean }> = {
     washTradingWindowHours: { min: 1, max: 8760, whole: true },
     washTradingMinTxns: { min: 1, max: 100_000, whole: true },
     inactiveMemberDays: { min: 1, max: 3650, whole: true },
@@ -866,24 +849,19 @@ export function thresholdProblem(key: string, value: unknown): string | null {
 }
 
 export function getThresholds(): Thresholds {
-    const config = getLocalConfig();
-    const merged: Thresholds = { ...DEFAULT_THRESHOLDS, ...(config.thresholds || {}) };
-    // A value saved before the limits (a negative, or the `null` an Infinity is written as) reads as its default.
+    const stored = (getLocalConfig().thresholds ?? {}) as Partial<Record<string, unknown>>;
+    const merged = { ...DEFAULT_THRESHOLDS };
+    // Only the thresholds there are: a value saved before the limits (a negative, or the `null` an Infinity is written
+    // as) reads as its default, and a key that is no threshold (the circulation rate that was one) is never read.
     for (const key of Object.keys(THRESHOLD_LIMITS) as (keyof typeof THRESHOLD_LIMITS)[]) {
-        if (thresholdProblem(key, merged[key]) !== null) merged[key] = DEFAULT_THRESHOLDS[key];
+        if (thresholdProblem(key, stored[key]) === null) merged[key] = stored[key] as number;
     }
     return merged;
 }
 
 export function updateThresholds(updates: Partial<Thresholds>): Thresholds {
     const config = getLocalConfig();
-    const current = { ...DEFAULT_THRESHOLDS, ...(config.thresholds || {}) };
-    
-    // Support saving old keys by mapping them to new ones if passed
-    if (updates.demurrageRate !== undefined) updates.circulationRate = updates.demurrageRate;
-    if (updates.demurrageEpochDays !== undefined) updates.circulationEpochDays = updates.demurrageEpochDays;
-    
-    const merged = { ...current, ...updates };
+    const merged = { ...getThresholds(), ...updates };
     config.thresholds = merged;
     saveLocalConfig(config);
     console.log('⚙️ Thresholds updated:', merged);
@@ -937,14 +915,19 @@ export function updateBackupCadence(updates: { pullSeconds?: number | null; reco
     return { backupPullSeconds: config.backupPullSeconds ?? null, backupReconcileMinutes: config.backupReconcileMinutes ?? null };
 }
 
+/**
+ * The gateway as stored, over its defaults. Its one switch is `servePwa`: a switch that is gone (gateway.ts
+ * REMOVED_GATEWAY_SWITCHES) is never read here, and is carried over and dropped from the file once at boot
+ * (config/community-shape-upgrade.ts).
+ */
 export function getGatewayConfig(): GatewayConfig {
     const config = getLocalConfig();
+    const stored = config.gateway?.features as Partial<GatewayConfig['features']> | undefined;
     return {
         ...DEFAULT_GATEWAY_CONFIG,
         ...(config.gateway || {}),
         features: {
-            ...DEFAULT_GATEWAY_CONFIG.features,
-            ...(config.gateway?.features || {}),
+            servePwa: typeof stored?.servePwa === 'boolean' ? stored.servePwa : DEFAULT_GATEWAY_CONFIG.features.servePwa,
         },
         rateLimiting: {
             ...DEFAULT_GATEWAY_CONFIG.rateLimiting,
@@ -961,8 +944,7 @@ export function updateGatewayConfig(updates: Partial<GatewayConfig>): GatewayCon
         ...current,
         ...updates,
         features: {
-            ...current.features,
-            ...(updates.features || {}),
+            servePwa: typeof updates.features?.servePwa === 'boolean' ? updates.features.servePwa : current.features.servePwa,
         },
         rateLimiting: {
             ...current.rateLimiting,

@@ -14,11 +14,7 @@ describe('GatewayModule component', () => {
         corsAllowedOrigins: ['https://app.beanpool.org', 'http://localhost:3001'],
         adminIpAllowlist: [],
         features: {
-            marketplace: true,
-            messaging: true,
-            federation: false,
-            invites: true,
-            servePwa: true,
+            servePwa: false,
         },
     };
 
@@ -80,7 +76,7 @@ describe('GatewayModule component', () => {
         expect(screen.getByText('Settings saved successfully')).toBeInTheDocument();
     });
 
-    it('handles feature toggle switches', () => {
+    it('handles the web app switch, the one switch left', () => {
         const onChangeMock = vi.fn();
         render(
             <GatewayModule
@@ -92,18 +88,33 @@ describe('GatewayModule component', () => {
             />
         );
 
-        const federationCheckbox = screen.getByLabelText(/Multi-Node Federation/i);
-        expect(federationCheckbox).not.toBeChecked();
+        const pwaCheckbox = screen.getByLabelText(/Static PWA Asset Server/i);
+        expect(pwaCheckbox).not.toBeChecked();
 
-        fireEvent.click(federationCheckbox);
+        fireEvent.click(pwaCheckbox);
 
         expect(onChangeMock).toHaveBeenCalledWith({
             ...mockGatewayConfig,
-            features: {
-                ...mockGatewayConfig.features,
-                federation: true,
-            },
+            features: { servePwa: true },
         });
+    });
+
+    it('offers no switch for invites, messaging, the Market or federation (How this community works S3)', () => {
+        render(
+            <GatewayModule
+                gateway={mockGatewayConfig}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+            />
+        );
+
+        for (const gone of [/Marketplace/i, /Direct Messaging/i, /Multi-Node Federation/i, /Cryptographic Invites/i]) {
+            expect(screen.queryByLabelText(gone)).toBeNull();
+        }
+        expect(screen.queryByText('Subsystem Feature Toggles')).toBeNull();
+        expect(screen.getByText(/Who can join is set under How this community works/)).toBeInTheDocument();
     });
 
     it('displays rate limit disabled alert and enables rate limiting on quick fix click', () => {

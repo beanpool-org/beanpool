@@ -517,7 +517,7 @@ async function main(): Promise<void> {
         built('it publishes its contact email but not its phone, and keeps its members out of the directory', await A('/api/local/admin/node/config', {
             publishContactEmail: true, publishContactPhone: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
         }));
-        built('and sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45 }));
+        built('and sets its own thresholds', await A('/api/admin/thresholds', { inactiveMemberDays: 45 }));
         built('Gwen proposes a Decision', await S_(gwen, '/api/commons/decisions', {
             title: 'Make Cy a voucher', description: 'Cy has helped half the street', touches: 'member', effect: 'grant_voucher', subject: cy.pk,
         }));

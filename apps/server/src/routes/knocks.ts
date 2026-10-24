@@ -36,8 +36,8 @@
  * The auth limiter (15 a minute per address) on a knock, and the knock rules: one open knock per key, 3 an address a
  * day (429 `rate_limited`, which names the network), and on the whole node 30 a day and 50 open made in the last 3
  * days (429 `busy`, the same for both so a flood can't tell which, and not blaming the applicant's network), 30 days
- * after a decline (engine/knocks.ts). The gateway's `invites` switch covers these routes too (https-server.ts): a node
- * that takes no invites takes no knocks.
+ * after a decline (engine/knocks.ts). The profile's `invites` and `knocks` switches gate these routes too
+ * (profile-feature-gate.ts): a node that takes no invites takes no knocks.
  *
  * ## The main server only
  *

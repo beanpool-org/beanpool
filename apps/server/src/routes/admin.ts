@@ -46,7 +46,7 @@ import {
     getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
-import { gatewayAllowlistRefusal } from '../config/gateway.js';
+import { gatewayAllowlistRefusal, removedGatewaySwitchRefusal } from '../config/gateway.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
@@ -2300,6 +2300,13 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can change its gateway settings')) return;
     const { code, ...body } = (ctx as any).requestBody || {};
+    // The four switches that are gone (config/gateway.ts): a save that names one is refused whole.
+    const removedSwitch = removedGatewaySwitchRefusal(body);
+    if (removedSwitch) {
+        ctx.status = 400;
+        ctx.body = removedSwitch;
+        return;
+    }
     const allowlistRefusal = gatewayAllowlistRefusal(body.adminIpAllowlist, clientIp(ctx));
     if (allowlistRefusal) {
         ctx.status = 400;

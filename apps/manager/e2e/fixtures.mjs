@@ -426,10 +426,6 @@ const GATEWAY_CONFIG = {
         '::1',
     ],
     features: {
-        marketplace: true,
-        messaging: true,
-        federation: true,
-        invites: true,
         servePwa: true,
     },
     rateLimiting: {

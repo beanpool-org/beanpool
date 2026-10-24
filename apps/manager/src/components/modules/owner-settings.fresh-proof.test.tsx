@@ -22,7 +22,7 @@ const STEP_UP = { error: 'Press Manage on your phone again, then make this chang
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const OWNER_KEY = { kind: 'key' as const, memberPubkey: 'a'.repeat(64), role: 'owner' as const };
 const gateway: GatewayConfig = {
-    features: { marketplace: true, messaging: true, federation: true, invites: true, servePwa: true },
+    features: { servePwa: true },
     corsAllowedOrigins: ['*'], rateLimiting: { enabled: true, maxRequestsPerMinute: 60 }, adminIpAllowlist: [],
 };
 
@@ -65,7 +65,7 @@ describe('Gateway save (S4a; opus-1984 N4)', () => {
         await enterCode('gateway-proof', '222222');
         await waitFor(() => expect(screen.queryByTestId('gateway-proof-code')).toBeNull());
         expect(sent.map((s) => s.body.code)).toEqual([undefined, '111111', '222222']);
-        expect(sent.every((s) => (s.body.features as Record<string, boolean>).marketplace === true)).toBe(true);
+        expect(sent.every((s) => JSON.stringify(s.body.features) === JSON.stringify(gateway.features))).toBe(true);
     });
 
     it('computer viewer: the from-your-phone sentence, not "HTTP 403"; nothing re-sent', async () => {

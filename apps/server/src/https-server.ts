@@ -36,6 +36,7 @@ import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
     getConnectorByPublicUrl,
+    ENABLE_PEER_CONNECTORS,
     type TrustLevel,
 } from './connector-manager.js';
 import { federationCors, mountFederationRoutes } from './federation-api.js';
@@ -1311,7 +1312,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     // OPTIONS 204 or a router answers 405 (agent/oauth-route.ts).
     app.use(oauthDoorOff());
 
-    // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, Feature Toggles, Rate Limiting)
+    // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, federation's routes and the headless switch, Rate Limiting)
 
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
@@ -1377,29 +1378,17 @@ export async function startHttpsServer(port: number): Promise<number> {
             }
         }
 
-        // 3. Subsystem Feature Toggles Interceptors
-        // What a check PROTECTS is matched ignoring case; what it EXEMPTS is matched as sent, so a
-        // differently-cased spelling can only ever be treated more strictly.
+        // 3. Federation's HTTP routes and the headless switch. What a check PROTECTS is matched ignoring case; what it
+        //    EXEMPTS is matched as sent, so a differently-cased spelling can only ever be treated more strictly.
+        //    Invites, messaging and the Market have no switch here: who can join is the community's (How this community
+        //    works, config/community-shape.ts), and nothing makes a community without chat or a Market. A server that
+        //    stored one of the old switches off had it carried over once at boot (config/community-shape-upgrade.ts).
         const lowerPath = ctx.path.toLowerCase();
-        if (!gwConfig.features?.marketplace && lowerPath.startsWith('/api/marketplace')) {
+        // Connections to other communities are this server's env (ENABLE_PEER_CONNECTORS, off unless set), as the peer
+        // protocol already is (federation-protocol.ts FED-06): with them off, no /api/federation route answers.
+        if (!ENABLE_PEER_CONNECTORS && lowerPath.startsWith('/api/federation')) {
             ctx.status = 503;
-            ctx.body = { error: word('Marketplace feature is currently disabled by node gateway') };
-            return;
-        }
-        if (!gwConfig.features?.messaging && lowerPath.startsWith('/api/messaging')) {
-            ctx.status = 503;
-            ctx.body = { error: word('Messaging feature is currently disabled by node gateway') };
-            return;
-        }
-        if (!gwConfig.features?.federation && lowerPath.startsWith('/api/federation')) {
-            ctx.status = 503;
-            ctx.body = { error: word('Federation feature is currently disabled by node gateway') };
-            return;
-        }
-        // A knock (G6) is answered with an invite, so a node that takes no invites takes no knocks either.
-        if (!gwConfig.features?.invites && (lowerPath.startsWith('/api/invite') || lowerPath.startsWith('/api/community/invite') || lowerPath.startsWith('/api/join/knock'))) {
-            ctx.status = 503;
-            ctx.body = { error: word('Invites feature is currently disabled by node gateway') };
+            ctx.body = { error: word('Connections to other communities are off on this server.'), code: 'peer_connectors_off' };
             return;
         }
         if (!gwConfig.features?.servePwa && (ctx.path === '/' || lowerPath.startsWith('/app') || lowerPath.endsWith('.html'))) {

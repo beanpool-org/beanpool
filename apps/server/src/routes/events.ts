@@ -83,7 +83,12 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: word('A signed request is required') };
             return;
         }
-        ctx.body = { events: listMyEvents(actor) };
+        try {
+            ctx.body = { events: listMyEvents(actor) };
+        } catch (e: any) {
+            ctx.status = 500;
+            ctx.body = { error: e?.message || 'Failed to list events' };
+        }
     });
 
     /**

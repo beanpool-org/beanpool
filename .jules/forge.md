@@ -167,3 +167,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
 **Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.
+
+## 2026-10-24 - [Missing try/catch in GET /api/events/mine]
+**Issue:** `GET /api/events/mine` in `apps/server/src/routes/events.ts` called `listMyEvents(actor)` without a `try/catch` block.
+**Learning:** Route handlers calling domain query functions that read from database tables can throw unhandled exceptions during query failures or DB locks, producing raw 500 unhandled rejections instead of formatted JSON error bodies.
+**Pattern:** Enclose domain query functions inside Koa route handlers in `try/catch` blocks and set `ctx.status = 500` with structured JSON error responses `{ error: '...' }`.

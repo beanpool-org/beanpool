@@ -555,6 +555,26 @@ for (const dark of [false, true]) {
                 expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
             });
 
+            // A photo just sent to a shop that had none is its shop's until the enterprise is read with it; Remove takes that
+            // one down too, never a button that does nothing (PR #2442 review 4367272208).
+            it('a banner photo just saved, before the enterprise is read with it, comes down with Remove and one Save', async () => {
+                banner.next = BANNER_PICKED;
+                await render('console');
+                await click(byId('manage-face-banner'), 'Choose a banner photo');
+                await click(byId('manage-face-save'), 'Save');
+                // The node still answers the enterprise as it was: its shop not read with the photo just sent.
+                expect(byId('manage-face-banner-image')?.querySelector('img')?.getAttribute('src')).toBe(BANNER_PICKED);
+                await click(byId('manage-face-banner-remove'), 'Remove the banner photo');
+                expect(byId('manage-face-banner-image')).toBeNull();
+                expect(byId('manage-face-banner-remove')).toBeNull();
+                await click(byId('manage-face-save'), 'Save');
+                expect(writes()).toEqual([
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: BANNER_PICKED } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } },
+                ]);
+                expect(byId('manage-face-banner-image')).toBeNull();
+            });
+
             it('no photo picked changes nothing; one that cannot be read says so, and nothing is sent', async () => {
                 banner.next = null;
                 await render('console');

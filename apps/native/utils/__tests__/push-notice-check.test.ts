@@ -177,7 +177,10 @@ let mullum: Community;
 let byron: Community;
 let navigated: NoticeRoute[];
 const navigate = (route: NoticeRoute) => { navigated.push(route); };
-const tap = (n: IncomingNotice) => followTap(n, { storage: AsyncStorage, account: kim }, navigate);
+/** What a valid notice from another community the phone keeps was handed on with: the switch (push-notice-switch.ts). */
+let openedIn: Array<{ community: string; id: string; route: NoticeRoute }>;
+const openIn = async (community: string, id: string, route: () => Promise<NoticeRoute>) => { openedIn.push({ community, id, route: await route() }); };
+const tap = (n: IncomingNotice) => followTap(n, { storage: AsyncStorage, account: kim, openIn }, navigate);
 const open = (n: IncomingNotice) => checkWhileOpen(n, { storage: AsyncStorage, recipient: kim.publicKey });
 
 /** Kim registered at each community, as the app does at start, so each answered with its key (or none). */
@@ -201,6 +204,7 @@ beforeEach(() => {
     sent = [];
     down = new Set();
     navigated = [];
+    openedIn = [];
     serve();
     takeNoticeWarning();
 });
@@ -400,6 +404,8 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         expect(detailRequests()[0].url).toBe(`${MULLUM}/api/notices/push/${data.i}`);
         expect(boundSignatureValid(detailRequests()[0], kim.publicKey)).toBe(true);
         expect(takeNoticeWarning()).toBe(false);
+        // The community the phone is set to: opened here, as before; nothing is switched.
+        expect(openedIn).toEqual([]);
     });
 
     it('valid, and the community can\'t say where (down, or it forgot the notice): the tab for its kind', async () => {
@@ -431,6 +437,8 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         expect(warnings).toBe(3);
         expect(navigated).toEqual([]);
         expect(detailRequests()).toEqual([]);
+        // Nor does any of them move the phone to another community.
+        expect(openedIn).toEqual([]);
     });
 
     it('too old, but signed by its community for Kim: no navigation, and no warning (it isn\'t a forgery)', async () => {
@@ -454,18 +462,49 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         expect(navigated).toEqual([`/post/${POST_ID}`]);
     });
 
-    it('valid, from a community the phone keeps but isn\'t set to: nothing opened, no request, no warning', async () => {
+    // Before 24 Oct a valid notice from another community the phone keeps opened nothing ("it just drops you onto the node
+    // you are already on": Marty). It now goes to the switch (push-notice-switch.ts), with where it lands there.
+    it('valid, from a community the phone keeps but isn\'t set to: handed to the switch with where it lands, asked of that community; nothing opened here', async () => {
         const data = byron.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: POST_ID } });
-        expect(await tap(push(data))).toMatchObject({ kind: 'open', community: BYRON, active: false });
+        expect(await tap(push(data))).toMatchObject({ kind: 'open', community: BYRON, id: data.i, active: false });
+        expect(openedIn).toEqual([{ community: BYRON, id: data.i, route: `/post/${POST_ID}` }]);
+        // Asked of its own community, signed by Kim, never of the one the phone is set to.
+        expect(detailRequests().map((r) => r.url)).toEqual([`${BYRON}/api/notices/push/${data.i}`]);
+        expect(boundSignatureValid(detailRequests()[0], kim.publicKey)).toBe(true);
+        // Nothing opened over the community the phone is on now: the switch opens it, there.
         expect(navigated).toEqual([]);
-        expect(detailRequests()).toEqual([]);
         expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('valid, from another community, which can\'t say where (down): the switch is handed the tab for its kind', async () => {
+        down.add(BYRON);
+        const data = byron.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: CHAT_ID } });
+        await tap(push(data));
+        expect(openedIn).toEqual([{ community: BYRON, id: data.i, route: '/(tabs)/chats' }]);
+        expect(navigated).toEqual([]);
+    });
+
+    it('another community\'s notice is asked about only once the switch wants it: a switch that is held asks nothing', async () => {
+        const data = byron.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: POST_ID } });
+        const held: string[] = [];
+        await followTap(push(data), { storage: AsyncStorage, account: kim, openIn: async (community) => { held.push(community); } }, navigate);
+        expect(held).toEqual([BYRON]);
+        expect(detailRequests()).toEqual([]);
+        expect(navigated).toEqual([]);
+    });
+
+    it('repeated: another community\'s notice goes to the switch once, however often its tap comes back', async () => {
+        const data = byron.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: POST_ID } });
+        await tap(push(data));
+        expect(await tap(push(data))).toEqual({ kind: 'nothing', reason: 'repeated' });
+        expect(openedIn).toHaveLength(1);
     });
 
     it('an unsigned push, with every registered community pinned: the warning, and nowhere', async () => {
         expect((await tap(push({ kind: 'recovery_started', screen: 'settings' }))).kind).toBe('warn');
         expect(takeNoticeWarning()).toBe(true);
         expect(navigated).toEqual([]);
+        expect(openedIn).toEqual([]);
     });
 
     it('the key vault\'s notice opens Settings on a phone that gave the vault its token, and is an unsigned push on any other', async () => {

@@ -22,7 +22,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createContext, createElement as h, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, landOnClaim, memberRedirect } from '../member-landing';
+import {
+    DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, landOnClaim, memberRedirect, NOTICE_LANDING_MS, openAfterLanding, takeOpenAfterLanding,
+} from '../member-landing';
 
 type Route = 'welcome' | '(tabs)/index' | '(tabs)/settings';
 
@@ -269,6 +271,41 @@ describe('a landing is only for the account it was asked for (PR #1357 confirmat
     });
 });
 
+describe('a tapped notice opens after the landing, for its community and account only (push-notice-switch.ts)', () => {
+    const BYRON = 'https://byron.example.net';
+    const NOW = 1_800_000_000_000;
+
+    it('taken once, by the account it was asked for, with its community in use (written with or without a trailing slash)', () => {
+        openAfterLanding('/post/3f2b8c1e-5a6d-4e7f-8a9b-0c1d2e3f4a5b', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-A', 'https://mullum.beanpool.org', NOW)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', null, NOW)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', `${BYRON}/`, NOW + 1000)).toBe('/post/3f2b8c1e-5a6d-4e7f-8a9b-0c1d2e3f4a5b');
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW + 1000)).toBeNull();
+    });
+
+    it('another account on the phone drops it; so does its time running out', () => {
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-B', BYRON, NOW)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBeNull();
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW + NOTICE_LANDING_MS)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW + 1)).toBeNull();
+    });
+
+    it('the latest tap replaces any before it', () => {
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        openAfterLanding('/(tabs)/market', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/market');
+    });
+
+    it('leaves the landings from welcome as they were', () => {
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        expect(memberRedirect(['welcome'], 'key-A')).toBe(DEFAULT_MEMBER_LANDING);
+        expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/chats');
+    });
+});
+
 describe('guestRedirect: a chosen guest the root guard finds on welcome (PR #2320 review)', () => {
     it('nothing asked: null, and the guest stays (on welcome to use an invite for that community, say)', () => {
         expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
@@ -300,11 +337,13 @@ describe('guestRedirect: a chosen guest the root guard finds on welcome (PR #232
 describe('the model is the app', () => {
     const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), 'utf8');
 
+    // Since 24 Oct the guard's last two lines open, over the tabs' index only, a notice tapped from the community the phone
+    // just moved to for it (push-notice-switch.test.ts drives that); the landing itself is as before.
     it("app/_layout.tsx's guard ends by landing where memberRedirect says, and replaces to the tabs nowhere else from welcome", () => {
         const layout = read('../../app/_layout.tsx');
         const guard = layout.slice(layout.indexOf('        if (isLoading) return;\n        const root = (segments as string[])[0];'));
         const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding]);'));
-        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*$/);
+        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);\n\s*$/);
         expect(body).not.toMatch(/root === 'welcome'\) \{\s*router\.replace/);
     });
 

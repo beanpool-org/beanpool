@@ -25,6 +25,42 @@ export interface CommunityRow {
 
 const PING_MS = 4000;
 
+let moving = false;
+
+/** Whether a {@link switchCommunity} is under way: a second one waits for nothing and starts nothing. */
+export function communitySwitchUnderWay(): boolean {
+    return moving;
+}
+
+/**
+ * The phone moves to another community it keeps: a tap on the BeanPool sheet's row (`switchTo` below), and a tap on a
+ * notice from that community (push-notice-switch.ts). The one switch for both. The community becomes the phone's (its own
+ * database, the anchor, the update screen told), then back to the bottom of the stack and the whole app through Welcome
+ * for it, where the root guard lands the member (member-landing.ts). `beforeWelcome` runs between the two, once the
+ * community is the phone's: a tapped notice asks the root layout's recognition again there, so the guard reads this
+ * community's answer, and asks for its screen. Throws, before anything moves, for an address that isn't plain.
+ */
+export async function switchCommunity(url: string, beforeWelcome?: () => Promise<void>): Promise<void> {
+    moving = true;
+    try {
+        // Only a plain host[:port] becomes the phone's community (node-url.ts); refused before anything moves.
+        assertPlainNodeAddress(url);
+        const { closeDB, initDB } = await import('./db');
+        await closeDB();
+        await AsyncStorage.setItem('beanpool_anchor_url', url);
+        await initDB();
+        // The full-screen "Update required" was the community left's; the one now in use is asked at once, so
+        // switching back to a community whose floor stops this app puts it up again (utils/community-switch.ts).
+        communitySwitched();
+        await beforeWelcome?.().catch((e) => console.warn('[Communities] Before the bounce through Welcome', e));
+        // Back to the bottom of the stack, then bounce the whole app through Welcome for the new community.
+        if (router.canDismiss()) router.dismissAll();
+        router.replace('/welcome');
+    } finally {
+        moving = false;
+    }
+}
+
 async function getJson(url: string | ((signal: AbortSignal) => Promise<Response>)): Promise<any | null> {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), PING_MS);
@@ -88,21 +124,10 @@ export function useCommunities() {
     }, [me]);
 
     const switchTo = useCallback(async (url: string) => {
-        if (url === active || switching) return;
+        if (url === active || switching || communitySwitchUnderWay()) return;
         setSwitching(true);
         try {
-            // Only a plain host[:port] becomes the phone's community (node-url.ts); refused before anything moves.
-            assertPlainNodeAddress(url);
-            const { closeDB, initDB } = await import('./db');
-            await closeDB();
-            await AsyncStorage.setItem('beanpool_anchor_url', url);
-            await initDB();
-            // The full-screen "Update required" was the community left's; the one now in use is asked at once, so
-            // switching back to a community whose floor stops this app puts it up again (utils/community-switch.ts).
-            communitySwitched();
-            // Back to the bottom of the stack, then bounce the whole app through Welcome for the new community.
-            if (router.canDismiss()) router.dismissAll();
-            router.replace('/welcome');
+            await switchCommunity(url);
         } catch (e: any) {
             setSwitching(false);
             Alert.alert(t("Couldn't switch community"), e?.message || t('Please try again.'));

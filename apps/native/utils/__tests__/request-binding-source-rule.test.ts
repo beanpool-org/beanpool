@@ -233,8 +233,9 @@ describe('the phone\'s community address is written only after the plain-address
         // (utils/rekey-redeem.ts rekeyCommunityUrl), checked again before it is written.
         'app/rekey-code.tsx onBound': /assertPlainNodeAddress\(s\.community\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', s\.community\)/,
         'app/rekey-code.tsx moveOntoCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
-        // The header's community switcher.
-        'utils/use-communities.ts switchTo': /assertPlainNodeAddress\(url\)/,
+        // The header's community switcher (the BeanPool sheet's rows), and a tapped notice from another community the phone
+        // keeps (utils/push-notice-switch.ts): the one switch for both.
+        'utils/use-communities.ts switchCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
         // Both restores (12 words, sign-in).
         'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
         // Development discovery: only plain candidates are probed.

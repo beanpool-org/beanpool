@@ -11,8 +11,9 @@
  *   counted ({@link droppedNoticeCounts}).
  * - **On a tap** ({@link checkTap}), the same check. A valid notice is opened: the app asks its community where it lands
  *   (`GET /api/notices/push/<id>`) and goes there only through {@link noticeRoute}, which builds the route from a fixed
- *   list and lets an id through only in the shape the node issues them. Not valid: the app goes nowhere and shows
- *   {@link FORGED_NOTICE_LINE} once ({@link warnAboutNotice}).
+ *   list and lets an id through only in the shape the node issues them. A valid notice from another community this phone
+ *   keeps moves the phone there first, as the community list does, unless something holds it (push-notice-switch.ts).
+ *   Not valid: the app goes nowhere and shows {@link FORGED_NOTICE_LINE} once ({@link warnAboutNotice}).
  * - **No string from a push reaches a route.** The kind picks a tab from core's fixed table; the notice id goes only into
  *   the details request, and only in its fixed shape. A push's own `screen`, `postId` or `conversationId` (what servers
  *   sent before signed notices) is never read.
@@ -446,6 +447,27 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
     }
 }
 
+// ── Counting ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The community that signed a notification's notice for this account, by the same check as {@link checkWhileOpen} and
+ * {@link checkTap} (its pin, this account, its lifetime), for counting it (notice-counts.ts): the notice's id, and whether
+ * that community is the one the phone is set to. Null for anything else: unsigned, signed by no community this phone
+ * keeps, for another account, out of its time. Notes nothing and counts no drop, so it never changes what a later check
+ * of the same notice decides. Asks no community anything. Never throws.
+ */
+export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Promise<{ community: string; id: string; active: boolean } | null> {
+    try {
+        const notice = signedNotice(n.data);
+        if (!notice) return null;
+        const checked = await checkSigned(notice, ctx);
+        if (!checked.ok) return null;
+        return { community: checked.pin.community, id: checked.id, active: checked.pin.community === checked.pins.anchor };
+    } catch {
+        return null;
+    }
+}
+
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`
@@ -513,25 +535,30 @@ export async function noticeDetails(community: string, id: string, account: Acco
 }
 
 /**
- * A tap on a notification (or the one that launched the app), followed: {@link checkTap}, then for a valid notice from
- * the community the phone is set to, its details and {@link noticeRoute}; Settings for the key vault's; the warning for
- * one the phone can't trust. A valid notice from another community the phone keeps opens nothing: the screens show the
- * community the phone is set to. Returns what was decided. Never throws.
+ * A tap on a notification (or the one that launched the app), followed: {@link checkTap}, then for a valid notice its
+ * details and {@link noticeRoute}; Settings for the key vault's; the warning for one the phone can't trust. A valid notice
+ * from the community the phone is set to opens here (`navigate`). One from another community the phone keeps goes to
+ * `openIn` (push-notice-switch.ts `openNoticeIn`), which moves the phone there unless something holds it, and opens it
+ * there: the screens show the community the phone is set to. `openIn` asks for the route only once it is going, so a
+ * switch that is held asks that community nothing. Returns what was decided. Never throws.
  */
 export async function followTap(
     n: IncomingNotice,
-    ctx: Omit<NoticeContext, 'recipient'> & { account: Account | null; detailsTimeoutMs?: number },
+    ctx: Omit<NoticeContext, 'recipient'> & {
+        account: Account | null;
+        detailsTimeoutMs?: number;
+        openIn: (community: string, id: string, route: () => Promise<NoticeRoute>) => Promise<unknown>;
+    },
     navigate: (route: NoticeRoute) => void,
 ): Promise<TapDecision> {
     const decision = await checkTap(n, { storage: ctx.storage, recipient: ctx.account?.publicKey ?? null, now: ctx.now });
     try {
         if (decision.kind === 'open' && ctx.account) {
-            if (!decision.active) {
-                console.log(`[Push] A notice from ${decision.community}, which the phone is not set to: nothing opened`);
-                return decision;
-            }
-            const details = await noticeDetails(decision.community, decision.id, ctx.account, ctx.detailsTimeoutMs);
-            navigate(noticeRoute(decision.noticeKind, details));
+            const account = ctx.account;
+            // Where it lands, as its own community answers, signed by the account it was sent to.
+            const route = async () => noticeRoute(decision.noticeKind, await noticeDetails(decision.community, decision.id, account, ctx.detailsTimeoutMs));
+            if (decision.active) navigate(await route());
+            else await ctx.openIn(decision.community, decision.id, route);
         } else if (decision.kind === 'settings') {
             navigate('/(tabs)/settings');
         } else if (decision.kind === 'warn') {

@@ -481,6 +481,34 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(nav).not.toHaveBeenCalledWith('messages');
     });
 
+    it("a group invitation's line opens the group, whose info offers Join; several open Commons (tester report 24 Oct, item 6)", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'invite', count: 1, accent: false, label: "You're invited to join Garden Club", target: { to: 'invite', id: 'garden-id' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        const { unmount } = render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        const line = within(needs).getByTestId('home-needs-invite');
+        expect(line).toHaveTextContent("You're invited to join Garden Club");
+        fireEvent.click(within(needs).getByRole('button', { name: "You're invited to join Garden Club" }));
+        expect(nav).toHaveBeenCalledWith('group', 'garden-id');
+        expect(nav).not.toHaveBeenCalledWith('messages');
+        unmount();
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'invite', count: 2, accent: false, label: "You're invited to join 2 groups", target: { to: 'invites' } },
+            ] },
+        })));
+        const nav2 = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav2} />);
+        const needs2 = await screen.findByTestId('home-card-needs');
+        fireEvent.click(within(needs2).getByRole('button', { name: "You're invited to join 2 groups" }));
+        expect(nav2).toHaveBeenCalledWith('projects');
+    });
+
     it('a new member\'s Beans: nothing to repay, how credit opens; the steps link to where each is done', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },

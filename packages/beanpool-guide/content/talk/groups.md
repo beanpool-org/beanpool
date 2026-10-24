@@ -42,7 +42,9 @@ You can invite people on the phone and in the web app. On the phone, a new group
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet: there, they open the group and tap **Accept invitation**. When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations in **Commons** yet: there, the line in **Needs you** opens the group, and they tap **Accept invitation**. When they join, the chat says so.
+
+If you take an invitation back and invite the same person again, they get no second alert within the hour. Someone who has blocked you still gets the invitation, with no alert.
 
 ## The group's chat
 
@@ -115,14 +117,17 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
+When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (two people with a plus). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
+
+A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.
+- Tap **Decline invitation** to say no. The app asks once more, then the invitation goes, from **Needs you** too. Whoever invited you can invite you again.
 - If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.
 - If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**.
 
-The web app does not mark invitations yet. Open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page.
+The web app does not mark invitations in **Commons** yet. Tap the line in **Needs you** on Home, or open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it.
 
 ## Posting to a group
 

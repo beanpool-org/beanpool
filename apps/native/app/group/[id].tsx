@@ -9,6 +9,9 @@
  * group's own answer — with who invited you — fills it in the moment it arrives; the members' faces arrive on
  * their own and never hold the page up. Two requests, sent together; neither waits on the other.
  *
+ * An open invitation can also be declined (Decline invitation, under Not now): the member's own row goes, as leaving does,
+ * and with it the invitation's line in Needs you. Whoever invited them can invite them again.
+ *
  * States (utils/your-groups inviteLandingPhase, unit tested): skeleton → ready, or error (no signal; Try again),
  * unavailable (not found), expired (opened as an invitation that is no longer open, with no other way in).
  *
@@ -24,7 +27,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../ThemeContext';
-import { getGroupForLanding, getGroupActiveMembers, joinGroupApi, type GroupItem, type GroupMemberItem } from '../../utils/db';
+import { getGroupForLanding, getGroupActiveMembers, joinGroupApi, leaveGroupApi, type GroupItem, type GroupMemberItem } from '../../utils/db';
+import { useIdentity } from '../IdentityContext';
 import {
     chatEmoji, chatHref, inviteLandingAction, inviteLandingConvenor, inviteLandingPhase, inviteLandingFacts, inviteLandingPreviewFromParams,
 } from '../../utils/your-groups';
@@ -48,6 +52,7 @@ export default function GroupInviteLanding() {
     const id = rawId || '';
     const preview = React.useMemo(() => inviteLandingPreviewFromParams(params), [params.name, params.category, params.joinPolicy, params.memberCount, params.invited]);
     const insets = useSafeAreaInsets();
+    const { identity } = useIdentity();
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     // undefined = still asking; null = the node said not found.
@@ -113,6 +118,32 @@ export default function GroupInviteLanding() {
         } finally {
             if (alive.current) setBusy(false);
         }
+    };
+
+    // Declining an open invitation: asked once, then the member's own row goes (server engine removeGroupMember).
+    const decline = () => {
+        if (!g || viewerStatus !== 'invited' || busy || !identity?.publicKey) return;
+        const me = identity.publicKey;
+        Alert.alert(t('Decline the invitation?'), t('You will not join {name}. Whoever invited you can invite you again.', { name: g.name }), [
+            { text: t('Cancel'), style: 'cancel' },
+            {
+                text: t('Decline'), style: 'destructive', onPress: async () => {
+                    setBusy(true);
+                    const failed = (e?: any) => Alert.alert(t('Could not decline'),
+                        e?.message ? chatLineWords(e.message) : t('Could not reach the node. Try again when you have signal.'));
+                    try {
+                        if (await leaveGroupApi(g.id, me)) {
+                            yourGroupsStore.refresh();
+                            close();
+                        } else failed();
+                    } catch (e: any) {
+                        failed(e);
+                    } finally {
+                        if (alive.current) setBusy(false);
+                    }
+                },
+            },
+        ]);
     };
 
     const topBar = (
@@ -247,6 +278,12 @@ export default function GroupInviteLanding() {
                 <Pressable style={styles.secondaryBtn} onPress={close} accessibilityRole="button">
                     <Text style={styles.secondaryText}>{t('Not now')}</Text>
                 </Pressable>
+                {viewerStatus === 'invited' && (
+                    <Pressable style={styles.secondaryBtn} onPress={decline} disabled={busy} accessibilityRole="button"
+                        accessibilityState={{ disabled: busy }} testID="invite-landing-decline">
+                        <Text style={styles.declineText}>{t('Decline invitation')}</Text>
+                    </Pressable>
+                )}
             </ScrollView>
         );
     }
@@ -302,4 +339,5 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     note: { fontSize: 13, color: colors.text.secondary, textAlign: 'center', marginTop: 8 },
     secondaryBtn: { minHeight: 48, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', marginTop: 6 },
     secondaryText: { fontSize: 16, fontWeight: '700', color: colors.text.secondary },
+    declineText: { fontSize: 15, fontWeight: '600', color: colors.text.muted, textAlign: 'center' },
 });

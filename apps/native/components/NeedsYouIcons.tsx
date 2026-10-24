@@ -12,12 +12,12 @@ import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '
 import { getCachedNodeProfile, decisionsOn, type NodeFeatures } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    buildNeedsYou, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT,
+    buildNeedsYou, fitNeedsYou, isOwnInviteChange, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT,
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import { t } from '@beanpool/core';
-import { HOME_HEADER_WAIT_MS, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
+import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
@@ -33,6 +33,7 @@ const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIc
     admin: 'shield-account-outline',
     deal: 'handshake-outline',
     vote: 'vote-outline',
+    invite: 'account-multiple-plus-outline',
     message: 'message-text-outline',
     group: 'account-group-outline',
 };
@@ -55,13 +56,13 @@ export function goToNeedsTarget(target: Exclude<NeedsYouTarget, { to: 'admin' }>
 }
 
 type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;
-type NodeParts = Pick<NeedsYouInputs, 'groupChats' | 'admin'> & {
+type NodeParts = Pick<NeedsYouInputs, 'groupChats' | 'groupInvites' | 'admin'> & {
     communityName: string | null;
     /** Home's vote line, from the header's own read (loadNode); drawn by Home's rule (mergeNeeds) with the switches beside it. */
     votes: HomeNeedsItem[] | null;
     features: HomeAnswer['features'] | null;
 };
-const NO_NODE_PARTS: NodeParts = { groupChats: null, admin: null, communityName: null, votes: null, features: null };
+const NO_NODE_PARTS: NodeParts = { groupChats: null, groupInvites: null, admin: null, communityName: null, votes: null, features: null };
 const settle = <T,>(p: Promise<T>) => p.catch(() => null);
 
 /** From the phone's own database: no request, nothing decrypted. */
@@ -115,6 +116,8 @@ async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
         votes: Array.isArray(needs) ? needs.filter((i: HomeNeedsItem) => i?.kind === 'vote') : null,
         features: features ? { ...features } : null,
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
+        // The member's open invitations to groups, beside their chats (a node from before them says none).
+        groupInvites: Array.isArray(yourGroups?.invites) ? yourGroups.invites : null,
         admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,
         communityName: admin?.communityName ?? null,
     };
@@ -166,9 +169,9 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
             setEntries(mergeNeeds(home.current.items, localNeeds(me, now, local.current.transactions, local.current.conversations), now, home.current.features));
             return;
         }
-        const { groupChats, admin, votes, features } = node.current;
+        const { groupChats, groupInvites, admin, votes, features } = node.current;
         const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);
-        setEntries([...buildNeedsYou({ me, now, ...local.current, decisions: null, groupChats, admin }), ...mergeNeeds(votes, null, now, features)]
+        setEntries([...buildNeedsYou({ me, now, ...local.current, decisions: null, groupChats, groupInvites, admin }), ...mergeNeeds(votes, null, now, features)]
             .sort((a, b) => rank(a.kind) - rank(b.kind)));
     }, [me]);
 
@@ -238,12 +241,15 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         const app = AppState.addEventListener('change', st => {
             if (st === 'active') { poke(); startPoll(); } else stopPoll();
         });
-        const ws = DeviceEventEmitter.addListener('ws_activity', () => {
+        const ws = DeviceEventEmitter.addListener('ws_activity', (data: unknown) => {
+            // One of the member's own group invitations made, taken up, declined or withdrawn: Home's answer is from
+            // before it, so the next read is the header's own (GET /api/your-groups lists what is still open).
+            if (isOwnInviteChange(data, me)) forgetHomeForHeader();
             if (settleTimer) clearTimeout(settleTimer);
             settleTimer = setTimeout(poke, WS_SETTLE_MS);
         });
         return () => { stopPoll(); app.remove(); ws.remove(); if (settleTimer) clearTimeout(settleTimer); };
-    }, [poke]);
+    }, [poke, me]);
 
     // 🛡️ is the Settings "Manage" press, landing at the item's /settings section; the rest are app routes.
     const open = (t: NeedsYouTarget) => {

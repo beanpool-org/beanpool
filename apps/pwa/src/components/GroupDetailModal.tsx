@@ -175,6 +175,24 @@ export function GroupDetailModal({
         }
     };
 
+    // Declining an open invitation: the member's own row goes, as leaving does (server engine removeGroupMember), and with it
+    // the invitation's line in Needs you. An invite-only group is then hidden from them, so the sheet closes.
+    const handleDecline = async () => {
+        if (!myPubkey) return;
+        if (!window.confirm(t('Decline the invitation to {group}? Whoever invited you can invite you again.', { group: groupData.name }))) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            await removeGroupMember(groupData.id, myPubkey);
+            if (onMembershipChanged) onMembershipChanged();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || t('Could not decline the invitation'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleHandOverLead = async (targetPubkey: string, callsign?: string) => {
         if (!window.confirm(callsign
             ? t('Make {name} the lead convenor of {group}? They can remove and demote convenors, and you cannot take the lead back.', { name: callsign, group: groupData.name })
@@ -617,15 +635,26 @@ export function GroupDetailModal({
                                 {t('Request Pending Approval')}
                             </div>
                         ) : isInvited ? (
-                            <button
-                                type="button"
-                                data-testid="group-accept-invite"
-                                onClick={handleJoin}
-                                disabled={actionLoading}
-                                className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                            >
-                                {t('Accept invitation')}
-                            </button>
+                            <>
+                                <button
+                                    type="button"
+                                    data-testid="group-accept-invite"
+                                    onClick={handleJoin}
+                                    disabled={actionLoading}
+                                    className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                >
+                                    {t('Accept invitation')}
+                                </button>
+                                <button
+                                    type="button"
+                                    data-testid="group-decline-invite"
+                                    onClick={handleDecline}
+                                    disabled={actionLoading}
+                                    className="w-full mt-2 py-2.5 px-4 rounded-xl text-bp-ink-accent font-semibold text-sm hover:bg-bp-chip-accent-tint transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                >
+                                    {t('Decline invitation')}
+                                </button>
+                            </>
                         ) : groupData.joinPolicy === 'invite_only' ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 {t('Invite Only')}

@@ -10,14 +10,14 @@ import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
 import { canManageNode, type AdminQueueItem, type SettingsSection } from './node-role';
 
-export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
+export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
 
 /**
  * Highest first. The highest sits nearest the invite/Settings/avatar group and keeps its spot as others
  * come and go; the lowest are the first to fold into "•••". Admin work (🛡️, owners, admins and moderators only) comes
  * first: a report or an emergency suspension can be urgent.
  */
-export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'message', 'group'];
+export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'invite', 'message', 'group'];
 
 /** Where a tap lands: {@link needsTargetHref} names the screen, and the component navigates there. */
 export type NeedsYouTarget =
@@ -39,7 +39,14 @@ export type NeedsYouTarget =
      * A chat group, for its members' vote (slice S3): its chat with the info sheet open, where its Decisions block is. The
      * node sends it only to an app that asks with `lands=group` (utils/home-store.ts homePath).
      */
-    | { to: 'group'; id: string };
+    | { to: 'group'; id: string }
+    /**
+     * An invitation to a group: its invite landing (app/group/[id].tsx), opened as an invitation. Several: Commons →
+     * Groups, where each shows INVITED. The node sends these only to an app that asks with `lands=invite`
+     * (utils/home-store.ts homePath).
+     */
+    | { to: 'invite'; id: string }
+    | { to: 'invites' };
 
 /** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
 export function groupVoteHref(groupId: string): { pathname: string; params: Record<string, string> } {
@@ -71,6 +78,10 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         case 'enterprise': return { pathname: '/treasury-manage', params: { publicKey: target.id } };
         // A group's vote: the group itself (its chat, the info sheet open on its Decisions block), never Talk's list.
         case 'group': return groupVoteHref(target.id);
+        // An invitation: the landing that says what the group is and who asked, with Join (utils/your-groups.ts
+        // inviteLandingHref, as a Commons row opens it); several, the Commons list where each is marked INVITED.
+        case 'invite': return { pathname: '/group/[id]', params: { id: target.id, invited: '1' } };
+        case 'invites': return { pathname: '/(tabs)/projects', params: { section: 'groups' } };
     }
 }
 
@@ -106,6 +117,12 @@ export interface NeedsYouConversation {
     peer: string;
 }
 
+/** One of the member's open invitations to a group: GET /api/your-groups `invites` (server engine/group-invites.ts). */
+export interface NeedsYouGroupInvite {
+    groupId: string;
+    name: string;
+}
+
 /** One row of GET /api/your-groups. */
 export interface NeedsYouGroupChat {
     kind: 'group' | 'enterprise' | 'event';
@@ -128,6 +145,8 @@ export interface NeedsYouInputs {
     } | null;
     conversations: NeedsYouConversation[] | null;
     groupChats: NeedsYouGroupChat[] | null;
+    /** Absent or null when not read (a node from before it said them): no line rather than a guess. */
+    groupInvites?: NeedsYouGroupInvite[] | null;
     /**
      * The member's node role (GET /api/node-admin/me) and, only when that is owner/admin/moderator, the node's admin
      * queue (GET /api/node-admin/queue). null when either is unknown: no 🛡️ rather than a guess. `decisions` words it.
@@ -239,6 +258,19 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         }
     }
 
+    // Open invitations to groups, one line for them all as the node words it on Home: gone once each is accepted,
+    // declined or withdrawn (the node lists only what is still open).
+    const invites = (i.groupInvites || []).filter(g => typeof g?.groupId === 'string' && g.groupId && typeof g.name === 'string');
+    if (invites.length) {
+        out.push({
+            kind: 'invite', count: invites.length, accent: false,
+            label: invites.length === 1
+                ? t("You're invited to join {name}", { name: invites[0].name })
+                : tn(invites.length, "You're invited to join {n} group", "You're invited to join {n} groups"),
+            target: invites.length === 1 ? { to: 'invite', id: invites[0].groupId } : { to: 'invites' },
+        });
+    }
+
     const dms = (i.conversations || []).filter(c => c.unread > 0 && c.type === 'dm');
     if (dms.length) {
         out.push({
@@ -299,4 +331,18 @@ export function needsYouRowOrder(fit: { shown: NeedsYouEntry[]; hidden: number }
 
 export function moreLabel(hidden: number): string {
     return tn(hidden, '{n} more thing needs you', '{n} more things need you');
+}
+
+/**
+ * A socket event that changes one of this member's own invitations to a group: one made (`group_member_invited`, which
+ * the node sends to the group's convenors and the member invited), or one taken up, declined or withdrawn (the row
+ * updated or removed, which the member's own sockets get too). The header then reads the node itself rather than draw
+ * Home's answer from before it (NeedsYouIcons), so the line comes and goes without a reload.
+ */
+export function isOwnInviteChange(data: unknown, me: string | null | undefined): boolean {
+    if (!me || !data || typeof data !== 'object') return false;
+    const d = data as { type?: unknown; member?: { memberPubkey?: unknown } | null; memberPubkey?: unknown };
+    if (d.type === 'group_member_invited' || d.type === 'group_member_updated') return d.member?.memberPubkey === me;
+    if (d.type === 'group_member_removed') return d.memberPubkey === me;
+    return false;
 }

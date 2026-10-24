@@ -84,6 +84,7 @@ import { probationRuleSet, probationSummary, type ProbationSummary } from '../en
 import { readMemberArea } from '../engine/member-area.js';
 import { getInterestsUpdatedAt, getTourRecord } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
+import { pendingGroupInvites } from '../engine/group-invites.js';
 import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { memberShop, shopOf } from '../engine/shops.js';
@@ -175,7 +176,7 @@ export const HOME_INTERESTS_PREF_KEY = 'interests';
 
 // ── what the answer holds ────────────────────────────────────────────────────────────────────────────────────────────
 
-export type NeedsKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
+export type NeedsKind = 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
 /** Where a tap lands: the same targets the header's "needs you" icons use (apps/native utils/needs-you.ts). */
 export type NeedsTarget =
     | { to: 'admin'; section: AdminSettingsSection }
@@ -188,7 +189,13 @@ export type NeedsTarget =
     /** An enterprise's own screen, for its keepers' votes (DESIGN-group-decisions §2.8): only to an app that says it opens it. */
     | { to: 'enterprise'; id: string }
     /** A chat group's own screen, for its members' votes (slice S3): only to an app that says it opens it (lands=group). */
-    | { to: 'group'; id: string };
+    | { to: 'group'; id: string }
+    /**
+     * An invitation to a group (engine/group-invites.ts): the one open, on the app's invite landing, or the list of groups
+     * where each shows as invited. Only to an app that says it opens them (lands=invite).
+     */
+    | { to: 'invite'; id: string }
+    | { to: 'invites' };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -351,15 +358,16 @@ export interface HomeReader {
     asked: string[] | undefined;
     /**
      * `lands=` as sent (parseLands): the landings beyond the first set this app can open. An app that names none is given
-     * nothing that would land nowhere in it: no line or count for an enterprise's keepers' votes (`enterprise`).
+     * nothing that would land nowhere in it: no line or count for an enterprise's keepers' votes (`enterprise`), a group's
+     * (`group`), or the member's open group invitations (`invite`).
      */
     lands?: ReadonlySet<HomeLanding>;
     now?: number;
 }
 
 /** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise' | 'group';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -589,6 +597,19 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                 target: votes[0].scopeKind === 'enterprise' && votes[0].scopeId ? { to: 'enterprise', id: votes[0].scopeId }
                     : votes[0].scopeKind === 'group' && votes[0].scopeId ? { to: 'group', id: votes[0].scopeId } : { to: 'decide' },
                 closesAt: soonest,
+            });
+        }
+    }
+
+    // The member's open invitations to groups, one line for them all (engine/group-invites.ts): gone once each is accepted,
+    // declined or withdrawn. Only for an app that opens an invitation (lands=invite): an older one has no such line.
+    if (c.lands.has('invite')) {
+        const invites = pendingGroupInvites(me);
+        if (invites.length) {
+            items.push({
+                kind: 'invite', count: invites.length, accent: false,
+                label: invites.length === 1 ? `You're invited to join ${clip(invites[0].name, NAME_CHARS)}` : `You're invited to join ${invites.length} groups`,
+                target: invites.length === 1 ? { to: 'invite', id: invites[0].groupId } : { to: 'invites' },
             });
         }
     }

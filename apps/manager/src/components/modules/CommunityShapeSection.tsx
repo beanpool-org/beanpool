@@ -949,7 +949,7 @@ export function CommunityShapeSection({
                 ) : (
                     <div data-testid="shape-audit-log" className="space-y-2">
                         {log.slice(0, 50).map((entry) => (
-                            <div key={entry.id} className="text-xs text-nature-300 py-1 border-b border-nature-800/50 break-words leading-relaxed">
+                            <div key={`${entry.kept}-${entry.id}`} className="text-xs text-nature-300 py-1 border-b border-nature-800/50 break-words leading-relaxed">
                                 <span className="font-mono text-nature-400">
                                     {formatLogDate(entry.at)}
                                 </span>{' '}

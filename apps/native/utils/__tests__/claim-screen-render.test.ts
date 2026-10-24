@@ -11,6 +11,8 @@
  *      the pale Claim button made no sense. The box now shows a pattern and, under it, where the code is;
  *   2. with no server yet (Set up a new community server), the screen had no scanner: only the camera app or
  *      Settings → Link a device read the server's claim QR. Its first step now has Scan the code.
+ * And on a phone with no account the claim makes the account (DESIGN-account-without-global-fable.md §2.2, §4): the
+ * last block. The claim's key rule (utils/claim-key.ts) is stubbed here, answer by answer: node-claim.test.ts runs it.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -44,6 +46,8 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFillObject: {} },
         Alert: { alert: vi.fn() },
+        // Android's back button: the test presses it through the listener the screen registers.
+        BackHandler: { addEventListener: vi.fn((_: string, fn: () => boolean) => { back.press = fn; return { remove: vi.fn() }; }) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
@@ -51,8 +55,9 @@ vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: 
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children) }));
 const nav = vi.hoisted(() => ({
     params: {} as Record<string, string>,
-    router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn(), canGoBack: vi.fn(() => true) },
+    router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn(), canGoBack: vi.fn(() => true), canDismiss: vi.fn(() => false), dismissAll: vi.fn() },
 }));
+const back = vi.hoisted(() => ({ press: null as null | (() => boolean) }));
 vi.mock('expo-router', () => ({ router: nav.router, useLocalSearchParams: () => nav.params, ErrorBoundary: () => null }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 // The camera: allowed unless a test refuses it, and the barcode handler kept so a test can hand it what the camera read.
@@ -74,13 +79,13 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: ctx, useStyles: (factory: (c: ReturnType<typeof ctx>) => unknown) => factory(ctx()) };
 });
 // One object, as the provider keeps it: the screen asks for membership again whenever it changes.
-const who = vi.hoisted(() => ({ identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'marty' } }));
+const who = vi.hoisted(() => ({ identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'marty' }, setIdentity: vi.fn() }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ start: vi.fn(), busy: false, dialog: null }) }));
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => null) }));
 vi.mock('../community-switch', () => ({ communitySwitched: vi.fn() }));
 vi.mock('../membership-probe', () => ({ fetchMembership: vi.fn(async () => new Response(JSON.stringify({ isMember: true }), { status: 200 })) }));
-vi.mock('../node-admin', () => ({ requireDeviceUnlock: vi.fn(async () => 'ok'), NO_DEVICE_LOCK_MESSAGE: 'no lock' }));
+vi.mock('../node-admin', () => ({ requireDeviceUnlock: vi.fn(async () => 'ok'), hasDeviceLock: vi.fn(async () => true), NO_DEVICE_LOCK_MESSAGE: 'no lock' }));
 // The server's answer to GET /api/local/claim: no owner yet, named Beans Town.
 const CODE_ID = '0a1b2c3d';
 const server = vi.hoisted(() => ({ asked: [] as string[], addresses: ['beans.example.org'] as string[] | null }));
@@ -95,15 +100,29 @@ vi.mock('../node-claim', async (importOriginal) => {
         readNodeHasAddress: vi.fn(async () => true),
         // The node's own addresses, as its info names them (the success screen reads them).
         readNodeAddresses: vi.fn(async () => server.addresses),
-        // The claim itself is node-claim.test.ts's: here the node takes it.
-        claimCommunity: vi.fn(async () => ({ kind: 'owner' })),
     };
 });
+// The claim's key (utils/claim-key.ts), answer by answer: what the phone holds follows `who` (the phone's account, or
+// none), and the node takes the claim unless a test says otherwise. The rule itself is node-claim.test.ts's.
+const keys = vi.hoisted(() => ({ state: null as null | Record<string, unknown> }));
+vi.mock('../claim-key', () => ({
+    claimKeyState: vi.fn(async () => keys.state ?? (who.identity ? { kind: 'account', identity: who.identity } : { kind: 'none' })),
+    claimKeyForThisPhone: vi.fn(async (_origin: string, held: unknown) => held
+        ?? (who.identity ? { identity: who.identity, createdHere: false } : { identity: { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: '' }, createdHere: true })),
+    claimWithKey: vi.fn(async (req: { key: { identity: object; createdHere: boolean }; callsign: string }) => ({
+        outcome: { kind: 'owner', callsign: null }, identity: { ...req.key.identity, callsign: req.callsign }, madeHere: req.key.createdHere, wordsUnseen: req.key.createdHere, released: false,
+    })),
+    checkOwnClaim: vi.fn(async () => ({ outcome: { kind: 'owner', callsign: null }, released: false })),
+    finishClaim: vi.fn(async (_o: string, identity: object) => identity),
+    releaseClaimKey: vi.fn(async () => false),
+}));
 
 import { Alert } from 'react-native';
 import ClaimCommunityScreen from '../../app/claim-community';
 import { CLAIM_CODE_PLACEHOLDER } from '../claim-link';
-import { claimCodeDigits, claimCodeFromDigits, claimCommunity, readClaimStatus } from '../node-claim';
+import { claimCodeDigits, claimCodeFromDigits, readClaimStatus } from '../node-claim';
+import { checkOwnClaim, claimKeyForThisPhone, claimWithKey, finishClaim, releaseClaimKey } from '../claim-key';
+import { hasDeviceLock, requireDeviceUnlock } from '../node-admin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 
@@ -147,6 +166,8 @@ async function scan(host: HTMLElement, data: string) {
 beforeEach(() => {
     document.body.innerHTML = '';
     nav.params = {};
+    keys.state = null;
+    back.press = null;
     look.theme = 'light';
     server.asked = [];
     server.addresses = ['beans.example.org'];
@@ -393,155 +414,285 @@ describe('claimed at the server\'s number, the owner is told a name follows the 
     });
 });
 
-describe('the QR on a phone with no account yet (Dax, 23 Oct): a way on, not a dead end', () => {
-    const KEPT = 'beanpool_pending_claim';
+/**
+ * The `beanpool claim` QR on a phone with no account (Dax, 23 Oct): the claim makes the account (DESIGN §2.2), with nothing
+ * of ours in the way. #2412's "Make my account" sent the member to make one elsewhere first, and with no invite that
+ * meant the global community's.
+ */
+describe('the claim on a phone with no account makes the account', () => {
     const signedIn = who.identity;
     const storage = () => vi.mocked(AsyncStorage);
     beforeEach(() => {
         storage().setItem.mockClear();
-        storage().removeItem.mockClear();
         nav.router.replace.mockClear();
         nav.router.back.mockClear();
-        vi.mocked(claimCommunity).mockClear();
+        nav.router.dismissAll.mockClear();
+        for (const f of [claimKeyForThisPhone, claimWithKey, checkOwnClaim, finishClaim, releaseClaimKey, requireDeviceUnlock, hasDeviceLock]) vi.mocked(f).mockClear();
     });
     const withNoAccount = async (run: () => Promise<void>) => {
         (who as { identity: unknown }).identity = null;
         try { await run(); } finally { (who as { identity: unknown }).identity = signedIn; }
     };
+    const nameField = (host: HTMLElement) => q(host, 'input[aria-label="Your callsign"]') as HTMLInputElement | null;
+    const type = async (field: HTMLInputElement, text: string) => {
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(field, text);
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    };
+    const fromTheQr = async () => {
+        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+        return render();
+    };
 
-    it('says the account comes first and offers Make my account: no code box, no Claim button, never the code', async () => {
+    it('draws the code box, Your name here and Claim and become owner, with what the tap will do: no Make my account', async () => {
         await withNoAccount(async () => {
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-            const host = await render();
+            const host = await fromTheQr();
             expect(host.textContent).toContain('Claim Beans Town');
             expect(host.textContent).toContain(ORIGIN);
-            expect(q(host, '[data-testid="claim-no-account"]')?.textContent)
-                .toBe('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here, with the code filled in.');
-            expect(button(host, 'Make my account')).toBeDefined();
-            expect(codeField(host)).toBeNull();
-            expect(button(host, 'Claim and become owner')).toBeUndefined();
-            expect(host.textContent).not.toContain(CODE.slice(6));
+            expect(host.textContent).toContain('This community has no owner yet. Its one-time code is on its server.');
+            expect(q(host, '[data-testid="claim-makes-account"]')?.textContent)
+                .toBe('Claiming makes your BeanPool account on this phone, and makes it the owner of Beans Town.');
+            expect(q(host, '[data-testid="claim-only-yours"]')?.textContent).toBe('Only claim a server you installed yourself.');
+            expect(codeField(host)!.value).toBe(claimCodeDigits(CODE));
+            expect(host.textContent).toContain('Your name here');
+            expect(nameField(host)).not.toBeNull();
+            expect(q(host, '[data-testid="claim-name-hint"]')?.textContent).toBe('How people in Beans Town will see you. You can change it later.');
+            expect(q(host, '[data-testid="claim-make-account"]')).toBeNull();
+            expect(host.textContent).not.toContain('Make my account');
+            // The name first: two characters at least.
+            expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBe('true');
+            await type(nameField(host)!, 'Ada');
+            expect(button(host, 'Claim and become owner')?.getAttribute('aria-disabled')).toBeNull();
         });
     });
 
-    it('Make my account keeps the claim on the phone, then opens the first screen; nothing is claimed', async () => {
+    it('nothing is made by reading the screen: no key, no claim, nothing written', async () => {
         await withNoAccount(async () => {
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-            const host = await render();
-            await act(async () => { button(host, 'Make my account')!.click(); });
-            await act(async () => {});
-            const kept = storage().setItem.mock.calls.filter(([k]) => k === KEPT);
-            expect(kept).toHaveLength(1);
-            expect(JSON.parse(kept[0][1] as string)).toMatchObject({ node: ORIGIN, codeId: CODE_ID, code: CODE });
-            expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
-            // Kept before the screen goes.
-            expect(storage().setItem.mock.invocationCallOrder[0]).toBeLessThan(nav.router.replace.mock.invocationCallOrder[0]);
-            expect(claimCommunity).not.toHaveBeenCalled();
+            await fromTheQr();
+            expect(claimKeyForThisPhone).not.toHaveBeenCalled();
+            expect(claimWithKey).not.toHaveBeenCalled();
+            expect(storage().setItem).not.toHaveBeenCalled();
         });
     });
 
-    it('a QR with no address: the same way on, in the words for no code when it had none', async () => {
+    it('the tap: the phone\'s unlock first, then the key (made now), the claim under the name typed; Checking the code… then Claiming…', async () => {
         await withNoAccount(async () => {
-            nav.params = {};
-            const host = await render();
-            expect(host.textContent).toContain('Claim a community');
-            expect(q(host, '[data-testid="claim-no-account"]')?.textContent)
-                .toBe('This phone has no BeanPool account yet. Make yours first: then BeanPool brings you back here.');
-            expect(button(host, 'Make my account')).toBeDefined();
-        });
-    });
-
-    it('a server that already has an owner says so, and offers no account for it', async () => {
-        await withNoAccount(async () => {
-            vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-            const host = await render();
-            expect(host.textContent).toContain('This community already has an owner');
-            expect(button(host, 'Make my account')).toBeUndefined();
-        });
-    });
-
-    it('with an account, the claim done: the claim kept for it is taken off the phone', async () => {
-        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-        const host = await render();
-        // The screen up with the account took it off already (below): this is the claim's own.
-        storage().removeItem.mockClear();
-        await act(async () => { button(host, 'Claim and become owner')!.click(); });
-        await act(async () => {});
-        expect(host.textContent).toContain('You own Beans Town');
-        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
-    });
-
-    it('refused because the server has an owner by now, or a new code: taken off too', async () => {
-        for (const kind of ['already-claimed', 'code-changed'] as const) {
-            document.body.innerHTML = '';
-            storage().removeItem.mockClear();
-            vi.mocked(claimCommunity).mockResolvedValueOnce({ kind } as Awaited<ReturnType<typeof claimCommunity>>);
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-            const host = await render();
-            storage().removeItem.mockClear();
+            const host = await fromTheQr();
+            await type(nameField(host)!, ' Ada ');
+            let sending: () => void = () => {};
+            let answer: (v: unknown) => void = () => {};
+            vi.mocked(claimWithKey).mockImplementationOnce((req: any) => new Promise((resolve) => {
+                sending = () => req.onSending();
+                answer = resolve;
+            }) as any);
             await act(async () => { button(host, 'Claim and become owner')!.click(); });
             await act(async () => {});
-            expect(storage().removeItem, kind).toHaveBeenCalledWith(KEPT);
-        }
-    });
-
-    it('Back leaves the claim: taken off the phone, and the screen goes back', async () => {
-        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-        const host = await render();
-        storage().removeItem.mockClear();
-        await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
-        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
-        expect(nav.router.back).toHaveBeenCalled();
-    });
-
-    it('Back before the account: taken off the phone too', async () => {
-        await withNoAccount(async () => {
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-            const host = await render();
-            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+            expect(vi.mocked(requireDeviceUnlock).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(claimKeyForThisPhone).mock.invocationCallOrder[0]);
+            expect(host.textContent).toContain('Checking the code…');
+            expect(button(host, 'Claim and become owner')).toBeUndefined();
+            const req = vi.mocked(claimWithKey).mock.calls[0][0];
+            expect(req).toMatchObject({ origin: ORIGIN, code: CODE, codeId: CODE_ID, callsign: 'Ada', key: { createdHere: true } });
+            await act(async () => { sending(); });
+            expect(host.textContent).toContain('Claiming…');
+            // No way off the screen while the claim is out: its answer decides.
             await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
-            expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
+            expect(back.press!()).toBe(true);
+            expect(releaseClaimKey).not.toHaveBeenCalled();
+            expect(nav.router.back).not.toHaveBeenCalled();
+            await act(async () => { answer({ outcome: { kind: 'wrong-code' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }); });
+            await act(async () => {});
+        });
+    });
+
+    it('no screen lock: nothing is made, and the owner\'s words say why; said before the name is typed, too', async () => {
+        await withNoAccount(async () => {
+            vi.mocked(hasDeviceLock).mockResolvedValueOnce(false);
+            const host = await fromTheQr();
+            const note = q(host, '[data-testid="claim-no-lock"]');
+            expect(note?.textContent).toBe("Set a screen lock firstAn owner's phone needs a screen lock. Set one in your phone's settings, then try again.");
+            // Before the name field, which comes after it on the screen.
+            expect(note!.compareDocumentPosition(nameField(host)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            await type(nameField(host)!, 'Ada');
+            vi.mocked(requireDeviceUnlock).mockResolvedValueOnce('no-device-lock');
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(vi.mocked(Alert.alert)).toHaveBeenCalledWith('Set a screen lock first', "An owner's phone needs a screen lock. Set one in your phone's settings, then try again.");
+            expect(claimKeyForThisPhone).not.toHaveBeenCalled();
+            expect(claimWithKey).not.toHaveBeenCalled();
+        });
+    });
+
+    it('in: the claim\'s finish under the name the node kept, then one welcome for the wizard, never this screen under it', async () => {
+        await withNoAccount(async () => {
+            nav.router.canDismiss.mockReturnValueOnce(true);
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({
+                outcome: { kind: 'owner', callsign: 'Ada 2' }, identity: { ...req.key.identity, callsign: 'Ada' }, madeHere: true, wordsUnseen: true, released: false,
+            }));
+            const host = await fromTheQr();
+            await type(nameField(host)!, 'Ada');
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(finishClaim).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ callsign: 'Ada' }), 'Beans Town', 'Ada 2');
+            expect(nav.router.dismissAll).toHaveBeenCalled();
+            expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
+            expect(vi.mocked(finishClaim).mock.invocationCallOrder[0]).toBeLessThan(nav.router.replace.mock.invocationCallOrder[0]);
+            // The owner's card comes at the wizard's end, after the 12 words: not here.
+            expect(host.textContent).not.toContain('You own Beans Town');
+        });
+    });
+
+    it('no answer: the account stays on the phone, the screen says so, and Check again asks the node', async () => {
+        await withNoAccount(async () => {
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'check-again' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }));
+            const host = await fromTheQr();
+            await type(nameField(host)!, 'Ada');
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            const card = q(host, '[data-testid="claim-unconfirmed"]');
+            expect(card?.textContent).toContain("We couldn't confirm the claim yet. It may have worked.");
+            expect(card?.textContent).toContain('Your account is kept on this phone until the server answers.');
+            // Now the key is on the phone, the claim's own (claim-key.ts claimKeyState).
+            keys.state = { kind: 'claims', key: { identity: { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' }, createdHere: true }, joinsOut: 1, callsign: 'Ada' };
+            await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+            await act(async () => {});
+            // Back keeps a key the node may hold: releaseClaimKey decides (it says no while a claim is out), and the screen goes.
+            expect(releaseClaimKey).toHaveBeenCalledTimes(1);
             expect(nav.router.back).toHaveBeenCalled();
         });
     });
 
-    // PR #2412 review: only the header's arrow took the claim off. Left by the system back, a closed app or a notification,
-    // the guard's landing from welcome (every cold start, every community switch) came back to this screen for a day.
-    it('up with an account, the screen takes the kept claim off the phone at once: however it is left, it is not the landing again', async () => {
-        nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-        const host = await render();
-        // Nothing tapped: no Back, no claim. The screen is simply up, as the guard's landing brought it.
-        expect(storage().removeItem).toHaveBeenCalledWith(KEPT);
-        expect(nav.router.back).not.toHaveBeenCalled();
-        expect(nav.router.replace).not.toHaveBeenCalled();
-        expect(claimCommunity).not.toHaveBeenCalled();
-        // The claim is in the route now: the code is still filled in, and the claim still works from here.
-        expect(codeField(host)!.value).toBe(claimCodeDigits(CODE));
-        storage().removeItem.mockClear();
-        await act(async () => { button(host, 'Claim and become owner')!.click(); });
-        await act(async () => {});
-        expect(host.textContent).toContain('You own Beans Town');
+    it('Check again: in → the wizard', async () => {
+        await withNoAccount(async () => {
+            keys.state = { kind: 'claims', key: { identity: { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' }, createdHere: true }, joinsOut: 1, callsign: 'Ada' };
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'check-again' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }));
+            const host = await fromTheQr();
+            // The name the claim kept, typed before a restart.
+            expect(nameField(host)!.value).toBe('Ada');
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            await act(async () => { (q(host, '[data-testid="claim-check-again"]') as HTMLElement).click(); });
+            await act(async () => {});
+            expect(checkOwnClaim).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ createdHere: true }), expect.any(Function));
+            expect(finishClaim).toHaveBeenCalled();
+            expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
+        });
     });
 
-    it('a join half done keeps it: the guard sends the screen back to welcome, and the claim is wanted when the join ends', async () => {
-        const join = { step: 'seedBackup', inviteCode: '', anchorUrl: ORIGIN, callsign: 'marty' };
-        storage().getItem.mockImplementation(async (k: string) => (k === 'beanpool_pending_onboarding' ? JSON.stringify(join) : null));
-        try {
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
+    it('back after a restart while the answer was out, to a server that has an owner now: it asks whose by itself', async () => {
+        await withNoAccount(async () => {
+            keys.state = { kind: 'claims', key: { identity: { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' }, createdHere: true }, joinsOut: 1, callsign: 'Ada' };
+            vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
+            // Welcome hands the record back here with the code's id, never the code.
+            nav.params = { node: ORIGIN, id: CODE_ID };
             await render();
-            expect(storage().getItem).toHaveBeenCalledWith('beanpool_pending_onboarding');
-            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
+            await act(async () => {});
+            expect(checkOwnClaim).toHaveBeenCalledTimes(1);
+            expect(finishClaim).toHaveBeenCalled();
+            expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
+        });
+    });
+
+    it('another phone won the race: Someone already owns Beans Town, nothing was made here, and Back', async () => {
+        await withNoAccount(async () => {
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: true }));
+            const host = await fromTheQr();
+            await type(nameField(host)!, 'Ada');
+            vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(q(host, '[data-testid="claim-someone-owns"]')?.textContent).toBe('Someone already owns Beans Town.');
+            expect(host.textContent).toContain('Nothing was made on this phone.');
+            await act(async () => { button(host, 'Back')!.click(); });
+            await act(async () => {});
+            expect(nav.router.back).toHaveBeenCalled();
+        });
+    });
+
+    it('a wrong code: the words, the key kept for another try; Back, or Android\'s back, leaves through the key rule', async () => {
+        await withNoAccount(async () => {
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'wrong-code' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: false }));
+            const host = await fromTheQr();
+            await type(nameField(host)!, 'Ada');
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(host.textContent).toContain("That code isn't right.");
+            expect(button(host, 'Claim and become owner')).toBeDefined();
+            await act(async () => { back.press!(); });
+            await act(async () => {});
+            expect(releaseClaimKey).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ createdHere: true }));
+            expect(nav.router.back).toHaveBeenCalled();
+        });
+    });
+
+    it('after a restart the app holds the claim\'s own key: when Back takes it off, the app lets go of it too', async () => {
+        const own = { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' };
+        (who as { identity: unknown }).identity = own;
+        who.setIdentity.mockClear();
+        try {
+            keys.state = { kind: 'claims', key: { identity: own, createdHere: true }, joinsOut: 0, callsign: 'Ada' };
+            vi.mocked(releaseClaimKey).mockResolvedValueOnce(true);
+            const host = await fromTheQr();
+            // The claim's own key draws the form that makes the account, never the account's.
+            expect(nameField(host)!.value).toBe('Ada');
+            expect(q(host, '[data-testid="claim-makes-account"]')).not.toBeNull();
+            await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+            await act(async () => {});
+            expect(releaseClaimKey).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ identity: own }));
+            expect(who.setIdentity).toHaveBeenCalledWith(null);
         } finally {
-            storage().getItem.mockImplementation(async () => null);
+            (who as { identity: unknown }).identity = signedIn;
         }
     });
 
-    it('no account yet: the screen up keeps it, through any restart, for the account', async () => {
-        await withNoAccount(async () => {
-            nav.params = { node: ORIGIN, id: CODE_ID, code: CODE };
-            await render();
-            expect(storage().removeItem).not.toHaveBeenCalledWith(KEPT);
-        });
+    it('and when another phone won the race, the same', async () => {
+        const own = { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32), callsign: 'Ada' };
+        (who as { identity: unknown }).identity = own;
+        who.setIdentity.mockClear();
+        try {
+            keys.state = { kind: 'claims', key: { identity: own, createdHere: true }, joinsOut: 0, callsign: 'Ada' };
+            vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({ outcome: { kind: 'already-claimed' }, identity: req.key.identity, madeHere: true, wordsUnseen: true, released: true }));
+            const host = await fromTheQr();
+            vi.mocked(readClaimStatus).mockResolvedValueOnce({ kind: 'claimed' });
+            keys.state = { kind: 'none' };
+            await act(async () => { button(host, 'Claim and become owner')!.click(); });
+            await act(async () => {});
+            expect(who.setIdentity).toHaveBeenCalledWith(null);
+            expect(host.textContent).toContain('Nothing was made on this phone.');
+        } finally {
+            (who as { identity: unknown }).identity = signedIn;
+        }
+    });
+
+    it('with an account, as before: a member there types no name, its own key claims, and the owner\'s card is here', async () => {
+        const host = await fromTheQr();
+        expect(nameField(host)).toBeNull();
+        expect(q(host, '[data-testid="claim-makes-account"]')).toBeNull();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        expect(vi.mocked(claimWithKey).mock.calls[0][0]).toMatchObject({ key: { createdHere: false, identity: { publicKey: signedIn.publicKey } }, callsign: '' });
+        expect(host.textContent).toContain('You own Beans Town');
+        expect(finishClaim).not.toHaveBeenCalled();
+        // Nothing is ever taken off the phone for an account.
+        await act(async () => { (q(host, '[aria-label="Back"]') as HTMLElement).click(); });
+        await act(async () => {});
+        expect(vi.mocked(releaseClaimKey).mock.calls.every(([, key]) => !(key as { createdHere: boolean }).createdHere)).toBe(true);
+    });
+
+    it('an account whose 12 words this phone has never shown (another join made the key): in → the claim\'s finish and the wizard, never the owner\'s card alone (#2433 review)', async () => {
+        nav.router.canDismiss.mockReturnValueOnce(true);
+        vi.mocked(claimWithKey).mockImplementationOnce(async (req: any) => ({
+            outcome: { kind: 'owner', callsign: 'marty' }, identity: req.key.identity, madeHere: false, wordsUnseen: true, released: false,
+        }));
+        const host = await fromTheQr();
+        await act(async () => { button(host, 'Claim and become owner')!.click(); });
+        await act(async () => {});
+        // The phone's own key claims, never a second one; once in, the words come first.
+        expect(vi.mocked(claimWithKey).mock.calls[0][0]).toMatchObject({ key: { createdHere: false, identity: { publicKey: signedIn.publicKey } } });
+        expect(finishClaim).toHaveBeenCalledWith(ORIGIN, expect.objectContaining({ publicKey: signedIn.publicKey }), 'Beans Town', 'marty');
+        expect(nav.router.dismissAll).toHaveBeenCalled();
+        expect(nav.router.replace).toHaveBeenCalledWith('/welcome');
+        expect(host.textContent).not.toContain('You own Beans Town');
     });
 });

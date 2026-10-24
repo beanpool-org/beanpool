@@ -115,7 +115,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
 
     return (
         <article
-            className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mb-4 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"
+            className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col"
             aria-label={t('{title} by {name} on {platform}', { title: item.title || t('Community post'), name: authorName, platform: platName })}
         >
             {/* Header: Neighbour details + Category + Owner actions. When a longer language's Hide and Delete can't sit

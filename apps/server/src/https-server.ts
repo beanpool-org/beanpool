@@ -1732,7 +1732,11 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
                 const refusal = membersOnlyRefusal(ctx.path);
-                ctx.body = refusal ? { ...refusal } : { error: word('Read access requires a member identity') };
+                // `not_a_member`: the signer reads as no member here, which the apps can tell from every other 403 of this
+                // gate (a spent nonce, a signature it could not check, a replaced or closed key). The claim's owner check
+                // reads it at GET /api/node-admin/me (native node-claim.ts ownerCheckViaRole): only this answer, never
+                // another 403, takes a claim's key off the phone.
+                ctx.body = refusal ? { ...refusal } : { error: word('Read access requires a member identity'), code: NOT_A_MEMBER_CODE };
                 return;
             }
 

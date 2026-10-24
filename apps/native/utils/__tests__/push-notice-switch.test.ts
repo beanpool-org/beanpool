@@ -62,7 +62,7 @@ import { followTap, takeNoticeWarning, type IncomingNotice, type NoticeRoute } f
 import { openNoticeIn } from '../push-notice-switch';
 import { communitySwitchUnderWay, switchCommunity } from '../use-communities';
 import { getPendingOnboarding, setPendingOnboarding, clearPendingOnboarding } from '../onboarding-state';
-import { DEFAULT_MEMBER_LANDING, landOnClaim, memberRedirect, NOTICE_LANDING_MS, takeOpenAfterLanding } from '../member-landing';
+import { DEFAULT_MEMBER_LANDING, memberRedirect, NOTICE_LANDING_MS, takeOpenAfterLanding } from '../member-landing';
 import { readNoticeCounts, watchNoticeCounts } from '../notice-counts';
 import { onCommunitySwitched } from '../community-switch';
 import { notRecognisedStays } from '../mismatch-plan';
@@ -200,7 +200,6 @@ beforeEach(() => {
     nodeUrl = MULLUM;
     recognition = 'member';
     // Nothing left over from another test.
-    landOnClaim(null);
     memberRedirect(['welcome']);
     stopCounting = watchNoticeCounts(AsyncStorage);
     stopListening = onCommunitySwitched(() => { mem.log.push(`communitySwitched (on ${mem.async.get(ANCHOR)})`); });
@@ -351,13 +350,6 @@ describe('what holds the member wins: the tap lands where that sends them, never
         recognition = 'member';
         expect(takeOpenAfterLanding(kim.publicKey, BYRON, Date.now() + NOTICE_LANDING_MS + 1)).toBeNull();
         expect(await guardOnWelcome()).toEqual(['router.replace /(tabs)']);
-    });
-
-    it('a claim waiting for the account: the guard lands on the claim screen, and the notice doesn\'t open over it', async () => {
-        landOnClaim({ route: '/claim-community?node=x', until: Date.now() + 60_000 });
-        await tap(push(byron.notice(kim.publicKey, { screen: 'post', postId: POST_ID })));
-        expect(await guardOnWelcome()).toEqual(['router.replace /claim-community?node=x']);
-        landOnClaim(null);
     });
 
     it('an address that isn\'t plain is refused before anything moves', async () => {

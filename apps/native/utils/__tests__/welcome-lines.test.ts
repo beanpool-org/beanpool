@@ -62,7 +62,7 @@ afterEach(() => setLanguage('en'));
 const ROOT = path.resolve(__dirname, '../..');
 /** The lower layers whose sentences welcome shows. */
 const SOURCES = [
-    'utils/node-profile.ts', 'utils/global-join.ts', 'utils/door-work.ts', 'utils/sso-recovery.ts', 'utils/sso-signin.ts',
+    'utils/node-profile.ts', 'utils/global-join.ts', 'utils/door-key.ts', 'utils/door-work.ts', 'utils/sso-recovery.ts', 'utils/sso-signin.ts',
     'utils/sso-sheet-connect.ts', 'utils/keeper-enrolment.ts', 'utils/no-words-copy.ts', 'utils/words-on-screen.ts',
     'utils/words-clipboard.ts', 'utils/recovery-kit.ts', 'utils/protection-state.ts', 'utils/vault.ts', 'utils/db.ts',
 ];

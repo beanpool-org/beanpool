@@ -60,7 +60,8 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { vaultTicketNonce } from '@beanpool/core';
 import { SsoSignInError } from '../sso-signin';
 import { connectAndDeposit } from '../sso-sheet-connect';
-import { installNetwork, noVault, useVault, VAULT, type SentRequest } from './fake-vault';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { COMMUNITY, CommunityKeepingCopies, installNetwork, noVault, useVault, VAULT, type SentRequest } from './fake-vault';
 
 const NONCE = '/v1/ticket';
 const DEPOSIT = '/v1/copies';
@@ -219,5 +220,34 @@ describe('components/SsoEnrolSheet.tsx', () => {
         const saving = s.slice(start, end);
         expect(saving).not.toMatch(/Cancel/);
         expect(saving).not.toMatch(/closeAndStop|onClose/);
+    });
+});
+
+describe('an account a claim made: its copy at the community itself, in a build with a key vault too (Marty, 24 Oct)', () => {
+    it("copyAt 'community': the community's nonce, the sign-in, the deposit at the community, and nothing to the vault", async () => {
+        const net = installNetwork();
+        const community = new CommunityKeepingCopies('member');
+        net.community.handle = (req) => community.handle(req);
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const before = getItem.getMockImplementation();
+        // The community the claim made the phone's (utils/claim-key.ts finishClaim).
+        getItem.mockImplementation(async (key: string) => (key === 'beanpool_anchor_url' ? COMMUNITY : null));
+        try {
+            facebookSaysYes();
+            const outcome = connectAndDeposit({
+                provider: 'facebook', url: COMMUNITY, identity: MEMBER, phoneLock: null, onSignedIn: () => {},
+                signal: new AbortController().signal, copyAt: 'community',
+            }).then((value) => ({ value, error: undefined as unknown }), (error) => ({ value: undefined, error }));
+            await vi.advanceTimersByTimeAsync(20_000);
+            const { value, error } = await outcome;
+            expect(error).toBeUndefined();
+            expect(value?.error).toBeUndefined();
+            expect(value?.enrolledSso).toEqual(['facebook']);
+            expect(net.sent.map((s) => `${s.origin}${s.path}`)).toEqual([`${COMMUNITY}/api/recovery/sso-nonce`, `${COMMUNITY}/api/recovery/shares/sso`]);
+            expect(net.sent.filter((s) => s.origin === VAULT)).toEqual([]);
+            expect(community.copies.has('facebook')).toBe(true);
+        } finally {
+            if (before) getItem.mockImplementation(before);
+        }
     });
 });

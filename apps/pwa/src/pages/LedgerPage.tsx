@@ -436,7 +436,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
     if (waitingForMode) {
         return (
-            <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid="ledger-waiting">
+            <div className="p-4 md:p-6 max-w-6xl xl:max-w-7xl mx-auto min-h-full pb-24" data-testid="ledger-waiting">
                 {modeTimedOut ? (
                     <div className="space-y-3">
                         <p className="text-sm text-nature-600 dark:text-nature-300" role="alert">{t('Could not load your ledger.')}</p>
@@ -456,7 +456,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     }
 
     return (
-        <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24" data-testid={preview ? 'ledger-preview' : undefined}>
+        <div className="p-4 md:p-6 max-w-6xl xl:max-w-7xl mx-auto min-h-full pb-24" data-testid={preview ? 'ledger-preview' : undefined}>
             {/* In preview: the strip, then "Example Valley · an example member" (design §1 row 3), as on the phone. */}
             {preview && <LocalCommunityStrip feature="beans" {...ways} />}
             {preview && <SampleHeader />}

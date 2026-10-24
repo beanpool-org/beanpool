@@ -12,34 +12,17 @@
  * node called the restored key a stranger, so the guard never reached its landing) is dropped when another account, or
  * none, is on the phone, so a later account never lands on it (PR #1357 confirmation, N1).
  *
- * One more: a claim waiting for the phone's first account ({@link landOnClaim}) lands on the claim screen, ahead of both.
- *
  * And one after the landing: the screen of a notice tapped from another community, which the phone has just moved to for
  * it ({@link openAfterLanding}), opens over the tabs' index once the guard has let the member in there.
  */
 import type { NoticeRoute } from './push-notice-check';
 
-/** The claim screen with a waiting claim's fields (utils/claim-link.ts `claimRouteFor`). */
-export type ClaimLanding = `/claim-community${string}`;
-
-export type MemberLanding = '/(tabs)' | '/(tabs)/settings' | ClaimLanding;
+export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
 
 /** The tabs' index: every landing from welcome but the one a screen asked for. */
 export const DEFAULT_MEMBER_LANDING: MemberLanding = '/(tabs)';
 
 let next: { to: MemberLanding; publicKey: string | null } | null = null;
-let claim: { to: ClaimLanding; until: number } | null = null;
-
-/**
- * A claim waits for this phone's account (utils/onboarding-state.ts `PendingClaim`): until `until` (ms), every landing from
- * welcome goes to the claim screen instead of the tabs, for whichever account the phone makes. Not taken once, unlike
- * {@link landNextOn}: a restart part-way through still comes back to it, until the claim screen is up with the account and
- * takes it off the phone (onboarding-state.ts `handOverPendingClaim`), the claim then travelling in that screen's route.
- * Kept in step with the phone by the root layout (null once it is gone); never set by a screen.
- */
-export function landOnClaim(to: { route: ClaimLanding; until: number } | null): void {
-    claim = to ? { to: to.route, until: to.until } : null;
-}
 
 /**
  * The guard's next landing from welcome goes to `to`. Call it before `setIdentity`, and don't navigate: the guard does.
@@ -67,20 +50,18 @@ export function holdStartUpLinkRoute(): void {
 
 /**
  * The root guard's last check, for a member with an identity whose node has not said otherwise: on welcome or the bare
- * root, where to go (a waiting claim's screen, {@link landOnClaim}; else a landing asked for with `landNextOn`, taken
- * once; else the tabs' index). Anywhere else, null: stay, and leave a landing asked for untouched. Before the router
- * has reported the route a start-up link opened ({@link holdStartUpLinkRoute}), null too: that `[]` is no route yet, not
- * the bare root.
+ * root, where to go (a landing asked for with `landNextOn`, taken once; else the tabs' index). Anywhere else, null: stay,
+ * and leave a landing asked for untouched. Before the router has reported the route a start-up link opened
+ * ({@link holdStartUpLinkRoute}), null too: that `[]` is no route yet, not the bare root.
  */
-export function memberRedirect(segments: readonly string[], publicKey: string | null = null, now: number = Date.now()): MemberLanding | null {
+export function memberRedirect(segments: readonly string[], publicKey: string | null = null): MemberLanding | null {
     // Asked for another account than the one now on the phone: never used, whatever the route.
     if (next && next.publicKey !== null && next.publicKey !== publicKey) next = null;
     // The router has said where it is (the link's screen, or wherever the member went since): nothing left to wait for.
     if (segments.length !== 0) startUpLinkPending = false;
     else if (startUpLinkPending) return null;
     if (segments.length !== 0 && segments[0] !== 'welcome') return null;
-    if (claim && !(now < claim.until)) claim = null;
-    const to = claim?.to ?? next?.to ?? DEFAULT_MEMBER_LANDING;
+    const to = next?.to ?? DEFAULT_MEMBER_LANDING;
     next = null;
     return to;
 }

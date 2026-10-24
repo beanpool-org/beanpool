@@ -21,9 +21,9 @@ import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
-import { getPendingClaim, getPendingOnboarding, pendingClaimLanding, subscribePendingOnboarding } from '../utils/onboarding-state';
+import { claimInFlight, forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
-import { DEFAULT_MEMBER_LANDING, guestRedirect, landOnClaim, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
+import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { DrawnInLanguage, LanguageProvider, useWords, whenLanguagePicked } from '../components/LanguageProvider';
@@ -197,22 +197,23 @@ function RootLayoutNav() {
     const lockScreen = useAppLockScreen();
     const [appLockChecked, setAppLockChecked] = useState(false);
 
-    // null = not yet loaded; true = a join wizard was interrupted after the
-    // keypair was created but before the invite was redeemed. While true, the
+    // null = not yet loaded; false = none; 'wizard' = a join wizard was interrupted after the
+    // keypair was created but before the invite was redeemed. While set, the
     // identity is a stranger to every node BY DESIGN — route back into the
     // wizard, never to node-mismatch (see utils/onboarding-state.ts).
-    // A claim waiting for the phone's account (the claim screen's "Make my account") is read with it, and handed to the
-    // landing before the flag is set: the guard waits for the flag, so its landing from welcome already knows of the claim.
-    const [pendingOnboarding, setPendingOnboardingFlag] = useState<boolean | null>(null);
+    // 'claim' = that wizard is a claim whose answer is not in (onboarding-state.ts claimInFlight): the claim screen
+    // stays too, so the node can say whether the claim landed.
+    const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | 'wizard' | 'claim' | null>(null);
     useEffect(() => {
         let mounted = true;
         const refresh = () => {
-            Promise.all([getPendingOnboarding(), getPendingClaim()]).then(([p, claim]) => {
+            getPendingOnboarding().then((p) => {
                 if (!mounted) return;
-                landOnClaim(pendingClaimLanding(claim));
-                setPendingOnboardingFlag(!!p);
+                setPendingOnboardingFlag(!p ? false : claimInFlight(p) ? 'claim' : 'wizard');
             });
         };
+        // A claim code an older build kept at rest for an account made elsewhere (#2412): that detour is gone.
+        void forgetOldPendingClaim();
         refresh();
         const unsubscribe = subscribePendingOnboarding(refresh);
         return () => { mounted = false; unsubscribe(); };
@@ -622,9 +623,9 @@ function RootLayoutNav() {
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
         // on a fresh device that holds no local identity yet — the screen mints
         // the new identity itself at the "Submit Request" step — so it must be
-        // reachable without one. So is the claim screen, which keeps a claim
-        // for the account the phone makes first. Any other route → back to
-        // welcome (utils/auth-return.ts, `setupRedirect`).
+        // reachable without one. So is the claim screen, whose claim makes the
+        // account. Any other route → back to welcome (utils/auth-return.ts,
+        // `setupRedirect`).
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {
@@ -642,7 +643,7 @@ function RootLayoutNav() {
         // "my account is gone". Don't route at all until the flag has loaded.
         if (pendingOnboarding === null) return;
         if (pendingOnboarding) {
-            const to = setupRedirect(segments, { hasIdentity: true, pendingOnboarding: true });
+            const to = setupRedirect(segments, { hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim' });
             if (to) router.replace(to);
             return;
         }

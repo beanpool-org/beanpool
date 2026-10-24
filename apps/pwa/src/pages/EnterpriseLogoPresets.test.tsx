@@ -52,9 +52,9 @@ const sampleTreasuryDetail = {
 
 describe('enterprise logo presets (web)', () => {
     beforeEach(() => {
-        vi.spyOn(api, 'getTreasuries').mockResolvedValue([]);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
-        vi.spyOn(api, 'getDecisions').mockResolvedValue([]);
+        vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [], myPoolVoting: null });
         vi.spyOn(api, 'createEnterprise').mockResolvedValue({ success: true, project: { id: 'p1' } } as any);
         vi.spyOn(api, 'changeEnterpriseFace').mockResolvedValue({ success: true, name: 'Tool Library', purpose: null, about: null } as any);
         vi.spyOn(api, 'changeEnterpriseShop').mockResolvedValue({ success: true } as any);
@@ -185,7 +185,7 @@ describe('enterprise logo presets (web)', () => {
 
             fireEvent.click(sproutPreset);
 
-            fireEvent.click(screen.getByRole('button', { name: 'Save Profile' }));
+            fireEvent.click(screen.getByRole('button', { name: /Save Profile/i }));
 
             await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(1));
             expect(vi.mocked(api.updateMemberProfile)).toHaveBeenCalledWith(
@@ -206,9 +206,12 @@ describe('enterprise logo presets (web)', () => {
 
             fireEvent.click(mountainPreset);
 
+            // Next step: guide
+            fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
             // Finish setup
-            const finishBtn = screen.getByRole('button', { name: 'Finish' });
-            fireEvent.click(finishBtn);
+            const doneBtn = screen.getByRole('button', { name: /Done/i });
+            fireEvent.click(doneBtn);
 
             await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(1));
             expect(vi.mocked(api.updateMemberProfile)).toHaveBeenCalledWith(

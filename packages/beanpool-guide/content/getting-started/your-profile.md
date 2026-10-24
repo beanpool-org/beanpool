@@ -12,10 +12,10 @@ related: privacy, trust-badges, joining, people
 - Change what you like:
 - **Callsign** is the name people see.
 - **Bio** is a few words about you, up to 200 characters.
-- Tap the photo to change it.
+- Tap the photo to change it: choose a photo or one of the ready-made pictures.
 - Tap **Save Profile**.
 
-In the web app, tap **Edit Profile**, change the photo with **Camera** or **Gallery**, and tap **Save Profile Changes**.
+In the web app, tap **Edit Profile**, change the photo with **Camera**, **Gallery**, or one of the ready-made pictures, and tap **Save Profile Changes**.
 
 You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community, in the phone app), and the short tour of how BeanPool works. In a web browser, set your area in **Settings**, under **Your area**.
 

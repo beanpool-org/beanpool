@@ -24,7 +24,13 @@ import * as path from 'node:path';
 import { act, createElement, forwardRef, Fragment, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+    Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+(Module as any)._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 

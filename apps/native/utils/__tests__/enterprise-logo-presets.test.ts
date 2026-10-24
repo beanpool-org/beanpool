@@ -51,7 +51,11 @@ vi.mock('react-native', () => {
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
-        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (onChangeText) {
+            attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value);
+            attrs.onInput = (e: { target: { value: string } }) => onChangeText(e.target.value);
+            attrs.value = value ?? '';
+        }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (accessibilityState?.selected !== undefined) attrs['aria-selected'] = String(accessibilityState.selected);
@@ -178,7 +182,12 @@ describe('enterprise logo presets (phone)', () => {
         expect(el).toBeTruthy();
         await act(async () => {
             const input = el as HTMLInputElement;
-            input.value = val;
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+            if (set) {
+                set.call(input, val);
+            } else {
+                input.value = val;
+            }
             input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
         });
@@ -186,7 +195,7 @@ describe('enterprise logo presets (phone)', () => {
 
     it('propose form opens AvatarPickerSheet with presets; picking a preset sets the logo to bundled://<id>', async () => {
         await act(async () => {
-            root.render(createElement(ProposeProjectModal));
+            root.render(createElement(ProposeProjectModal) as any);
         });
 
         // Tapping the logo button opens the picker
@@ -230,7 +239,7 @@ describe('enterprise logo presets (phone)', () => {
         };
 
         await act(async () => {
-            root.render(createElement(ProposeProjectModal));
+            root.render(createElement(ProposeProjectModal) as any);
         });
 
         const chooseLogoBtn = host.querySelector('[aria-label="Choose a logo"]');
@@ -266,7 +275,7 @@ describe('enterprise logo presets (phone)', () => {
                 project: false,
                 logoUrl: null,
                 onSaved: () => {},
-            }));
+            }) as any);
         });
 
         const changeLogoBtn = host.querySelector('[data-testid="manage-face-logo"]');

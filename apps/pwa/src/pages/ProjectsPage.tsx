@@ -9,6 +9,8 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resizePhotoFile } from '../lib/photo-resize';
+import { resolveAvatarUrl } from '../lib/avatar';
+import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { DecideSection } from '../components/DecideSection';
 import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
@@ -841,7 +843,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 />
                                 {newPhotos.length > 0 && (
                                     <div className="mt-2 flex items-center gap-2">
-                                        <img src={newPhotos[0]} alt={t('Preview')} className="w-12 h-12 rounded-xl object-cover border border-nature-700" />
+                                        <img src={resolveAvatarUrl(newPhotos[0]) || newPhotos[0]} alt={t('Preview')} className="w-12 h-12 rounded-xl object-cover border border-nature-700" />
                                         <button
                                             type="button"
                                             onClick={() => setNewPhotos([])}
@@ -851,6 +853,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         </button>
                                     </div>
                                 )}
+                                <AvatarPresetPicker
+                                    selected={newPhotos[0]}
+                                    onSelect={(uri) => setNewPhotos([uri])}
+                                />
                             </div>
 
                             <div className="flex gap-3 pt-3">

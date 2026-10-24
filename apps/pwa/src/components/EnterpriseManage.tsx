@@ -23,6 +23,7 @@ import {
 import { addEnterpriseShopOffers, changeEnterpriseFace, changeEnterpriseShop, featureOffer } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { resizePhotoFile } from '../lib/photo-resize';
+import { AvatarPresetPicker } from './AvatarPresetPicker';
 import {
     faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, shopPhotoOf, type Face, type ShopfrontListing,
 } from '../lib/shopfront';
@@ -54,14 +55,21 @@ export function faceOf(detail: any): Face {
     };
 }
 
-export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, onSaved }: {
+export function EnterpriseFace({
+    treasury,
+    detail,
+    project = detail?.lifecycle === 'bounded',
+    lead = detail?.isLeadOrSoleKeeperOrAdmin ?? true,
+    shopEditable = detail?.isLeadOrSoleKeeperOrAdmin ?? true,
+    onSaved,
+}: {
     treasury: string;
     detail: any;
-    project: boolean;
+    project?: boolean;
     /** Its lead keeper, sole keeper or a node admin (the detail's isLeadOrSoleKeeperOrAdmin): name and purpose are theirs. */
-    lead: boolean;
+    lead?: boolean;
     /** A keeper, who may change its shop (a node admin who keeps none of it may not). */
-    shopEditable: boolean;
+    shopEditable?: boolean;
     /** Reads the enterprise again: after a Save, and after one whose profile went but whose shop change didn't. */
     onSaved: () => void;
 }) {
@@ -76,7 +84,8 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
     const changes = faceChanges(was, form, { lead, shop: shopEditable });
     const dirty = Object.keys(changes.profile).length > 0 || Object.keys(changes.shop).length > 0;
     const set = (patch: Partial<Face>) => { setForm((f) => ({ ...f, ...patch })); setSaved(false); setError(null); };
-    const logo = form.avatar ?? resolveAvatarUrl(detail?.avatar);
+    const logoRaw = form.avatar !== undefined ? form.avatar : detail?.avatar;
+    const logo = resolveAvatarUrl(logoRaw) ?? logoRaw;
     // Its banner as it will be: the photo just chosen, none once taken down, else the one its shop has.
     const heldBanner = shopPhotoOf(detail?.shop);
     const banner = form.banner === null ? null : form.banner ?? resolveAvatarUrl(heldBanner);
@@ -161,6 +170,10 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
                         />
                     </label>
                 </div>
+                <AvatarPresetPicker
+                    selected={form.avatar ?? detail?.avatar}
+                    onSelect={(uri) => set({ avatar: uri })}
+                />
             </div>
 
             {shopEditable && (
@@ -410,3 +423,5 @@ export function EnterpriseFeatured({ treasury, shopId, listings, onShopOpened, o
         </section>
     );
 }
+
+export { EnterpriseFace as EnterpriseManage };

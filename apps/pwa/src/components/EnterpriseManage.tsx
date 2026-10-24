@@ -59,8 +59,8 @@ export function EnterpriseFace({
     treasury,
     detail,
     project = detail?.lifecycle === 'bounded',
-    lead = detail?.isLeadOrSoleKeeperOrAdmin ?? true,
-    shopEditable = detail?.isLeadOrSoleKeeperOrAdmin ?? true,
+    lead = detail?.isLeadOrSoleKeeperOrAdmin ?? false,
+    shopEditable = false,
     onSaved,
 }: {
     treasury: string;
@@ -85,7 +85,7 @@ export function EnterpriseFace({
     const dirty = Object.keys(changes.profile).length > 0 || Object.keys(changes.shop).length > 0;
     const set = (patch: Partial<Face>) => { setForm((f) => ({ ...f, ...patch })); setSaved(false); setError(null); };
     const logoRaw = form.avatar !== undefined ? form.avatar : detail?.avatar;
-    const logo = resolveAvatarUrl(logoRaw) ?? logoRaw;
+    const logo = resolveAvatarUrl(logoRaw);
     // Its banner as it will be: the photo just chosen, none once taken down, else the one its shop has.
     const heldBanner = shopPhotoOf(detail?.shop);
     const banner = form.banner === null ? null : form.banner ?? resolveAvatarUrl(heldBanner);

@@ -152,7 +152,8 @@ export default function TabLayout() {
     const [needsBackup, setNeedsBackup] = useState(false);
     const lastNetSyncAtRef = useRef(0);
     const { nodeUrl } = useNodeStatus();
-    // Commons and Ledger are money: a node with Beans off (the global community) hides them. What this phone
+    // Commons and Ledger are money: a node with Beans off (the global community) hides them when Decisions are off too
+    // (with Decisions on, Commons stays for Decisions and groups). What this phone
     // last heard from the node first, so the strip doesn't jump, then the node's own answer. Read from the phone's
     // community itself at each screen change, not from `nodeUrl` alone: switching in Settings, from the community
     // list or by joining another one doesn't recheck the node status, and the strip must never keep the community

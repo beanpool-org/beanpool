@@ -109,7 +109,7 @@ On the phone, a group you asked to join is in neither list until a convenor lets
 
 An **Invite Only** group is hidden from everyone who is not in it or invited to it.
 
-On the phone, a local community with no Beans has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**. The global community has the **Commons** tab: its groups are there, under an example from a local community (see "Beans and the global community").
+On the phone, a local community with no Beans and no Decisions has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**. If Decisions are on, the **Commons** tab stays for Decisions and groups. The global community has the **Commons** tab: its groups are there, under an example from a local community (see "Beans and the global community").
 
 If a convenor removed you from a group, you cannot join it again by yourself.
 

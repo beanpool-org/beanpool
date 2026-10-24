@@ -399,12 +399,18 @@ export type HideableTab = 'projects' | 'ledger';
 /**
  * Commons (the `projects` route) and Ledger are money: the pool, enterprises, crowdfunds, balances.
  * On a node with Beans off they would show a ledger that is 0 forever, so they are hidden, unless the node's
- * `showcase` is on: then both stay, and show Example Valley in preview (design §1 rows 3 and 6). The
- * routes stay (a link to them still opens), only the tab strip changes.
+ * `showcase` is on: then both stay, and show Example Valley in preview (design §1 rows 3 and 6).
+ *
+ * Marty's decision (board, 24 Oct 18:52): On a Beans-off community where Decisions are on, the Commons tab
+ * stays for Decide (formal Decisions) and Groups (chat groups only). The Ledger tab stays hidden.
+ * The routes stay (a link to them still opens), only the tab strip changes.
  */
 export function hiddenTabsFor(features: NodeFeatures | null | undefined): HideableTab[] {
     if (features?.showcase === true) return [];
-    return features?.beans === false ? ['projects', 'ledger'] : [];
+    if (features?.beans === false) {
+        return decisionsOn(features) ? ['ledger'] : ['projects', 'ledger'];
+    }
+    return [];
 }
 
 /** Whether this node's members trade in Beans. Unknown counts as yes: that is every node today. */

@@ -11,7 +11,8 @@ import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
     CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY,
-    PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY,
+    PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
+    TYPED_PLACE_STORE_KEY,
 } from './storage-keys';
 import { forgetNoticeCounts } from './notice-counts';
 import { Platform } from 'react-native';
@@ -488,10 +489,12 @@ interface WipeableStorage {
  * result on those nodes is treated as guest mode. The communities this key asked to join (utils/knock.ts)
  * tie the key to places near where the member lives, so they go too (#1179 review 4109868126).
  *
- * So does the member's profile: the one profile copy (canonical-profile.ts: photo, bio, contact) and a
- * photo parked for the next sync with the flag that sends it (avatar-value.ts). None of them is keyed to
- * the account, and the next account's profile publish (db.ts `pushProfileToServer`) and its knocks
- * (find-community.tsx) fall back on them: left behind, they would go out under the new key. The invite
+ * So does the member's profile: the one profile copy (canonical-profile.ts: photo, bio, contact) and the
+ * change waiting to reach each community, its new name and parked photo (pending-profile-sync.ts), with the
+ * one flag and photo an older build kept for the phone. The profile copy is not keyed to the account, and
+ * the next account's profile publish (db.ts `pushProfileToServer`) and its knocks (find-community.tsx) fall
+ * back on it: left behind, it would go out under the new key. A waiting change names its account and is never
+ * sent under another, and it goes with that account all the same, in every community. The invite
  * codes this key made (people.tsx) name who the member invited; the node keeps them, so the list comes back.
  * So does an unfinished post (map.tsx `OFFER_DRAFT_KEY`: its words, photos and map pin). It is kept per
  * community, not per account, so the next account there would be offered it to finish and post as its own
@@ -563,6 +566,8 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     // Home's copies hold the account's own Beans, deals and who wrote to it (utils/home-store.ts).
     const accountKeys = allKeys.filter((k: string) =>
         k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('beanpool:names-') || k.startsWith('bp_offline_invites_') || k.startsWith(HOME_STORE_PREFIX)
+        // The profile change waiting to reach each community (pending-profile-sync.ts).
+        || k.startsWith(PENDING_PROFILE_STORE_PREFIX)
         // Each tool's settings (tools/store.ts): which reminders are on, which door was taken.
         || k.startsWith(TOOL_SETTINGS_PREFIX));
     if (accountKeys.length > 0) {

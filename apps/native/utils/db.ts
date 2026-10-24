@@ -24,10 +24,11 @@ import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './node
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
-import { isPlainNodeAddress, shouldBlockCleartextNodeUrl } from './node-url';
+import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
-import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
+import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
+import { clearPendingProfileChange, pendingProfileChange } from './pending-profile-sync';
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
@@ -6755,8 +6756,13 @@ export async function redeemInvite(
 // pillar-sync's offline-edit retry loop, and a proactive push right after joining
 // a new node so the picture lands before the user ever opens the composer.
 //
-// The avatar is resolved in two steps: a photo picked during an OFFLINE save, parked in
-// `pending_profile_avatar` by the screen that could not publish it, always goes — it has
+// It publishes the change waiting for the ACTIVE community (pending-profile-sync.ts) and no other:
+// that community's own row, with the name and photo its entry keeps over the row's. The retry
+// passes `community`, the community its sync cycle is for, and publishes nothing if the phone has
+// moved on since: one community's change and row never reach another.
+//
+// The avatar is resolved in two steps: a photo picked during an OFFLINE save, parked in this
+// community's entry by the screen that could not publish it, always goes — it has
 // reached nothing yet, so it is the newest copy anywhere. Otherwise `catchUpAvatar` decides,
 // and the canonical copy goes only when the node is KNOWN to hold no photo for us. That
 // fallback is what makes the picture follow the user onto a freshly-joined second community,
@@ -6771,16 +6777,22 @@ export async function redeemInvite(
 // Two callers have one: the marketplace photo gate, where the node has just said "please set
 // a profile photo", and the invite-redeem publish, where the redeem response carried the
 // member row the node holds. Both outrank the local row, which a sync may have left stale.
-// The caller WITHOUT one — the pending_profile_sync retry — can reach a node that already
+// The caller WITHOUT one — the pending-profile retry — can reach a node that already
 // holds a NEWER photo from another device, so it leaves `avatar` out rather than posting
 // canonical over it. The flag is passed THROUGH, undefined and all: an explicit `false` is the
 // node saying it holds a photo, which withholds the canonical copy that an empty local row
 // would otherwise license — on a node this device has never synced, empty means unsynced.
-export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): Promise<boolean> {
+export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; community?: string }): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity) return false;
+    if (opts?.community !== undefined && plainOriginOf(opts.community) !== plainOriginOf(anchorUrl)) return false;
+    // What waits for this community, read once: the publish is built from it, and only it is retired.
+    const pending = await pendingProfileChange(anchorUrl, identity.publicKey);
     const profile = await getMemberProfile(identity.publicKey);
+    // The row comes from the copy open when it was read (getDb follows a switch): with the phone moved on, it may be
+    // another community's, and none of it goes to this one (#2461 review).
+    if (!(await stillOnCommunity(anchorUrl))) return false;
 
     const canonical = await getCanonicalProfile();
     // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
@@ -6790,18 +6802,21 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // canonical copy is not an unconditional replacement for it: only a local pick ever writes
     // canonical, so when the node holds a photo this phone has not picked, canonical is the
     // OLDER one and posting it would overwrite the member's newest choice.
-    // Through the one shared rule, which every publish path uses: a pick parked by the offline
-    // branch of settings Save / Re-run Setup first (re-checked for portability, since anything
-    // that is not a `data:`/`bundled://` value is not ours to publish), otherwise the catch-up
-    // inference below. There is no session pick on this path — it runs with no screen in front of
-    // it. `decision.clearsParkedPick` is what licenses retiring the parked copy afterwards, and
-    // only after a verified 2xx: every `return false` below leaves it for the next retry.
+    // Through the one shared rule, which every publish path uses: a pick the offline branch of
+    // settings Save / Re-run Setup parked for THIS community first (re-checked for portability,
+    // since anything that is not a `data:`/`bundled://` value is not ours to publish), otherwise
+    // the catch-up inference below. There is no session pick on this path — it runs with no screen
+    // in front of it. The parked copy, and the change it waits in, retire only after a verified
+    // 2xx: every `return false` below leaves them for the next retry.
     const decision = await resolveProfilePublishAvatar({
+        parked: pending?.avatar,
         catchUp: { localRow: profile?.avatar_url, canonical: canonical?.avatar, nodeHasNoPhoto: opts?.nodeHasNoPhoto },
     });
     const avatar = decision.avatar;
 
-    const callsign = profile?.callsign || identity.callsign;
+    // A name changed here and not yet accepted wins over the row's: a members sync landing first writes the name the
+    // node still holds over the row.
+    const callsign = pending?.callsign || profile?.callsign || identity.callsign;
     const bio = profile?.bio ?? canonical?.bio ?? '';
     const contactValue = profile?.contact_value ?? canonical?.contactValue ?? null;
     const contactVisibility = profile?.contact_visibility ?? canonical?.contactVisibility ?? 'community';
@@ -6811,14 +6826,13 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
     // published. It now carries bio, contact and archetype too, so keying it on the avatar
     // dropped a quiz result on the floor for anyone who hadn't uploaded a photo — and cleared
     // the pending flag on the way out, so it never retried. Only give up when there is
-    // genuinely nothing anywhere to publish.
-    if (!avatar && !bio && !contactValue && !archetypeRaw) {
-        await AsyncStorage.removeItem('pending_profile_sync');
-        // Safe to drop the parked value here, and the only place it is dropped unsent: `avatar`
-        // being null means the rule found nothing publishable, so anything still parked is a
-        // value that is not portable and can never be published — a portable pick would have been
-        // chosen above and kept this code out of this branch.
-        await AsyncStorage.removeItem('pending_profile_avatar');
+    // genuinely nothing anywhere to publish. A new name waiting here is something to publish.
+    if (!avatar && !bio && !contactValue && !archetypeRaw && !pending?.callsign) {
+        // Safe to drop this community's change here, parked value and all, and the only place it
+        // is dropped unsent: `avatar` being null means the rule found nothing publishable, so
+        // anything still parked is a value that is not portable and can never be published — a
+        // portable pick would have been chosen above and kept this code out of this branch.
+        await clearPendingProfileChange(anchorUrl, pending);
         return false;
     }
     let publicArchetype: string | null = null;
@@ -6866,13 +6880,16 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
         } catch { /* non-JSON body — trust the 2xx */ }
         if (!avatarPersisted) return false;
 
-        // This function IS the pending-sync retry and has just published everything the flag was
-        // set for, so the flag retires unconditionally — otherwise an offline BIO-ONLY edit would
-        // re-publish on every sync for ever.
-        await AsyncStorage.removeItem('pending_profile_sync');
-        // The parked pick retires only if THIS payload carried it, and only here: every
-        // `return false` above leaves it in place for the next retry.
-        await retireParkedPickAfterPublish(decision);
+        // This function IS the pending-sync retry and has just published everything this
+        // community's change holds (its parked pick is always chosen above when portable), so the
+        // change retires — otherwise an offline BIO-ONLY edit would re-publish on every sync for
+        // ever. Only here, and only if it is still the one this payload was built from: every
+        // `return false` above leaves it for the next retry, and a change kept while this was out
+        // waits for the next.
+        await clearPendingProfileChange(anchorUrl, pending);
+        // The local mirror writes the copy open now (getDb): after a switch while the update was out, that is another
+        // community's, and this one's profile stays out of it. This community's next members sync brings it home.
+        if (!(await stillOnCommunity(anchorUrl))) return true;
         // Mirror the canonical avatar into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
@@ -6886,10 +6903,22 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean }): 
                     archetype: archetypeRaw || undefined,
                 });
             } catch { /* local mirror is best-effort */ }
+        } else if (callsign !== profile?.callsign) {
+            // A name it has just taken (the one waiting here) goes into the row as well, and only the name: until the
+            // next members sync the row still holds the old one, which the screens show and a later retry here falls
+            // back on (#2461 review).
+            try {
+                await updateMemberProfile(identity.publicKey, { callsign });
+            } catch { /* local mirror is best-effort */ }
         }
         return true;
     } catch {}
     return false;
+}
+
+/** Whether the phone is still on `community`: the copy getDb opens is that community's (pillar-sync's mid-sync check). */
+async function stillOnCommunity(community: string): Promise<boolean> {
+    return getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url')) === getDatabaseFilenameForNode(community);
 }
 
 function _isProfilePhotoError(msg: string): boolean {

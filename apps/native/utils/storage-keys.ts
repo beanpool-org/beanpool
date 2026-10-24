@@ -131,6 +131,13 @@ export const PUSH_PINS_STORE_KEY = 'beanpool_push_pins';
 export const NOTICE_COUNTS_STORE_KEY = 'beanpool_notice_counts';
 
 /**
+ * A profile change waiting to reach a community (utils/pending-profile-sync.ts): one key per community, this prefix and
+ * its address in one spelling (node-url.ts plainOriginOf). Sign Out wipes them (utils/identity.ts
+ * wipeIdentityScopedStorage): the changes were the account's.
+ */
+export const PENDING_PROFILE_STORE_PREFIX = 'beanpool_pending_profile:';
+
+/**
  * This phone's push token as last registered for the account on it (services/push-notifications.ts; SecureStore, not
  * AsyncStorage). The account unregisters it on its communities as it leaves the phone (utils/account-leaves-phone.ts).
  */

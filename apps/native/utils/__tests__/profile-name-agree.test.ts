@@ -361,6 +361,12 @@ const pull = async () => {
     await settle();
 };
 const field = (label: string) => (host.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement | null)?.value;
+/** What waits for `url`'s community (utils/pending-profile-sync.ts): one key per community, its address in one spelling. */
+const waitingKey = (url: string) => `beanpool_pending_profile:${new URL(url).origin}`;
+const waitingIn = (url: string) => {
+    const raw = store.map.get(waitingKey(url));
+    return raw ? JSON.parse(raw) : null;
+};
 const type = async (label: string, value: string) => {
     await act(async () => { inputSetters.get(label)?.(value); });
     await settle(2);
@@ -552,8 +558,9 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         await press('Save Profile');
 
         expect(alerts.said).toContain('Offline Mode');
-        expect(store.map.get('pending_profile_sync')).toBe('true');
-        // pillar-sync's retry (pushProfileToServer) publishes `profile?.callsign || identity.callsign` from this row.
+        // Kept for this community, with the new name (pending-profile-sync.ts): pillar-sync's retry there sends it, even
+        // over a members sync that wrote the old name back into the row.
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Marty Renamed' });
         expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
         expect(host.textContent).toContain('Marty Renamed');
 
@@ -573,9 +580,9 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         await press('✏️ Edit');
         await type('Callsign', 'Marty Renamed');
         await press('Save Profile');
-        expect(store.map.get('pending_profile_sync')).toBe('true');
-        // A photo the offline Save parked (or one picked now) rides on the next online Save.
-        store.map.set('pending_profile_avatar', 'data:image/png;base64,UElDSw==');
+        expect(waitingIn(NODE)?.callsign).toBe('Marty Renamed');
+        // A photo the offline Save parked for this community (or one picked now) rides on the next online Save.
+        store.map.set(waitingKey(NODE), JSON.stringify({ ...waitingIn(NODE), avatar: 'data:image/png;base64,UElDSw==' }));
 
         const { updates } = mockNode();
         await press('✏️ Edit');
@@ -583,7 +590,62 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         const sent = updates.at(-1);
         expect(sent, 'the online Save reached the node').toBeDefined();
         expect(sent.callsign).toBe('Marty Renamed');
+        expect(sent.avatar).toBe('data:image/png;base64,UElDSw==');
         expect(mockDb.remoteCallsign).toBe('Marty Renamed');
+        // The community has taken both: nothing waits there.
+        expect(waitingIn(NODE)).toBeNull();
+    });
+
+    it('after an offline rename and a members sync writing the old name back over the row, the next online Save sends the NEW name, not the row\'s (#2461 review r4368471153)', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Marty Renamed' });
+
+        // The members sync writes the name the node still holds over the row, and the screen reads it from there.
+        mockDb.localProfile = { ...mockDb.localProfile, callsign: 'Marty party' };
+        await pull();
+
+        // Back online, the member saves a bio and leaves the name alone.
+        const { updates } = mockNode();
+        await press('✏️ Edit');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+        const sent = updates.at(-1);
+        expect(sent, 'the online Save reached the node').toBeDefined();
+        expect(sent.bio).toBe('Grows tomatoes');
+        expect(sent.callsign).toBe('Marty Renamed');
+        expect(mockDb.remoteCallsign).toBe('Marty Renamed');
+        // The row and the card say the name the node now holds, never the old one the sync wrote.
+        expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
+        expect(host.textContent).toContain('Marty Renamed');
+        expect(waitingIn(NODE)?.callsign).toBeUndefined();
+    });
+
+    it('an offline bio Save over the old name a members sync wrote keeps the waiting rename, and the row says it too', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+
+        mockDb.localProfile = { ...mockDb.localProfile, callsign: 'Marty party' };
+        await pull();
+
+        await press('✏️ Edit');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+        expect(alerts.said.filter((s) => s === 'Offline Mode')).toHaveLength(2);
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Marty Renamed' });
+        // The row is what the retry falls back on: it holds the waiting name, not the one the sync wrote.
+        expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
+        expect(mockDb.localProfile.bio).toBe('Grows tomatoes');
     });
 
     it('a rename waiting to sync in one community is never sent from a Save in another (#2439 Sonnet note: the flag is device-wide)', async () => {
@@ -594,7 +656,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         await press('✏️ Edit');
         await type('Callsign', 'Marty Renamed');
         await press('Save Profile');
-        expect(store.map.get('pending_profile_sync')).toBe('true');
+        expect(waitingIn(NODE)?.callsign).toBe('Marty Renamed');
 
         // The member is now in another community, and saves there without touching the name.
         store.map.set('beanpool_anchor_url', 'https://other.example.net');
@@ -604,6 +666,51 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         const sent = updates.at(-1);
         expect(sent, 'the Save reached the other community').toBeDefined();
         expect(sent.callsign).toBeUndefined();
+        // The other community's Save neither sent nor cleared the change waiting for this one.
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Marty Renamed' });
+        expect(waitingIn('https://other.example.net')).toBeNull();
+    });
+
+    it('a photo parked for one community never rides a Save in another, and stays parked for its own', async () => {
+        const PARKED = 'data:image/png;base64,UElDSw==';
+        store.map.set(waitingKey(NODE), JSON.stringify({ publicKey: KEY, avatar: PARKED }));
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        store.map.set('beanpool_anchor_url', 'https://other.example.net');
+        const { updates } = mockNode();
+
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Bio', 'Written in the other community');
+        await press('Save Profile');
+
+        const sent = updates.at(-1);
+        expect(sent, 'the Save reached the other community').toBeDefined();
+        expect(sent.bio).toBe('Written in the other community');
+        expect('avatar' in sent).toBe(false);
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, avatar: PARKED });
+    });
+
+    it('a rename waiting in one community does not stop another community\'s name showing there', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+        expect(alerts.said).toContain('Offline Mode');
+
+        // On the other community the row is stale, and that community answers its own name for this key.
+        store.map.set('beanpool_anchor_url', 'https://other.example.net');
+        mockDb.localProfile = { public_key: KEY, callsign: 'Old Other Name' };
+        mockDb.remoteCallsign = 'Marty Elsewhere';
+        mockNode();
+        await pull();
+
+        expect(mockDb.localProfile.callsign).toBe('Marty Elsewhere');
+        expect(host.textContent).toContain('Marty Elsewhere');
+        expect(waitingIn(NODE)?.callsign).toBe('Marty Renamed');
     });
 
     it.each([

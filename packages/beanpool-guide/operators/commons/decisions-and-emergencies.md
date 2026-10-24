@@ -13,7 +13,7 @@ The community governs itself through Decisions. Members propose and vote in the 
 - Enough people must vote: at least 3, and at least 30% of members active in the last 30 days (25% for removing someone).
 - It passes with 60% yes. Removing someone needs 66%; restoring someone needs just over half. A tie fails.
 - Votes are secret: members and admins see only the totals. See Privacy and what your server can see, for what the server itself keeps.
-- Each member can have one open Decision at a time. Frozen and suspended members cannot vote or propose.
+- Each member can have one open Decision at a time. Frozen and suspended members cannot propose, and cannot vote, with one exception: someone suspended in an emergency still votes on every other Decision while the community votes on removing them, and counts in its turnout. Nobody votes on a Decision to remove them.
 
 What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, give or take away vouching, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days.
 
@@ -34,9 +34,11 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - They are suspended at once and their role, if any, is set aside.
 - While it lasts, their listings are off the Market and the map, and they bring nobody in: no invite, no answer to a request to join, and an invite or paper ticket they made earlier admits nobody. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat) and finish or cancel the deals they have open. Their listings and invites come back as they were when it ends.
 - A suspension made when acting on a report is the same suspension, and the same vote opens, with the reason given, or that a report about them was upheld.
-- A 7-day vote opens: "Keep the suspension?". One member, one vote, 60% to keep it.
-- If it does not pass, the suspension lifts by itself and their role comes back.
-- If it passes, they stay suspended until someone lifts it, and any role it set aside is gone for good.
+- A 7-day vote opens on removing them: "Remove …?". It is decided as any removal is: one member, one vote, 25% turnout, 66% to remove. They cannot vote on it, and still vote on every other Decision, so suspending someone cannot swing another vote.
+- If it does not pass, or too few vote, the suspension lifts when the vote closes and their role comes back.
+- If it passes, they stay suspended through a removal's 7 days' grace, and are then removed (see Removing someone).
+- No vote removes an owner or admin: on one of them, the suspension ends when the vote closes, whatever it decides, and their role comes back.
+- A "Keep the suspension?" vote opened before this version runs to its end as it did.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
 - The suspended person gets no notification. Tell them yourself.
 - In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else.
@@ -47,14 +49,14 @@ On the global community no vote opens. The suspension lasts 7 days and then lift
 
 Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons.
 
-No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it, with one exception: if the community votes to keep their emergency suspension (above), the role it set aside is gone for good. If an admin must go, an owner takes the role away first; after that they are a member like any other.
+No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it, not even by the vote that opens when one of them is suspended (above). If an admin must go, an owner takes the role away first; after that they are a member like any other.
 
 ## Halting a Decision
 
 **Halt this Decision** stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public.
 
 - Halting a removal in its grace period restores the person.
-- Halting a "keep the suspension" vote lifts the suspension.
+- Halting the vote an emergency suspension opened lifts the suspension.
 - A suspension nobody votes on (on the global community) has **Lift suspension now** instead. It asks for a reason the same way, and lifts the suspension straight away.
 - **Owner only**: if halting would give someone back an owner or admin role, only an owner can do it. The same goes for lifting such a suspension by hand, and for cutting a grace period short.
 
@@ -62,5 +64,5 @@ Halting overrides the community. Use it for a mistake or an abuse of the process
 
 ## Know this
 
-- A suspension by Decision takes away the person's role for good. So does an emergency suspension that members vote to keep. An emergency suspension only sets the role aside while its vote is open: if the vote fails, or you lift or halt it first, the role comes back.
+- A suspension by Decision takes away the person's role for good. An emergency suspension only sets the role aside while its vote is open: if the vote fails, or you lift or halt it first, the role comes back.
 - Lifting a suspension by hand is refused while a removal is waiting out its grace period. Halt the removal instead.

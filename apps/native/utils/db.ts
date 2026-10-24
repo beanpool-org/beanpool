@@ -3246,7 +3246,11 @@ export type DecisionEffect =
     | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
-    /** Opened by the node when an admin suspends someone: "Keep this suspension?" Never proposed by a member. */
+    /**
+     * "Keep this suspension?": opened by the node when an admin suspended someone before removal by vote S2 (an admin's
+     * pause now opens a remove_member vote, utils/decision-card.ts isPauseVote), and still the record of a pause where
+     * formal Decisions are off. Never proposed by a member.
+     */
     | 'keep_suspension'
     | 'remove_member'
     | 'grant_enterprise'

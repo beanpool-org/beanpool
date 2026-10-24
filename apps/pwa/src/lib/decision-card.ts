@@ -45,6 +45,43 @@ export function keepSuspensionHeadline(params: { memberName?: string; suspendedA
 }
 
 /**
+ * A pause's own vote (removal by vote S2): the community's vote on removing a member, which the node opened when an admin
+ * paused them. Its author is the node and its params carry `rule: 2`; a removal a member proposes is never one (the node
+ * keeps those marks out of a proposal).
+ */
+export function isPauseVote(decision: { effect: string; authorPubkey?: string; params?: any }): boolean {
+    return decision.effect === 'remove_member' && decision.authorPubkey === 'SYSTEM' && decision.params?.rule === 2;
+}
+
+/**
+ * A vote on removing the reader themself, a pause's or one a member proposed: nobody votes on their own removal (the node
+ * refuses it, removal by vote S2), so the card says so instead of offering the vote.
+ */
+export function isOwnRemoval(decision: { effect: string; subject?: string | null }, me: string | null | undefined): boolean {
+    return decision.effect === 'remove_member' && !!me && decision.subject === me;
+}
+
+/** The pause vote card's first line: who was paused, and when (core's formatDate, "22 Oct 2026"). */
+export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: string } | null | undefined, fallbackName: string): string {
+    const name = params?.memberName || fallbackName;
+    const at = params?.pausedAt ? Date.parse(params.pausedAt) : NaN;
+    return Number.isFinite(at)
+        ? t('An admin paused {name} on {date}.', { name, date: formatDate(new Date(at), 'day-month-year') })
+        : t('An admin paused {name}.', { name });
+}
+
+/**
+ * What each answer does (design §8.2): Yes removes them after the 7-day grace window, No brings them back when the vote
+ * closes. No vote removes someone who holds an owner or admin role (§3.8): then the pause ends with the vote, whatever it says.
+ */
+export function pauseVoteBody(params: { memberName?: string; serverRole?: string } | null | undefined, fallbackName: string): string {
+    const name = params?.memberName || fallbackName;
+    return params?.serverRole
+        ? t("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.", { name })
+        : t('Yes removes {name} after 7 days. No brings {name} back as soon as the vote closes.', { name });
+}
+
+/**
  * What a member can do on a vote about community money (answer H), known before they try: null when they
  * can vote, otherwise the sentence the node would answer with.
  */

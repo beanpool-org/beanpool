@@ -545,6 +545,19 @@ async function main(): Promise<void> {
             `a vote cast moves the tag, and the vote line goes (got ${afterVote.status})`);
         const steady = await get('/api/home', alice, { 'If-None-Match': afterVote.etag! });
         assert(steady.status === 304, `and with nothing else changed, a 304 again (got ${steady.status})`);
+
+        // A vote on removing Alice is never a vote Alice is asked to cast: she can't vote in it (the voter rule refuses her), so
+        // the line would stay all week. Carol, who may vote, is asked (#2430, deciding review r4365798773).
+        const carolVotes = async () => ((await get('/api/home', carol)).body?.cards?.needs?.items ?? []).find((i: any) => i.kind === 'vote')?.count ?? 0;
+        const carolBefore = await carolVotes();
+        db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, franchise, status, opens_at, closes_at)
+                    VALUES ('dec-home-remove-alice', 'SYSTEM', 'HomeSentinel remove alice', 'A removal', 'member', 'remove_member', ?, '1m1v', 'open', ?, ?)`)
+            .run(alice.pk, new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 6 * DAY).toISOString()); // as a pause opens it (S2)
+        const aliceNeeds = (await get('/api/home', alice)).body?.cards?.needs?.items ?? [];
+        assert(!aliceNeeds.some((i: any) => i.kind === 'vote'), `a vote on removing her is no vote Alice is asked to cast (${JSON.stringify(aliceNeeds)})`);
+        const carolAfter = await carolVotes();
+        assert(carolAfter === carolBefore + 1, `and Carol, who may vote in it, is asked (${carolBefore} → ${carolAfter})`);
+        db.prepare("DELETE FROM decisions WHERE id = 'dec-home-remove-alice'").run();
     }
 
     // ── 5. cards= skips work ────────────────────────────────────────────────────────────────────────────────────

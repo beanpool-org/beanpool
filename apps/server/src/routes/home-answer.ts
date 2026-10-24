@@ -567,15 +567,17 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
 
     // Votes the member hasn't cast on Decisions open now, as the signed decisions list gives them (routes/commons.ts):
     // formal Decisions only where they are on, never an emergency suspension made while they were off, and never a money
-    // vote the member can't cast yet (no completed trade and no voice credits), which isn't asking anything of them. Only
-    // for a reader who reads as a member: a suspended member casts no vote, and the line names the Decision.
+    // vote the member can't cast yet (no completed trade and no voice credits), which isn't asking anything of them, and never a
+    // vote on removing the member themselves (the voter rule refuses them; the line would stay all week, #2430). Only for a reader
+    // who reads as a member (`c.member`), and the line names the Decision.
     if (c.member && decisionsOn()) {
         const mine = getOwnDecisionVotes(me);
         const blocked = !hasCompletedTrade(me) && getVoiceCredits(me) <= 0;
         const votes = [...getOpenDecisions(), ...scopedVotesFor(c)]
             .filter(d => !madeWithoutVote(d) && !mine.has(d.id)
                 && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
-                && !(d.franchise === 'quadratic_trade' && blocked))
+                && !(d.franchise === 'quadratic_trade' && blocked)
+                && !(d.effect === 'remove_member' && d.subject === me))
             .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt));
         if (votes.length) {
             const soonest = votes[0].closesAt;

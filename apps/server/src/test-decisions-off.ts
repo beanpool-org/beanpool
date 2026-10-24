@@ -12,15 +12,15 @@
  *      or new, offers a vote. Underneath the routes, createDecision throws and castDecisionVote refuses.
  *   2. An emergency suspension with votes off: an admin suspends at once; the record it opens is a suspension, not a
  *      question, and nobody can vote on it; the member is still suspended on day 6; when the 7 days end the tick lifts
- *      it and gives back the node role it held aside. An admin can lift one sooner. One opened while votes were on,
- *      with enough yes votes to keep it, lifts all the same once the switch is off. One made while votes were off
+ *      it and gives back the node role it held aside. An admin can lift one sooner. One opened while votes were on (the
+ *      vote on removing them), with enough yes votes to pass, lifts all the same once the switch is off. One made while votes were off
  *      stays a suspension nobody votes on after the switch goes back on, and lifts at its end whatever votes it holds.
  *   3. What a vote decided before the switch went off is not carried out: a passed Decision is blocked at the tick, an
  *      open one whose vote passed is blocked too, and a removal in its grace window is not completed (nor can an admin
  *      hurry it); the admin brake still halts it and gives the member back.
  *   4. A local community (NODE_PROFILE unset): unchanged. info reports `decisions: true`, a member proposes and votes,
- *      and an emergency suspension opens "Keep …'s suspension?", which a vote keeps. The operator's override
- *      `nodeProfile.decisions=false` switches them off there too.
+ *      and an emergency suspension opens the vote on removing the member, "Remove …?" (removal by vote S2), whose Yes
+ *      starts the removal's grace window. The operator's override `nodeProfile.decisions=false` switches them off there too.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-decisions-off.ts
  */
@@ -233,7 +233,7 @@ async function main() {
     await new Promise(r => setTimeout(r, 5));
     const ginaSuspended = await call('POST', `/api/local/admin/users/${gina.pk}/suspend`, { reason: 'Harassing a member in messages' }, null, ADMIN);
     const ginaRecord = ginaSuspended.body?.decision;
-    assert(ginaSuspended.status === 200 && ginaRecord?.title === "Keep Gina's suspension?", `with votes on, it opens as a vote (${JSON.stringify(ginaRecord?.title)})`);
+    assert(ginaSuspended.status === 200 && ginaRecord?.title === 'Remove Gina?', `with votes on, it opens as a vote (${JSON.stringify(ginaRecord?.title)})`);
     const keeps = [];
     for (const v of [...voters, olga]) keeps.push((await call('POST', `/api/commons/decisions/${ginaRecord?.id}/vote`, { support: true }, v)).status);
     assert(keeps.every(s => s === 200), `five members vote to keep it (${keeps.join(', ')})`);
@@ -331,12 +331,15 @@ async function main() {
     await new Promise(r => setTimeout(r, 5));
     const jackSuspended = await call('POST', `/api/local/admin/users/${jack.pk}/suspend`, { reason: 'Threats in the market chat, again' }, null, ADMIN);
     const jackRecord = jackSuspended.body?.decision;
-    assert(jackSuspended.status === 200 && jackRecord?.title === "Keep Jack's suspension?"
-        && String(jackRecord?.description).startsWith(`An admin suspended Jack on ${jackRecord?.opensAt?.slice(0, 10)}. Keep the suspension?`),
-        `an emergency suspension opens a vote, as before (${JSON.stringify(jackRecord?.title)})`);
+    assert(jackSuspended.status === 200 && jackRecord?.title === 'Remove Jack?'
+        && String(jackRecord?.description).startsWith(`An admin paused Jack on ${jackRecord?.opensAt?.slice(0, 10)}.`),
+        `an emergency suspension opens a vote, the vote on removing him (${JSON.stringify(jackRecord?.title)})`);
     for (const v of [...voters, olga, kate]) await call('POST', `/api/commons/decisions/${jackRecord?.id}/vote`, { support: true }, v);
-    de.tickDecisions(Date.parse(jackRecord.closesAt) + 60_000);
-    assert(statusOf(jack) === 'disabled' && decision(jackRecord.id).status === 'executed', `and the vote keeps it (${statusOf(jack)}, ${decision(jackRecord.id).status})`);
+    // Closed now and ticked at the real time: a tick a week ahead would also see the grace window it starts end.
+    db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), jackRecord.id);
+    de.tickDecisions();
+    assert(statusOf(jack) === 'disabled' && decision(jackRecord.id).status === 'execution_pending_grace',
+        `and the vote passes: the removal's grace window starts, Jack still paused (${statusOf(jack)}, ${decision(jackRecord.id).status})`);
 
     setOverride('false');
     const info5 = await call('GET', '/api/community/info', null, alice);

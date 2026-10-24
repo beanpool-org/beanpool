@@ -2812,6 +2812,8 @@ export async function writeOffStrandedEscrow(
 
 export interface AdminDecisionItem {
     id: string;
+    /** 'SYSTEM' for one the node opened itself (an emergency suspension's vote, since removal by vote S2 a pause's own vote). */
+    authorPubkey?: string;
     title: string;
     description: string;
     effect: string;
@@ -2913,9 +2915,10 @@ export async function haltDecision(nodeUrl: string, decisionId: string, reason: 
 }
 
 /**
- * Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" Decision. If members
- * don't keep it, it lifts by itself. The reason (10+ characters) is shown to members on that Decision. Suspending an
- * owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it.
+ * Emergency suspension: takes effect at once and opens the community's 7-day vote on removing the member (`effect`
+ * remove_member, since removal by vote S2; a node before it opened a "Keep this suspension?" keep_suspension vote). If
+ * the vote doesn't pass, it lifts by itself. The reason (10+ characters) is shown to members on that Decision.
+ * Suspending an owner asks an owner's fresh proof (server ownerRemovalProof): `code` carries it.
  */
 export async function emergencySuspendMember(
     nodeUrl: string,
@@ -2924,11 +2927,11 @@ export async function emergencySuspendMember(
     adminPassword?: string,
     tfaToken?: string,
     code?: string
-): Promise<{ success: boolean; decision?: { id: string; closesAt: string; params?: { noVote?: boolean } } }> {
+): Promise<{ success: boolean; decision?: { id: string; closesAt: string; effect?: string; params?: { noVote?: boolean } } }> {
     return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason, ...proofField(code) }, adminPassword, tfaToken);
 }
 
-/** Lift a suspension by hand; an open "Keep this suspension?" vote about it closes with it. */
+/** Lift a suspension by hand; the open vote it opened (on removing them, or "Keep this suspension?") closes with it. */
 export async function liftMemberSuspension(nodeUrl: string, pubkey: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
     return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/status`, { status: 'active' }, adminPassword, tfaToken);
 }

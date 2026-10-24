@@ -10,7 +10,7 @@
 
 import { db } from '../db/db.js';
 import { getShutdownStatus } from './shutdown-recovery.js';
-import { decisionsOn } from '../decisions-engine.js';
+import { decisionsOn, openPauseVotes } from '../decisions-engine.js';
 import { standbyIncidentOpen } from '../services/standby-health.js';
 import { serverAlertCount } from '../services/alerts.js';
 import { suggestionCountFor } from '../agent/suggestions.js';
@@ -81,7 +81,8 @@ export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean
         },
         {
             kind: 'suspensions',
-            count: count("SELECT COUNT(*) AS c FROM decisions WHERE effect = 'keep_suspension' AND status = 'open'"),
+            // Each open pause: its own vote on removing the member (removal by vote S2), or a "Keep …'s suspension?" row.
+            count: openPauseVotes().length,
             // With formal Decisions off (the global profile) an emergency suspension opens no vote: it lifts by
             // itself after 7 days unless an admin lifts it sooner.
             label: decisionsOn() ? 'Emergency suspensions the community is voting on' : 'Emergency suspensions in their 7 days',

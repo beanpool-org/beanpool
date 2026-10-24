@@ -218,6 +218,22 @@ describe('the Decide section in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
     });
 
+    // Removal by vote S2: a pause's own vote, and one on an admin, whom no vote removes (§3.8).
+    it("a pause's own vote: who was paused and when, and what each answer does", async () => {
+        await showIn('xx');
+        drawDecide([
+            decision('g', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Dave', rule: 2, pausedAt: '2026-10-22T10:00:00.000Z', commonsPool: 300 } }),
+            decision('h', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Eve', rule: 2, serverRole: 'admin', pausedAt: '2026-10-22T10:00:00.000Z', commonsPool: 300 } }),
+        ]);
+        const boxes = screen.getAllByTestId('pause-vote-box');
+        expect(boxes).toHaveLength(2);
+        expect(boxes[0].textContent).toContain(xx('An admin paused {name} on {date}.').replace('{name}', 'Dave').split('{date}')[0]);
+        expect(boxes[0].textContent).toContain(xx('Yes removes {name} after 7 days. No brings {name} back as soon as the vote closes.').split('{name}').join('Dave'));
+        expect(boxes[1].textContent).toContain(
+            xx("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.").split('{name}').join('Eve'));
+        expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
+    });
+
     it('who may propose, the empty list, a money vote someone with no trade cannot cast, and each refusal', async () => {
         await showIn('xx');
         drawDecide([], { canPropose: false });

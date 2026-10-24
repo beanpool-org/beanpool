@@ -246,6 +246,25 @@ describe('Invite people on the web group sheet', () => {
         confirm.mockRestore();
     });
 
+    it('while the decline is sent, both buttons look held and Decline is a full 44 px target', async () => {
+        vi.mocked(getGroup).mockImplementation(async () => ({ ...card(), viewerRole: 'member', viewerStatus: 'invited' }) as any);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Join the group to see who is here'), { code: 'join_to_see' }));
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        let letGo!: () => void;
+        vi.mocked(removeGroupMember).mockImplementation(() => new Promise((r) => { letGo = () => r(undefined as any); }));
+        render(<GroupDetailModal group={{ ...card(), viewerRole: 'member', viewerStatus: 'invited' } as any} isOpen onClose={vi.fn()} onMembershipChanged={vi.fn()} myPubkey={CAT} />);
+        const decline = await screen.findByTestId('group-decline-invite');
+        const accept = screen.getByTestId('group-accept-invite');
+        expect(decline.className).toContain('min-h-[44px]');
+        for (const b of [accept, decline]) expect(b.className).toContain('disabled:opacity-50');
+        fireEvent.click(decline);
+        await waitFor(() => expect(removeGroupMember).toHaveBeenCalled());
+        expect(decline).toBeDisabled();
+        expect(accept).toBeDisabled();
+        letGo();
+        confirm.mockRestore();
+    });
+
     it('no Decline for a member or a convenor: only an open invitation is declined', async () => {
         open();
         await screen.findByText('martys group');

@@ -461,6 +461,10 @@ async function main(): Promise<void> {
         let bRecoveryCode = '';
 
         // ── 1. Genesis and claim ──
+        // This proves the SERVER needs nothing of ours for a claim. It cannot see the app: these phones are this process,
+        // which makes its keys itself. The phone's own path, a claim that makes the account on a phone with no account and
+        // contacts nothing but the community, is apps/native/utils/__tests__/claim-account-e2e.test.ts
+        // (DESIGN-account-without-global-fable.md §1, "A blind spot worth naming").
         await step('1. genesis and claim: each owner claims their node and names the community', async () => {
             for (const [node, owner, community] of [[A, olive, 'Riverbend'], [B, cy, 'Hilltop']] as const) {
                 await claim(node, owner);

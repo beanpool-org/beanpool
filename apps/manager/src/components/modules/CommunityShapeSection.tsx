@@ -1144,7 +1144,7 @@ function ShapeRow({
                     <span className="text-base select-none shrink-0" aria-hidden="true">{icon}</span>
                     <span className="text-xs font-bold text-white break-words">{name}</span>
                 </div>
-                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto min-w-0 max-w-full">
                     <span data-testid={`shape-val-${id}`} className="text-xs font-medium text-white break-words">
                         {displayValue}
                     </span>

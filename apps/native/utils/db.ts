@@ -52,8 +52,9 @@ import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplaced
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import {
     sendSealedGroupLine, editSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
-    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT, type GroupPhotoCache,
+    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT,
 } from './group-chat-lines';
+import { groupPhotoCache, forgetGroupPhotos, forgetRemovedGroupPhotos } from './group-photo-cache';
 import type { GroupLineView, ServedGroupLine } from './group-line-display';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
@@ -78,63 +79,6 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
     try {
         await FileSystem.deleteAsync(`${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`, { idempotent: true });
     } catch { /* nothing to do: the message is gone either way */ }
-}
-
-// A group chat's opened photos, one folder per group (DESIGN-group-chat-photos-fable.md §2.3, §2.4): kept by message id as a
-// DM's are, so a group this phone is no longer in is cleared in one go. A name the node served is a file name here only when
-// it is a plain id: nothing it serves can name a file outside the group's folder.
-const GROUP_PHOTO_DIR = `${CHAT_IMAGE_CACHE_DIR}groups/`;
-const PLAIN_ID = /^[0-9a-z][0-9a-z-]{0,63}$/;
-const groupPhotoFolder = (groupId: string): string | null => (PLAIN_ID.test(groupId) ? `${GROUP_PHOTO_DIR}${groupId}/` : null);
-const groupPhotoFile = (groupId: string, messageId: string): string | null => {
-    const folder = groupPhotoFolder(groupId);
-    return folder && PLAIN_ID.test(messageId) ? `${folder}${messageId}.jpg` : null;
-};
-
-/** Where GroupChatView keeps the photos it opened (utils/group-chat-lines.ts getDecryptedGroupAttachment). */
-export const groupPhotoCache: GroupPhotoCache = {
-    async get(groupId, messageId) {
-        const file = groupPhotoFile(groupId, messageId);
-        return file && (await FileSystem.getInfoAsync(file)).exists ? file : null;
-    },
-    async put(groupId, messageId, dataUri) {
-        const file = groupPhotoFile(groupId, messageId);
-        const jpeg = dataUri.match(/^data:image\/[a-z0-9.+-]+;base64,(.*)$/is);
-        // Drawn from memory this once when it can't be kept under a plain name, as a DM photo of an unknown shape is.
-        if (!file || !jpeg) return dataUri;
-        try { await FileSystem.makeDirectoryAsync(groupPhotoFolder(groupId)!, { intermediates: true }); } catch {}
-        await FileSystem.writeAsStringAsync(file, jpeg[1], { encoding: 'base64' });
-        return file;
-    },
-};
-
-/**
- * Take a group's opened photos off this phone, best effort and with no promise in words: the node no longer serves this
- * phone the group's chat (a removed member, a leaver), as it no longer serves the words (§2.4).
- */
-async function forgetGroupPhotos(groupId: string): Promise<void> {
-    const folder = groupPhotoFolder(groupId.toLowerCase());
-    if (!folder) return;
-    try { await FileSystem.deleteAsync(folder, { idempotent: true }); } catch { /* the OS trims its cache folder anyway */ }
-}
-
-/** The kept files this session already took off for a removed line: each is asked once, not on every poll. */
-const removedGroupPhotos = new Set<string>();
-
-/**
- * A line the node now serves as removed (deleted by its author, removed by a convenor) takes its kept photo with it, on
- * every phone that opened it. Not waited on: the chat's read doesn't wait for the cache folder.
- */
-function forgetRemovedGroupPhotos(groupId: string, messages: unknown): void {
-    if (!Array.isArray(messages)) return;
-    for (const m of messages) {
-        if (m?.type !== 'removed') continue;
-        const file = groupPhotoFile(groupId.toLowerCase(), String(m.id));
-        if (!file || removedGroupPhotos.has(file)) continue;
-        if (removedGroupPhotos.size >= 5000) removedGroupPhotos.clear();
-        removedGroupPhotos.add(file);
-        FileSystem.deleteAsync(file, { idempotent: true }).catch(() => { /* the line is gone either way */ });
-    }
 }
 
 /**
@@ -6394,8 +6338,11 @@ export async function editMessage(conversationId: string, messageId: string, new
     );
 }
 
-/** A chat the node reads by design (an event's, an enterprise's thread) takes no photo (DESIGN-group-chat-photos-fable.md §4). */
-export const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "Photos can't be sent in this chat.";
+/**
+ * A chat the node reads by design (an event's, an enterprise's thread) takes no photo (DESIGN-group-chat-photos-fable.md
+ * §4). Translated where it is shown (utils/chat-line-words.ts).
+ */
+const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "Photos can't be sent in this chat.";
 
 /**
  * Send an image in a DM (NAT-1 attachments). The image is E2E-encrypted with the

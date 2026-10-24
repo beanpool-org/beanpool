@@ -99,7 +99,7 @@ describe('every sentence the key and line code writes is in the table', () => {
         }
         // A photo in an event's or an enterprise's chat (DESIGN-group-chat-photos-fable.md §4); its apostrophe makes it double-quoted.
         const noPhotos = "Photos can't be sent in this chat.";
-        expect(db).toContain(`export const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "${noPhotos}";`);
+        expect(db).toContain(`const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "${noPhotos}";`);
         expect(chatLineWords(noPhotos)).toBe(noPhotos);
         expect(known(noPhotos)).toBe(true);
         // signedRequestWithMethod's refusal with no words of the node's, by its status.

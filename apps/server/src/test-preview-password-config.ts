@@ -75,7 +75,7 @@ const ROUNDED_AREA = { lat: -28.56, lng: 153.5, radiusKm: 25 };
 // contacts off, every 12 hours), so a Save that wrote a default back shows.
 const STORED = {
     serviceRadius: AREA, publishLocation: false, publishMembers: false, publishHealth: false,
-    publishContactEmail: true, publishContactPhone: false, directoryPushIntervalHours: 0,
+    publishContactEmail: true, publishContactPhone: false, directoryPushIntervalHours: 6,
 };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const show = (v: unknown) => JSON.stringify(v);

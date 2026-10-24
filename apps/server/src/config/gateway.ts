@@ -1,11 +1,14 @@
 // Gateway configuration — node self-protection layer.
 //
 // Controls access to the node API: CORS allowed origins, admin IP allowlists,
-// feature toggles, and rate limiting. These are bootstrap-level security
-// settings that the node enforces independently of any external manager.
+// whether the node serves the web app, and rate limiting. These are bootstrap-level
+// security settings that the node enforces independently of any external manager.
 //
-// Phase 3 of the architecture vision. Stub for now — will be populated when
-// gateway configuration is implemented.
+// It had four more switches (marketplace, messaging, federation, invites): blunter copies of what How this community
+// works sets, and a Market or chat answered 503 that no community wants. They are gone (design
+// scratch/fable-design/DESIGN-community-shape-settings-fable.md §3.2, slice S3); a stored one is carried over once at
+// boot (config/community-shape-upgrade.ts), and federation's routes answer only where ENABLE_PEER_CONNECTORS is on.
+import { word } from '@beanpool/core';
 
 export interface GatewayConfig {
     /** Origins allowed to make cross-origin API requests (for detached PWA hosting). */
@@ -14,12 +17,8 @@ export interface GatewayConfig {
     /** IP addresses or CIDR ranges allowed to access admin endpoints. Empty = all allowed. */
     adminIpAllowlist: string[];
 
-    /** Feature toggles — enable/disable major subsystems. */
+    /** servePwa off: a headless node, which serves the API and Settings but not the web app. */
     features: {
-        marketplace: boolean;
-        messaging: boolean;
-        federation: boolean;
-        invites: boolean;
         servePwa: boolean;
     };
 
@@ -37,10 +36,6 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     corsAllowedOrigins: [],
     adminIpAllowlist: [],
     features: {
-        marketplace: true,
-        messaging: true,
-        federation: true,
-        invites: true,
         servePwa: true,
     },
     // #132: Rate limiting enabled by default to protect against brute-force and DoS.
@@ -51,6 +46,31 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
         maxRequestsPerMinute: 120,
     },
 };
+
+/**
+ * The gateway switches that are gone, each with the name the manager gave it. A stored one is carried over once
+ * (config/community-shape-upgrade.ts), and a save that names one is refused (removedGatewaySwitchRefusal).
+ */
+export const REMOVED_GATEWAY_SWITCHES = {
+    marketplace: 'Marketplace', messaging: 'P2P Direct Messaging', federation: 'Multi-Node Federation', invites: 'Cryptographic Invites',
+} as const;
+export type RemovedGatewaySwitch = keyof typeof REMOVED_GATEWAY_SWITCHES;
+
+/**
+ * Why a gateway save is refused for naming a switch that is gone (`features.invites` and the rest), or null. Nothing a
+ * save says about them could be kept: refused whole, so a stale page never reads as having switched one off.
+ */
+export function removedGatewaySwitchRefusal(body: unknown): { error: string; code: 'gateway_switch_removed'; removed: string[] } | null {
+    const features = body && typeof body === 'object' ? (body as { features?: unknown }).features : undefined;
+    if (!features || typeof features !== 'object') return null;
+    const removed = Object.keys(REMOVED_GATEWAY_SWITCHES).filter((k) => Object.prototype.hasOwnProperty.call(features, k));
+    if (removed.length === 0) return null;
+    return {
+        error: word("These gateway switches no longer exist: who can join is set under How this community works, connections to other communities on the server (ENABLE_PEER_CONNECTORS), and chat and the Market are always on. Reload Settings and save again."),
+        code: 'gateway_switch_removed',
+        removed,
+    };
+}
 
 /**
  * Whether the admin IP allow-list lets `ip` reach the admin surface (https-server.ts enforces it): an exact address, `*`,

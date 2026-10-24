@@ -132,7 +132,7 @@ async function child(): Promise<void> {
             updateLocalConfig({
                 callsign: a.callsign, communityName: a.name, location: { lat: 51.5, lng: -0.12 }, contactEmail: a.email, contactPhone: '+44 20 7946 0000',
                 gateway: { ...DEFAULT_GATEWAY_CONFIG, corsAllowedOrigins: ['https://standby.example'], adminIpAllowlist: a.allowlist },
-                thresholds: { ...DEFAULT_THRESHOLDS, circulationEpochDays: 20 }, backupPullSeconds: 30,
+                thresholds: { ...DEFAULT_THRESHOLDS, inactiveMemberDays: 20 }, backupPullSeconds: 30,
             });
             setReplicationToken(a.ownToken);
             updateNodeConfig({ serviceRadius: { lat: 51.5, lng: -0.12, radiusKm: 50 }, directoryPushIntervalHours: 24, publishContactPhone: true });
@@ -476,7 +476,7 @@ async function main(): Promise<void> {
         built('it publishes its contact email, keeps its phone and member count out of the directory, and draws its service area', await A('/api/local/admin/node/config', {
             publishContactEmail: true, publishMembers: false, serviceRadius: { lat: -33.71, lng: 151.1, radiusKm: 9 }, directoryPushIntervalHours: 6,
         }));
-        built('it sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45, washTradingMinTxns: 6 }));
+        built('it sets its own thresholds', await A('/api/admin/thresholds', { inactiveMemberDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
         // Keeping fewer than the default 7 asks the owner's fresh proof (#1984 confirmation N-2): Manage on the phone, just now.
         built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
@@ -534,8 +534,8 @@ async function main(): Promise<void> {
         built('and stops publishing its health', await A('/api/local/admin/node/config', { publishHealth: false }));
         // The publisher's timer can't wait longer than 2^31 - 1 ms (596 hours). Longer, below zero, or a fraction of an hour
         // that rounds to nothing, and Node fires it every millisecond: a flood on the directory registry every community
-        // shares. Both Settings screens send whole hours from 0 (off) to 24.
-        for (const every of [-1, 0.0001, 597, 24 * 366, '12']) {
+        // shares. The schedule is whole hours from 1: its 0, Never, is Listed off under How this community works (S3).
+        for (const every of [0, -1, 0.0001, 597, 24 * 366, '12']) {
             const bad = await A('/api/local/admin/node/config', { directoryPushIntervalHours: every });
             assert(bad.status === 400, `the route refuses a directory push interval of ${j(every)} hours (${brief(bad)})`);
         }
@@ -550,10 +550,10 @@ async function main(): Promise<void> {
         // The last admin call on M's HTTPS server: its admin IP allowlist names an address this machine is not, and this
         // machine's own (a list that would shut out the caller is refused: amendment 1 to design case 18). The gateway is
         // an owner's with the fresh proof: Manage on the phone, pressed just now.
-        built('it sets its gateway: another origin for its web app, messaging off, a request limit, an admin IP allowlist', await api(m, 'POST', '/api/local/admin/gateway', {
+        built('it sets its gateway: another origin for its web app, its web app served, a request limit, an admin IP allowlist', await api(m, 'POST', '/api/local/admin/gateway', {
             admin: await main.send('owner-phone-session'),
             body: {
-                corsAllowedOrigins: ['https://app.riverbend.example'], features: { messaging: false }, rateLimiting: { enabled: true, maxRequestsPerMinute: 300 },
+                corsAllowedOrigins: ['https://app.riverbend.example'], features: { servePwa: true }, rateLimiting: { enabled: true, maxRequestsPerMinute: 300 },
                 adminIpAllowlist: ['203.0.113.7', '127.0.0.1'],
             },
         }));
@@ -577,7 +577,7 @@ async function main(): Promise<void> {
             `the kept record is M's new one, its gateway without M's admin IP allowlist (${j(sNow.kept?.record?.localConfig?.gateway)})`);
         const takes = await standby.send('record-takes-interval', { values: [0, 1, 24, 596, -1, 0.0001, 597, 24 * 366, '12'] });
         assert(j(takes) === j([true, true, true, true, false, false, false, false, false]),
-            `a kept record takes the push intervals the route does, and none the publisher's timer can't hold (${j(takes)})`);
+            `a kept record takes the push intervals the route does, the old Never too (a main server from before S3 sends it, and the install carries it over: test-shape-upgrade.ts), and none the publisher's timer can't hold (${j(takes)})`);
         const takesSchedule = await standby.send('record-takes-snapshot-interval', { values: [1, 24, 596, 0, -1, 0.5, 597, 24 * 30, 24 * 366, '12'] });
         assert(j(takesSchedule) === j([true, true, true, false, false, false, false, false, false, false]),
             `a kept record takes the snapshot intervals the route does, and none the scheduler's timer can't hold (${j(takesSchedule)})`);

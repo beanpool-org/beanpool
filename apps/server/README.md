@@ -35,7 +35,9 @@ The node enforces its own security firewall via `src/config/gateway.ts` and `loc
 | **CORS Allowed Origins** | `corsAllowedOrigins` | String array of origins allowed cross-origin API access (`['https://app.beanpool.org']`) |
 | **Admin IP Allowlist** | `adminIpAllowlist` | String array of client IPs/CIDRs allowed to access `/settings`, `/api/local/admin/*`, and `/api/admin/*` |
 | **Rate Limiting** | `rateLimiting.enabled`, `maxRequestsPerMinute` | Sliding-window per-IP request throttle (`429 Too Many Requests`) |
-| **Feature Toggles** | `features.marketplace`, `messaging`, `federation`, `invites`, `servePwa` | Dynamic status interceptors (`503 Service Unavailable` / `530 Headless`) |
+| **Headless node** | `features.servePwa` | Off: the web app is not served (`530 Headless`); the API and Settings are |
+
+Who can join is set under How this community works, not here; `/api/federation/*` answers only where `ENABLE_PEER_CONNECTORS=true` (`503 peer_connectors_off` otherwise). The gateway's old `marketplace`, `messaging`, `federation` and `invites` switches are gone: a server that stored one has it carried over once at boot (`src/config/community-shape-upgrade.ts`).
 
 ## 🛠️ Node Administration & Setup
 

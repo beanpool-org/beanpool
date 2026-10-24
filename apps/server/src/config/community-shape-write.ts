@@ -37,8 +37,12 @@
  *   listed      refused on the global kind (`profile`); on refused while DIRECTORY_UNLISTED holds every push back.
  *   dmRequests, decisions, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail, sharePhone,
  *   shareHealth: no lock.
- * The other locks only say why a value is what it is (held back, the schedule's Never, an auth hatch, members on demand,
- * a standby's Listed): nothing here changes them, and they refuse nothing. The open door, the private preview, visitors
+ * The other locks only say why a value is what it is (held back, an auth hatch, members on demand, a standby's Listed):
+ * nothing here changes them, and they refuse nothing.
+ *
+ * Members are told of a change they live by, never of one that changes nothing they see: the 12-words door set on behind
+ * a shut open door, or Beans set on where a moved ledger already runs them (the owners' line and alert still say what
+ * was set). The open door, the private preview, visitors
  * and connections are the server's: 400.
  */
 import { word, wordsFor, type WordKey } from '@beanpool/core';
@@ -394,10 +398,13 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         actor: by.actor,
         actorRole: by.actorRole,
     });
-    // The 12-words door set on behind a shut open door takes nobody yet: members are told only of a door that changed.
+    // The 12-words door set on behind a shut open door takes nobody yet, and Beans set on where a moved ledger already runs
+    // them were on all along: members are told only of a door, or Beans, that changed.
     const wordsDoorMoved = shape.settings.wordsDoor?.value !== S.wordsDoor?.value;
+    const beansMoved = shape.settings.beans.value !== S.beans.value;
     const sentences = [
-        ...planned.filter((c) => !c.setting.startsWith('knownFloor.') && (c.setting !== 'wordsDoor' || wordsDoorMoved)).map(memberSentence),
+        ...planned.filter((c) => !c.setting.startsWith('knownFloor.') && (c.setting !== 'wordsDoor' || wordsDoorMoved)
+            && (c.setting !== 'beans' || beansMoved)).map(memberSentence),
         floorPlan ? floorSentence(floorPlan, S.knownFloor.value.on, (floorPlan.confirmation ?? S.knownFloor.configured.on) && beansAfter) : null,
     ].filter((s): s is string => !!s);
     let told: 'members' | 'nobody' = 'nobody';

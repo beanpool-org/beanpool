@@ -500,6 +500,7 @@ export const SUITES = [
     'test-door-setting',
     'test-community-shape-read',
     'test-community-shape-write',
+    'test-shape-upgrade',
     'test-names-list',
     'test-invite-bound-name',
     'test-names-copy',
@@ -602,6 +603,8 @@ export const VARIANTS = [
     { name: 'test-federation-commission', tag: 'on', label: 'settlement ON', env: { FEDERATION_SETTLEMENT: 'true' } },
     // FED-06: with peer connectors switched off, a configured peer's lookups, relays, listing pulls and purchases are refused.
     { name: 'test-federation-hardening', tag: 'peers-off', label: 'ENABLE_PEER_CONNECTORS unset', env: { ENABLE_PEER_CONNECTORS: null } },
+    // How this community works S3: federation's HTTP routes answer only with peer connectors on; the plain run has them on.
+    { name: 'test-shape-upgrade', tag: 'peers-off', label: 'ENABLE_PEER_CONNECTORS unset', env: { ENABLE_PEER_CONNECTORS: null } },
 
     // The keeper HTTP reachability suite with read enforcement switched OFF by the operator opt-out. Read auth is ON by
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a

@@ -1,6 +1,7 @@
 import { getDirectoryInfo, getNodeConfig, updateNodeConfig, getNodeRole } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { isDirectoryPushInterval, DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS, LEGACY_NEVER_INTERVAL } from '../config/community-settings.js';
 import { getP2PNode, getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
 import { listingFields, PROMISE_GAP_MESSAGES, type ListingFields, type PromiseGap, type PromiseStatus } from '../engine/directory-promise.js';
@@ -80,12 +81,10 @@ const HELD_BACK_MESSAGES: Record<DirectoryHoldBack, string> = { unnamed: HELD_BA
 /**
  * For the owners' screens (GET /api/local/admin/diagnostics `directoryHeldBack`: the manager's Directory Publishing and
  * static/settings.js): why this community is not on the public map although it is set to publish. Null where it
- * publishes, and where its screens already say why not: a standby, a profile that is never listed (global), or the
- * push interval at Never.
+ * publishes, and where its screens already say why not: a standby, or Listed off (the global profile's default).
  */
 export function directoryHeldBack(): DirectoryHoldBack | null {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().publishToDirectory) return null;
-    if (getNodeConfig().directoryPushIntervalHours === 0) return null;
     return holdBack();
 }
 
@@ -100,12 +99,11 @@ export interface DirectoryPromiseDiagnostics extends PromiseStatus {
 /**
  * For the owners' screens (GET /api/local/admin/diagnostics `directoryPromise`, and GET /api/local/admin/directory/
  * promise): the listing promise (engine/directory-promise.ts) as the next push will carry it, and why not. Null where
- * nothing is pushed at all and the screens already say why: a standby, a profile that is never listed, the interval at
- * Never. A community held back for its name still gets it, so its owners can make the promise before they name it.
+ * nothing is pushed at all and the screens already say why: a standby, or Listed off. A community held back for its
+ * name still gets it, so its owners can make the promise before they name it.
  */
 export function directoryPromiseStatus(): DirectoryPromiseDiagnostics | null {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().publishToDirectory) return null;
-    if (getNodeConfig().directoryPushIntervalHours === 0) return null;
     const { fields, status } = listingFields();
     return { ...status, acceptingKnocks: fields.acceptingKnocks, why: status.gaps.map((g: PromiseGap) => PROMISE_GAP_MESSAGES[g]) };
 }
@@ -147,14 +145,16 @@ export function initDirectoryPublisher(): boolean {
         console.log(`[Directory] 📴 ${HELD_BACK_UNLISTED_MESSAGE}`);
         return false;
     }
-    const config = getNodeConfig();
-    const intervalHours = config.directoryPushIntervalHours !== undefined ? config.directoryPushIntervalHours : 12;
-    
-    if (intervalHours === 0) {
-        console.log(`[Directory] 📴 Push publisher is disabled.`);
+    // The schedule, whole hours from 1 (the route takes only those); anything else stored reads as the default. Its old
+    // 0, Never, is carried over to Listed off at boot and at a kept record's install (config/community-shape-upgrade.ts).
+    // A 0 still stored here means that carry didn't run or failed: fail closed, as the old Never did, and send nothing.
+    const stored = getNodeConfig().directoryPushIntervalHours;
+    if (stored === LEGACY_NEVER_INTERVAL) {
+        console.log('[Directory] 📴 The old schedule "Never" is still stored and was not carried over to Listed off, so nothing is sent. To be listed, save a schedule (every 1 hour or more) in Node Identity; not to be, switch Listed off under How this community works.');
         return false;
     }
-    
+    const intervalHours = isDirectoryPushInterval(stored) ? stored : DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS;
+
     // Convert hours to milliseconds
     const intervalMs = intervalHours * 60 * 60 * 1000;
 
@@ -170,8 +170,8 @@ export function initDirectoryPublisher(): boolean {
 /**
  * The community's name was saved (routes/community.ts update-identity: the manager's Node Identity and first-start
  * wizard, static/settings.js). A community named after its server started is listed at once rather than at the next
- * timed push (12 hours by default), and a rename shows at once. Only while the publisher runs: nothing on a standby,
- * with the switch off, or with the interval at Never; nothing while it is held back.
+ * timed push (12 hours by default), and a rename shows at once. Only while the publisher runs: nothing on a standby or
+ * with Listed off; nothing while it is held back.
  */
 export function communityNameSaved(): void {
     if (!pushTimer || holdBack()) return;

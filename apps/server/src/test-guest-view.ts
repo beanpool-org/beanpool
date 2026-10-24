@@ -1228,9 +1228,10 @@ async function main(): Promise<void> {
                 signedFor: 'localhost', signature: 'AAAA' },
             // The QR sign-in's two digits, typed by a browser that holds no binding cookie for the pairing.
             'POST /api/local/admin/auth/pairing/:id/confirm': { code: '00' },
-            // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most (owner or admin only).
+            // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most under How this
+            // community works (the exception an owner's or an admin's, the dial an owner's).
             'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
-            'POST /api/local/admin/known-floor': { confirmation: true, knownFloor: 5000, creditCap: 5000 },
+            'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor: 5000, cap: 5000 }, join: 'members' } },
             // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
             'POST /api/commons/pay': { amount: 1 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
@@ -1347,9 +1348,9 @@ async function main(): Promise<void> {
             'POST /api/local/admin/directory/promise', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
             'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
-            'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
+            'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
-            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape',
+            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape',
             'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',

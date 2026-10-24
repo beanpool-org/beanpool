@@ -10,13 +10,16 @@
  * directory switches (config/community-settings.ts), and this server's env. Each value comes from the reader the node's own
  * gates use (getProfileSwitches, getNodeFeatures, doorFor, the engine's known-floor readers, directoryHeldBack), so the
  * shape can't say one thing while the node does another (test-community-shape-read.ts holds it to the gates for every
- * stored combination). Nothing here writes: the write path is slice S2, and every change it makes is a line in
- * `community_settings_log` (schema.sql), which `log` reads with the known floor's own community lines.
+ * stored combination). Nothing here writes: the write path is config/community-shape-write.ts (slice S2), which refuses
+ * a change wherever a lock below refuses it, and every change it makes is a line in `community_settings_log`
+ * (schema.sql), which `log` reads with the known floor's own community lines.
  *
  * ## Sources
  *   - `owner`: a choice this community stored: an override row (`nodeProfile.<switch>`), a door or known-floor row, a
- *     directory switch in the node_config object. Settings writes some of them today (the door, the known floor, requests
- *     to join, the directory switches); the operator writes the rest by hand.
+ *     directory switch in the node_config object that differs from its default. That object is stored whole on every
+ *     write (updateNodeConfig), bookkeeping included (the last directory push), and a standby's copy carries every field,
+ *     so a field being there says nobody chose it: no store records who chose a directory switch, so one that reads as its
+ *     default reads `default`, as a door or a switch set back to its default removes its row.
  *   - `profile`: no override, so the default of the server's kind (NODE_PROFILE: local or global).
  *   - `default`: no row of the community's, so the default every community starts with.
  *   - `server`: this server's env (PRIVATE_PREVIEW, ENABLE_PEER_CONNECTORS), which no setting of the community's changes.
@@ -28,15 +31,18 @@
  *     visitors nothing (private-preview.ts, door.ts, lockToPrivatePreview).
  *   - `invites_off`: no requests to join without invites (lockKnocksToInvites).
  *   - `beans_off`: no known floor without Beans (the engine's dial; setKnownFloorSettings refuses 409 `no_beans`).
- *   - `profile`: the open door and no invites leave no door to choose (doorSettingRefusal, 409 `door_set_by_profile`).
+ *   - `profile`: the open door and no invites leave no door to choose (doorSettingRefusal, 409 `door_set_by_profile`);
+ *     Beans stay off while the open door is set on, since the first Bean that moved would shut it for good (lockToLedger);
+ *     and the global kind is never a place in the directory (design §2.3), so Listed is its kind's there.
  *   - `server_env`: set in this server's env (the preview, connections, DIRECTORY_UNLISTED).
- *   - `held_back`, `schedule_never`: set to be listed, but nothing is sent (directory-publisher.ts: no name of its own, the
- *     address service's probation, the update schedule at Never).
+ *   - `held_back`: set to be listed, but nothing is sent (directory-publisher.ts: no name of its own, the address
+ *     service's probation). `schedule_never`: set to be listed, but the update schedule is Never, so it is sent only when
+ *     someone presses Publish Now (pushDirectoryNow reads no schedule).
  *   - `auth_hatch_open`: ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false open what only members should read.
  *   - `open_membership`: members on demand stays on while the whole directory is closed (lockOnDemandToOpenMembership).
  *   - `standby`: a standby never publishes to the directory.
- * Nothing is locked for being set by the server's kind alone: an operator's override changes those, and which of them an
- * owner may change on the page is the write path's to decide (the design's questions 1, 2, 5 and 12).
+ * Nothing else is locked for being set by the server's kind alone: an operator's override changes those, and which of
+ * them an owner may change is the write path's (config/community-shape-write.ts: what it takes, and which locks refuse).
  *
  * ## On a standby
  * A standby keeps its main server's community rows as a copy it applies to nothing, while its own rows stay its own
@@ -94,6 +100,16 @@ export interface ShapeSetting<T> {
 
 /** Who can join: any member invites, only admins do, nobody new for now (invites off), or anyone through the open door. */
 export type JoinState = CommunityDoor | 'paused' | 'open';
+
+/**
+ * Who can join as the switches `cfg` set it, the door row (`door`, asked only where invites are on) beside them: the open
+ * door where it is set and invites are off, which is so even where a moved ledger keeps it shut, and paused where neither
+ * takes anyone. The shape's rule, and the write path's for where a change leaves it (config/community-shape-write.ts).
+ */
+export function configuredJoinOf(cfg: Pick<ProfileSwitches, 'openJoin' | 'invites'>, door: () => CommunityDoor): JoinState {
+    return cfg.openJoin && !cfg.invites ? 'open' : !cfg.invites ? 'paused' : door();
+}
+
 /** What a visitor sees: nothing of the community's, the listings and their rough area, or what only members should. */
 export type VisitorsView = 'nothing' | 'listings' | 'open';
 export interface KnownFloorShape { on: boolean; floor: number; cap: number; capMax: number }
@@ -203,7 +219,17 @@ const LOCK_WORDS = {
         + (fromOverrides ? "this server's own rows set that (nodeProfile.openJoin, nodeProfile.invites)" : `this server's kind (${profile}) sets that`)
         + '. Whoever runs the server changes it.',
     onTheServer: (env: string) => `Set on the server (${env}). ${ASK_THE_SERVER}`,
-    scheduleNever: 'Set to be listed, but the directory update schedule is Never, so nothing is sent. Choose a schedule under Node Identity.',
+    scheduleNever: 'Set to be listed, but the directory update schedule is Never: it is sent only when someone presses Publish Now under Node Identity. Choose a schedule there to keep it listed.',
+    pauseBesideOpenDoor: (setBy: string, words: boolean) =>
+        `New members can't be paused here: anyone can also join through the open door, with ${words ? '12 secret words or a sign-in' : 'a sign-in'}, `
+        + `and a pause would leave that door taking everyone. ${setBy} sets it: whoever runs the server shuts it first (nodeProfile.openJoin = false).`,
+    pauseBehindShutDoor: (setBy: string) =>
+        `New members can't be paused here: ${setBy} sets the open door, which stays shut for good now that Beans have moved here. `
+        + 'Paused, this community would read as that shut door, and only whoever runs the server could take the pause back. '
+        + 'Whoever runs the server turns the open door off first (nodeProfile.openJoin = false).',
+    unlockPause: 'Whoever runs the server turns the open door off (nodeProfile.openJoin = false); then new members can be paused here.',
+    beansOffWhileOpen: 'Beans stay off while anyone can join through the open door: the first Bean that moved would shut the door for good, since open sign-up must never meet a live credit system. Whoever runs the server closes the open door first (nodeProfile.openJoin).',
+    listedByKind: (profile: NodeProfile) => `Set by this server's kind (${profile}): the global community is the lobby, not a place on the directory's map. Whoever runs the server changes that.`,
     standbyListed: 'This server is a standby: it never publishes to the directory.',
     openMembership: 'On while nobody can read the whole member directory (openMembership): the apps find people on demand.',
     hatchOpen: (flags: string[]) => `This server's settings open ${flags.map((f) => `${HATCH_WORDS[f] ?? f} (${f}=false)`).join(' and ')} to anyone. `
@@ -215,6 +241,29 @@ const HELD_BACK_WORDS: Record<DirectoryHoldBack, string> = {
 };
 
 const lock = (code: ShapeLockCode, why: string, unlock?: string): ShapeLock => (unlock ? { code, why, unlock } : { code, why });
+
+/**
+ * The locks the write path finds where the change it is checking leaves the node, not where the shape read it: requests
+ * to join with this request pausing invites, the known floor with this request switching Beans off, Listed switched on
+ * while DIRECTORY_UNLISTED holds every push back, and a pause where the open door is set (config/community-shape-write.ts).
+ */
+export const LOCKS_AFTER_A_CHANGE = {
+    invitesOff: (): ShapeLock => lock('invites_off', LOCK_WORDS.invitesOff, LOCK_WORDS.unlockInvites),
+    /**
+     * Paused where the open door is set (`before`, the shape the request is checked against): invites off there read as
+     * the open door (configuredJoinOf), which still takes everyone (`profile`), or, shut by the ledger, is a join no owner
+     * may change, so a pause only whoever runs the server could lift (`ledger_moved`).
+     */
+    pausedBesideOpenDoor: (before: Shape): ShapeLock => {
+        const { openDoor, wordsDoor } = before.settings;
+        const setBy = openDoor.source === 'owner' ? "this server's own row" : `this server's kind (${before.kind})`;
+        return openDoor.value
+            ? lock('profile', LOCK_WORDS.pauseBesideOpenDoor(setBy[0].toUpperCase() + setBy.slice(1), wordsDoor?.value === true), LOCK_WORDS.unlockPause)
+            : lock('ledger_moved', LOCK_WORDS.pauseBehindShutDoor(setBy), LOCK_WORDS.unlockPause);
+    },
+    beansOff: (): ShapeLock => lock('beans_off', LOCK_WORDS.beansOffFloor),
+    unlisted: (): ShapeLock => lock('server_env', HELD_BACK_UNLISTED_MESSAGE),
+};
 
 // ── The community's rows ───────────────────────────────────────────────────────────────────
 
@@ -229,9 +278,12 @@ interface CommunityRows {
     knownFloor: string | null;
     creditCap: string | null;
     directory: Directory;
-    /** The directory switches the community stored; the rest read as their defaults. */
-    stored: ReadonlySet<DirectoryField>;
 }
+
+/** What getNodeConfig reads each directory switch as when nothing is stored (state-engine.ts): the share switches' `default`. */
+export const DIRECTORY_SWITCH_DEFAULTS: Readonly<Record<Exclude<DirectoryField, 'directoryPushIntervalHours'>, boolean>> = {
+    publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false, publishHealth: true,
+};
 
 function row(key: string): string | null {
     const r = db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string | null } | undefined;
@@ -240,15 +292,12 @@ function row(key: string): string | null {
 
 function ownRows(): CommunityRows {
     const n = getNodeConfig();
-    let raw: Record<string, unknown> = {};
-    try { raw = JSON.parse(row('node_config') ?? '{}') ?? {}; } catch { /* getNodeConfig reads it as the defaults too */ }
     return {
         door: row(DOOR_KEY),
         confirmation: row(CONFIRMATION_DIAL_KEY),
         knownFloor: row(KNOWN_FLOOR_KEY),
         creditCap: row(CREDIT_CAP_KEY),
         directory: Object.fromEntries(DIRECTORY_FIELDS.map((f) => [f, n[f]])) as Directory,
-        stored: new Set(DIRECTORY_FIELDS.filter((f) => raw && typeof raw === 'object' && f in raw)),
     };
 }
 
@@ -262,11 +311,9 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
     const dir = parsed.record.directory as Partial<Record<DirectoryField, unknown>>;
     const copied = (key: string, mine: string | null) => (key in nc ? nc[key] ?? null : mine);
     const directory = { ...own.directory };
-    const stored = new Set(own.stored);
     for (const f of DIRECTORY_FIELDS) {
         if (dir[f] === undefined || dir[f] === null) continue;
         (directory as Record<string, unknown>)[f] = dir[f];
-        stored.add(f);
     }
     // As a take-over installs them: a record from before the two contact switches were split publishes neither.
     for (const f of ['publishContactEmail', 'publishContactPhone'] as const) if (!(f in dir)) directory[f] = false;
@@ -277,7 +324,6 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
             knownFloor: copied(KNOWN_FLOOR_KEY, own.knownFloor),
             creditCap: copied(CREDIT_CAP_KEY, own.creditCap),
             directory,
-            stored,
         },
         copiedAt: kept.copiedAt ?? null,
     };
@@ -287,7 +333,7 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
 
 export const LOG_LINES = 50;
 /** The known floor's community-wide lines, as the shape's settings: a member's exception or the health lines are not. */
-const KNOWN_FLOOR_ACTIONS: Record<string, string> = { confirmation: 'knownFloor.on', known_floor: 'knownFloor.floor', credit_cap: 'knownFloor.cap' };
+export const KNOWN_FLOOR_ACTIONS: Readonly<Record<string, string>> = { confirmation: 'knownFloor.on', known_floor: 'knownFloor.floor', credit_cap: 'knownFloor.cap' };
 
 function callsignOf(actor: string): string | null {
     const name = adminActorName(actor);
@@ -302,8 +348,13 @@ function readLog(): ShapeLogLine[] {
             actorRole: r.actor_role, setting: r.setting, from: r.old_value, to: r.new_value, note: r.note,
         }));
     const actions = Object.keys(KNOWN_FLOOR_ACTIONS);
-    const floorLines = (db.prepare(`SELECT id, actor_pubkey, action, old_value, new_value, at FROM known_floor_log
-        WHERE member_pubkey IS NULL AND action IN (${actions.map(() => '?').join(', ')}) ORDER BY at DESC, rowid DESC LIMIT ?`)
+    // A change made through the shape route is a line in both logs, stamped alike (community-shape-write.ts): its
+    // known_floor_log twin is left out, so the change is read once, with its note.
+    const twin = `CASE k.action ${actions.map((a) => `WHEN '${a}' THEN '${KNOWN_FLOOR_ACTIONS[a]}'`).join(' ')} END`;
+    const floorLines = (db.prepare(`SELECT k.id, k.actor_pubkey, k.action, k.old_value, k.new_value, k.at FROM known_floor_log k
+        WHERE k.member_pubkey IS NULL AND k.action IN (${actions.map(() => '?').join(', ')})
+          AND NOT EXISTS (SELECT 1 FROM community_settings_log c WHERE c.at = k.at AND c.actor_pubkey = k.actor_pubkey AND c.setting = ${twin})
+        ORDER BY k.at DESC, k.rowid DESC LIMIT ?`)
         .all(...actions, LOG_LINES) as any[])
         .map((r): ShapeLogLine => ({
             id: r.id, kept: 'known_floor_log', at: r.at, actor: r.actor_pubkey, actorCallsign: callsignOf(r.actor_pubkey),
@@ -330,7 +381,7 @@ export function readShape(): Shape {
 
     // Who can join: the door the gates use (doorFor reads the row only when the setting decides), and invites.
     const door = doorFor(() => doorFromRow(rows.door));
-    const configuredJoin: JoinState = cfg.openJoin && !cfg.invites ? 'open' : !cfg.invites ? 'paused' : doorFromRow(rows.door);
+    const configuredJoin = configuredJoinOf(cfg, () => doorFromRow(rows.door));
     const join: ShapeSetting<JoinState> = {
         value: door === 'open' ? 'open' : !s.invites ? 'paused' : door,
         configured: configuredJoin,
@@ -376,7 +427,8 @@ export function readShape(): Shape {
         : undefined;
 
     const share = (field: Exclude<DirectoryField, 'directoryPushIntervalHours'>): ShapeSetting<boolean> => ({
-        value: rows.directory[field], configured: rows.directory[field], source: rows.stored.has(field) ? 'owner' : 'default', lock: null,
+        value: rows.directory[field], configured: rows.directory[field],
+        source: rows.directory[field] !== DIRECTORY_SWITCH_DEFAULTS[field] ? 'owner' : 'default', lock: null,
     });
 
     const hatches = guestViewAuthFlagsOff();
@@ -403,13 +455,14 @@ export function readShape(): Shape {
         preview: { value: preview, configured: preview, source: 'server', lock: lock('server_env', LOCK_WORDS.onTheServer(PRIVATE_PREVIEW_ENV)) },
         beans: {
             ...plain('beans'),
-            lock: history ? lock('ledger_moved', LOCK_WORDS.beansStayOn(history)) : null,
+            lock: history ? lock('ledger_moved', LOCK_WORDS.beansStayOn(history))
+                : cfg.openJoin && !cfg.beans ? lock('profile', LOCK_WORDS.beansOffWhileOpen) : null,
             includes: { escrow: s.escrow, enterprises: s.enterprises, treasuries: s.treasuries, crowdfund: s.crowdfund },
         },
         knownFloor,
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
-        listed: listed(standby, cfg, s, rows.directory, sourceOf('publishToDirectory')),
+        listed: listed(kind, standby, cfg, s, rows.directory, sourceOf('publishToDirectory')),
         shareLocation: share('publishLocation'),
         shareMemberCount: share('publishMembers'),
         shareEmail: share('publishContactEmail'),
@@ -433,9 +486,15 @@ export function readShape(): Shape {
  * the schedule): the switch, then DIRECTORY_UNLISTED, the schedule's Never, and the hold-backs (directoryHeldBack). A
  * standby sends nothing (the publisher asks that first); it is named only where the switch is on, so a standby whose
  * switch is off says what its main server's shape says. It never says the main server publishes: that server's env and
- * hold-backs are its own.
+ * hold-backs are its own. On the global kind it is the kind's (design §2.3), whatever the switch: the value stays what
+ * the publisher does, and the lock says no owner changes it there.
  */
-function listed(standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, directory: Directory, source: ShapeSource): ShapeSetting<boolean> {
+function listed(kind: NodeProfile, standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, directory: Directory, source: ShapeSource): ShapeSetting<boolean> {
+    const run = listedAsPublished(standby, cfg, s, directory, source);
+    return kind === 'global' ? { ...run, lock: lock('profile', LOCK_WORDS.listedByKind(kind)) } : run;
+}
+
+function listedAsPublished(standby: boolean, cfg: ProfileSwitches, s: ProfileSwitches, directory: Directory, source: ShapeSource): ShapeSetting<boolean> {
     const base = { configured: cfg.publishToDirectory, source };
     if (!s.publishToDirectory) return { ...base, value: false, lock: null };
     if (standby) return { ...base, value: false, lock: lock('standby', LOCK_WORDS.standbyListed) };

@@ -87,6 +87,10 @@ export function NodeIdentityPanel({
     const [acceptKnocks, setAcceptKnocks] = useState<boolean | null>(null);
     // Message requests (the server's engine/dm-requests.ts): null until the node says it has the setting.
     const [dmRequests, setDmRequests] = useState<boolean | null>(null);
+    // Both are how this community works, changed only there (POST /api/local/admin/community-shape: an owner's, logged and
+    // told to every member), so Save sends one only when it differs from what the node said. The page "How this community
+    // works" takes these two boxes over (slice S4).
+    const loadedSwitches = useRef<{ knocks: boolean | null; dmRequests: boolean | null }>({ knocks: null, dmRequests: null });
     const [openKnocks, setOpenKnocks] = useState<number | null>(null);
     // Who answers a request to join follows who may invite (`door`, set under People & Safety → Invites & QR).
     const [onlyAdminsAnswer, setOnlyAdminsAnswer] = useState(false);
@@ -173,9 +177,13 @@ export function NodeIdentityPanel({
                         setLastDirectoryPush(cfg.lastDirectoryPush);
                     }
                     setOnlyAdminsAnswer(cfg.door === 'admins');
-                    if (typeof cfg.dmRequests === 'boolean') setDmRequests(cfg.dmRequests);
+                    if (typeof cfg.dmRequests === 'boolean') {
+                        setDmRequests(cfg.dmRequests);
+                        loadedSwitches.current.dmRequests = cfg.dmRequests;
+                    }
                     if (typeof cfg.acceptKnocks === 'boolean') {
                         setAcceptKnocks(cfg.acceptKnocks);
+                        loadedSwitches.current.knocks = cfg.acceptKnocks;
                         // How many are waiting is the operator's only, so it is its own admin read.
                         const knocksUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/knocks');
                         const knocksRes = await fetch(knocksUrl, {
@@ -473,17 +481,30 @@ export function NodeIdentityPanel({
                                 : null,
                         }
                         : {}),
-                    // Only to a node that has the setting; it keeps what it had when this is left out.
-                    ...(acceptKnocks === null ? {} : { acceptKnocks }),
-                    ...(dmRequests === null ? {} : { dmRequests }),
                 }),
             });
 
-            if (identityRes.ok && configRes.ok) {
+            // 3. Requests to join and message requests, where one changed: How this community works, the one place they
+            // change. An admin's is refused there in the node's words (an owner's choice).
+            const shapeChanges = {
+                ...(acceptKnocks !== null && acceptKnocks !== loadedSwitches.current.knocks ? { knocks: acceptKnocks } : {}),
+                ...(dmRequests !== null && dmRequests !== loadedSwitches.current.dmRequests ? { dmRequests } : {}),
+            };
+            let shapeRes: Response | null = null;
+            if (Object.keys(shapeChanges).length > 0) {
+                shapeRes = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-shape'), {
+                    method: 'POST',
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), changes: shapeChanges }),
+                });
+                if (shapeRes.ok) loadedSwitches.current = { knocks: acceptKnocks, dmRequests };
+            }
+
+            if (identityRes.ok && configRes.ok && (!shapeRes || shapeRes.ok)) {
                 setSaveStatus({ text: 'Saved!', isError: false });
                 onRefreshDiag();
             } else {
-                const failingRes = !identityRes.ok ? identityRes : configRes;
+                const failingRes = !identityRes.ok ? identityRes : !configRes.ok ? configRes : shapeRes!;
                 const errData = await failingRes.json().catch(() => ({}));
                 setSaveStatus({
                     text: errData.totpRequired

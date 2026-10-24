@@ -1,10 +1,13 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { KnownFloorPanel, hoursWording, readKnownFloorSettings } from './KnownFloorPanel';
+import { KnownFloorPanel, hoursWording, readKnownFloorSettings, readShapeKnownFloor } from './KnownFloorPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
-/** People & Safety → "The known floor" (community modes slice 4): the dial, the known floor and the cap, saved by an owner. */
+/**
+ * People & Safety → "The known floor" (community modes slice 4): the dial, the known floor and the cap, saved by an owner
+ * under How this community works (POST /api/local/admin/community-shape `knownFloor`, slice S2).
+ */
 
 const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
@@ -16,8 +19,12 @@ function mockNode(
     config: { ok?: boolean; status?: number; body?: unknown } = { ok: true, body: {} }
 ) {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes('/api/local/admin/community-shape') && init?.method === 'POST') {
+            const kf = JSON.parse(String(init.body)).changes.knownFloor;
+            const value = { on: kf.on ?? SETTINGS.confirmation, floor: kf.floor ?? SETTINGS.knownFloor, cap: kf.cap ?? SETTINGS.creditCap, capMax: 5000 };
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ shape: { settings: { knownFloor: { value } } }, told: 'members' }) });
+        }
         if (url.includes('/api/local/admin/known-floor')) {
-            if (init?.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ...SETTINGS, ...JSON.parse(String(init.body)) }) });
             return Promise.resolve({ ok: read.ok, status: read.status ?? 200, json: () => Promise.resolve(read.body) });
         }
         if (url.includes('/api/node/config')) {
@@ -41,6 +48,10 @@ describe('KnownFloorPanel', () => {
     it('reads only a whole answer', () => {
         expect(readKnownFloorSettings(SETTINGS)).toMatchObject({ confirmation: false, knownFloor: 1000, creditCap: 2000 });
         expect(readKnownFloorSettings({ error: 'Not found' })).toBeNull();
+        const before = readKnownFloorSettings(SETTINGS)!;
+        expect(readShapeKnownFloor({ settings: { knownFloor: { value: { on: true, floor: 1500, cap: 3000, capMax: 5000 } } } }, before))
+            .toEqual({ confirmation: true, knownFloor: 1500, creditCap: 3000, creditCapDefault: 2000, creditCapMax: 5000 });
+        expect(readShapeKnownFloor({ error: 'Only an owner of this community can change how it works' }, before)).toBeNull();
     });
 
     it('shows nothing on a node older than the known floor', async () => {
@@ -61,7 +72,8 @@ describe('KnownFloorPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save the known floor' }));
         await screen.findByText('Saved.');
         const post = f.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
-        expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ confirmation: true, knownFloor: 3000, creditCap: 5000 });
+        expect(String(post![0])).toContain('/api/local/admin/community-shape');
+        expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ changes: { knownFloor: { on: true, floor: 3000, cap: 5000 } } });
     });
 
     it('a community as it starts: the dial on, saying what a confirmation gives, and an owner switches it off', async () => {
@@ -76,7 +88,7 @@ describe('KnownFloorPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save the known floor' }));
         await screen.findByText('Saved.');
         const post = f.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
-        expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ confirmation: false });
+        expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ changes: { knownFloor: { on: false } } });
     });
 
     it('refuses a known floor above the cap before sending it', async () => {

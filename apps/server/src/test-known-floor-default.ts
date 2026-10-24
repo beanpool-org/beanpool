@@ -3,7 +3,7 @@
  * a mixed community needs no setup, and nothing changes until an admin confirms someone.
  *
  *   0. the global profile (Beans off, before any Bean moves): the dial reads off whatever its row says, the owner can't
- *      switch it on (409 no_beans) and that writes nothing, a confirmed member holds no known grant, and the join screen
+ *      switch it on (409 beans_off, under How this community works) and that writes nothing, a confirmed member holds no known grant, and the join screen
  *      asks no consent
  *   1. a fresh node: no row, and the dial reads on in the settings, a member's panel and the join screen's terms; a
  *      confirmed member with one live offer has a limit of the known floor, exactly -1,000; an unconfirmed member's is 0;
@@ -155,8 +155,13 @@ async function main(): Promise<void> {
     seedGenesisMember(founder.pk, founder.name);
     const owner = ownerSessionHeaders();
     const ada = makeMember('Ada');
-    const settings = (body: unknown) => call('POST', null, '/api/local/admin/known-floor', body, owner);
     const read = () => call('GET', null, '/api/local/admin/known-floor', undefined, owner);
+    // The dial is changed under How this community works (POST /api/local/admin/community-shape `knownFloor`, slice S2; the
+    // known floor's own POST is gone), and read back as the settings.
+    const settings = async (body: { confirmation: boolean }) => {
+        const r = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: body.confirmation } } }, owner);
+        return r.status === 200 ? { ...r, body: (await read()).body } : r;
+    };
     const terms = () => call('GET', null, '/api/community/consent-terms');
 
     // ── 0. the global profile: Beans off ───────────────────────────────────────────────────────
@@ -169,7 +174,7 @@ async function main(): Promise<void> {
     assert(gRead.status === 200 && gRead.body?.confirmation === false, `the settings read the dial off (${show(gRead)})`);
     assert(confirmationDialOn(db) === false && memberKnownGrant(db, gia.pk) === 0, 'and the engine reads it off: a confirmed member holds no known grant');
     const gOn = await settings({ confirmation: true });
-    assert(gOn.status === 409 && gOn.body?.code === 'no_beans', `the owner can't switch it on (${show(gOn)})`);
+    assert(gOn.status === 409 && gOn.body?.code === 'beans_off', `the owner can't switch it on: the shape's Beans-off lock (${show(gOn)})`);
     assert(dialRow() === null, `and nothing was written (row ${JSON.stringify(dialRow())})`);
     db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CONFIRMATION_DIAL_KEY, 'on');
     assert(confirmationDialOn(db) === false && memberKnownGrant(db, gia.pk) === 0 && (await read()).body?.confirmation === false,

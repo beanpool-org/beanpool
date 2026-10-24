@@ -73,8 +73,8 @@ export interface ProfileSwitches {
     treasuries: boolean;
     crowdfund: boolean;
     /** This node takes "ask to join" requests from non-members, which any member may answer with an invite (G6,
-     *  routes/knocks.ts; D4 = a: on for every community). Off: every /api/join/knock route is 404. The operator's
-     *  one-tap opt-out in Settings (`acceptKnocks`) is this switch's override (`setSwitchOverride`). A knock is
+     *  routes/knocks.ts; D4 = a: on for every community). Off: every /api/join/knock route is 404. An owner's
+     *  opt-out (`knocks` under How this community works; `acceptKnocks` in reads) is this switch's override. A knock is
      *  answered with an invite, so with `invites` off it is off too, whatever its own setting says. */
     knocks: boolean;
     /** Invites (engine/invites.ts): a member makes a code or an offline ticket, an owner or admin a seed invite, and
@@ -396,7 +396,7 @@ export function readProfileOverrides(): Partial<ProfileSwitches> {
 }
 
 /**
- * Sets the operator's override of one switch, from Settings (`acceptKnocks` is the `knocks` switch's). A value equal to
+ * Sets the override of one switch, from How this community works (config/community-shape-write.ts). A value equal to
  * the running profile's default removes the override instead, so the record holds only what the operator changed. An
  * override rides the profile record: to a standby with every copy, and in the take-over bundle, which is told to
  * re-seal here.

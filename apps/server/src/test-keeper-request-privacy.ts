@@ -159,8 +159,8 @@ async function main(): Promise<void> {
     grantNodeRole(ada.pk, 'admin', 'SYSTEM');
     const adaAdmin = sessionHeaders(ada.pk, 'admin');
 
-    const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
-    assert(on.status === 200 && on.body?.confirmation === true, `the owner turns the known-floor dial on (${show(on)})`);
+    const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the known-floor dial on (${show(on)})`);
 
     const lead = makeMember('Lena');
     const otto = makeMember('Otto');

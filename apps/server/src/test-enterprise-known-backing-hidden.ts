@@ -271,8 +271,8 @@ async function main(): Promise<void> {
     const mo = makeMember('Mo');
     for (const m of [kai, lia, mo]) confirm(m, ada);
 
-    const dial = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
-    assert(dial.status === 200 && dial.body?.confirmation === true, `the owner turns the confirmation dial on (${dial.status})`);
+    const dial = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    assert(dial.status === 200 && dial.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the confirmation dial on (${dial.status})`);
 
     // Kai Co: Lee keeps it and backs it with 300 of his own. Kai, confirmed, asks to join with 500, which he can back only
     // from his known grant, and Ada (an admin outside it) approves: bound at once, with a known pledge of 500.

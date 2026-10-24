@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { prepared } from '../statements.js';
 
@@ -58,6 +58,10 @@ describe('prepared: statements compiled once per database handle', () => {
 // The member checks every signed request runs (the server's signature check, readsAsMember): compiled once per handle
 // (load model 2026-10-05, finding 2: `prepare` the top self-time frame), answering exactly what a fresh prepare does.
 describe('the per-request member checks use the cached statements', () => {
+    // members.js loads its whole module graph cold. Inside a test that load counted against the 5 s test limit and timed out in
+    // full local runs at load 30+ (24 Oct, three runs); loaded once here, with its own limit, the tests time only the checks.
+    let members: typeof import('../members.js');
+    beforeAll(async () => { members = await import('../members.js'); }, 120_000);
     function membersDb(): { db: Database.Database; compiles: () => number } {
         const db = new Database(':memory:');
         db.exec(`CREATE TABLE members (public_key TEXT PRIMARY KEY, status TEXT, is_visitor INTEGER);
@@ -77,7 +81,7 @@ describe('the per-request member checks use the cached statements', () => {
     const keys = ['aa', 'AA', 'bb', 'cc', 'dd', 'ee', '', null];
 
     it('answers as a fresh prepare does through every state, compiling each statement once', async () => {
-        const { isNodeMember, isInvalidatedKey } = await import('../members.js');
+        const { isNodeMember, isInvalidatedKey } = members;
         const { db, compiles } = membersDb();
         const states: string[] = [
             '',
@@ -106,7 +110,7 @@ describe('the per-request member checks use the cached statements', () => {
     });
 
     it('a new handle (a restore, a fresh test database) gets its own statements and its own answers', async () => {
-        const { isNodeMember } = await import('../members.js');
+        const { isNodeMember } = members;
         const a = membersDb();
         a.db.exec("INSERT INTO members VALUES ('aa', 'active', 0)");
         expect(isNodeMember(a.db, 'aa')).toBe(true);

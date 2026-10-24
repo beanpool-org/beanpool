@@ -17,5 +17,9 @@ export default defineConfig({
     test: {
         minWorkers: process.env.CI ? 1 : undefined,
         maxWorkers: process.env.CI ? 2 : undefined,
+        // A full local run (scripts/test-all.sh) gives every test 30 s, as native and core take it: the default 5 s timed out
+        // statements.test.ts in three runs at load 30+ on 24 Oct, and the failure then stopped every other package mid-run.
+        testTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
+        hookTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
     },
 });

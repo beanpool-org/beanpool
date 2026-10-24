@@ -172,6 +172,25 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
 // Under a connected sign-in, who can open the copy it keeps. Recovery seal S3 said a community's operators could; the
 // key vault (V4) moves every copy there, and D6 (Marty, 2026-09-28) is the honest words for it, in the one-custodian
 // period until the reshare (D1).
+describe('KeeperProtectionPanel: an account a claim made keeps its copy at its community, even in a vault build', () => {
+    // #2433 review r4366342448: Safety Backup after a claim drew the vault's words ("BeanPool's key vault … in Iceland",
+    // "in every community") for a copy SsoEnrolSheet put at the owner's own community (Marty, 24 Oct: no vault copy).
+    it('says the community keeps it, names the community, warns it works only while that server runs; no vault words', () => {
+        const text = textOf(render(React.createElement(KeeperProtectionPanel, {
+            protection: COVERED, hasWords: true, copyAt: 'community', communityName: 'Valley Hub', onProtectSso: vi.fn(), onDisconnectSso: vi.fn(),
+        })));
+        expect(text).not.toContain(VAULT_COPY_OPENERS);
+        expect(text).not.toMatch(/in every community/);
+        expect(text).not.toMatch(/key vault|Iceland/);
+        expect(text).toMatch(/Valley Hub/);
+        expect(text).toMatch(/only works while your community's server is running/);
+    });
+    it('without copyAt, the same vault build still says the vault (nothing else changed)', () => {
+        const text = textOf(panel(COVERED, true));
+        expect(text).toContain(VAULT_COPY_OPENERS);
+    });
+});
+
 describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
     it('the sentences, word for word: BeanPool can (one person for now), the host can read memory, a court, the sign-in; the words alone keep everyone else out', () => {
         expect(VAULT_COPY_OPENERS).toBe(

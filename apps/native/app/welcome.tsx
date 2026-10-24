@@ -91,7 +91,10 @@ import { communitySwitched } from '../utils/community-switch';
 import { ConsentText } from '../components/ConsentText';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
-import { ClaimWaitingNote } from '../components/ClaimWaitingNote';
+import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
+import { claimSuccessActions, readNodeAddresses } from '../utils/node-claim';
+import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
+import { useManageNode } from '../components/useManageNode';
 import { Sentence } from '../components/Sentence';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
@@ -157,7 +160,7 @@ export default function WelcomeScreen() {
     const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
         ? (params.mode as any)
         : 'home';
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>(initialMode);
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'globalJoin' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'ownerCard' | 'confirmReplace'>(initialMode);
     useEffect(() => {
         if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
             setMode(params.mode as any);
@@ -371,6 +374,20 @@ export default function WelcomeScreen() {
     /** Safety Backup's "Add a sign-in as a second way back" (utils/join-link.ts), and what it added. */
     const [showLinkSheet, setShowLinkSheet] = useState(false);
     const [linked, setLinked] = useState<Extract<LinkAnswer, { kind: 'linked' }> | null>(null);
+    /**
+     * A claim's last step, the owner's card (utils/claim-key.ts `finishClaim`): the community's name as its server said it
+     * (onboarding-state.ts `communityName`), its own addresses for "Set the address" or "Open Settings" and the number's
+     * nudge, and Manage signed by the account the claim made, which the app holds only once the wizard ends.
+     */
+    const [claimedName, setClaimedName] = useState<string | null>(null);
+    const [ownerAddresses, setOwnerAddresses] = useState<string[] | null | undefined>(undefined);
+    const ownerManage = useManageNode(pendingIdentity);
+    useEffect(() => {
+        if (mode !== 'ownerCard' || !createAnchorUrl) return;
+        let alive = true;
+        readNodeAddresses(createAnchorUrl).then(a => { if (alive) setOwnerAddresses(a); });
+        return () => { alive = false; };
+    }, [mode, createAnchorUrl]);
     /** Stops the name step's check when the member leaves it (Back to Home, Use a different sign-in). */
     const nameCheckRef = useRef<AbortController | null>(null);
     useEffect(() => () => nameCheckRef.current?.abort(), []);
@@ -495,8 +512,11 @@ export default function WelcomeScreen() {
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
     const protection = protectionFrom(enrolment);
-    /** In by 12 words and no sign-in added yet: Safety Backup speaks to that (two-doors design §2.5). */
-    const wordsMember = joinFlow === 'global' && joinDoor === 'words' && !linked;
+    /**
+     * In by 12 words and no sign-in added yet: Safety Backup speaks to that (two-doors design §2.5). The global community's
+     * 12-words door, or a claim, which makes the account with its 12 words alone.
+     */
+    const wordsMember = (joinFlow === 'global' || joinFlow === 'claim') && joinDoor === 'words' && !linked;
 
     /**
      * Split the words and hand out the pieces, on the way into step 3.
@@ -781,11 +801,18 @@ export default function WelcomeScreen() {
             });
             if (plan.action === 'none') return;
             if (plan.action === 'clear') {
-                // Keypair never made it to storage — nothing to resume.
+                // Nothing to resume: the keypair never made it to storage, or a claim's record whose key another join took
+                // over (resumePlan). The key, if any, stays.
                 await clearPendingOnboarding();
                 return;
             }
             if (!mounted) return;
+            if (plan.mode === 'claim') {
+                // A claim whose answer the phone never had: back to the claim screen with the key it made, where the node
+                // says whether it landed (app/claim-community.tsx). The code is typed again there: it is never kept here.
+                router.replace(claimRouteFor({ node: plan.anchorUrl, nodeRefused: false, codeId: plan.claimCodeId, code: null }));
+                return;
+            }
             setCallsign(plan.callsign);
             setInviteCode(plan.inviteCode);
             setPendingInviteCode(plan.inviteCode);
@@ -794,7 +821,8 @@ export default function WelcomeScreen() {
             if (plan.avatar) setPendingAvatar(plan.avatar);
             setJoinFlow(plan.flow);
             setJoinDoor(plan.joinDoor);
-            if (plan.flow === 'global') {
+            setClaimedName(plan.communityName);
+            if (plan.flow === 'global' || plan.flow === 'claim') {
                 if (plan.joinEnrolment) setEnrolment(plan.joinEnrolment);
                 getCachedNodeProfile(plan.anchorUrl)
                     .then(p => { if (mounted) setJoinBeansOn(beansOn(p?.features)); })
@@ -1845,8 +1873,8 @@ export default function WelcomeScreen() {
 
     // --- Back-button guard for seed phrase screen ---
     function handleSeedBackPress() {
-        // A global join is already done: back is the photo step, and nothing is discarded.
-        if (joinFlow === 'global') {
+        // A global join or a claim is already done: back is the photo step, and nothing is discarded.
+        if (joinFlow === 'global' || joinFlow === 'claim') {
             updatePendingOnboarding({ step: 'profileSetup' }).catch(() => {});
             setMode('profileSetup');
             setError(null);
@@ -2037,9 +2065,9 @@ export default function WelcomeScreen() {
                             )}
                         </Pressable>
 
-                        {/* A global join is done by this step (the node has the member), so there is nothing to go
-                            back to: the door would only say "already a member". */}
-                        {joinFlow !== 'global' && (
+                        {/* A global join or a claim is done by this step (the node has the member), so there is
+                            nothing to go back to: the door would only say "already a member", the claim "already owned". */}
+                        {joinFlow === 'invite' && (
                         <Pressable
                             style={styles.backBtn}
                             onPress={() => {
@@ -2082,6 +2110,8 @@ export default function WelcomeScreen() {
                         <KeeperProtectionPanel
                             protection={protection}
                             hasWords={hasMnemonic(pendingIdentity)}
+                            copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                            communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
@@ -2115,10 +2145,17 @@ export default function WelcomeScreen() {
                             provider={ssoProvider}
                             identity={pendingIdentity}
                             askPhoneLock={!pendingWordsAreNew}
+                            copyAt={joinFlow === 'claim' ? 'community' : undefined}
                             onClose={() => setShowSsoSheet(false)}
                             onEnrolled={(result) => {
                                 setEnrolment(result);
                                 setShowSsoSheet(false);
+                                // A claim's owner linked a sign-in, kept by the community itself: from here the panel every
+                                // sign-in member sees, after a restart too.
+                                if (joinFlow === 'claim') {
+                                    updatePendingOnboarding({ joinDoor: undefined, joinEnrolment: result }).catch(() => {});
+                                    setJoinDoor(null);
+                                }
                             }}
                         />
 
@@ -2242,11 +2279,13 @@ export default function WelcomeScreen() {
                         </>
                         )}
 
-                        {/* The one secondary action for a 12-words member: skippable, like the tickbox above. */}
+                        {/* The one secondary action for a 12-words member: skippable, like the tickbox above. In by a
+                            claim, the sign-in's copy is kept by the community claimed, never by us: no global community,
+                            no key vault (Marty, 24 Oct). */}
                         {wordsMember && Platform.OS !== 'web' && (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginTop: 8 }]}
-                                onPress={() => setShowLinkSheet(true)}
+                                onPress={() => (joinFlow === 'claim' ? setShowSsoSheet(true) : setShowLinkSheet(true))}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.secondaryBtnText}>{WORDS_BACKUP_TEXT.addSignIn}</Text>
@@ -2460,6 +2499,71 @@ export default function WelcomeScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
+                        {/* A claim's last step is the owner's card, after these: its own Let's Begin. */}
+                        <Pressable
+                            style={[styles.primaryBtn, loading && styles.disabledBtn]}
+                            disabled={loading}
+                            onPress={joinFlow === 'claim' ? () => {
+                                updatePendingOnboarding({ step: 'ownerCard' }).catch(() => {});
+                                setMode('ownerCard');
+                                setError(null);
+                            } : handleConfirmSeed}
+                            accessibilityRole="button"
+                        >
+                            {loading ? (
+                                <ActivityIndicator color={colors.text.inverse} />
+                            ) : (
+                                <Text style={styles.primaryBtnText}>{joinFlow === 'claim' ? t('Next →') : t("Let's Begin! 🚀")}</Text>
+                            )}
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.backBtn}
+                            onPress={() => {
+                                updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
+                                setMode('seedBackup');
+                                setError(null);
+                            }}
+                            disabled={loading}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.backBtnText}>{t('← Back to Backup')}</Text>
+                        </Pressable>
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+        );
+    }
+
+    // --- THE OWNER'S CARD: a claim's last step (utils/claim-key.ts; DESIGN-account-without-global-fable.md §2.2), after the
+    // 12 words, so they are seen before the owner is sent off to Settings. Then Home. ---
+    if (mode === 'ownerCard' && pendingIdentity) {
+        const hasAddress = ownerAddresses ? ownerAddresses.length > 0 : null;
+        const actions = claimSuccessActions({ isAnchor: true, hasAddress });
+        const nudge = ownerAddresses === undefined ? null : numberOnlyAddress(createAnchorUrl, ownerAddresses);
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style={dark ? 'light' : 'dark'} />
+                <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                    <View style={styles.card}>
+                        <Text style={styles.title} testID="owner-card-title">{claimedName ? t('You own {name}', { name: claimedName }) : t('You own this community')}</Text>
+                        <Text style={styles.ownerAddress} selectable>{createAnchorUrl}</Text>
+                        <Text style={styles.subtitle}>{t("This phone's screen lock is how you manage it; keep it on. Add a second owner soon.")}</Text>
+                        {nudge ? <Text style={styles.subtitle} testID="owner-card-number-nudge">{numberNudge(nudge)}</Text> : null}
+                        <Pressable
+                            style={styles.secondaryBtn}
+                            onPress={() => ownerManage.start(claimedName ?? createAnchorUrl)}
+                            disabled={ownerManage.busy || loading}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.secondaryBtnText}>
+                                {ownerManage.busy ? t('Opening…') : actions.includes('set-address') ? t('Set the address') : t('Open Settings')}
+                            </Text>
+                        </Pressable>
+                        {ownerManage.dialog}
+
+                        {error && <Text style={styles.error}>{error}</Text>}
+
                         <Pressable
                             style={[styles.primaryBtn, loading && styles.disabledBtn]}
                             disabled={loading}
@@ -2476,14 +2580,15 @@ export default function WelcomeScreen() {
                         <Pressable
                             style={styles.backBtn}
                             onPress={() => {
-                                updatePendingOnboarding({ step: 'seedBackup' }).catch(() => {});
-                                setMode('seedBackup');
+                                updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
+                                setMode('onboardingGuide');
                                 setError(null);
                             }}
                             disabled={loading}
                             accessibilityRole="button"
+                            accessibilityLabel={t('Back')}
                         >
-                            <Text style={styles.backBtnText}>{t('← Back to Backup')}</Text>
+                            <Text style={styles.backBtnText}>{t('← Back')}</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
@@ -3505,9 +3610,6 @@ export default function WelcomeScreen() {
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
 
                     <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={openGlobalDoor} styles={styles} />
-                    {/* A claim waiting for this phone's account (app/claim-community.tsx): right under the doors, which stay above
-                        the fold, and before the sentence about BeanPool. */}
-                    <ClaimWaitingNote style={styles.claimWaitingNote} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}
@@ -3540,6 +3642,19 @@ export default function WelcomeScreen() {
                     >
                         <Text style={styles.restoreSecondaryBtnText}>{t('🔑 Already a Member? Restore Account →')}</Text>
                     </Pressable>
+
+                    {/* Whoever installed a community server claims it here, and the claim makes their account: no invite,
+                        and nothing of ours (app/claim-community.tsx). Quiet, under the fold: the doors and their hint stay
+                        where they are (utils/__tests__/welcome-doors-render.test.ts). */}
+                    <Pressable
+                        style={styles.claimServerLink}
+                        onPress={() => router.push(CLAIM_NEW_SERVER_ROUTE)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Installed BeanPool on a server? Claim it')}
+                        testID="welcome-claim-server"
+                    >
+                        <Text style={styles.claimServerLinkText}>{t('Installed BeanPool on a server? Claim it →')}</Text>
+                    </Pressable>
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -3553,8 +3668,6 @@ const styles = StyleSheet.create({
     homeMain: { width: '100%', alignItems: 'center' },
     // The two doors (components/WelcomeDoors.tsx), right under the title; the line under Explore when its door can't be used.
     homeDoors: { width: '100%', alignItems: 'center', marginTop: 16 },
-    // A claim waiting for this account (components/ClaimWaitingNote.tsx): body ink on a card, readable in light and dark.
-    claimWaitingNote: { width: '100%', marginTop: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, color: colors.text.body, fontSize: 15, lineHeight: 21, textAlign: 'center', overflow: 'hidden' },
     doorLine: { fontSize: 15, color: colors.text.secondary, textAlign: 'center', lineHeight: 21, marginBottom: 8 },
     // The sentence about BeanPool, under the doors (it was the subtitle above them).
     homeAbout: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginTop: 20 },
@@ -3593,6 +3706,11 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
     },
+    // "Installed BeanPool on a server? Claim it →": a quiet link under Restore, a 48dp target, the words wrapping.
+    claimServerLink: { marginTop: 8, minHeight: 48, width: '100%', paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+    claimServerLinkText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 21 },
+    // The owner's card: the claimed community's full address, wrapped, never cut (the one thing a phishing server can't fake).
+    ownerAddress: { fontSize: 15, color: colors.text.secondary, marginTop: 4, marginBottom: 8, lineHeight: 21, fontFamily: 'monospace' },
     restorePromptBox: {
         marginTop: 16,
         padding: 14,
@@ -3675,7 +3793,8 @@ const styles = StyleSheet.create({
     wipeLabel: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, letterSpacing: 1, marginTop: 8, marginBottom: 8 },
     dangerBtn: { backgroundColor: colors.feedback.danger.solid, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     dangerBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
-    backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
+    // A 48dp target at 320dp and 1.3x text, as every button on these steps: 10 of padding round one line measured 41.
+    backBtn: { marginTop: 16, alignItems: 'center', justifyContent: 'center', padding: 10, minHeight: 48 },
     /** A way off "Your Name" while Next is out: drawn faded, as well as disabled. */
     closedWhileNextIsOut: { opacity: 0.4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },

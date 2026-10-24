@@ -2,7 +2,9 @@
  * A real node for the phone's end-to-end door tests (apps/native/utils/__tests__/global-door-e2e.test.ts): the global
  * profile, over HTTPS on a port the OS picks, with the real signature middleware, the real door routes
  * (routes/open-join.ts) and the real door work, so the phone's own code is measured against the node it will meet.
- * Also a community's own node (PHONE_DOOR_PROFILE=community) for utils/__tests__/debts-repayment-e2e.test.ts.
+ * Also a community's own node (PHONE_DOOR_PROFILE=community) for utils/__tests__/debts-repayment-e2e.test.ts, and, with
+ * PHONE_DOOR_CLAIM_CODE=1, a brand-new one waiting for its first owner, its one-time claim code made at boot as index.ts
+ * makes it (claim-code.ts initClaimCode), for utils/__tests__/claim-account-e2e.test.ts.
  * A test fixture only: nothing in the server imports it, and no suite runs it on its own.
  *
  * Started by that test with `node --import tsx src/phone-door-test-harness.ts`, in its own data folder
@@ -87,9 +89,12 @@ async function main(): Promise<void> {
     const { forgetSyncEpochHeaderValue } = await import('./services/identity-epoch.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    const { initClaimCode } = await import('./claim-code.js');
 
     await initTls();
     initStateEngine();
+    // A new server's first start: no owner, so a one-time claim code in data/claim-code.txt (index.ts step 2.55).
+    if (process.env.PHONE_DOOR_CLAIM_CODE === '1') initClaimCode();
     const port = await startHttpsServer(0);
 
     const jwk = process.env.PHONE_DOOR_GOOGLE_JWK;

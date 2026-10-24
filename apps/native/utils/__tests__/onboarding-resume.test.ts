@@ -14,7 +14,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
 }));
 
-import { resumePlan, type PendingOnboarding } from '../onboarding-state';
+import { claimInFlight, keyMadeForThisJoin, resumePlan, type PendingOnboarding } from '../onboarding-state';
 
 const KEY = 'ab'.repeat(32);
 const STORED = { publicKey: KEY, privateKey: '07'.repeat(32), callsign: 'Sam', createdAt: '2026-09-26T00:00:00Z' } as any;
@@ -56,6 +56,77 @@ describe('resuming the global join', () => {
     });
 });
 
+describe('resuming a claim that made the account (DESIGN-account-without-global §2.2)', () => {
+    const ORIGIN = 'https://beans.example.org';
+    const claimOut: PendingOnboarding = {
+        step: 'claim', flow: 'claim', inviteCode: '', anchorUrl: ORIGIN, callsign: 'Ada', redeemed: false,
+        freshKey: KEY, joinsOut: 1, claimCodeId: '0a1b2c3d',
+    };
+
+    it('its answer not in: back to the claim screen, at its address and code id, with the same key, marked as the claim\'s own', () => {
+        const plan = resumePlan(claimOut, STORED);
+        expect(plan).toMatchObject({
+            action: 'resume', mode: 'claim', flow: 'claim', anchorUrl: ORIGIN, callsign: 'Ada', redeemed: false,
+            freshKey: true, newKey: true, claimCodeId: '0a1b2c3d', joinDoor: null,
+        });
+        if (plan.action !== 'resume') throw new Error('expected resume');
+        expect(plan.identity).toBe(STORED);
+        // The guard holds the claim screen for it (auth-return.ts claimOut).
+        expect(claimInFlight(claimOut)).toBe(true);
+    });
+
+    it('the claim in: the wizard\'s steps, words member, its key new, the community\'s name for the owner\'s card', () => {
+        for (const step of ['profileSetup', 'seedBackup', 'onboardingGuide', 'ownerCard'] as const) {
+            const record: PendingOnboarding = {
+                step, flow: 'claim', inviteCode: '', anchorUrl: ORIGIN, callsign: 'Ada', redeemed: true,
+                newKey: KEY, joinDoor: 'words', communityName: 'Bean\u202eTown',
+            };
+            const plan = resumePlan(record, STORED);
+            expect(plan, step).toMatchObject({ action: 'resume', mode: step, flow: 'claim', newKey: true, joinDoor: 'words', claimCodeId: null });
+            // Cleaned again as it is read: the record comes back from storage like any input.
+            if (plan.action === 'resume') expect(plan.communityName).toBe('BeanTown');
+            expect(claimInFlight(record)).toBe(false);
+        }
+    });
+
+    it('the claim\'s own key is a key this join made (no lock before its words); another key is not', () => {
+        expect(keyMadeForThisJoin(claimOut, KEY)).toBe(true);
+        expect(keyMadeForThisJoin(claimOut, 'cd'.repeat(32))).toBe(false);
+    });
+
+    it('a record at an address the app would not claim at, or a step that is not a claim\'s, is dropped', () => {
+        expect(resumePlan({ ...claimOut, anchorUrl: 'http://8.8.8.8' }, STORED)).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...claimOut, anchorUrl: 'javascript:alert(1)' }, STORED)).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...claimOut, step: 'create' }, STORED)).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...claimOut, step: 'globalJoin' }, STORED)).toEqual({ action: 'clear' });
+        // A claim's steps belong to no other flow.
+        expect(resumePlan({ ...globalAtDoor, step: 'claim' }, STORED)).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...globalAtDoor, step: 'ownerCard' }, STORED)).toEqual({ action: 'clear' });
+        // A bad code id is left out, never sent on.
+        const plan = resumePlan({ ...claimOut, claimCodeId: '../../x' }, STORED);
+        expect(plan).toMatchObject({ action: 'resume', mode: 'claim', claimCodeId: null });
+    });
+
+    it('gives way to an invite that arrives, and drops a record with no key behind it', () => {
+        expect(resumePlan(claimOut, STORED, { incomingInvite: 'INV-NEW', paramsInvite: 'INV-NEW' })).toEqual({ action: 'none' });
+        expect(resumePlan(claimOut, null)).toEqual({ action: 'clear' });
+    });
+
+    it('at its own step, a record that no longer marks the stored key as the claim\'s is dropped, never handed back (#2433 review)', () => {
+        // Another join took the key over (door-key.ts adoptJoinKey takes `freshKey` and `joinsOut` away)…
+        const { freshKey: _fresh, joinsOut: _out, ...adopted } = claimOut;
+        expect(resumePlan(adopted, STORED)).toEqual({ action: 'clear' });
+        // …or the phone holds another key than the one the claim made, or the mark is no key at all.
+        expect(resumePlan(claimOut, { ...STORED, publicKey: 'cd'.repeat(32) })).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...claimOut, freshKey: true as any }, STORED)).toEqual({ action: 'clear' });
+        // The guard leaves the claim screen alone for it until welcome drops it: a claim at another address by the same
+        // key may be out on that screen (node-claim.test, "a held claim's key, claiming another address").
+        expect(claimInFlight(adopted)).toBe(true);
+        // Past the claim's own step the record is the wizard's, mark or none, as before.
+        expect(resumePlan({ ...adopted, step: 'profileSetup', redeemed: true }, STORED)).toMatchObject({ action: 'resume', mode: 'profileSetup', flow: 'claim' });
+    });
+});
+
 describe('resuming an invite join, as before', () => {
     const inviteAtPhoto: PendingOnboarding = { step: 'profileSetup', inviteCode: 'INV-ABC', anchorUrl: 'https://test.beanpool.org', callsign: 'Kim', redeemed: true };
 
@@ -85,6 +156,11 @@ describe('resuming an invite join, as before', () => {
 
 describe('the welcome screen', () => {
     const src = () => fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+
+    it('hands a claim whose answer is not in back to the claim screen, with no code (never kept)', () => {
+        const s = src();
+        expect(s).toMatch(/if \(plan\.mode === 'claim'\) \{[^}]*router\.replace\(claimRouteFor\(\{ node: plan\.anchorUrl, nodeRefused: false, codeId: plan\.claimCodeId, code: null \}\)\);\s*return;/);
+    });
 
     it('resumes through resumePlan, and takes a global record back to the door with its key', () => {
         const s = src();

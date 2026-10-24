@@ -27,7 +27,7 @@ Set up a BeanPool community server for me.
 - Installs Docker, and adds swap on a 1 GB server, which otherwise can run out of memory while it starts.
 - Runs the one block: fetches the compose file, creates the network the server uses, pulls the published image, starts it, and waits until the server has made its one-time claim code.
 - Runs beanpool claim with the address. With --ip or your own domain, your server gets its own certificate for the address, and beanpool claim waits up to three minutes until the address answers with it. With a name, your server asks for NAME.beanpool.org with its own key and waits up to three minutes for it to go live; a name that waits for approval moves over by itself once approved. See Your community needs an address phones can reach, in First-time setup.
-- Shows you the claim code, the QR code and the numbered steps for your phone: install BeanPool, make your account, then scan.
+- Shows you the claim code, the QR code and the numbered steps for your phone: install BeanPool, then scan. The claim makes your account.
 
 If beanpool claim prints a warning that phones will not connect, or that the QR code carries no address, it says why: with --ip, most often port 80 or 443 closed in the server's firewall. Fix that and run it again, or use a name. The claim code waits until a phone uses it.
 
@@ -35,7 +35,7 @@ An IP address is a number: if your server or its IP address changes, every membe
 
 ## What stays yours
 
-- **The claim.** Your phone claims the community and becomes its owner. First install BeanPool on it and make your account (with no invite, tap **Explore BeanPool worldwide**). Then scan the QR code, or open BeanPool, go to **Find a community**, type the address in the search box and tap **Claim ‹name›**. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.
+- **The claim.** Your phone claims the community and becomes its owner. Install BeanPool on it, then scan the QR code, or open BeanPool and tap **Installed BeanPool on a server? Claim it**. The claim makes your BeanPool account on the phone: no invite, and nothing from the BeanPool project. A phone that already has an account claims with it. The code works once, for the first phone that uses it, so claim straight away. Then check under People & Safety → Owners & admins that you are the only owner.
 - **Your 12 words.** Your phone shows them when it makes your key. Write them on paper and keep them. Never type them into an assistant, a chat or a server: whoever has them is you.
 - **Your keys and secrets.** Give the assistant nothing more than a token you can revoke: an SSH key made for this job, which you remove from the server when it is done, or a cloud provider's token you can revoke. Never your cloud account's password, and never your phone. Afterwards, change anything you keep secret that it saw.
 

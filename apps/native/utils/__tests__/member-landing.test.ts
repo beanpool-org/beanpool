@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createContext, createElement as h, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, landOnClaim, memberRedirect } from '../member-landing';
+import { DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, memberRedirect } from '../member-landing';
 
 type Route = 'welcome' | '(tabs)/index' | '(tabs)/settings';
 
@@ -212,39 +212,27 @@ describe('memberRedirect: the root guard\'s landing from welcome', () => {
     });
 });
 
-describe('a claim waiting for the account (the claim screen\'s Make my account, Dax 23 Oct)', () => {
-    const CLAIM = '/claim-community?node=https%3A%2F%2Fbeans.example.org&id=0a1b2c3d&code=claim-a1b2-c3d4-e5f6-7890' as const;
-    const NOW = 1_000_000;
-    afterEach(() => { landOnClaim(null); });
-
-    it('lands on the claim screen from welcome or the bare root, for any account, every time until it is gone', () => {
-        landOnClaim({ route: CLAIM, until: NOW + 1 });
-        expect(memberRedirect(['welcome'], 'pk-a', NOW)).toBe(CLAIM);
-        // Not taken once: a restart part-way through comes back to it.
-        expect(memberRedirect([], 'pk-b', NOW)).toBe(CLAIM);
-        expect(memberRedirect(['welcome'], null, NOW)).toBe(CLAIM);
-        landOnClaim(null);
-        expect(memberRedirect(['welcome'], null, NOW)).toBe('/(tabs)');
-    });
-
-    it('ahead of a landing asked for, which it uses up', () => {
+describe('a claim no longer waits for an account made elsewhere: the claim makes it (DESIGN-account-without-global §2.2)', () => {
+    // #2412's detour kept the claim for an account made by another door, and every landing from welcome went back to the
+    // claim screen for a day. The claim screen makes the account now, and a claim whose answer is not in is the wizard's
+    // record, which the guard holds on the claim screen itself (auth-return.ts setupRedirect `claimOut`).
+    it('from welcome or the bare root, any account lands on the tabs, or on the landing asked for, taken once', () => {
+        for (const key of ['pk-a', 'pk-b', null]) {
+            expect(memberRedirect(['welcome'], key)).toBe('/(tabs)');
+            expect(memberRedirect([], key)).toBe('/(tabs)');
+        }
         landNextOn('/(tabs)/settings');
-        landOnClaim({ route: CLAIM, until: NOW + 1 });
-        expect(memberRedirect(['welcome'], null, NOW)).toBe(CLAIM);
-        landOnClaim(null);
-        expect(memberRedirect(['welcome'], null, NOW)).toBe('/(tabs)');
+        expect(memberRedirect(['welcome'])).toBe('/(tabs)/settings');
+        expect(memberRedirect(['welcome'])).toBe('/(tabs)');
     });
 
-    it('anywhere else: stay, the claim screen itself included', () => {
-        landOnClaim({ route: CLAIM, until: NOW + 1 });
-        for (const segments of [['(tabs)'], ['claim-community'], ['node-mismatch']]) expect(memberRedirect(segments, null, NOW)).toBeNull();
+    it('the claim screen, like anywhere else but welcome: stay', () => {
+        for (const segments of [['(tabs)'], ['claim-community'], ['node-mismatch']]) expect(memberRedirect(segments, 'pk-a')).toBeNull();
     });
 
-    it('not once it has run out', () => {
-        landOnClaim({ route: CLAIM, until: NOW });
-        expect(memberRedirect(['welcome'], null, NOW)).toBe('/(tabs)');
-        // And it stays out: a later landing is the tabs too.
-        expect(memberRedirect(['welcome'], null, NOW - 10)).toBe('/(tabs)');
+    it('nothing in the module lands on a claim any more', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../member-landing.ts'), 'utf8');
+        expect(src).not.toMatch(/landOnClaim|ClaimLanding|claim-community/);
     });
 });
 

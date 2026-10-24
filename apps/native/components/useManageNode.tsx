@@ -14,6 +14,7 @@ import { TotpCodeDialog, looksLikeTotpCode } from './TotpCodeDialog';
 import { manageNode, NO_DEVICE_LOCK_MESSAGE, type ManageOutcome, type SettingsSection } from '../utils/node-admin';
 import { t, word, type WordKey } from '@beanpool/core';
 import { settingsLineWords } from './settings/settings-lines';
+import type { BeanPoolIdentity } from '../utils/identity';
 
 /**
  * utils/node-admin.ts signs the sign-in with the member's key, so it never reaches the words layer: its own sentences are
@@ -41,8 +42,13 @@ export function manageLineWords(english: string): string {
     return settingsLineWords(english);
 }
 
-export function useManageNode() {
-    const { identity } = useIdentity();
+/**
+ * `account`: the key to sign in with when it is not yet the app's (the claim's owner card at the end of the join wizard,
+ * app/welcome.tsx, before the wizard hands the account to the app). Otherwise the app's own account.
+ */
+export function useManageNode(account?: BeanPoolIdentity | null) {
+    const { identity: appAccount } = useIdentity();
+    const identity = account ?? appAccount;
     const [busy, setBusy] = useState(false);
     const [name, setName] = useState('this community');
     const [totp, setTotp] = useState<{ continueWith: (code: string) => Promise<ManageOutcome>; wrongCode: boolean } | null>(null);

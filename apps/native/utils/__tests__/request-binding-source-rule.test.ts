@@ -227,6 +227,9 @@ describe('the phone\'s community address is written only after the plain-address
         'app/(tabs)/settings.tsx handleUpdateAnchor': /isPlainNodeAddress\(finalAnchorUrl\)/,
         // People's "Join another community", an approved knock, a directory pick; and the way back when a redeem fails.
         'utils/join-another-community.ts joinAnotherCommunity': /assertPlainNodeAddress\(targetUrl\)[\s\S]*isPlainNodeAddress\(opts\.returnUrl\)/,
+        // The claim made the account (utils/claim-key.ts finishClaim): the origin came through claimNodeOrigin on the claim
+        // screen; this is the write's own check.
+        'utils/claim-key.ts finishClaim': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
         // The claim's "Make ‹name› my community": the origin came through claimNodeOrigin; this is the write's own check.
         'app/claim-community.tsx makeMine': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
         // A re-key code bound this phone (app/rekey-code.tsx): the community the ask went to, a plain origin already

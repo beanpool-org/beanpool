@@ -12,16 +12,18 @@
  *   4. POST. If the answer is lost, the claim may still have happened: the node is asked again, and when it says it has
  *      an owner and that owner is this phone's key, the claim is done. A 429 on that check means "check again later or
  *      from another network", never "failed" (the node's brake is per address, and a stranger on the same address can
- *      hold it).
+ *      hold it). No answer in time ({@link CLAIM_REQUEST_TIMEOUT_MS}) is a lost answer too.
  *
- * The key the node registers is the identity already on this phone (one identity per device): nothing here makes one.
+ * The key the node registers is the one the claim is signed with: the phone's own account when it has one (one identity
+ * per device), else the one the claim made for this phone (utils/claim-key.ts, which writes it to the phone just before
+ * the POST, through `beforePost`). Nothing here makes, writes or takes off a key.
  */
 import {
     CLAIM_SCRYPT, audienceOf, claimKeyFromCodeAsync, claimProof, claimText, signedRequestBytes, toBase64,
 } from '@beanpool/core';
 import { buildSignedHeaders, memberSigner } from './crypto';
 import { isPlainNodeAddress } from './node-url';
-import { CLAIM_CODE_ID, isClaimCode } from './claim-link';
+import { CLAIM_CODE_ID, cleanClaimName, isClaimCode } from './claim-link';
 
 export * from './claim-link';
 
@@ -54,52 +56,58 @@ export type ClaimStatus =
 
 type Fetch = typeof fetch;
 
+/**
+ * Each request of a claim gets this long, as the global door's do (global-join.ts JOIN_TIMEOUT_MS): the claim screen
+ * can't be left while the claim is out (app/claim-community.tsx `leave`), and nothing else bounds how long a fetch may
+ * wait. A claim with no answer in time may still have landed: it is a lost answer, and the node is asked whether it did
+ * ({@link confirmLostClaim}), with the same time for each of those reads.
+ */
+export const CLAIM_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * `ask`, given {@link CLAIM_REQUEST_TIMEOUT_MS} to answer, else `late`: its fetch is aborted then, and raced as well,
+ * so the wait ends even where a fetch doesn't stop when asked to (invite-next.ts nodeSaysMember). The answer's body is
+ * read inside `ask`: a reply whose body never comes is no answer either.
+ */
+async function inTime<T>(ask: (signal: AbortSignal) => Promise<T>, late: T): Promise<T> {
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outOfTime = new Promise<T>((resolve) => {
+        // `late` before the abort: whatever the abort makes of the fetch comes after it.
+        timer = setTimeout(() => { resolve(late); stop.abort(); }, CLAIM_REQUEST_TIMEOUT_MS);
+    });
+    try {
+        return await Promise.race([ask(stop.signal), outOfTime]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function retryAfterOf(res: Response): number | null {
     const n = Number(res.headers?.get?.('Retry-After'));
     return Number.isFinite(n) && n > 0 ? Math.ceil(n) : null;
 }
 
-/** Breaks that would start a new line: become a space, so "Bean\nTown" reads "Bean Town". */
-const LINE_BREAKS = /[\t\n\v\f\r\u0085\u2028\u2029]/g;
-/**
- * Control characters (C0, DEL, C1) and the invisible format characters (Unicode Cf, BMP): the soft hyphen, the Arabic
- * number signs and letter mark (U+061C), the zero-width space and direction marks (U+200B, U+200E, U+200F; the non-joiner and joiner U+200C/D stay), every bidi embedding,
- * override and isolate (U+202A-202E, U+2066-2069), the word joiner and invisible operators (U+2060-2064), the
- * deprecated format controls (U+206A-206F), the BOM (U+FEFF) and the interlinear annotation marks (U+FFF9-FFFB).
- * Listed by hand rather than as \p{Cc}\p{Cf}, so the set is explicit and does not hang on the JS engine's Unicode tables.
- */
-// eslint-disable-next-line no-control-regex -- removing control characters is the point
-const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
-/** The same, beyond the basic plane (needs the u flag): tag characters U+E0000-E007F and musical format controls U+1D173-1D17A. */
-const INVISIBLE_ASTRAL = /[\u{E0000}-\u{E007F}\u{1D173}-\u{1D17A}]/gu;
-export const CLAIM_NAME_MAX = 80;
 /** Anything that looks like a claim code (with or without `claim-` and the dashes), for the developer log. */
 const CODE_SHAPED = /(?:claim-)?[0-9a-f]{4}(?:-?[0-9a-f]{4}){3}/gi;
-
-/**
- * A server-written community name made safe to show: one line, no invisible or direction-changing characters (the zero-width
- * non-joiner and joiner, U+200C/U+200D, stay: scripts such as Persian and emoji sequences need them, and neither moves text), runs of
- * whitespace as one space, trimmed, at most {@link CLAIM_NAME_MAX} characters. Null when nothing is left.
- */
-export function cleanClaimName(raw: unknown): string | null {
-    if (typeof raw !== 'string') return null;
-    const flat = raw.replace(LINE_BREAKS, ' ').replace(INVISIBLE, '').replace(INVISIBLE_ASTRAL, '').replace(/\s+/g, ' ').trim();
-    const capped = Array.from(flat).slice(0, CLAIM_NAME_MAX).join('').trim();
-    return capped || null;
-}
 
 /** GET /api/local/claim at `origin`. Only `unclaimed`, `codeId`, `salt` and `communityName` are read. */
 export async function readClaimStatus(origin: string, fetchImpl: Fetch = fetch): Promise<ClaimStatus> {
     if (!isPlainNodeAddress(origin)) return { kind: 'unreachable', message: 'That is not a community address the app can use.' };
-    let res: Response;
+    let reply: { res: Response; body: unknown } | null;
     try {
-        res = await fetchImpl(`${origin}/api/local/claim`, { method: 'GET', headers: { Accept: 'application/json', 'Cache-Control': 'no-store' } });
+        reply = await inTime(async (signal) => {
+            const res = await fetchImpl(`${origin}/api/local/claim`, { method: 'GET', headers: { Accept: 'application/json', 'Cache-Control': 'no-store' }, signal });
+            return { res, body: res.ok ? await res.json().catch(() => null) : null };
+        }, null);
     } catch (e: any) {
         return { kind: 'unreachable', message: e?.message || 'Could not reach the server.' };
     }
+    if (!reply) return { kind: 'unreachable', message: 'Could not reach the server.' };
+    const { res } = reply;
     if (res.status === 429) return { kind: 'busy', retryAfter: retryAfterOf(res) };
     if (!res.ok) return { kind: 'unreachable', message: `The server did not answer (${res.status}).` };
-    const body = await res.json().catch(() => null) as { unclaimed?: unknown; codeId?: unknown; salt?: unknown; communityName?: unknown } | null;
+    const body = reply.body as { unclaimed?: unknown; codeId?: unknown; salt?: unknown; communityName?: unknown } | null;
     if (!body || typeof body.unclaimed !== 'boolean') return { kind: 'unreachable', message: "That address doesn't answer like a BeanPool server." };
     if (body.unclaimed === false) return { kind: 'claimed' };
     const communityName = cleanClaimName(body.communityName) ?? audienceOf(origin) ?? origin;
@@ -179,43 +187,78 @@ export async function confirmLostClaim(origin: string, identity: ClaimIdentity, 
 }
 
 /**
- * The whole claim, after the phone's unlock: derive, sign, POST, and read the answer. A lost answer (no reply, a 5xx,
- * an answer that isn't the node's) and a 429 go through {@link confirmLostClaim}.
+ * What the node said to the claim's POST itself (utils/claim-key.ts counts a claim signed by a key the claim made as out
+ * until the node refuses it, utils/door-key.ts):
+ * - `unsent`: nothing went out (the body could not be made, or `beforePost` stopped it);
+ * - `owner`: this key owns the community, by the POST's answer or by the owner check after a lost one;
+ * - `refused`: the node refused this POST before or instead of any write (a wrong or changed code, no code, another
+ *   server, the brake, a refusal this app has no words for);
+ * - `another-owner`: the POST's own `claim_already_claimed`: by the node's answer, another key owns it;
+ * - `not-owner`: after a lost answer, the owner check said the node's owner is not this key;
+ * - `unclear`: no clear answer. The claim may have landed.
  */
-export async function claimCommunity(req: ClaimRequest & { isOwner: OwnerCheck; fetchImpl?: Fetch }): Promise<ClaimOutcome> {
+export type ClaimHeard = 'unsent' | 'owner' | 'refused' | 'another-owner' | 'not-owner' | 'unclear';
+
+/** What a claim showed and what the node said to it. */
+export interface ClaimAnswer { outcome: ClaimOutcome; heard: ClaimHeard }
+
+/**
+ * The whole claim, after the phone's unlock: derive, sign, POST, and read the answer. A lost answer (no reply, or none
+ * in time, a 5xx, an answer that isn't the node's, a 2xx that isn't an owner's) and a 429 go through
+ * {@link confirmLostClaim}.
+ */
+export async function claimCommunity(req: ClaimRequest & { isOwner: OwnerCheck; fetchImpl?: Fetch; beforePost?: () => Promise<void> }): Promise<ClaimOutcome> {
+    return (await claimAndHear(req)).outcome;
+}
+
+/**
+ * {@link claimCommunity}, with what the node said to the POST itself ({@link ClaimHeard}). `beforePost` runs once the
+ * body is signed and before the POST goes: the claim's key goes onto the phone there (utils/claim-key.ts). When it
+ * throws, nothing is sent.
+ */
+export async function claimAndHear(req: ClaimRequest & { isOwner: OwnerCheck; fetchImpl?: Fetch; beforePost?: () => Promise<void> }): Promise<ClaimAnswer> {
     const fetchImpl = req.fetchImpl ?? fetch;
     let body: Record<string, string>;
     try {
         body = await buildClaimBody(req);
+        await req.beforePost?.();
     } catch (e: any) {
-        return { kind: 'error', message: e?.message || 'The claim could not be made.' };
+        return { outcome: { kind: 'error', message: e?.message || 'The claim could not be made.' }, heard: 'unsent' };
     }
-    let res: Response;
-    try {
-        res = await fetchImpl(`${req.origin}/api/local/claim`, {
+    const lost = async (): Promise<ClaimAnswer> => {
+        const outcome = await confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
+        return { outcome, heard: outcome.kind === 'owner' ? 'owner' : outcome.kind === 'already-claimed' ? 'not-owner' : 'unclear' };
+    };
+    const reply = await inTime(async (signal) => {
+        const res = await fetchImpl(`${req.origin}/api/local/claim`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify(body),
+            signal,
         });
-    } catch {
-        return confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
-    }
-    const answer = await res.json().catch(() => null) as { ok?: unknown; role?: unknown; callsign?: unknown; code?: unknown; error?: unknown } | null;
+        const answer = await res.json().catch(() => null) as { ok?: unknown; role?: unknown; callsign?: unknown; code?: unknown; error?: unknown } | null;
+        return { res, answer };
+    }, null).catch(() => null);
+    // No answer, or none in time: the claim may have landed all the same.
+    if (!reply) return lost();
+    const { res, answer } = reply;
     if (res.ok && answer?.ok === true && answer.role === 'owner') {
-        return { kind: 'owner', callsign: typeof answer.callsign === 'string' ? answer.callsign : null };
+        return { outcome: { kind: 'owner', callsign: typeof answer.callsign === 'string' ? answer.callsign : null }, heard: 'owner' };
     }
     const code = typeof answer?.code === 'string' ? answer.code : '';
     if (res.status === 429) {
-        const lost = await confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
-        if (lost.kind === 'owner') return lost;
-        return { kind: 'braked', retryAfter: retryAfterOf(res) };
+        // The node brakes only before it writes anything, so this POST changed nothing; an earlier one may have landed.
+        const earlier = await confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
+        if (earlier.kind === 'owner') return { outcome: earlier, heard: 'owner' };
+        return { outcome: { kind: 'braked', retryAfter: retryAfterOf(res) }, heard: 'refused' };
     }
-    if (res.status === 421) return { kind: 'wrong-server' };
-    if (code === 'claim_wrong_code') return { kind: 'wrong-code' };
-    if (code === 'claim_code_changed') return { kind: 'code-changed' };
-    if (code === 'claim_already_claimed') return { kind: 'already-claimed' };
-    if (code === 'claim_no_code') return { kind: 'no-code' };
-    if (res.status >= 500 || !answer) return confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
+    if (res.status === 421) return { outcome: { kind: 'wrong-server' }, heard: 'refused' };
+    if (code === 'claim_wrong_code') return { outcome: { kind: 'wrong-code' }, heard: 'refused' };
+    if (code === 'claim_code_changed') return { outcome: { kind: 'code-changed' }, heard: 'refused' };
+    if (code === 'claim_already_claimed') return { outcome: { kind: 'already-claimed' }, heard: 'another-owner' };
+    if (code === 'claim_no_code') return { outcome: { kind: 'no-code' }, heard: 'refused' };
+    // The node answers 2xx only for an owner: anything else in a 2xx is no answer of the node's.
+    if (res.status >= 500 || !answer || res.ok) return lost();
     // A refusal this app has no words for. The server's own text never reaches the screen: it would sit right under the
     // code field, the one place a server could still talk the owner out of the code. Dev builds log it, never with the
     // code: the code is not in the line, and anything in the server's text shaped like a claim code is blanked.
@@ -223,7 +266,7 @@ export async function claimCommunity(req: ClaimRequest & { isOwner: OwnerCheck; 
         const said = answer.error.slice(0, 200).replace(CODE_SHAPED, '[code]');
         console.warn(`[claim] the server refused the claim (${res.status}): ${said}`);
     }
-    return { kind: 'error', message: `The server refused the claim (${res.status}).` };
+    return { outcome: { kind: 'error', message: `The server refused the claim (${res.status}).` }, heard: 'refused' };
 }
 
 /** The words for each outcome but success (design: "The phone: Claim a community"). */
@@ -258,15 +301,18 @@ export function claimOutcomeMessage(outcome: ClaimOutcome, communityName: string
  */
 export async function readNodeAddresses(origin: string, fetchImpl: Fetch = fetch): Promise<string[] | null> {
     if (!isPlainNodeAddress(origin)) return null;
-    try {
-        const res = await fetchImpl(`${origin}/api/community/info`, { method: 'GET', headers: { Accept: 'application/json' } });
-        if (!res.ok) return null;
-        const body = await res.json().catch(() => null) as { addresses?: unknown } | null;
-        if (!body || !Array.isArray(body.addresses)) return null;
-        return body.addresses.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map(a => a.trim());
-    } catch {
-        return null;
-    }
+    // Read while the claim screen still says "Claiming…" (the phone's own account's success): in time, or none.
+    return inTime(async (signal) => {
+        try {
+            const res = await fetchImpl(`${origin}/api/community/info`, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+            if (!res.ok) return null;
+            const body = await res.json().catch(() => null) as { addresses?: unknown } | null;
+            if (!body || !Array.isArray(body.addresses)) return null;
+            return body.addresses.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map(a => a.trim());
+        } catch {
+            return null;
+        }
+    }, null);
 }
 
 /**
@@ -279,24 +325,40 @@ export async function readNodeHasAddress(origin: string, fetchImpl: Fetch = fetc
 }
 
 /**
- * {@link OwnerCheck} through the signed role lookup the app already uses (`GET /api/node-admin/me`, node-admin.ts). A 429
- * or a 5xx is no answer ("check again"), not "someone else owns it".
+ * The node's refusal of a key that is no member there (apps/server engine/members.ts NOT_A_MEMBER_CODE): its read gate's,
+ * for a key with no member row, and node-admin.ts's, for one that is no active member.
  */
-export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
+const NOT_A_MEMBER = 'not_a_member';
+
+/**
+ * {@link OwnerCheck} through the signed role lookup the app already uses (`GET /api/node-admin/me`, node-admin.ts). Only
+ * the node saying so is "someone else owns it": a role it names that is not owner, or its refusal of a key that is no
+ * member there (403 `not_a_member`). Anything else is no answer ("check again"): a 429 or a 5xx, a 401 for the phone's
+ * clock, a 421 for a host the node's names don't take yet, an older node's 404, a 2xx that names no role, and every other
+ * 403, which the signature check gives for reasons that say nothing about who owns the node (a nonce already spent by
+ * the same request sent twice, a signature it couldn't check, a replaced or closed key), and no answer in time. A
+ * claim's own key comes off the phone on "someone else owns it" (utils/claim-key.ts), so a key the node may hold as
+ * owner is never taken for someone else's.
+ */
+export const ownerCheckViaRole: OwnerCheck = (origin, identity) => inTime(async (signal) => {
     try {
         const url = `${origin}/api/node-admin/me`;
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
-        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
-        if (res.status === 429 || res.status >= 500) return null;
-        if (!res.ok) return 'not-owner';
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers }, signal });
+        if (res.status === 403) {
+            const refusal = await res.json().catch(() => null) as { code?: unknown } | null;
+            return refusal?.code === NOT_A_MEMBER ? 'not-owner' : null;
+        }
+        if (!res.ok) return null;
         const body = await res.json().catch(() => null) as { role?: unknown } | null;
-        if (!body) return null;
+        // The node names the role, or none (null).
+        if (!body || !(typeof body.role === 'string' || body.role === null)) return null;
         return body.role === 'owner' ? 'owner' : 'not-owner';
     } catch {
         return null;
     }
-};
+}, null);
 
 /**
  * The success screen's buttons. Manage opens only the phone's own community (NodeAdminEntry), so a phone anchored

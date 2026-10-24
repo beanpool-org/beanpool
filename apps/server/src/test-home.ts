@@ -89,6 +89,9 @@ import zlib from 'node:zlib';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { lockedDm } from './dm-test-payload.js';
+// The server runs in this process with a 5 s keep-alive; the money section pays 1000 times without yielding, and on CI's
+// Node 22 the next request then reused a socket the server had closed ("fetch failed", four runs on 24 Oct).
+import { localFetch } from './keepalive-test-fetch.js';
 
 const MODE = `[${RUN}]`;
 let run = 0, passed = 0;
@@ -143,7 +146,7 @@ type Res = { status: number; text: string; body: any; etag: string | null; heade
 async function get(urlPath: string, id?: Id | null, extra: Record<string, string> = {}): Promise<Res> {
     beforeCall();
     const started = performance.now();
-    const res = await fetch(`${BASE}${urlPath}`, { headers: { ...(id ? signedHeaders('GET', urlPath, '', id) : {}), ...extra } });
+    const res = await localFetch(`${BASE}${urlPath}`, { headers: { ...(id ? signedHeaders('GET', urlPath, '', id) : {}), ...extra } });
     const text = await res.text();
     const ms = performance.now() - started;
     let body: any;
@@ -155,7 +158,7 @@ async function postJson(urlPath: string, id: Id, payload: unknown): Promise<Res>
     beforeCall();
     const started = performance.now();
     const body = JSON.stringify(payload);
-    const res = await fetch(`${BASE}${urlPath}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', urlPath, body, id) } });
+    const res = await localFetch(`${BASE}${urlPath}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', urlPath, body, id) } });
     const text = await res.text();
     let parsed: any;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }
@@ -421,7 +424,7 @@ async function main(): Promise<void> {
         const stranger = await get('/api/home', outsider);
         assert(stranger.status === 403 && stranger.body?.code === 'members_only' && !stranger.text.includes('HomeSentinel'),
             `a key that is no member here is refused 403 members_only (got ${stranger.status} ${stranger.text.slice(0, 80)})`);
-        const head = await fetch(`${BASE}/api/home`, { method: 'HEAD' });
+        const head = await localFetch(`${BASE}/api/home`, { method: 'HEAD' });
         assert(head.status === 401, `and a HEAD is refused as its GET (got ${head.status})`);
         const mine = await get('/api/home', alice);
         assert(mine.status === 200 && mine.body?.me?.joinedAt && mine.body?.profile === 'local' && typeof mine.body?.features?.beans === 'boolean',

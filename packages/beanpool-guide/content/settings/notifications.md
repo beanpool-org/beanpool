@@ -10,7 +10,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 
 - Open **Settings**. Under **App Settings**, tap **Notification Preferences**.
 - Switch each kind on or off:
-- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, or when a vote opens in a group or enterprise you are in.
+- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in.
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
 - **Held in Trust & System:** beans held, released or in question.
 

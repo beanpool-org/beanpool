@@ -61,8 +61,14 @@ export type NeedsTarget =
     /** An enterprise's own screen, for its keepers' vote; sent only to an app that asks with `lands=enterprise` (lib/api.ts getHome). */
     | { to: 'enterprise'; id: string }
     /** A chat group's info, for its members' vote; sent only to an app that asks with `lands=group` (lib/api.ts getHome). */
-    | { to: 'group'; id: string };
-export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+    | { to: 'group'; id: string }
+    /**
+     * The member's open invitation to a group (its info, with Join), or to several (Commons, where each shows invited);
+     * sent only to an app that asks with `lands=invite` (lib/api.ts getHome).
+     */
+    | { to: 'invite'; id: string }
+    | { to: 'invites' };
+export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**
  * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only

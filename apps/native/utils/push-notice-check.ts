@@ -471,7 +471,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`
-    | `/treasury-manage?publicKey=${string}`;
+    | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
 const ENTERPRISE_KEY = /^[0-9a-f]{64}$/;
@@ -487,7 +487,7 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
 /**
  * Where a valid notice's tap lands, from what its community answered for it (`data` of `GET /api/notices/push/<id>`,
  * or nothing when it couldn't be had): a post or a chat when the answer names one by an id in the node's own shape, an
- * enterprise's keepers' console by its key (a keepers' vote opening: its Decisions block is there since slice S7), a group by its id (its members' vote opening), Settings when it says so, and otherwise the tab for the notice's kind; Home, where the app opens, for a kind this
+ * enterprise's keepers' console by its key (a keepers' vote opening: its Decisions block is there since slice S7), a group by its id (its members' vote opening), a group's invite landing by its id (an invitation), Settings when it says so, and otherwise the tab for the notice's kind; Home, where the app opens, for a kind this
  * build doesn't know (`kind` null). Every route is one of a fixed few; the only text taken from the answer is an id that matched
  * {@link NODE_ID}.
  */
@@ -498,6 +498,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     if (d.screen === 'enterprise' && typeof d.publicKey === 'string' && ENTERPRISE_KEY.test(d.publicKey)) return `/treasury-manage?publicKey=${d.publicKey}`;
     // A group's vote opening: the group itself, its info sheet open on its Decisions block; never Talk (slice S3).
     if (d.screen === 'group' && typeof d.groupId === 'string' && NODE_ID.test(d.groupId)) return `/chat/${d.groupId}?group=1&info=1`;
+    // An invitation to a group: its invite landing, opened as an invitation (utils/your-groups.ts inviteLandingHref), with
+    // Join; never the group's chat, which they are not in yet.
+    if (d.screen === 'invite' && typeof d.groupId === 'string' && NODE_ID.test(d.groupId)) return `/group/${d.groupId}?invited=1`;
     if (d.screen === 'settings') return '/(tabs)/settings';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;

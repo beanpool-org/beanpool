@@ -25,6 +25,12 @@ describe('the kinds', () => {
         expect(PUSH_NOTICE_KINDS['decision.open'].tab).toBe('home');
     });
 
+    it("a group invitation is a kind of its own, landing on Home, whose Needs-you line opens it: the member is in no chat of the group's yet", () => {
+        expect(isPushNoticeKind('group.invite')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['group.invite'].tab).toBe('home');
+        expect(pushNoticeWords('group.invite')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'You were invited to join a group.' });
+    });
+
     it('every kind has a sentence, and every push has the same title', () => {
         for (const kind of Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]) {
             const words = pushNoticeWords(kind);

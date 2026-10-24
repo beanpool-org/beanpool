@@ -644,17 +644,22 @@ function EnterpriseBody({
     const lifecycleWord = e.lifecycle === 'bounded' ? t('project', undefined, 'lifecycle') : t('enterprise', undefined, 'lifecycle');
     const titleLine = `${e.name} · ${lifecycleWord}`;
     const requests = e.requests ? tn(e.requests, '{n} request to approve', '{n} requests to approve') : null;
-    const balanceText = typeof e.balance === 'number' && typeof e.keepers === 'number'
-        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance), keepers: tn(e.keepers, '{n} keeper', '{n} keepers') })
-        : null;
+    const keeperText = typeof e.keepers === 'number' ? tn(e.keepers, '{n} keeper', '{n} keepers') : null;
+    const balanceText = typeof e.balance === 'number' && keeperText
+        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance), keepers: keeperText })
+        : typeof e.balance === 'number'
+            ? t('Balance {balance}', { balance: beansAmount(e.balance) })
+            : keeperText;
     const monthText = e.month ? monthSummaryLine(e.month) : null;
     const latestText = e.latest ? enterpriseLatestLine(e.latest) : null;
+
+    const fullLine = [titleLine, balanceText, monthText, latestText, requests].filter(Boolean).join('. ');
 
     return (
         <div>
             <HomeLine
                 onClick={() => onNavigate('enterprise', e.id)}
-                label={e.lifecycle === 'bounded' ? t('{line}. Opens the project.', { line: titleLine }) : t('{line}. Opens the enterprise.', { line: titleLine })}
+                label={e.lifecycle === 'bounded' ? t('{line}. Opens the project.', { line: fullLine }) : t('{line}. Opens the enterprise.', { line: fullLine })}
             >
                 <span className="min-w-0 flex-1">
                     <span className="block break-words font-semibold">{titleLine}</span>

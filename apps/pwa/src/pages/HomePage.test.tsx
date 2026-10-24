@@ -3021,6 +3021,9 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(ent).toHaveTextContent('Latest: +12 Beans from Ana · 2h ago');
         expect(ent).toHaveTextContent('3 requests to approve');
         expect(ent).toHaveTextContent('and 1 more you keep');
+        expect(within(ent).getByRole('button', {
+            name: 'Mullum Ceramics · enterprise. Balance 340 Beans · 3 keepers. This month: 5 trades · +120 in · −60 out. Latest: +12 Beans from Ana · 2h ago. 3 requests to approve. Opens the enterprise.',
+        })).toBeInTheDocument();
 
         // Decide
         const decide = screen.getByTestId('home-card-decide');
@@ -3285,6 +3288,27 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(tiles[3]).toHaveTextContent('3');
         expect(tiles[3]).toHaveTextContent('events coming up');
         expect(commWide.textContent).not.toMatch(/trades this month|Commons pot/);
+    });
+
+    it('enterprise card with Beans off shows keeper count without balance', async () => {
+        const noBeansEnterprise = answer({}, {
+            enterprise: {
+                id: 'e1',
+                name: 'Local Food Coop',
+                lifecycle: 'unbounded',
+                keepers: 4,
+                requests: 1,
+                others: 0,
+            },
+        });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(noBeansEnterprise));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const ent = await screen.findByTestId('home-card-enterprise');
+        expect(ent).toHaveTextContent('4 keepers');
+        expect(ent).not.toHaveTextContent('Balance');
+        expect(within(ent).getByRole('button', {
+            name: 'Local Food Coop · enterprise. 4 keepers. 1 request to approve. Opens the enterprise.',
+        })).toBeInTheDocument();
     });
 
     it('navigation: listing tile opens listing, group line opens chat, Pulse tile opens Pulse, deal opens deal', async () => {

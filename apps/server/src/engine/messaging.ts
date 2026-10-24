@@ -467,7 +467,7 @@ export function sendMessage(
     if (visitor && directConv && directConv.type !== 'dm') throw new MessagingError(VISITOR_SEND_REFUSAL);
     if (directConv?.type === GROUP_THREAD_TYPE) {
         try {
-            const m = postGroupThreadMessageFromSendRoute(cb, conversationId, authorPubkey, ciphertext, nonce, type, !!attachment?.data, clientId, metadata);
+            const m = postGroupThreadMessageFromSendRoute(cb, conversationId, authorPubkey, ciphertext, nonce, type, attachment, clientId, metadata);
             return { id: m.id, conversationId: m.conversationId, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp };
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
@@ -631,21 +631,29 @@ export function sendMessage(
         metadata,
         timestamp: new Date().toISOString()
     };
-    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata, msg.timestamp);
-    
-    if (attachment?.data && attachment?.nonce) {
+    const photo = attachment?.data && attachment?.nonce ? attachment : undefined;
+    let photoCols: { data: string | null; storage_key: string | null } | null = null;
+    if (photo) {
         // The ciphertext goes to the image store and the row keeps the nonce, the mime and a key
         // (storage design §7). The node has never held the key that would decrypt either half, so nothing
         // about what it can read changes; only where the 8 MB of it lives.
         // An id no key is built from (storage/image-store.ts idSegment refuses one, never strips it) keeps the
         // ciphertext in the row, as a store that refuses it does: a failure here never fails the message.
+        // The object before the rows (group chat photos S2): a failed insert below leaves an object no row names, which the
+        // storage-health sweep takes past its grace, never a line whose photo row is missing.
         let key: string | null = null;
         try { key = attachmentKey(msg.id); } catch { /* kept in the row */ }
-        const cols = key ? storeAttachmentColumns(getImageStore(), key, attachment.data) : { data: attachment.data, storage_key: null };
-        db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
-            .run(msg.id, cols.data, attachment.nonce, attachment.mime || 'image/jpeg', cols.storage_key);
-        if (attBytes > 0) recordStoredPhotoBytes(authorPubkey, attBytes);
+        photoCols = key ? storeAttachmentColumns(getImageStore(), key, photo.data) : { data: photo.data, storage_key: null };
     }
+    // The line and its photo's row in one transaction: both or neither.
+    db.transaction(() => {
+        db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata, msg.timestamp);
+        if (photo && photoCols) {
+            db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
+                .run(msg.id, photoCols.data, photo.nonce, photo.mime || 'image/jpeg', photoCols.storage_key);
+        }
+    })();
+    if (photo && attBytes > 0) recordStoredPhotoBytes(authorPubkey, attBytes);
 
     // Only the conversation's participants — the people GET /api/messages/:id lets read it.
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) }, participants.map(p => p.public_key));

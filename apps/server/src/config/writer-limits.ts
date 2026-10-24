@@ -106,6 +106,16 @@ export const WRITER_LIMITS = {
 };
 
 /**
+ * The largest photo a group chat line may carry, in characters of its base64 `data` as sent: the sealed attachment
+ * (DESIGN-group-chat-photos-fable.md §2.5). Over it, 400 and nothing is stored. Each photo also counts in the day's photo
+ * budget (engine/photo-upload-budget.ts); there is no per-group number. Measured 25 Oct 2026 (group chat photos S2): the
+ * 20 densest images in the repo, fitted to 800 px and encoded at quality 0.7 by Chromium's canvas (the web) and by
+ * libjpeg-turbo (the phone's encoder family), came to 140 KiB of JPEG at most, 249 KiB sealed; 800 x 800 of pure noise, the
+ * densest an encoder makes, 329 KiB of JPEG, 585 KiB sealed. 768 KiB is room over both: a JPEG of up to 442,287 bytes.
+ */
+export const GROUP_PHOTO_MAX_BYTES = 768 * 1024;
+
+/**
  * How much one member may READ of something in a day, where reading it often is how a stranger would walk the community
  * (the privacy review of 2026-10-14, scratch/global-node/DESIGN-global-member-privacy-fable.md §3). Counted in memory by
  * nearest-people-budget.ts, as the gateway counts the day budget: a restart starts every count again. Only where

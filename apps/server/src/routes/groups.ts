@@ -54,7 +54,7 @@ import { avatarKeysRequired, groupPictureKeyMatches } from '../engine/avatar-key
 import { membersOnlyHere } from './viewer.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
-import { memberErrorText } from './member-error-text.js';
+import { isServerFault, memberErrorText } from './member-error-text.js';
 import { heavyRead, heavyReadKey, LIGHT_BYTES } from '../heavy-reads.js';
 import { getMembersVersion } from '../engine/versions.js';
 import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, snapshotSendWeight } from '../members-snapshot.js';
@@ -599,18 +599,22 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             clientId = body.clientId.toLowerCase();
         }
         // A reply quotes a message in THIS chat (chat parity, 2026-09-23), named in the metadata and bound into the sealed
-        // line; the engine checks it is in this conversation and is not a system line.
+        // line; the engine checks it is in this conversation and is not a system line. A photo line is type 'image' with its
+        // sealed photo as `attachment` (DESIGN-group-chat-photos-fable.md §2.2), checked by the engine as the words are.
         try {
             // A muted member (G3) sends nothing anyone else reads.
             assertNotMuted(actor);
-            const message = postGroupThreadMessage(ctx.params.id, actor, { ciphertext: body.ciphertext, nonce: body.nonce, metadata: body.metadata }, clientId);
+            const message = postGroupThreadMessage(ctx.params.id, actor, {
+                ciphertext: body.ciphertext, nonce: body.nonce, metadata: body.metadata, type: body.type, attachment: body.attachment,
+            }, clientId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {
             if (respondGroupKeyError(ctx, e)) return;
             if (respondProfileRefusal(ctx, e)) return;
             const msg = memberErrorText(e, 'Could not post the message');
-            ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
+            // A server fault (the database, the store) is a 500, so the app sends the line again under the same id (#672).
+            ctx.status = e?.code === 'ID_CONFLICT' ? 409 : isServerFault(e) ? 500 : groupChatStatus(msg);
             ctx.body = { error: msg };
         }
     });

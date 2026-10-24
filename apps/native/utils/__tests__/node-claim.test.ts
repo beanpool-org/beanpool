@@ -31,7 +31,7 @@ vi.mock('expo-secure-store', () => ({
 
 import {
     APP_CLAIM_SCRYPT, CLAIM_NAME_MAX, buildClaimBody, cleanClaimName, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
-    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, claimProbeOrigin, claimLinkFromScan, CLAIM_CODE_PLACEHOLDER, type OwnerCheck,
+    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, claimProbeOrigin, claimLinkFromScan, CLAIM_CODE_PLACEHOLDER, CLAIM_REQUEST_TIMEOUT_MS, type OwnerCheck,
 } from '../node-claim';
 
 // core's fixed vectors (packages/beanpool-core/src/__tests__/claim-proof.test.ts), made with Node's crypto.
@@ -181,6 +181,27 @@ describe('the entry: only a node that answers unclaimed', () => {
         expect((await readClaimStatus(ORIGIN, (async () => { throw new Error('offline'); }) as any)).kind).toBe('unreachable');
         expect((await readClaimStatus(ORIGIN, (async () => json(200, { unclaimed: true, codeId: null, salt: null })) as any)).kind).toBe('no-code');
         expect((await readClaimStatus(ORIGIN, (async () => json(200, { unclaimed: true, codeId: '../x', salt: SALT })) as any)).kind).toBe('no-code');
+    });
+
+    it('a node that never answers: unreachable once the wait runs out, in words the app has, never a spinner for good', async () => {
+        // As long as the global door's requests get (global-join.ts JOIN_TIMEOUT_MS), and no longer.
+        expect(CLAIM_REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(30_000);
+        vi.useFakeTimers();
+        try {
+            let signal: AbortSignal | null | undefined;
+            let settled = false;
+            const pending = readClaimStatus(ORIGIN, ((_url: string, init?: RequestInit) => {
+                signal = init?.signal;
+                return new Promise<Response>(() => {});
+            }) as any).finally(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await pending).toEqual({ kind: 'unreachable', message: 'Could not reach the server.' });
+            expect(signal?.aborted).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 
@@ -383,6 +404,20 @@ describe('the success screen\'s address button', () => {
         expect(await readNodeHasAddress(ORIGIN, (async () => json(200, { name: 'old node' })) as any)).toBeNull();
         expect(await readNodeHasAddress(ORIGIN, (async () => json(500, {})) as any)).toBeNull();
         expect(await readNodeHasAddress(ORIGIN, (async () => { throw new Error('x'); }) as any)).toBeNull();
+    });
+
+    it('a node that never answers (read while the claim screen still says "Claiming…"): none once the wait runs out', async () => {
+        vi.useFakeTimers();
+        try {
+            let settled = false;
+            const pending = readNodeHasAddress(ORIGIN, (() => new Promise<Response>(() => {})) as any).finally(() => { settled = true; });
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await pending).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });
 
@@ -876,5 +911,119 @@ describe('the claim that makes the account', () => {
             expect(record(), why).toBeNull();
             spy.mockRestore();
         }
+    });
+
+    /**
+     * #2433 review (4365732910): the claim screen's Back is closed while the claim is out (app/claim-community.tsx
+     * `leave`), so no request of the claim may wait for ever. A node that takes each request and never answers it (a
+     * captive portal, a stalled connection); `sent(n)` once n requests have gone out.
+     */
+    function stalledNode() {
+        const seen: Array<{ url: string; method: string; signal: AbortSignal | null | undefined }> = [];
+        const waiting: Array<{ n: number; go: () => void }> = [];
+        const fetchImpl = vi.fn((url: string, init?: RequestInit) => {
+            seen.push({ url: String(url), method: init?.method ?? 'GET', signal: init?.signal });
+            for (const w of waiting) if (seen.length >= w.n) w.go();
+            return new Promise<Response>(() => {});
+        });
+        const sent = (n: number) => new Promise<void>((go) => { if (seen.length >= n) go(); else waiting.push({ n, go }); });
+        return { fetchImpl: fetchImpl as any, seen, sent };
+    }
+
+    it('a node that never answers the claim: a lost answer once the wait runs out, and the key and the record stay, counted out', async () => {
+        const key = await drafted();
+        const { fetchImpl, seen, sent } = stalledNode();
+        vi.useFakeTimers();
+        try {
+            let settled = false;
+            const pending = claimWith(key, fetchImpl).finally(() => { settled = true; });
+            // The POST is out: the key and its record are on the phone, counted out, and the screen says "Claiming…".
+            await sent(1);
+            expect(seen[0]).toMatchObject({ url: `${ORIGIN}/api/local/claim`, method: 'POST' });
+            expect(record()).toMatchObject({ step: 'claim', freshKey: key.identity.publicKey, joinsOut: 1 });
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            // No answer in time is a lost answer: the POST is given up, and the node is asked whether the claim landed.
+            await sent(2);
+            expect(seen[0].signal?.aborted).toBe(true);
+            expect(seen[1]).toMatchObject({ url: `${ORIGIN}/api/local/claim`, method: 'GET' });
+            // That read has the same time, and no answer to it is "check again".
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await pending).toMatchObject({ outcome: { kind: 'check-again' }, madeHere: true, released: false });
+            expect(seen[1].signal?.aborted).toBe(true);
+            expect(seen).toHaveLength(2);
+        } finally {
+            vi.useRealTimers();
+        }
+        // The node may hold this key as its owner: it stays, and the record brings the next launch back to the claim.
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        expect(record()).toMatchObject({ step: 'claim', flow: 'claim', freshKey: key.identity.publicKey, joinsOut: 1 });
+    });
+
+    it('Check again, and a node that never answers: check again once the wait runs out; the key and the record stay', async () => {
+        const { checkOwnClaim } = await import('../claim-key');
+        const key = await heldClaim();
+        const { fetchImpl, seen, sent } = stalledNode();
+        vi.useFakeTimers();
+        try {
+            let settled = false;
+            const pending = checkOwnClaim(ORIGIN, { identity: stored(), createdHere: true }, owner, fetchImpl).finally(() => { settled = true; });
+            await sent(1);
+            expect(seen[0]).toMatchObject({ url: `${ORIGIN}/api/local/claim`, method: 'GET' });
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await pending).toEqual({ outcome: { kind: 'check-again' }, released: false });
+            expect(seen[0].signal?.aborted).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        expect(record()).toMatchObject({ step: 'claim', flow: 'claim', freshKey: key.identity.publicKey, joinsOut: 1 });
+    });
+
+    it('the owner check, and a node that never answers it: no answer once the wait runs out, never "someone else"; the key stays', async () => {
+        const { checkOwnClaim } = await import('../claim-key');
+        const key = await heldClaim();
+        // GET /api/node-admin/me taken and never answered.
+        const me = stalledNode();
+        const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(((url: string, init?: RequestInit) => (String(url).endsWith('/api/node-admin/me')
+            ? me.fetchImpl(url, init)
+            : Promise.reject(new Error(`unexpected ${url}`)))) as any);
+        vi.useFakeTimers();
+        try {
+            // Check again: the node says it has an owner now, and whose it doesn't say in time.
+            const after = node(() => { throw new Error('no POST'); }, [claimed]);
+            let settled = false;
+            const again = checkOwnClaim(ORIGIN, { identity: stored(), createdHere: true }, ownerCheckViaRole, after.fetchImpl)
+                .finally(() => { settled = true; });
+            await me.sent(1);
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await again).toEqual({ outcome: { kind: 'check-again' }, released: false });
+            expect(me.seen[0].signal?.aborted).toBe(true);
+
+            // The POST's own 409, then the same owner check, never answered: no answer either.
+            const refused = node(() => json(409, { code: 'claim_already_claimed' }));
+            settled = false;
+            const retry = claimWith({ identity: stored(), createdHere: true }, refused.fetchImpl, ownerCheckViaRole)
+                .finally(() => { settled = true; });
+            await me.sent(2);
+            await vi.advanceTimersByTimeAsync(CLAIM_REQUEST_TIMEOUT_MS - 1);
+            expect(settled).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(await retry).toMatchObject({ outcome: { kind: 'check-again' }, released: false });
+            expect(me.seen[1].signal?.aborted).toBe(true);
+        } finally {
+            vi.useRealTimers();
+            spy.mockRestore();
+        }
+        expect(stored()?.publicKey).toBe(key.identity.publicKey);
+        expect(record()).toMatchObject({ step: 'claim', flow: 'claim', freshKey: key.identity.publicKey });
+        expect(record().joinsOut).toBeGreaterThan(0);
     });
 });

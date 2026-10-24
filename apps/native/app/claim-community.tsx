@@ -392,9 +392,10 @@ export default function ClaimCommunityScreen() {
     };
 
     // ── Leaving ─────────────────────────────────────────────────────────────────────────────────────────
-    // While the claim is out, nothing: its answer decides. Otherwise the claim's own key comes off the phone, with its
-    // record, only when no claim it signed can have landed (utils/claim-key.ts releaseClaimKey): a key the node may hold
-    // as owner stays, and the next launch comes back here with it. The phone's own account never comes off.
+    // While the claim is out, nothing: its answer decides, and no request of it waits for ever (utils/node-claim.ts
+    // CLAIM_REQUEST_TIMEOUT_MS). Otherwise the claim's own key comes off the phone, with its record, only when no claim
+    // it signed can have landed (utils/claim-key.ts releaseClaimKey): a key the node may hold as owner stays, and the
+    // next launch comes back here with it. The phone's own account never comes off.
     const leave = () => {
         if (busy) return;
         void (async () => {

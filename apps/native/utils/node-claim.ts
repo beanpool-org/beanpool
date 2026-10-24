@@ -12,7 +12,7 @@
  *   4. POST. If the answer is lost, the claim may still have happened: the node is asked again, and when it says it has
  *      an owner and that owner is this phone's key, the claim is done. A 429 on that check means "check again later or
  *      from another network", never "failed" (the node's brake is per address, and a stranger on the same address can
- *      hold it).
+ *      hold it). No answer in time ({@link CLAIM_REQUEST_TIMEOUT_MS}) is a lost answer too.
  *
  * The key the node registers is the one the claim is signed with: the phone's own account when it has one (one identity
  * per device), else the one the claim made for this phone (utils/claim-key.ts, which writes it to the phone just before
@@ -56,6 +56,33 @@ export type ClaimStatus =
 
 type Fetch = typeof fetch;
 
+/**
+ * Each request of a claim gets this long, as the global door's do (global-join.ts JOIN_TIMEOUT_MS): the claim screen
+ * can't be left while the claim is out (app/claim-community.tsx `leave`), and nothing else bounds how long a fetch may
+ * wait. A claim with no answer in time may still have landed: it is a lost answer, and the node is asked whether it did
+ * ({@link confirmLostClaim}), with the same time for each of those reads.
+ */
+export const CLAIM_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * `ask`, given {@link CLAIM_REQUEST_TIMEOUT_MS} to answer, else `late`: its fetch is aborted then, and raced as well,
+ * so the wait ends even where a fetch doesn't stop when asked to (invite-next.ts nodeSaysMember). The answer's body is
+ * read inside `ask`: a reply whose body never comes is no answer either.
+ */
+async function inTime<T>(ask: (signal: AbortSignal) => Promise<T>, late: T): Promise<T> {
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outOfTime = new Promise<T>((resolve) => {
+        // `late` before the abort: whatever the abort makes of the fetch comes after it.
+        timer = setTimeout(() => { resolve(late); stop.abort(); }, CLAIM_REQUEST_TIMEOUT_MS);
+    });
+    try {
+        return await Promise.race([ask(stop.signal), outOfTime]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function retryAfterOf(res: Response): number | null {
     const n = Number(res.headers?.get?.('Retry-After'));
     return Number.isFinite(n) && n > 0 ? Math.ceil(n) : null;
@@ -67,15 +94,20 @@ const CODE_SHAPED = /(?:claim-)?[0-9a-f]{4}(?:-?[0-9a-f]{4}){3}/gi;
 /** GET /api/local/claim at `origin`. Only `unclaimed`, `codeId`, `salt` and `communityName` are read. */
 export async function readClaimStatus(origin: string, fetchImpl: Fetch = fetch): Promise<ClaimStatus> {
     if (!isPlainNodeAddress(origin)) return { kind: 'unreachable', message: 'That is not a community address the app can use.' };
-    let res: Response;
+    let reply: { res: Response; body: unknown } | null;
     try {
-        res = await fetchImpl(`${origin}/api/local/claim`, { method: 'GET', headers: { Accept: 'application/json', 'Cache-Control': 'no-store' } });
+        reply = await inTime(async (signal) => {
+            const res = await fetchImpl(`${origin}/api/local/claim`, { method: 'GET', headers: { Accept: 'application/json', 'Cache-Control': 'no-store' }, signal });
+            return { res, body: res.ok ? await res.json().catch(() => null) : null };
+        }, null);
     } catch (e: any) {
         return { kind: 'unreachable', message: e?.message || 'Could not reach the server.' };
     }
+    if (!reply) return { kind: 'unreachable', message: 'Could not reach the server.' };
+    const { res } = reply;
     if (res.status === 429) return { kind: 'busy', retryAfter: retryAfterOf(res) };
     if (!res.ok) return { kind: 'unreachable', message: `The server did not answer (${res.status}).` };
-    const body = await res.json().catch(() => null) as { unclaimed?: unknown; codeId?: unknown; salt?: unknown; communityName?: unknown } | null;
+    const body = reply.body as { unclaimed?: unknown; codeId?: unknown; salt?: unknown; communityName?: unknown } | null;
     if (!body || typeof body.unclaimed !== 'boolean') return { kind: 'unreachable', message: "That address doesn't answer like a BeanPool server." };
     if (body.unclaimed === false) return { kind: 'claimed' };
     const communityName = cleanClaimName(body.communityName) ?? audienceOf(origin) ?? origin;
@@ -171,8 +203,9 @@ export type ClaimHeard = 'unsent' | 'owner' | 'refused' | 'another-owner' | 'not
 export interface ClaimAnswer { outcome: ClaimOutcome; heard: ClaimHeard }
 
 /**
- * The whole claim, after the phone's unlock: derive, sign, POST, and read the answer. A lost answer (no reply, a 5xx,
- * an answer that isn't the node's, a 2xx that isn't an owner's) and a 429 go through {@link confirmLostClaim}.
+ * The whole claim, after the phone's unlock: derive, sign, POST, and read the answer. A lost answer (no reply, or none
+ * in time, a 5xx, an answer that isn't the node's, a 2xx that isn't an owner's) and a 429 go through
+ * {@link confirmLostClaim}.
  */
 export async function claimCommunity(req: ClaimRequest & { isOwner: OwnerCheck; fetchImpl?: Fetch; beforePost?: () => Promise<void> }): Promise<ClaimOutcome> {
     return (await claimAndHear(req)).outcome;
@@ -196,17 +229,19 @@ export async function claimAndHear(req: ClaimRequest & { isOwner: OwnerCheck; fe
         const outcome = await confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
         return { outcome, heard: outcome.kind === 'owner' ? 'owner' : outcome.kind === 'already-claimed' ? 'not-owner' : 'unclear' };
     };
-    let res: Response;
-    try {
-        res = await fetchImpl(`${req.origin}/api/local/claim`, {
+    const reply = await inTime(async (signal) => {
+        const res = await fetchImpl(`${req.origin}/api/local/claim`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify(body),
+            signal,
         });
-    } catch {
-        return lost();
-    }
-    const answer = await res.json().catch(() => null) as { ok?: unknown; role?: unknown; callsign?: unknown; code?: unknown; error?: unknown } | null;
+        const answer = await res.json().catch(() => null) as { ok?: unknown; role?: unknown; callsign?: unknown; code?: unknown; error?: unknown } | null;
+        return { res, answer };
+    }, null).catch(() => null);
+    // No answer, or none in time: the claim may have landed all the same.
+    if (!reply) return lost();
+    const { res, answer } = reply;
     if (res.ok && answer?.ok === true && answer.role === 'owner') {
         return { outcome: { kind: 'owner', callsign: typeof answer.callsign === 'string' ? answer.callsign : null }, heard: 'owner' };
     }
@@ -266,15 +301,18 @@ export function claimOutcomeMessage(outcome: ClaimOutcome, communityName: string
  */
 export async function readNodeAddresses(origin: string, fetchImpl: Fetch = fetch): Promise<string[] | null> {
     if (!isPlainNodeAddress(origin)) return null;
-    try {
-        const res = await fetchImpl(`${origin}/api/community/info`, { method: 'GET', headers: { Accept: 'application/json' } });
-        if (!res.ok) return null;
-        const body = await res.json().catch(() => null) as { addresses?: unknown } | null;
-        if (!body || !Array.isArray(body.addresses)) return null;
-        return body.addresses.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map(a => a.trim());
-    } catch {
-        return null;
-    }
+    // Read while the claim screen still says "Claiming…" (the phone's own account's success): in time, or none.
+    return inTime(async (signal) => {
+        try {
+            const res = await fetchImpl(`${origin}/api/community/info`, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+            if (!res.ok) return null;
+            const body = await res.json().catch(() => null) as { addresses?: unknown } | null;
+            if (!body || !Array.isArray(body.addresses)) return null;
+            return body.addresses.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map(a => a.trim());
+        } catch {
+            return null;
+        }
+    }, null);
 }
 
 /**
@@ -298,16 +336,16 @@ const NOT_A_MEMBER = 'not_a_member';
  * member there (403 `not_a_member`). Anything else is no answer ("check again"): a 429 or a 5xx, a 401 for the phone's
  * clock, a 421 for a host the node's names don't take yet, an older node's 404, a 2xx that names no role, and every other
  * 403, which the signature check gives for reasons that say nothing about who owns the node (a nonce already spent by
- * the same request sent twice, a signature it couldn't check, a replaced or closed key). A claim's own key comes off the
- * phone on "someone else owns it" (utils/claim-key.ts), so a key the node may hold as owner is never taken for someone
- * else's.
+ * the same request sent twice, a signature it couldn't check, a replaced or closed key), and no answer in time. A
+ * claim's own key comes off the phone on "someone else owns it" (utils/claim-key.ts), so a key the node may hold as
+ * owner is never taken for someone else's.
  */
-export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
+export const ownerCheckViaRole: OwnerCheck = (origin, identity) => inTime(async (signal) => {
     try {
         const url = `${origin}/api/node-admin/me`;
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
-        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers }, signal });
         if (res.status === 403) {
             const refusal = await res.json().catch(() => null) as { code?: unknown } | null;
             return refusal?.code === NOT_A_MEMBER ? 'not-owner' : null;
@@ -320,7 +358,7 @@ export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
     } catch {
         return null;
     }
-};
+}, null);
 
 /**
  * The success screen's buttons. Manage opens only the phone's own community (NodeAdminEntry), so a phone anchored

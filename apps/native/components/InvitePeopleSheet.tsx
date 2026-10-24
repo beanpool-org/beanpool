@@ -233,7 +233,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                                     <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.publicKey} callsign={item.callsign} size={36} />
                                     <View style={styles.nameCol}>
                                         <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
-                                        <Text style={styles.keyPrefix} numberOfLines={1}>{(item.publicKey ?? '').slice(0, 8)}</Text>
+                                        <Text style={styles.keyPrefix} numberOfLines={1}>{t('{prefix}…', { prefix: (item.publicKey ?? '').slice(0, 8) }, 'the start of a member\'s key, under their name in a list, to tell two people with the same name apart')}</Text>
                                     </View>
                                     {already && <Text style={styles.already}>{t('In the group')}</Text>}
                                     {isInvited && <Text style={styles.already}>{t('Invited')}</Text>}

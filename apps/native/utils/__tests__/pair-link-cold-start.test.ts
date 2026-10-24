@@ -211,7 +211,9 @@ describe('the model is the app', () => {
         expect(layout).toContain('if (isLoading || !appLockChecked) return null;');
         const guard = layout.slice(layout.indexOf('    useEffect(() => {\n        if (isLoading) return;\n        const root = (segments as string[])[0];'));
         const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding]);'));
-        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*$/);
+        // Then, over the tabs' index only, a notice tapped from the community the phone has just moved to (#2436): nothing
+        // else after the landing.
+        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);\n\s*$/);
     });
 
     it('app/index.tsx is the bare root, and sends to welcome', () => {

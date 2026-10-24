@@ -467,4 +467,22 @@ describe('a phone updated from a build with one flag for the phone', () => {
         expect(await pendingProfileChange(B, ME)).toBeNull();
         expect(await pendingProfileChange(A, ME)).toEqual({ publicKey: ME, avatar: PHOTO });
     });
+
+    // Review of #2461: the follow came before any read had moved the flag, so the old row's removal dropped it with A.
+    it('a community followed to its new address before the flag moved takes the flag there: the old row\'s removal keeps it', async () => {
+        const { pendingProfileChange, carryPendingProfileChange } = await pendingModule();
+        const { removeSavedNode } = await import('../nodes');
+        const NEW_A = 'https://beans.a-town.org';
+        store.set('pending_profile_sync', 'true');
+        store.set('pending_profile_sync_anchor', A);
+        store.set('pending_profile_avatar', PHOTO);
+
+        // As acceptAddressFollow does (address-follow.ts): the change follows, then A's row goes.
+        await carryPendingProfileChange(A, NEW_A);
+        await removeSavedNode(A);
+
+        expect(await pendingProfileChange(NEW_A, ME)).toEqual({ publicKey: ME, avatar: PHOTO });
+        expect(await pendingProfileChange(A, ME)).toBeNull();
+        for (const old of ['pending_profile_sync', 'pending_profile_sync_anchor', 'pending_profile_avatar']) expect(store.has(old)).toBe(false);
+    });
 });

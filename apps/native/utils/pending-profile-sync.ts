@@ -169,12 +169,19 @@ export async function pendingNameAccepted(community: string | null | undefined):
     await AsyncStorage.setItem(key, JSON.stringify(rest));
 }
 
-/** A community followed to its new address (address-follow.ts): what waits for it waits there. Never throws. */
+/**
+ * A community followed to its new address (address-follow.ts): what waits for it waits there. An older build's flag set
+ * there and not moved yet names the new address, so the old row's removal keeps it (dropOlderFlagAt) and the first read
+ * there moves it. Never throws.
+ */
 export async function carryPendingProfileChange(from: string, to: string): Promise<void> {
     const fromKey = keyOf(from);
     const toKey = keyOf(to);
     if (!fromKey || !toKey || fromKey === toKey) return;
     try {
+        // Before the entry: a read that moves the flag meanwhile moves it to the entry carried next, or to `to`'s.
+        const olderAnchor = await AsyncStorage.getItem(OLDER_ANCHOR);
+        if (olderAnchor !== null && plainOriginOf(olderAnchor) === plainOriginOf(from)) await AsyncStorage.setItem(OLDER_ANCHOR, to);
         const waiting = await AsyncStorage.getItem(fromKey);
         if (waiting === null) return;
         if ((await AsyncStorage.getItem(toKey)) === null) await AsyncStorage.setItem(toKey, waiting);

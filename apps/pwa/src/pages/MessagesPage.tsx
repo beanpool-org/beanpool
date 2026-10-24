@@ -25,13 +25,13 @@ import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
-import { GROUP_CHAT_NO_PHOTOS_TEXT } from '../lib/group-chat-lines';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
     chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
-    groupLineShown, groupRemovedRuns, type GroupLineShown, type OpenedGroupThread,
+    groupLineShown, groupRemovedRuns, getDecryptedGroupAttachment, GROUP_CHAT_OLD_NODE_NOTICE, type GroupLineShown, type OpenedGroupThread,
 } from '../lib/group-chat-lines';
+import { resizePhotoFile } from '../lib/photo-resize';
 import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -40,7 +40,7 @@ import { registerLivePostTie, conversationTie } from '../lib/live-posts';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
-import { imageFromTransfer, dragCarriesFile, chatImageRefusal } from '../lib/chat-image-transfer';
+import { imageFromTransfer, dragCarriesFile, chatImageRefusal, NODE_READABLE_NO_PHOTOS_TEXT } from '../lib/chat-image-transfer';
 import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
@@ -223,6 +223,33 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
         })();
         return () => { active = false; };
     }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex]);
+    return <ChatPhotoShown uri={uri} failed={failed} />;
+}
+
+/**
+ * A locked group chat's photo (DESIGN-group-chat-photos-fable.md §2.3), opened once per line, signer and epoch by `open`
+ * (lib/group-chat-lines.ts getDecryptedGroupAttachment): only after its words opened, under the key and signer that opened
+ * them, so no other line's, chat's or sender's picture can stand in for it. Drawn as a DM's photo is.
+ */
+function GroupChatImageBubble({ photoKey, open }: { photoKey: string; open: () => Promise<string | null> }) {
+    const [uri, setUri] = useState<string | null>(null);
+    const [failed, setFailed] = useState(false);
+    const openRef = useRef(open);
+    openRef.current = open;
+    useEffect(() => {
+        let active = true;
+        setUri(null);
+        setFailed(false);
+        openRef.current()
+            .then((u) => { if (active) { if (u) setUri(u); else setFailed(true); } })
+            .catch(() => { if (active) setFailed(true); });
+        return () => { active = false; };
+    }, [photoKey]);
+    return <ChatPhotoShown uri={uri} failed={failed} />;
+}
+
+/** A chat photo in its bubble: the picture once opened, "Loading image…" until then, or "🔒 Image unavailable". */
+function ChatPhotoShown({ uri, failed }: { uri: string | null; failed: boolean }) {
     if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>{t('🔒 Image unavailable')}</span>;
     if (!uri) return <span style={{ opacity: 0.6 }}>{t('Loading image…')}</span>;
     return <img src={uri} alt="" style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />;
@@ -301,8 +328,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const activeConvIdRef = useRef<string | null>(null);
     const messageRequestIdRef = useRef<number>(0);
     // A picture that arrived by paste or drop, waiting for Send or Cancel. 📎 has no
-    // preview: picking a file from a dialog is already a deliberate act.
-    const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string | null } | null>(null);
+    // preview: picking a file from a dialog is already a deliberate act. It keeps the id a
+    // group's photo line goes under, so a Send again after a lost answer is stored once.
+    const [pendingImage, setPendingImage] = useState<{ file: File; previewUrl: string | null; clientId: string } | null>(null);
     // Why the last paste or drop went nowhere — shown inline above the composer.
     const [imageNotice, setImageNotice] = useState<string | null>(null);
     // The node's own words when it refused a message or a new conversation: a new account's limit (429
@@ -339,6 +367,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // This group's chat as opened here, once its answer has come (never the last conversation's).
     const openGroup = isGroupChat && groupChat?.id === activeConv?.id ? groupChat : null;
     const groupLocked = !!openGroup && (openGroup.nodeSaysLocked || openGroup.seenLocked);
+    // Why this group chat takes no photo, once its answer is in: it isn't locked here (a node from before locked chats, or
+    // an answer that didn't come; DESIGN-group-chat-photos-fable.md §2.6), and a group's photo is only ever sent sealed.
+    const groupPhotoRefusal = openGroup && !groupLocked
+        ? groupChatNotice({ nodeSaysLocked: false, seenLocked: false, chatError: openGroup.answer ? null : openGroup.error })
+        : null;
     const shownMessages = useMemo(() => {
         if (isDmThread) return dmThreadInShownOrder(messages);
         // A group chat draws nothing until its own answer is in: never another chat's lines under its name.
@@ -962,25 +995,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * from a browser that never saw this group locked; otherwise refused with a sentence, the words kept in the composer.
      */
     async function sendInGroup(conv: Conversation, wasEditing: ApiMessage | null): Promise<void> {
-        const ring = groupRing(conv.id);
-        let chat: GroupChatAnswer | null = null;
-        let chatErr: unknown = null;
-        try {
-            chat = await getGroupChat(conv.id, 1);
-        } catch (e) {
-            chatErr = e;
-        }
-        // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
-        if (holdConversation({ id: conv.id, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), chat?.messages).type === 'dm') {
-            setChatRefusal(GROUP_CHAT_IS_DM_TEXT);
-            await loadMessages(conv.id);
-            return;
-        }
-        const plan = await groupChatSendPlan(ring, chat, chatErr);
-        if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return; }
-        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? t(GROUP_CHAT_WORDS.closed) : t(GROUP_CHAT_WORDS.readOnly)); return; }
+        const check = await groupSendCheck(conv);
+        if (!check) return;
+        const { plan, chat, chatErr } = check;
         const text = draft.trim();
-        if (plan.kind === 'readable') {
+        if (plan === 'readable') {
             // A node from before locked chats, and a browser that never saw this group locked (§14.3): as it always was.
             const { ciphertext, nonce } = encodePlaintext(text);
             if (wasEditing) await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
@@ -998,10 +1017,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     });
                 }
             } catch (e) {
-                if (e instanceof GroupChatKeyError) { setChatRefusal(e.message); return; }
-                // The node refuses this member the keys (a removal, or a node that won't say): nothing readable went.
-                if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { setChatRefusal(heldGroupRefusal(chat, chatErr)); return; }
-                if (e instanceof GroupKeysRequestError) { setChatRefusal(e.message); return; }
+                if (saidGroupRefusal(e, chat, chatErr)) return;
                 throw e;
             }
         }
@@ -1010,6 +1026,77 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         setEditingMessage(null);
         setChatRefusal(null);
         await loadMessages(conv.id);
+    }
+
+    /**
+     * Before a line, an edit or a photo goes to a group's chat: its chat answer read again, and what may go
+     * (lib/group-chat-lines.ts groupChatSendPlan). Null when nothing may, its sentence then said in place: a DM the node
+     * calls a group's chat (the page reopens it as the DM), the plan's refusal, or a chat that takes no new lines.
+     */
+    async function groupSendCheck(conv: Conversation): Promise<{ plan: 'seal' | 'readable'; chat: GroupChatAnswer | null; chatErr: unknown } | null> {
+        const ring = groupRing(conv.id);
+        let chat: GroupChatAnswer | null = null;
+        let chatErr: unknown = null;
+        try {
+            chat = await getGroupChat(conv.id, 1);
+        } catch (e) {
+            chatErr = e;
+        }
+        // A DM the node calls a group's chat (finding 1): nothing leaves by the group route; the page reopens it as the DM.
+        if (holdConversation({ id: conv.id, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), chat?.messages).type === 'dm') {
+            setChatRefusal(GROUP_CHAT_IS_DM_TEXT);
+            await loadMessages(conv.id);
+            return null;
+        }
+        const plan = await groupChatSendPlan(ring, chat, chatErr);
+        if (plan.kind === 'refuse') { setChatRefusal(plan.sentence); return null; }
+        if (chat && chat.canPost === false) { setChatRefusal(chat.readOnly ? t(GROUP_CHAT_WORDS.closed) : t(GROUP_CHAT_WORDS.readOnly)); return null; }
+        return { plan: plan.kind, chat, chatErr };
+    }
+
+    /** A sealed send's refusal said in place (true); false for anything else, which is the caller's to show. */
+    function saidGroupRefusal(e: unknown, chat: GroupChatAnswer | null, chatErr: unknown): boolean {
+        if (e instanceof GroupChatKeyError) { setChatRefusal(e.message); return true; }
+        // The node refuses this member the keys (a removal, or a node that won't say): nothing readable went.
+        if (e instanceof GroupKeysRequestError && (e.status === 403 || e.status === 404)) { setChatRefusal(heldGroupRefusal(chat, chatErr)); return true; }
+        if (e instanceof GroupKeysRequestError) { setChatRefusal(e.message); return true; }
+        return false;
+    }
+
+    /**
+     * A photo in a group's chat (DESIGN-group-chat-photos-fable.md §2.2): fitted within 800 px on its longest side
+     * (lib/photo-resize.ts, the rule for every photo; a DM's keeps its 1000 px until that is decided), then its caption
+     * sealed as part 'body' and the photo as part 'attachment' under the line's one key and the keyring's epoch, both sealed
+     * again on a 409 (lib/group-chat-lines.ts sendSealedGroupLine). Only ever sealed: a node from before locked chats gets
+     * none (§2.6). Every refusal is said above the box, the picture kept; not optimistic, as a DM photo isn't.
+     */
+    async function sendPhotoInGroup(conv: Conversation, file: File, caption: string, clientId: string): Promise<boolean> {
+        setSending(true);
+        try {
+            const check = await groupSendCheck(conv);
+            if (!check) return false;
+            if (check.plan === 'readable') { setChatRefusal(GROUP_CHAT_OLD_NODE_NOTICE); return false; }
+            const dataUri = await resizePhotoFile(file).catch(() => { throw new Error(t('Could not load image')); });
+            const newest = [...shownMessages].reverse().find((m) => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
+            try {
+                await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
+                    groupId: groupIdKey(conv.id), text: caption, photo: dataUri, clientId, replyToId: replyToMessage?.id ?? null, after: newest?.id ?? null,
+                    mentionCandidates: (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign })),
+                });
+            } catch (e) {
+                if (saidGroupRefusal(e, check.chat, check.chatErr)) return false;
+                throw e;
+            }
+            setReplyToMessage(null);
+            setChatRefusal(null);
+            await loadMessages(conv.id);
+            return true;
+        } catch (err: any) {
+            setChatRefusal(nodeRefusal(err)?.message ?? (err?.message || t('Failed to send image')));
+            return false;
+        } finally {
+            setSending(false);
+        }
     }
 
     /**
@@ -1096,18 +1183,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     /**
-     * The one path a photo leaves by — 📎, paste and drop all end up here, and
+     * The one path a photo leaves by — 📎, paste and drop all end up here. In a DM
      * nothing inside it changed: resize, encrypt the blob as the attachment,
-     * encrypt the caption as the message body. Returns whether it got away, so a
-     * caller holding a draft knows whether to clear it.
+     * encrypt the caption as the message body. A group's goes sealed as the group's
+     * (sendPhotoInGroup). Returns whether it got away, so a caller holding a draft
+     * knows whether to clear it. `clientId`: the id a waiting group photo keeps.
      */
-    async function handleSendImage(file: File, caption = ''): Promise<boolean> {
+    async function handleSendImage(file: File, caption = '', clientId?: string): Promise<boolean> {
         if (!activeConv) return false;
-        if (activeConv.type !== 'dm') { alert(t('Photos can only be sent in direct messages.')); return false; }
-        // A group seen locked here takes no photo whatever the node calls it; an unreadable lock store sends none to a
-        // conversation this browser doesn't know as a DM (lib/group-hold.ts).
-        const route = await sendRouteOf(identity.publicKey, activeConv.id);
-        if (route !== 'as-typed') { setChatRefusal(route === 'group' ? GROUP_CHAT_NO_PHOTOS_TEXT : GROUP_HOLD_UNREAD_TEXT); return false; }
+        // A group's chat, and a group seen locked here whatever the node now calls it (lib/group-hold.ts): sealed as the
+        // group's photo under its keyring's epoch or not sent, never DM-sealed to whoever the node lists. An unreadable lock
+        // store sends none to a conversation this browser doesn't know as a DM.
+        const route = activeConv.type === 'group_thread' ? 'group' : await sendRouteOf(identity.publicKey, activeConv.id);
+        if (route === 'group') return sendPhotoInGroup({ ...activeConv, type: 'group_thread' }, file, caption, clientId ?? newDmMessageId());
+        if (route === 'refuse') { setChatRefusal(GROUP_HOLD_UNREAD_TEXT); return false; }
+        // An event's or an enterprise's chat: the node reads it by design, so it takes no photo (design §4).
+        if (activeConv.type !== 'dm') { setChatRefusal(NODE_READABLE_NO_PHOTOS_TEXT); return false; }
         setSending(true);
         try {
             const dataUri = await resizeImageToDataUri(file, 1000, 0.7);
@@ -1156,13 +1247,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     function offerImage(file: File) {
         if (!activeConv) return;
 
-        // Groups and event chats have no photos — the node refuses them, so we
-        // never start. Say so where the person is looking and send nothing. (A DM
-        // whose other person isn't known yet still opens the preview: Send says it
-        // couldn't be locked and keeps the picture there.)
-        if (activeConv.type !== 'dm') {
+        // A group's photo is sealed in this browser (sendPhotoInGroup), so a group chat
+        // not locked here takes none: its own notice says why (groupPhotoRefusal).
+        // Nor does a chat the node reads by design, an enterprise's (design §4). Say
+        // so where the person is looking and send nothing. (A group chat whose answer
+        // isn't in yet, and a DM whose other person isn't known yet, still open the
+        // preview: Send checks again, and says why nothing went, keeping the picture.)
+        if (activeConv.type === 'group_thread') {
+            if (groupPhotoRefusal) {
+                clearPendingImage();
+                setImageNotice(groupPhotoRefusal);
+                return;
+            }
+        } else if (activeConv.type !== 'dm') {
             clearPendingImage();
-            setImageNotice(t('Photos can only be sent in direct messages'));
+            setImageNotice(NODE_READABLE_NO_PHOTOS_TEXT);
             return;
         }
 
@@ -1187,14 +1286,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (prev?.previewUrl) {
                 try { URL.revokeObjectURL(prev.previewUrl); } catch {}
             }
-            return { file, previewUrl };
+            return { file, previewUrl, clientId: newDmMessageId() };
         });
     }
 
     /** Send the previewed picture, carrying whatever is in the composer as its caption. */
     async function sendPendingImage() {
         if (!pendingImage || sending) return;
-        const sent = await handleSendImage(pendingImage.file, draft.trim());
+        const sent = await handleSendImage(pendingImage.file, draft.trim(), pendingImage.clientId);
         if (!sent) return;
         clearPendingImage();
         setDraft('');   // a normal send clears the draft; so does this one
@@ -1245,6 +1344,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (!requestTakesPhoto(requestMode)) clearPendingImage();
     }, [requestMode]);
 
+    // So does one pasted into a group chat before its answer came, once that answer says the chat isn't locked here: the
+    // chat's notice says why in its place.
+    useEffect(() => {
+        if (!pendingImage || !groupPhotoRefusal) return;
+        clearPendingImage();
+        setImageNotice(groupPhotoRefusal);
+    }, [groupPhotoRefusal, pendingImage]);
+
     // What decryptMessage() puts in place of a body it could not read. A photo's
     // body is its caption, so these must never be shown as one.
     const UNREADABLE_BODIES = [t('[Encrypted — update your app to read]'), t('[Unable to decrypt this message]'), chatLineWords(DM_LINE_NOT_VERIFIED_TEXT)];
@@ -1294,7 +1401,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (g) {
             // The name and words of a line that is nobody's, or a tombstone's, are the app's own: in the member's language.
             const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : chatAuthorWords(g.name ?? GROUP_LINE_UNVERIFIED_NAME);
-            const text = g.text === null ? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId) : g.unattributed || g.nodeLine ? chatLineWords(g.text) : g.text;
+            // A photo line quotes as a DM's does: "🔒 Photo" (DESIGN-group-chat-photos-fable.md §2.3).
+            const text = g.text === null ? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId)
+                : g.unattributed || g.nodeLine ? chatLineWords(g.text) : parent.type === 'image' ? t('🔒 Photo') : g.text;
             return { author, text, note: null, named: false };
         }
         const view = lineViews?.get(parent.id);
@@ -2202,6 +2311,27 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     })()}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
+                                            if (groupLine && openGroup) {
+                                                // A locked group chat's photo line (DESIGN-group-chat-photos-fable.md §2.3): its words
+                                                // opened, so its photo is fetched and opened under the same key and signer, with its
+                                                // caption under it as a DM photo's is.
+                                                const view = openGroup.thread?.views.get(msg.id);
+                                                return (
+                                                    <>
+                                                        <GroupChatImageBubble
+                                                            photoKey={`${msg.id}|${view?.signer ?? ''}|${view?.epoch ?? ''}`}
+                                                            open={() => getDecryptedGroupAttachment(groupKeysNet, identity, indexedDbGroupLockStore, {
+                                                                groupId: groupIdKey(activeConv.id), line: { ...msg, type: 'image' }, view,
+                                                            })}
+                                                        />
+                                                        {groupLine.text && (
+                                                            <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                                                {groupLine.text}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                );
+                                            }
                                             const ctx = dmCtxFor(activeConv);
                                             if (!ctx) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>{t('🔒 Image')}</span>;
                                             // An image message's body is its caption, which is
@@ -2671,7 +2801,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         borderTop: '1px solid var(--border-primary)',
                         background: 'var(--bg-secondary)',
                     }}>
-                        {activeConv.type === 'dm' && requestTakesPhoto(requestMode) && (
+                        {/* A DM's photo, and a locked group's (sealed here); none in an old node's group chat (design §2.6). */}
+                        {(activeConv.type === 'dm' || groupLocked) && requestTakesPhoto(requestMode) && (
                             <label title={t('Send photo')} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: '40px', height: '40px', borderRadius: '50%',

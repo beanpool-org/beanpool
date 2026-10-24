@@ -294,9 +294,11 @@ describe('a photo line: its caption and its photo under one message key (DESIGN-
         const asked = () => node.calls.filter((c) => c.path.includes('/attachment')).length;
         const before = asked();
         const v = thread.views.get(p2.id)!;
-        for (const view of [{ ...v, waitingKey: true }, { ...v, unverified: true }, { ...v, hidden: true }, { ...v, signer: null }, { ...v, epoch: null }, undefined]) {
+        for (const view of [{ ...v, waitingKey: true }, { ...v, unverified: true }, { ...v, hidden: true }, { ...v, signer: null }, { ...v, epoch: null }]) {
             expect(await open(p2, view)).toBeNull();
         }
+        // A line the thread has no view of (not opened yet).
+        expect(await getDecryptedGroupAttachment(node.as(ben.publicKey), ben, store, { groupId: G, line: p2, view: undefined })).toBeNull();
         // A words line is no photo line, whatever its view.
         expect(await open({ ...p2, type: 'text' })).toBeNull();
         expect(asked()).toBe(before);

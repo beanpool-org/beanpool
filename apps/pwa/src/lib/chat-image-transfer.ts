@@ -15,7 +15,8 @@
 /**
  * The biggest source file a paste or a drop will take on.
  *
- * Everything is re-encoded to a 1000px-wide JPEG before it is sent, so this is
+ * Everything is re-encoded to a smaller JPEG before it is sent (1000px wide in a
+ * DM, 800px on its longest side in a group chat), so this is
  * not about what the node will accept — it is the point past which decoding the
  * original in a canvas stops being something a modest phone or an old laptop can
  * do. A pasted screenshot is never near it; a dropped camera RAW can be.
@@ -24,6 +25,13 @@ export const MAX_CHAT_IMAGE_BYTES = 20 * 1024 * 1024;
 
 /** How that limit is written where a person reads it. */
 export const MAX_CHAT_IMAGE_LABEL = '20 MB';
+
+/**
+ * Why a chat the community's server reads by design (an event's, an enterprise's) takes no photo: one there would be
+ * stored readable on the node and in its backups (DESIGN-group-chat-photos-fable.md §4). Translated where it is shown
+ * (lib/chat-line-words.ts).
+ */
+export const NODE_READABLE_NO_PHOTOS_TEXT = "Photos can't be sent in this chat: the community's server can read it.";
 
 /** What we need of a `DataTransfer`, so a test can hand us a plain object. */
 export interface ImageTransferLike {

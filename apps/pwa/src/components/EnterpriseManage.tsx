@@ -15,7 +15,7 @@
  *
  * Never a false success: a change shows as made only once the node says so.
  */
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
     ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, SHOP_KINDS, t, tn,
     type ShopKind,
@@ -23,6 +23,7 @@ import {
 import { addEnterpriseShopOffers, changeEnterpriseFace, changeEnterpriseShop, featureOffer } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { resizePhotoFile } from '../lib/photo-resize';
+import { AvatarPresetPicker } from './AvatarPresetPicker';
 import {
     faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, shopPhotoOf, type Face, type ShopfrontListing,
 } from '../lib/shopfront';
@@ -54,14 +55,21 @@ export function faceOf(detail: any): Face {
     };
 }
 
-export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, onSaved }: {
+export function EnterpriseFace({
+    treasury,
+    detail,
+    project = detail?.lifecycle === 'bounded',
+    lead = detail?.isLeadOrSoleKeeperOrAdmin ?? false,
+    shopEditable = false,
+    onSaved,
+}: {
     treasury: string;
     detail: any;
-    project: boolean;
+    project?: boolean;
     /** Its lead keeper, sole keeper or a node admin (the detail's isLeadOrSoleKeeperOrAdmin): name and purpose are theirs. */
-    lead: boolean;
+    lead?: boolean;
     /** A keeper, who may change its shop (a node admin who keeps none of it may not). */
-    shopEditable: boolean;
+    shopEditable?: boolean;
     /** Reads the enterprise again: after a Save, and after one whose profile went but whose shop change didn't. */
     onSaved: () => void;
 }) {
@@ -71,12 +79,16 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [picking, setPicking] = useState(false);
+    // Each picture's latest pick: a resize that ends after a newer pick (another photo, or a preset) is dropped.
+    const pickSeq = useRef({ avatar: 0, banner: 0 });
+    const [pickingWhich, setPickingWhich] = useState({ avatar: false, banner: false });
+    const picking = pickingWhich.avatar || pickingWhich.banner;
 
     const changes = faceChanges(was, form, { lead, shop: shopEditable });
     const dirty = Object.keys(changes.profile).length > 0 || Object.keys(changes.shop).length > 0;
     const set = (patch: Partial<Face>) => { setForm((f) => ({ ...f, ...patch })); setSaved(false); setError(null); };
-    const logo = form.avatar ?? resolveAvatarUrl(detail?.avatar);
+    const logoRaw = form.avatar !== undefined ? form.avatar : detail?.avatar;
+    const logo = resolveAvatarUrl(logoRaw);
     // Its banner as it will be: the photo just chosen, none once taken down, else the one its shop has.
     const heldBanner = shopPhotoOf(detail?.shop);
     const banner = form.banner === null ? null : form.banner ?? resolveAvatarUrl(heldBanner);
@@ -84,16 +96,23 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
     // Both pictures are made 800 px here before they go (lib/photo-resize.ts; memory: photos stay 800px).
     const pick = async (file: File | undefined, which: 'avatar' | 'banner') => {
         if (!file) return;
-        setPicking(true);
+        const n = ++pickSeq.current[which];
+        setPickingWhich((p) => ({ ...p, [which]: true }));
         setError(null);
         try {
             const picture = await resizePhotoFile(file);
+            if (n !== pickSeq.current[which]) return;
             set(which === 'avatar' ? { avatar: picture } : { banner: picture });
         } catch {
-            setError(t("That picture couldn't be read. Try another."));
+            if (n === pickSeq.current[which]) setError(t("That picture couldn't be read. Try another."));
         } finally {
-            setPicking(false);
+            if (n === pickSeq.current[which]) setPickingWhich((p) => ({ ...p, [which]: false }));
         }
+    };
+    const pickPreset = (uri: string) => {
+        pickSeq.current.avatar++;
+        setPickingWhich((p) => ({ ...p, avatar: false }));
+        set({ avatar: uri });
     };
     // Taking down a photo only just chosen leaves the shop as it is when it has none.
     const removeBanner = () => set({ banner: heldBanner ? null : undefined });
@@ -161,6 +180,10 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
                         />
                     </label>
                 </div>
+                <AvatarPresetPicker
+                    selected={form.avatar ?? detail?.avatar}
+                    onSelect={pickPreset}
+                />
             </div>
 
             {shopEditable && (
@@ -410,3 +433,5 @@ export function EnterpriseFeatured({ treasury, shopId, listings, onShopOpened, o
         </section>
     );
 }
+
+export { EnterpriseFace as EnterpriseManage };

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
@@ -8,8 +8,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 export { ErrorBoundary };
 import { StatusBar } from 'expo-status-bar';
 import { createEnterpriseApi } from '../utils/db';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
+import { MemberAvatar } from '../components/MemberAvatar';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
@@ -57,6 +57,7 @@ export default function ProposeProjectModal() {
     const [submitting, setSubmitting] = useState(false);
     const submittingRef = useRef(false);
     const [photos, setPhotos] = useState<string[]>([]);
+    const [pickingLogo, setPickingLogo] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
     const [validationToast, setValidationToast] = useState('');
     const keyboardVisible = useKeyboardState(s => s.isVisible);
@@ -287,7 +288,7 @@ export default function ProposeProjectModal() {
                             {photos.map((uri, idx) => (
                                 uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                     <View key={idx} style={{ position: 'relative' }}>
-                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.surface.subtle }} accessibilityLabel={t('Its logo')} />
+                                        <MemberAvatar avatarUrl={uri} pubkey="" callsign={title || t('Logo')} size={80} />
                                         <Pressable
                                             onPress={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
                                             style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.feedback.danger.solid, borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
@@ -301,25 +302,7 @@ export default function ProposeProjectModal() {
                             ))}
                             {photos.length < 1 && (
                                 <Pressable
-                                    onPress={async () => {
-                                        const res = await ImagePicker.launchImageLibraryAsync({
-                                            mediaTypes: ['images'],
-                                            allowsEditing: true,
-                                            aspect: [1, 1],
-                                            quality: 0.8,
-                                            base64: false,
-                                        });
-                                        if (!res.canceled && res.assets[0].uri) {
-                                            const manipResult = await ImageManipulator.manipulateAsync(
-                                                res.assets[0].uri,
-                                                [{ resize: { width: 800 } }],
-                                                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                                            );
-                                            if (manipResult.base64) {
-                                                setPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                                            }
-                                        }
-                                    }}
+                                    onPress={() => setPickingLogo(true)}
                                     style={{ width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.border.default, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.app }}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Choose a logo')}
@@ -328,6 +311,13 @@ export default function ProposeProjectModal() {
                                 </Pressable>
                             )}
                         </View>
+                        <AvatarPickerSheet
+                            visible={pickingLogo}
+                            title={t('Its logo')}
+                            colors={colors}
+                            onClose={() => setPickingLogo(false)}
+                            onSelectImage={(uri) => setPhotos([uri])}
+                        />
                     </View>
 
                 </ScrollView>

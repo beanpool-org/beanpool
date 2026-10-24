@@ -319,7 +319,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         mockDb.remoteCallsign = 'Marty party';
 
         await act(async () => {
-            root.render(createElement(SettingsScreen));
+            root.render(createElement(SettingsScreen) as any);
         });
         await settle();
 
@@ -344,7 +344,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         mockDb.remoteCallsign = null; // offline / unreachable
 
         await act(async () => {
-            root.render(createElement(SettingsScreen));
+            root.render(createElement(SettingsScreen) as any);
         });
         await settle();
 
@@ -359,7 +359,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         mockDb.remoteCallsign = 'Old Stale Marty';
 
         await act(async () => {
-            root.render(createElement(SettingsScreen));
+            root.render(createElement(SettingsScreen) as any);
         });
         await settle();
 
@@ -398,7 +398,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         }) as typeof fetch;
 
         await act(async () => {
-            root.render(createElement(SettingsScreen));
+            root.render(createElement(SettingsScreen) as any);
         });
         await settle();
 
@@ -446,9 +446,9 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
                 isOpen: true,
                 groupId: 'test-group',
                 groupName: 'Test Crew',
-                existing: new Set(),
+                existing: new Set<string>(),
                 onClose: () => {},
-            }));
+            }) as any);
         });
         await settle();
 

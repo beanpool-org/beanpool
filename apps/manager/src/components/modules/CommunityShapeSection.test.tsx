@@ -36,10 +36,34 @@ function makeDefaultShape(overrides: Partial<ShapeSettings> = {}, meta: Partial<
                 actor: 'o'.repeat(64),
                 actorCallsign: 'ada',
                 actorRole: 'owner',
-                setting: 'Who can join',
-                from: 'any member invites',
-                to: 'only admins invite',
+                setting: 'join',
+                from: 'members',
+                to: 'admins',
                 note: 'Summer visitors',
+            },
+            {
+                id: 'log-2',
+                kept: 'community_settings_log',
+                at: '2026-10-23T15:00:00.000Z',
+                actor: 'owner:password',
+                actorCallsign: null,
+                actorRole: 'owner',
+                setting: 'shareEmail',
+                from: 'off',
+                to: 'on',
+                note: null,
+            },
+            {
+                id: 'log-3',
+                kept: 'known_floor_log',
+                at: '2026-10-23T16:00:00.000Z',
+                actor: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+                actorCallsign: null,
+                actorRole: 'owner',
+                setting: 'knownFloor.cap',
+                from: '2000',
+                to: '3000',
+                note: null,
             },
         ],
         kindOnly: [],
@@ -542,8 +566,16 @@ describe('CommunityShapeSection — Audit log', () => {
 
         const logBlock = screen.getByTestId('shape-audit-log');
         expect(logBlock).toHaveTextContent('@ada (owner)');
-        expect(logBlock).toHaveTextContent('Who can join: any member invites → only admins invite');
+        expect(logBlock).toHaveTextContent('Who can join: Any member invites → Only admins invite');
         expect(logBlock).toHaveTextContent('“Summer visitors”');
+
+        // Password session displays "the owner (password)" and On/Off
+        expect(logBlock).toHaveTextContent('the owner (password)');
+        expect(logBlock).toHaveTextContent('Share email: Off → On');
+
+        // Raw key without callsign is shortened
+        expect(logBlock).toHaveTextContent('abcdef01… (owner)');
+        expect(logBlock).toHaveTextContent('Floor cap: 2000 → 3000');
     });
 });
 

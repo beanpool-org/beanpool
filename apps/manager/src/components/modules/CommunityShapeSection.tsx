@@ -11,6 +11,7 @@ import {
     type ShapeLock,
     type JoinState,
     type KnownFloorShape,
+    type ShapeLogLine,
     fetchCommunityShape,
     updateCommunityShape,
     getConsequenceSentence,
@@ -974,28 +975,34 @@ export function CommunityShapeSection({
                     <p className="text-xs text-nature-400 m-0">{t('No changes recorded yet.')}</p>
                 ) : (
                     <div data-testid="shape-audit-log" className="space-y-2">
-                        {log.slice(0, 50).map((entry) => (
-                            <div key={`${entry.kept}-${entry.id}`} className="text-xs text-nature-300 py-1 border-b border-nature-800/50 break-words leading-relaxed">
-                                <span className="font-mono text-nature-400">
-                                    {formatLogDate(entry.at)}
-                                </span>{' '}
-                                ·{' '}
-                                <span className="font-semibold text-white">
-                                    {entry.actorCallsign ? `@${entry.actorCallsign}` : entry.actor}
-                                </span>
-                                {entry.actorRole && (
-                                    <span className="text-nature-400"> ({entry.actorRole})</span>
-                                )}{' '}
-                                ·{' '}
-                                <span className="text-white">{entry.setting}</span>
-                                {entry.from !== null && entry.to !== null && (
-                                    <span>: {entry.from} → {entry.to}</span>
-                                )}
-                                {entry.note && (
-                                    <span className="text-nature-400 italic"> · &ldquo;{entry.note}&rdquo;</span>
-                                )}
-                            </div>
-                        ))}
+                        {log.slice(0, 50).map((entry) => {
+                            const actor = logActorDisplay(entry);
+                            const settingName = logSettingName(entry.setting);
+                            const fromVal = logValueDisplay(entry.setting, entry.from);
+                            const toVal = logValueDisplay(entry.setting, entry.to);
+                            return (
+                                <div key={`${entry.kept}-${entry.id}`} className="text-xs text-nature-300 py-1 border-b border-nature-800/50 break-words leading-relaxed">
+                                    <span className="font-mono text-nature-400">
+                                        {formatLogDate(entry.at)}
+                                    </span>{' '}
+                                    ·{' '}
+                                    <span className="font-semibold text-white">
+                                        {actor.name}
+                                    </span>
+                                    {actor.role && (
+                                        <span className="text-nature-400"> ({actor.role})</span>
+                                    )}{' '}
+                                    ·{' '}
+                                    <span className="text-white">{settingName}</span>
+                                    {entry.from !== null && entry.to !== null && (
+                                        <span>: {fromVal} → {toVal}</span>
+                                    )}
+                                    {entry.note && (
+                                        <span className="text-nature-400 italic"> · &ldquo;{entry.note}&rdquo;</span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -1038,6 +1045,53 @@ function visitorsDisplay(val: 'nothing' | 'listings' | 'open'): string {
         case 'open': return t('Open');
         default: return String(val);
     }
+}
+
+export function logActorDisplay(entry: ShapeLogLine): { name: string; role?: string } {
+    if (entry.actor === 'owner:password' || entry.actor === 'password') {
+        return { name: t('the owner (password)') };
+    }
+    if (entry.actorCallsign) {
+        return { name: `@${entry.actorCallsign}`, role: entry.actorRole ?? undefined };
+    }
+    const shortKey = entry.actor.length > 12 ? `${entry.actor.slice(0, 8)}…` : entry.actor;
+    return { name: shortKey, role: entry.actorRole ?? undefined };
+}
+
+export function logSettingName(setting: string): string {
+    const table: Record<string, string> = {
+        join: t('Who can join'),
+        wordsDoor: t('12 words at the open door'),
+        knocks: t('Requests to join'),
+        beans: t('Beans'),
+        knownFloor: t('Known floor for confirmed members'),
+        'knownFloor.on': t('Known floor for confirmed members'),
+        'knownFloor.floor': t('Confirmed members owe up to'),
+        'knownFloor.cap': t('Floor cap'),
+        dmRequests: t('First message from someone new'),
+        decisions: t('Community votes (Decisions)'),
+        listed: t('Listed in the BeanPool directory'),
+        shareLocation: t('Share location & radius'),
+        shareMemberCount: t('Share member count'),
+        shareEmail: t('Share email'),
+        sharePhone: t('Share phone'),
+        shareHealth: t('Share health'),
+        probation: t('Limits on new accounts'),
+        autoHide: t('Reported posts hidden automatically'),
+        autoHideReports: t('Reported posts hidden automatically'),
+        autoMute: t('Repeat offenders muted automatically'),
+    };
+    return table[setting] ?? setting;
+}
+
+export function logValueDisplay(setting: string, val: string | null): string {
+    if (val === null || val === undefined) return '';
+    if (setting === 'join') {
+        return joinDisplay(val as JoinState);
+    }
+    if (val === 'on' || val === 'true') return t('On');
+    if (val === 'off' || val === 'false') return t('Off');
+    return val;
 }
 
 function formatLogDate(isoDate: string): string {

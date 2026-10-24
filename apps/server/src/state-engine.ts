@@ -10742,14 +10742,22 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
  * How often an invitation to one group pushes the member it names: a convenor who withdraws it and invites them again,
  * over and over, sends one push an hour, not one each time (as a deal made again does, engine/escrow.ts
  * REPEAT_DEAL_PUSH_EVERY_MS). The invitation itself is as any other's: on the member's Home and in Commons. In memory: a
- * restart may send one more.
+ * restart may send one more. It keeps at most GROUP_INVITE_PUSHES_KEPT: past that, even within the hour, the oldest goes
+ * (an invitation wave can't grow it without end), and that pair may push once more.
  */
 export const REPEAT_GROUP_INVITE_PUSH_EVERY_MS = 60 * 60 * 1000;
+export const GROUP_INVITE_PUSHES_KEPT = 10_000;
+/** `<group id>|<member>` → when it last pushed. In the order the pushes went, so the first key is the oldest. */
 const groupInvitePushSentAt = new Map<string, number>();
 
 /** For a suite: forget when each invitation last pushed, as a restart does. */
 export function resetGroupInvitePushes(): void {
     groupInvitePushSentAt.clear();
+}
+
+/** For a suite: how many invitations' last pushes are kept. */
+export function groupInvitePushesKept(): number {
+    return groupInvitePushSentAt.size;
 }
 
 /**
@@ -10766,9 +10774,17 @@ function pushGroupInvite(groupId: string, convenorPubkey: string, targetPubkey: 
     const now = Date.now();
     const last = groupInvitePushSentAt.get(key);
     if (last !== undefined && now - last < REPEAT_GROUP_INVITE_PUSH_EVERY_MS) return;
-    if (groupInvitePushSentAt.size >= 10_000) {
-        for (const [k, t] of groupInvitePushSentAt) if (now - t >= REPEAT_GROUP_INVITE_PUSH_EVERY_MS) groupInvitePushSentAt.delete(k);
+    if (groupInvitePushSentAt.size >= GROUP_INVITE_PUSHES_KEPT) {
+        // Oldest first, so the expired ones are a run at the front: the scan stops at the first from the last hour.
+        for (const [k, t] of groupInvitePushSentAt) {
+            if (now - t < REPEAT_GROUP_INVITE_PUSH_EVERY_MS) break;
+            groupInvitePushSentAt.delete(k);
+        }
+        const oldest = groupInvitePushSentAt.keys().next().value;
+        if (groupInvitePushSentAt.size >= GROUP_INVITE_PUSHES_KEPT && oldest !== undefined) groupInvitePushSentAt.delete(oldest);
     }
+    // Moved to the end, not updated where it sits: an hour-old pair pushing again is now the newest.
+    groupInvitePushSentAt.delete(key);
     groupInvitePushSentAt.set(key, now);
     const groupName = (db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as { name: string } | undefined)?.name ?? 'A group';
     dispatchPushNotification(

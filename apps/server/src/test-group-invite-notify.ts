@@ -17,6 +17,8 @@
  *  5. What sends no push: an invitation already open, one withdrawn and made again within the hour (one push an hour), a
  *     member who has blocked the convenor (the invitation still stands, and shows), a member with chat notifications
  *     off, and someone who had asked to join and is admitted by the invitation.
+ *  6. The one-push-an-hour guard keeps at most GROUP_INVITE_PUSHES_KEPT: a wave of more invitations within the hour
+ *     leaves it at that (it doesn't grow without end), and the newest pair is still held to one push.
  *
  * Expo is answered here: nothing leaves this machine.
  */
@@ -28,7 +30,7 @@ delete process.env.NODE_ROLE;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, registerPushToken } from './state-engine.js';
+import { initStateEngine, registerPushToken, inviteGroupMember, groupInvitePushesKept, GROUP_INVITE_PUSHES_KEPT } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { addBlocks } from './engine/member-blocks.js';
@@ -261,6 +263,34 @@ async function main(): Promise<void> {
     await settle();
     assert(admitted.body?.member?.status === 'active' && pushesTo(ray).length === 0 && !inviteLine(await home(ray)),
         `inviting Ray, who had asked, admits him: no invitation push and no line (got ${admitted.body?.member?.status}, ${pushesTo(ray).length})`);
+
+    // ── 6. An invitation wave: the guard stays at its size ─────────────────────────────────────────────────────
+    // Straight to the engine, not over HTTPS: the size is what's measured, and 10,000 signed round trips would only be slow.
+    const wave = makeGroup('Big Choir', 'invite_only', cleo);
+    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`);
+    const many: string[] = [];
+    db.transaction(() => {
+        for (let i = 0; i < GROUP_INVITE_PUSHES_KEPT + 50; i++) {
+            const key = crypto.randomBytes(32).toString('hex');
+            insertMember.run(key, `Wave${i}`, new Date(Date.now() - 30 * DAY).toISOString());
+            many.push(key);
+        }
+    })();
+    for (const [i, key] of many.entries()) {
+        inviteGroupMember(wave, cleo.pubKeyHex, key);
+        if (i % 200 === 0) await new Promise(r => setImmediate(r));
+    }
+    const ivy = makeMember('Ivy');
+    expo.length = 0;
+    await invite(wave, cleo, ivy);
+    await settle(() => pushesTo(ivy).length > 0);
+    assert(groupInvitePushesKept() === GROUP_INVITE_PUSHES_KEPT && pushesTo(ivy).length === 1,
+        `${many.length + 1} invitations within the hour: the guard keeps ${GROUP_INVITE_PUSHES_KEPT} (got ${groupInvitePushesKept()}), and Ivy, the last, is told (got ${pushesTo(ivy).length})`);
+    await removeFrom(wave, cleo, ivy);
+    await invite(wave, cleo, ivy);
+    await settle();
+    assert(pushesTo(ivy).length === 1 && groupInvitePushesKept() === GROUP_INVITE_PUSHES_KEPT,
+        `the newest pair is still held: Ivy, withdrawn and invited again, gets no second push (got ${pushesTo(ivy).length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

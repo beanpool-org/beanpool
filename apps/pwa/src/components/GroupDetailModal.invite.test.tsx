@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react';
 import { GroupDetailModal } from './GroupDetailModal';
-import { getGroup, getGroupMembers, getCommunityMe, inviteGroupMember, getMembers, joinGroup, type Group } from '../lib/api';
+import { getGroup, getGroupMembers, getCommunityMe, inviteGroupMember, getMembers, joinGroup, removeGroupMember, type Group } from '../lib/api';
 
 const ME = 'pk-marty';
 const BEN = 'pk-ben';
@@ -222,6 +222,34 @@ describe('Invite people on the web group sheet', () => {
         expect(screen.queryByTestId('group-invite-people')).toBeNull();
         fireEvent.click(accept);
         await waitFor(() => expect(joinGroup).toHaveBeenCalledWith('g-1'));
+    });
+
+    it('the person invited can decline: asked once, their own row goes, and the sheet closes (the group may be hidden from them now)', async () => {
+        vi.mocked(getGroup).mockImplementation(async () => ({ ...card(), viewerRole: 'member', viewerStatus: 'invited' }) as any);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Join the group to see who is here'), { code: 'join_to_see' }));
+        vi.mocked(removeGroupMember).mockResolvedValue({ success: true });
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const onClose = vi.fn();
+        const changed = vi.fn();
+        render(<GroupDetailModal group={{ ...card(), viewerRole: 'member', viewerStatus: 'invited' } as any} isOpen onClose={onClose} onMembershipChanged={changed} myPubkey={CAT} />);
+        const decline = await screen.findByTestId('group-decline-invite');
+        expect(decline).toHaveTextContent('Decline invitation');
+        // Asked first: Cancel leaves the invitation as it was.
+        fireEvent.click(decline);
+        expect(confirm).toHaveBeenCalledWith('Decline the invitation to martys group? Whoever invited you can invite you again.');
+        expect(removeGroupMember).not.toHaveBeenCalled();
+        fireEvent.click(decline);
+        await waitFor(() => expect(removeGroupMember).toHaveBeenCalledWith('g-1', CAT));
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(changed).toHaveBeenCalled();
+        expect(joinGroup).not.toHaveBeenCalled();
+        confirm.mockRestore();
+    });
+
+    it('no Decline for a member or a convenor: only an open invitation is declined', async () => {
+        open();
+        await screen.findByText('martys group');
+        expect(screen.queryByTestId('group-decline-invite')).toBeNull();
     });
 
     // Review of #1979, N1: without the roster the sheet can't tell who is in or asking, and an invitation to someone who

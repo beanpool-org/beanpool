@@ -39,7 +39,7 @@ import {
 } from '../../components/home/HomeCardBodies';
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
-    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
+    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
     type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
@@ -515,11 +515,14 @@ export default function HomeScreen() {
         return () => { focused.current = false; clearInterval(poll); setTuneOpen(false); };
     }, []));
 
-    // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst).
+    // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst): its
+    // member's own group invitations among them, which Needs you lists.
+    const meRef = useRef(identity?.publicKey);
+    meRef.current = identity?.publicKey;
     useEffect(() => {
         const bell = createDoorbellDebounce(() => {
             if (focused.current && AppState.currentState === 'active') void refreshRef.current('bell');
-        }, HOME_DOORBELL_SETTLE_MS);
+        }, HOME_DOORBELL_SETTLE_MS, undefined, data => isHomeDoorbellFor(data, meRef.current));
         const ws = DeviceEventEmitter.addListener('ws_activity', (data: unknown) => { if (focused.current) bell.ring(data); });
         const app = AppState.addEventListener('change', st => { if (st === 'active' && focused.current) void refreshRef.current('focus'); });
         return () => { bell.cancel(); ws.remove(); app.remove(); };

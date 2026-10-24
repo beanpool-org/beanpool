@@ -34,7 +34,7 @@ import { toolHomeCardIds } from '../tools/index';
 import type { ShopHomeCard } from './shop';
 import { eventHomeWhen } from './events';
 import {
-    NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
+    NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords, isOwnInviteChange,
     type NeedsYouConversation, type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget, type NeedsYouTransaction,
 } from './needs-you';
 
@@ -1238,6 +1238,14 @@ export function isHomeDoorbell(data: unknown): boolean {
 }
 
 /**
+ * The doorbells Home cares about for this member: the shared ones, and a change to one of their own group invitations
+ * (utils/needs-you.ts isOwnInviteChange), which Needs you lists: made, taken up, declined or withdrawn.
+ */
+export function isHomeDoorbellFor(data: unknown, me: string | null | undefined): boolean {
+    return isHomeDoorbell(data) || isOwnInviteChange(data, me);
+}
+
+/**
  * A debouncer for the doorbell: each bell pushes the read back to `settleMs` after the last one, so a burst costs one
  * read. Pure over its timer functions, for the tests.
  */
@@ -1247,11 +1255,13 @@ export function createDoorbellDebounce(
     timers: { set: (fn: () => void, ms: number) => unknown; clear: (t: unknown) => void } = {
         set: (fn, ms) => setTimeout(fn, ms), clear: t => clearTimeout(t as ReturnType<typeof setTimeout>),
     },
+    /** Which bells count: {@link isHomeDoorbell}, or Home's {@link isHomeDoorbellFor} its member. */
+    wanted: (data: unknown) => boolean = isHomeDoorbell,
 ): { ring: (data: unknown) => void; cancel: () => void } {
     let timer: unknown = null;
     return {
         ring(data) {
-            if (!isHomeDoorbell(data)) return;
+            if (!wanted(data)) return;
             if (timer !== null) timers.clear(timer);
             timer = timers.set(() => { timer = null; run(); }, settleMs);
         },

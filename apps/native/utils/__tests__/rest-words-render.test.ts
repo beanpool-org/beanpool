@@ -89,11 +89,12 @@ vi.mock('../names-debts', async (importOriginal) => ({
     payTheCommons: vi.fn(async () => debt.pay),
 }));
 /** The node, for a group's landing. */
-const grp = vi.hoisted(() => ({ group: undefined as any, members: [] as any[], error: null as null | Error, joinError: null as null | Error }));
+const grp = vi.hoisted(() => ({ group: undefined as any, members: [] as any[], error: null as null | Error, joinError: null as null | Error, left: [] as string[][] }));
 vi.mock('../db', () => ({
     getGroupForLanding: vi.fn(async () => { if (grp.error) throw grp.error; return grp.group; }),
     getGroupActiveMembers: vi.fn(async () => grp.members),
     joinGroupApi: vi.fn(async () => { if (grp.joinError) throw grp.joinError; return {}; }),
+    leaveGroupApi: vi.fn(async (groupId: string, pk: string) => { grp.left.push([groupId, pk]); return true; }),
     getMyPosts: vi.fn(async () => []),
 }));
 vi.mock('../../components/useYourGroups', () => ({ yourGroupsStore: { refresh: () => {} } }));
@@ -153,6 +154,7 @@ beforeEach(() => {
     grp.members = [];
     grp.error = null;
     grp.joinError = null;
+    grp.left = [];
     oneWay.record = { url: 'https://global.example', joinedAt: Date.now() - 86_400_000, done: null };
     oneWay.vault = false;
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
@@ -365,6 +367,28 @@ describe("a group's invite landing in the pseudo-locale", () => {
             expect(alerts.said, thrown).toEqual([xx('Could not join'), body]);
         }
         expect(bypassing(host, WRITTEN, alerts.said.slice(0, -1))).toEqual([]);
+    });
+
+    it('an open invitation can be declined: asked once in words, then the member\'s own row goes and the landing closes', async () => {
+        nav.params = { id: 'g1', invited: '1' };
+        grp.group = GROUP;
+        grp.members = MEMBERS;
+        await renderIn('xx', createElement(GroupInviteLanding));
+        const decline = host.querySelector('[data-testid="invite-landing-decline"]');
+        expect(decline?.textContent).toBe(xx('Decline invitation'));
+        await click(decline, 'Decline invitation');
+        expect(alerts.said).toEqual([xx('Decline the invitation?'),
+            xx('You will not join {name}. Whoever invited you can invite you again.').replace('{name}', 'Seed Savers'), xx('Cancel'), xx('Decline')]);
+        expect(grp.left).toEqual([]);
+        await act(async () => { await alerts.buttons.find(b => b.text === xx('Decline'))?.onPress?.(); });
+        expect(grp.left).toEqual([['g1', who.identity.publicKey]]);
+        expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
+        // Only an open invitation: a member's own landing (they are in) has no Decline.
+        act(() => root.unmount());
+        root = createRoot(host);
+        grp.group = { ...GROUP, viewerStatus: 'active' };
+        await renderIn('xx', createElement(GroupInviteLanding));
+        expect(host.querySelector('[data-testid="invite-landing-decline"]')).toBeNull();
     });
 
     it('the states that are not the group: unreachable, unavailable, an invitation withdrawn', async () => {

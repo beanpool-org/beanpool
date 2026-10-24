@@ -41,7 +41,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
-    isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_TITLE, pushCommunityTag, pushNoticeBytes, pushNoticeWords, setLanguage,
+    isPushNoticeKind, PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_TITLE, pushCommunityTag, pushNoticeBytes, pushNoticeWords, setLanguage,
     type PushNoticeKind,
 } from '@beanpool/core';
 import { registerPushTokenWithCommunity } from '../push-registrations';
@@ -575,6 +575,23 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('decision.open', { screen: 'group', groupId: GROUP })).not.toBe('/(tabs)/chats');
     });
 
+    it("a group invitation lands on the group's invite landing, opened as an invitation, its id in the node's own shape; anything else on Home (tester report 24 Oct, item 6)", async () => {
+        const GROUP = '0f8e2c1a-5b6d-4e7f-9a0b-1c2d3e4f5a6b';
+        expect(PUSH_NOTICE_KINDS['group.invite'].tab).toBe('home');
+        expect(noticeRoute('group.invite', { screen: 'invite', groupId: GROUP })).toBe(`/group/${GROUP}?invited=1`);
+        for (const bad of [...FORGED, `${GROUP}?x=1`, GROUP.slice(1), 42, null, ['a'], { a: 1 }]) {
+            expect(noticeRoute('group.invite', { screen: 'invite', groupId: bad })).toBe('/(tabs)');
+        }
+        // No details (the node forgot it, or never answered): Home, whose Needs-you line opens the invitation.
+        expect(noticeRoute('group.invite', null)).toBe('/(tabs)');
+        // Never the group's chat: the member invited is not in it yet.
+        expect(noticeRoute('group.invite', { screen: 'invite', groupId: GROUP })).not.toMatch(/^\/chat\//);
+
+        // A tap on the signed notice, its details fetched from the community: the landing.
+        await tap(push(mullum.notice('group.invite', kim.publicKey, { data: { screen: 'invite', groupId: GROUP } })));
+        expect(navigated).toEqual([`/group/${GROUP}?invited=1`]);
+    });
+
     it('a valid notice whose community answers a forged target lands on its kind\'s tab, the target nowhere in the route', async () => {
         for (const bad of FORGED) {
             await tap(push(mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: bad } })));
@@ -696,8 +713,9 @@ describe('a community whose server sends no pushKey: its pushes show with fixed 
 
 describe('a genuine notice of a kind (or format) this build doesn\'t know is never called a forgery', () => {
     // Core's table grows (market.listing and event.update came after the design), and a community's server can be a
-    // release ahead of the member's app. A kind this build doesn't know is still checked against the pin.
-    const NEW_KIND = 'group.invite' as PushNoticeKind;
+    // release ahead of the member's app. A kind this build doesn't know is still checked against the pin. (It was
+    // 'group.invite' until that kind came, 24 Oct: any name outside the table will do, and the first check says it is.)
+    const NEW_KIND = 'group.welcome' as PushNoticeKind;
 
     beforeEach(async () => {
         keep(MULLUM, BYRON);
@@ -725,7 +743,7 @@ describe('a genuine notice of a kind (or format) this build doesn\'t know is nev
 
     it('signed by its community for this account: shown while open with general words, once', async () => {
         const data = mullum.notice(NEW_KIND, kim.publicKey);
-        const decision = await open(push(data, { title: 'BeanPool', body: 'You were invited to a group.' }));
+        const decision = await open(push(data, { title: 'BeanPool', body: 'Welcome to a group.' }));
         expect(decision).toEqual({ kind: 'replace', ...UNSIGNED_NOTICE_WORDS, data: { ...data, ...LOCAL_NOTICE_DATA } });
         expect(await open(push(data))).toEqual({ kind: 'drop', reason: 'repeated' });
         expect(takeNoticeWarning()).toBe(false);
@@ -806,7 +824,7 @@ describe('a genuine notice of a kind (or format) this build doesn\'t know is nev
 
     describe('a notice format above this build\'s (bp 2, 3, 99, "2") is an unsigned push: a forger writing it escapes nothing', () => {
         const forged = (bp: unknown) => ({
-            bp, c: mullum.tag, k: 'group.invite', i: 'f'.repeat(32), t: nowSeconds(), s: 'ab'.repeat(64),
+            bp, c: mullum.tag, k: NEW_KIND, i: 'f'.repeat(32), t: nowSeconds(), s: 'ab'.repeat(64),
             screen: 'post', postId: POST_ID, conversationId: CHAT_ID, url: 'https://evil.example/login',
         });
         const FORGER_WORDS = { title: 'URGENT', body: 'Send your 12 words to evil.example' };

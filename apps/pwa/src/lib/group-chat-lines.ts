@@ -8,6 +8,10 @@
  * detectMentions, design §9), since the node can no longer read them. A 409 saying the epoch moved or went stale is
  * answered once: the keyring syncs, rotates if it must, and the line is sealed again.
  *
+ * Photo (DESIGN-group-chat-photos-fable.md §2.2, §2.3): a photo line is its caption, sealed as part 'body', and the JPEG data
+ * URI, sealed as part 'attachment', under the line's one message key; the 409 re-seal seals both again. The node keeps the
+ * photo where a DM's is, and it is opened only once its words have, under the key that opened them.
+ *
  * Edit: sealed under the LINE's own epoch, never the current one (epochs-over-time design §3, Marty's pick 1). Without
  * that epoch's key in this browser the edit is refused here.
  *
@@ -58,8 +62,6 @@ export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's
 export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.";
 /** A chat answer that didn't come: nothing readable goes on a guess. */
 export const GROUP_CHAT_UNREAD_TEXT = "This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment.";
-/** Photos in a group chat come with slice 5; the node refuses them until then. */
-export const GROUP_CHAT_NO_PHOTOS_TEXT = 'Photos can only be sent in direct messages';
 /** Beside "Unverified" for a line a locked chat holds unsealed (review of #1788, finding 3). */
 export const GROUP_LINE_UNSEALED_DETAILS = "It isn't sealed, so nothing shows who wrote it.";
 
@@ -112,7 +114,13 @@ const UPDATE_REFUSALS = new Set(['epoch_stale', 'epoch_not_current', 'epoch_need
 
 export interface SendGroupLineInput {
     groupId: string;
+    /** The line's words; a photo line's caption, which may be empty. */
     text: string;
+    /**
+     * A photo line's photo: the JPEG as a data URI (DESIGN-group-chat-photos-fable.md §2.2). Sealed as part 'attachment' under
+     * the same message key, epoch and reply as the words, on every attempt, and sent beside them as type 'image'.
+     */
+    photo?: string;
     /** The client's own UUID v4: the id the line is sealed under and stored as. */
     clientId: string;
     replyToId?: string | null;
@@ -132,15 +140,16 @@ export async function sendSealedGroupLine(net: GroupKeysTransport, identity: Me,
     const mentions = detectMentions(input.text, (input.mentionCandidates ?? []).filter((c) => c.pubkey !== identity.publicKey));
     for (let attempt = 0; ; attempt++) {
         const { epoch, key } = await ring.prepareToSeal(input.progress);
-        const sealed = sealLine(input.text, {
-            myEdPrivHex: identity.privateKey, groupKey: key, groupId: input.groupId, epoch, messageId,
-            after: input.after ?? null, replyToId: input.replyToId ?? null,
-        });
+        const binding = { myEdPrivHex: identity.privateKey, groupKey: key, groupId: input.groupId, epoch, messageId, replyToId: input.replyToId ?? null };
+        const sealed = sealLine(input.text, { ...binding, after: input.after ?? null });
+        // A photo goes with its words or not at all: sealed again with them on a re-seal, so both parts carry one epoch.
+        const photo = input.photo === undefined ? null : sealLine(input.photo, { ...binding, part: 'attachment', after: null });
         const metadata: Record<string, unknown> = { epoch };
         if (input.replyToId) metadata.replyToId = input.replyToId;
         if (mentions.length) metadata.mentions = mentions;
-        const res = await net.post(`/api/groups/${encodeURIComponent(input.groupId)}/chat/message`,
-            { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata, clientId: messageId });
+        const line: Record<string, unknown> = { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata, clientId: messageId };
+        if (photo) Object.assign(line, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } });
+        const res = await net.post(`/api/groups/${encodeURIComponent(input.groupId)}/chat/message`, line);
         const body = await res.json().catch(() => ({}));
         if (res.ok) return body;
         if (attempt === 0 && res.status === 409 && UPDATE_REFUSALS.has(body?.code)) continue;
@@ -226,6 +235,40 @@ export async function openGroupThread(
     // A chat with no epoch yet is not waiting: the first member to write makes epoch 1.
     const waitingForNextKey = from !== null && enc.current !== null && from > enc.current;
     return { views, waitingForNextKey };
+}
+
+const PHOTO_DATA_URI = /^data:image\/[a-z0-9.+-]+;base64,/i;
+
+/**
+ * A photo line's photo, opened (DESIGN-group-chat-photos-fable.md §2.3): what an <img> draws, or null for "Image
+ * unavailable". Only as part of its message, bound to what opened its words: a line hidden, waiting for its key or
+ * unverified shows no photo and asks the node for nothing. Then GET /api/messages/:id/attachment, opened as part
+ * 'attachment' under the line's epoch key, its group, its signer, its id and its reply: a photo the node swapped from
+ * another line, another chat or another sender opens as nothing. The web keeps no copy: an opened photo lives in the page.
+ */
+export async function getDecryptedGroupAttachment(
+    net: GroupKeysTransport, identity: Me, store: GroupLockStore,
+    input: { groupId: string; line: ServedGroupLine; view: GroupLineView | undefined },
+): Promise<string | null> {
+    const { line, view } = input;
+    if (line.type !== 'image' || !view || view.hidden || view.waitingKey || view.unverified || !view.signer || view.epoch === null) return null;
+    const ring = groupKeyring(net, identity, input.groupId, store);
+    const messageId = String(line.id);
+    try {
+        const key = ring.openedKey(view.epoch) ?? await ring.keyFor(view.epoch);
+        if (!key) return null;
+        const res = await net.get(`/api/messages/${encodeURIComponent(messageId)}/attachment`);
+        if (!res.ok) return null;
+        const { data, nonce } = await res.json();
+        const replyTo = metadataOf(line.metadata).replyToId;
+        const photo = openLine({ ciphertext: data, nonce }, {
+            groupId: input.groupId, epoch: view.epoch, senderPubHex: view.signer, messageId, part: 'attachment',
+            replyToId: typeof replyTo === 'string' && replyTo ? replyTo : null,
+        }, key, ring.memo).text;
+        return PHOTO_DATA_URI.test(photo) ? photo : null;
+    } catch {
+        return null;
+    }
 }
 
 /** How the web draws one line of a group conversation. */

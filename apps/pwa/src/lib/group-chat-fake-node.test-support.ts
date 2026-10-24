@@ -25,7 +25,8 @@ export interface FakeGroupNode {
     shown: string[];
     stale: boolean;
     fromEpoch: Map<string, number>;
-    lines: { id: string; author: string; ciphertext: string; nonce: string; metadata: any }[];
+    /** The lines stored; a photo line is type 'image' with its sealed photo (DESIGN-group-chat-photos-fable.md §2.2). */
+    lines: { id: string; author: string; ciphertext: string; nonce: string; metadata: any; type?: string; attachment?: { data: string; nonce: string; mime?: string } }[];
     calls: { method: string; path: string; body?: any; as: string }[];
     /** Answer one request as a dishonest node would: return a Response to use it, undefined to answer honestly. */
     lie: ((method: string, path: string, me: string, body?: any) => Response | undefined) | null;
@@ -113,8 +114,18 @@ export function fakeGroupNode(groupId: string, members: string[]): FakeGroupNode
         if (method === 'POST' && p === `${base}/chat/message`) {
             const cur = node.current();
             if (body.metadata?.epoch !== cur || node.stale) return json(409, { error: 'epoch', code: node.stale ? 'epoch_stale' : 'epoch_not_current' });
-            node.lines.push({ id: body.clientId, author: me, ciphertext: body.ciphertext, nonce: body.nonce, metadata: { ...body.metadata, sender: me } });
+            node.lines.push({
+                id: body.clientId, author: me, ciphertext: body.ciphertext, nonce: body.nonce, metadata: { ...body.metadata, sender: me },
+                type: body.type ?? 'text', ...(body.attachment ? { attachment: body.attachment } : {}),
+            });
             return json(201, { success: true });
+        }
+        // A line's photo (GET /api/messages/:id/attachment, S2): to the group's members, as its words are; 404 otherwise.
+        const attachmentRoute = p.match(/^\/api\/messages\/([^/]+)\/attachment$/);
+        if (method === 'GET' && attachmentRoute) {
+            const l = node.lines.find((x) => x.id === decodeURIComponent(attachmentRoute[1]));
+            if (!node.roster.includes(me) || !l?.attachment) return json(404, { error: 'Attachment not found' });
+            return json(200, { data: l.attachment.data, nonce: l.attachment.nonce, mime: l.attachment.mime ?? 'image/jpeg' });
         }
         if (method === 'POST' && p === '/api/messages/edit') {
             const l = node.lines.find((x) => x.id === body.messageId);

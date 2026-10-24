@@ -32,7 +32,6 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.": word("End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned."),
     "This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock.": word("This node now says this chat isn't locked. This browser has held its keys, so it still locks every message, and sends nothing it can't lock."),
     "This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment.": word("This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment."),
-    'Photos can only be sent in direct messages': word('Photos can only be sent in direct messages'),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),
     "This message's key isn't in this browser, so it can't be edited here.": word("This message's key isn't in this browser, so it can't be edited here."),
     'Failed to edit message.': word('Failed to edit message.'),
@@ -51,8 +50,9 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "This is a locked group chat, and this screen can't lock messages. Nothing was sent; open it from Messages.": word("This is a locked group chat, and this screen can't lock messages. Nothing was sent; open it from Messages."),
     "This node answered with a locked group's chat, not a direct message, so nothing opened.": word("This node answered with a locked group's chat, not a direct message, so nothing opened."),
     'This chat holds private messages, so it stays a direct message. Nothing was sent; send it again here.': word('This chat holds private messages, so it stays a direct message. Nothing was sent; send it again here.'),
-    // lib/chat-image-transfer.ts: a picked file that isn't a picture.
+    // lib/chat-image-transfer.ts: a picked file that isn't a picture, and a chat that takes none.
     'That file is not a picture.': word('That file is not a picture.'),
+    "Photos can't be sent in this chat: the community's server can read it.": word("Photos can't be sent in this chat: the community's server can read it."),
     // core dm-crypto.ts: what stands in for a DM line, the one line under a marked one, and who a quote is from.
     "🔒 This message couldn't be verified, so it isn't shown.": word("🔒 This message couldn't be verified, so it isn't shown."),
     "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.": word("⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown."),

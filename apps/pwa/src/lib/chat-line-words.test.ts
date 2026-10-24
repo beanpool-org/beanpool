@@ -15,7 +15,7 @@ import {
     GROUP_KEY_ROSTER_UNREAD_TEXT, GROUP_KEY_STORE_UNREAD_TEXT, GROUP_KEY_WAITING_TEXT,
 } from './group-chat-keys';
 import {
-    GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NO_PHOTOS_TEXT, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_CHAT_UNREAD_TEXT,
+    GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_CHAT_UNREAD_TEXT,
     GROUP_EDIT_NO_KEY_TEXT, GROUP_LINE_DELETED_TEXT, GROUP_LINE_REMOVED_TEXT, GROUP_LINE_UNSEALED_DETAILS,
 } from './group-chat-lines';
 import {
@@ -24,7 +24,7 @@ import {
 } from './group-line-display';
 import { GROUP_CHAT_IS_DM_TEXT, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_HOLD_UNREAD_TEXT } from './group-hold';
 import { DmNotLockedError, dmNotLockedLine } from './dm-lock';
-import { MAX_CHAT_IMAGE_LABEL, chatImageRefusal } from './chat-image-transfer';
+import { MAX_CHAT_IMAGE_LABEL, NODE_READABLE_NO_PHOTOS_TEXT, chatImageRefusal } from './chat-image-transfer';
 
 afterEach(() => setLanguage('en'));
 
@@ -32,7 +32,7 @@ afterEach(() => setLanguage('en'));
 const WHOLE = [
     GROUP_KEY_ROLLBACK_TEXT, GROUP_KEY_WAITING_TEXT, GROUP_KEY_MISSING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT, GROUP_KEY_ROSTER_TEXT,
     GROUP_KEY_ROSTER_UNREAD_TEXT, GROUP_KEY_STORE_UNREAD_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
-    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_UNREAD_TEXT, GROUP_CHAT_NO_PHOTOS_TEXT,
+    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_UNREAD_TEXT,
     GROUP_LINE_UNSEALED_DETAILS, GROUP_EDIT_NO_KEY_TEXT, GROUP_LINE_DELETED_TEXT, GROUP_LINE_REMOVED_TEXT,
     GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT, GROUP_LINE_UNVERIFIED_DETAILS, GROUP_LINE_FORMER_MEMBER, GROUP_LINE_NOT_IN_GROUP,
     GROUP_LINE_WAITING_KEY_TEXT,
@@ -40,7 +40,7 @@ const WHOLE = [
     DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT,
     dmLineMarkText('old-app')!, dmLineMarkText('out-of-order')!, dmLineMarkText('moved')!, dmLineMarkText('from-admins')!,
     dmQuoteLabel('admins'), dmQuoteLabel('notice'), dmQuoteLabel('nobody'),
-    chatImageRefusal({ type: 'text/plain', size: 10 } as File)!,
+    chatImageRefusal({ type: 'text/plain', size: 10 } as File)!, NODE_READABLE_NO_PHOTOS_TEXT,
 ];
 /** Written inline where it is thrown (group-chat-lines.ts editSealedGroupLine: the node refused with no words). */
 const INLINE = ['Failed to edit message.'];

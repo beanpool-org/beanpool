@@ -903,13 +903,14 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
     });
 
-    it('in a group chat a pasted picture gets one line of explanation and nothing is sent', async () => {
+    it("in an old node's group chat, never locked here, a pasted picture gets one line of explanation and nothing is sent", async () => {
         const composer = await openChat(GROUP_ID);
 
         fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
 
+        // A group's photo is sealed in this browser; a node from before locked chats would read it (DESIGN-group-chat-photos-fable.md §2.6).
         const notice = await screen.findByTestId('chat-image-notice');
-        expect(notice).toHaveTextContent('Photos can only be sent in direct messages');
+        expect(notice).toHaveTextContent("This community's node is older and can read this group's chat. It will be locked once the node is updated.");
         expect(screen.queryByTestId('chat-image-preview')).not.toBeInTheDocument();
         expect(sendMessageApi).not.toHaveBeenCalled();
         expect(window.alert).not.toHaveBeenCalled();

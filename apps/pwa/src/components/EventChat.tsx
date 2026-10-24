@@ -19,7 +19,7 @@ import {
     type EventThreadMessage, type EventThreadView,
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
+import { imageFromTransfer, dragCarriesFile, NODE_READABLE_NO_PHOTOS_TEXT } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 import { blankedWithAccount } from '../lib/chat-tombstone';
@@ -296,7 +296,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                     className="flex-shrink-0 flex items-center gap-2 px-3 pb-1 min-w-0"
                 >
                     <span className="flex-1 min-w-0 text-xs text-nature-600 dark:text-nature-300 break-words">
-                        {imageNotice}
+                        {chatLineWords(imageNotice)}
                     </span>
                     <button
                         type="button"
@@ -323,7 +323,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         if (!dragCarriesFile(e.dataTransfer)) return;
                         e.preventDefault();
                         if (!imageFromTransfer(e.dataTransfer)) return;
-                        setImageNotice(t('Photos can only be sent in direct messages'));
+                        // The node reads this chat by design, so it takes no photo (DESIGN-group-chat-photos-fable.md §4).
+                        setImageNotice(NODE_READABLE_NO_PHOTOS_TEXT);
                     }}
                 >
                     <textarea
@@ -332,7 +333,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         onPaste={e => {
                             if (!imageFromTransfer(e.clipboardData)) return;
                             e.preventDefault();
-                            setImageNotice(t('Photos can only be sent in direct messages'));
+                            setImageNotice(NODE_READABLE_NO_PHOTOS_TEXT);
                         }}
                         onKeyDown={e => {
                             // An input method is mid-word — Japanese, Chinese, Korean and

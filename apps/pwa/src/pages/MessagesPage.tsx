@@ -1669,12 +1669,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         data-testid={requestMode === 'to-me' ? 'request-header-profile' : 'dm-header-profile'}
                                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
                                         onClick={() => onOpenProfile(peerPubkey)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                onOpenProfile(peerPubkey);
-                                            }
-                                        }}
                                         // The visible name first, so speech input matches it (review of #1979, X2).
                                         aria-label={t("{name}, see {name}'s profile", { name: title })}
                                         style={{

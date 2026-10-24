@@ -3,7 +3,7 @@
  * - In a DM with a person, the avatar + name is one button with an accessible name
  *   ("{name}, see {name}'s profile") opening their public profile.
  * - In a DM with an enterprise, it opens the enterprise's page.
- * - Keyboard (Enter/Space) works.
+ * - Native button semantics guarantee keyboard (Enter/Space) activation.
  * - A group chat header keeps its current behaviour (no change).
  * - A conversation whose other side is unknown/deleted draws no button.
  */
@@ -279,7 +279,7 @@ describe('web DM chat header', () => {
         await waitFor(() => expect(onOpenTreasury).toHaveBeenCalledWith(ENT));
     });
 
-    it('keyboard (Enter/Space) works to trigger the header button', async () => {
+    it('renders a native button with type="button" so keyboard (Enter/Space) activates it', async () => {
         const onOpenProfile = vi.fn();
         render(
             <MessagesPage
@@ -292,11 +292,9 @@ describe('web DM chat header', () => {
         await screen.findByRole('button', { name: 'Back to messages' });
         const headerBtn = screen.getByRole('button', { name: "Kofi, see Kofi's profile" });
 
-        fireEvent.keyDown(headerBtn, { key: 'Enter' });
-        expect(onOpenProfile).toHaveBeenCalledWith(KOFI);
-
-        onOpenProfile.mockClear();
-        fireEvent.keyDown(headerBtn, { key: ' ' });
+        expect(headerBtn.tagName).toBe('BUTTON');
+        expect(headerBtn).toHaveAttribute('type', 'button');
+        fireEvent.click(headerBtn);
         expect(onOpenProfile).toHaveBeenCalledWith(KOFI);
     });
 

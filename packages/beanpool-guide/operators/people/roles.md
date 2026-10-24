@@ -18,7 +18,7 @@ Owners can do everything in Settings. Only owners can:
 - lift a suspension that took away an owner's or an admin's role, which gives that role back;
 - end the waiting time early when an owner or admin is being removed;
 - change or retire the admin password, and turn two-factor sign-in on or off;
-- choose who may invite, set the known floor and the cap, and move the exception lines;
+- choose who may invite, turn requests to join and message requests on or off, set the known floor and the cap, and move the exception lines;
 - make or revoke automation tokens, set the alerts, and choose where off-box backups go;
 - make the recovery code, or take over;
 - allow or stop AI assistants;

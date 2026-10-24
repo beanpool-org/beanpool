@@ -134,8 +134,8 @@ async function main(): Promise<void> {
     // the default, never on a stored 'on'.
     const dialRow = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null;
     assert(confirmationDialOn(db) && dialRow() === null, `before the owner touches it, the dial reads on with no row (${dialRow()})`);
-    const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
-    assert(on.status === 200 && on.body?.confirmation === true && on.body?.knownFloor === 1000,
+    const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true && on.body?.shape?.settings?.knownFloor?.value?.floor === 1000,
         `the owner turns the dial on, the known floor at its default 1,000 (${show(on)})`);
     assert(dialRow() === null, `and turning it on writes no row: the default (${dialRow()})`);
 
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
         assert(seen?.authorEnergyCycled === 200, `its card carries Resident's 200, not Steward's 600 (${seen?.authorEnergyCycled})`);
     }
     // With the dial off there is no known pledge to leave out: the badge is the line, as before.
-    const off = await call('POST', null, '/api/local/admin/known-floor', { confirmation: false }, owner);
+    const off = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }, owner);
     const offCo = getMemberTrustProfile(knownCo);
     assert(off.status === 200 && offCo.floor === -300 && offCo.tierCredit === 300 && offCo.tier.name === 'Resident',
         `the dial off: Known Co's line and badge are both Dee's 300 (${offCo.floor}, ${offCo.tierCredit}, ${offCo.tier.name})`);

@@ -90,6 +90,7 @@ const GATED: Array<[string, string]> = [
     ['POST', '/api/local/admin/auth/enrol'],
     ['POST', '/api/local/admin/2fa/disable'],
     ['POST', '/api/local/admin/node/config'],
+    ['POST', '/api/local/admin/community-shape'],
     ['POST', '/api/admin/thresholds/get'],
     ['POST', '/api/admin/seed-invite'],
     ['POST', '/api/local/change-password'],

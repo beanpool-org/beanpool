@@ -96,6 +96,8 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 - **Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.
 - **Enterprises.** An enterprise counts up to half of each confirmed keeper's known floor towards its own. A keeper who keeps several enterprises shares that half between them.
 
+Each change to these is logged with who made it, and the owners get an alert. When the switch goes on or off, or the known floor moves while it is on, every member is told in a notice from the community; a change to the cap alone tells nobody.
+
 ### One member's known floor
 
 An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level doesn't change, on their profile and their listings alike: the known floor never counts towards a level, frozen, lowered or raised.

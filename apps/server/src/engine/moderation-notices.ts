@@ -77,7 +77,11 @@ export function reportedPostsRemovedBody(count: number): string {
     return count > 1 ? `${count} posts you reported were removed. Thank you for letting the moderators know.` : reportedPostRemovedBody();
 }
 
-function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>): void {
+/**
+ * One notice to each of these members: kept, live with its kept copy's id, and pushed. Also how every member hears that
+ * how this community works changed (state-engine.ts noticeToEveryMember).
+ */
+export function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string, body: string, data: Record<string, any>): void {
     const to = Array.from(new Set(recipients.filter(pk => typeof pk === 'string' && pk && pk !== 'SYSTEM')));
     if (to.length === 0) return;
     // Each recipient's copy is kept first (engine/kept-notices.ts), so a web app that is closed now shows it when it

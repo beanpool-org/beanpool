@@ -1191,8 +1191,11 @@ describe('NodeIdentityPanel Component', () => {
             const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
             return call ? JSON.parse(call[1].body) : undefined;
         };
+        // How this community works, the one place the switch changes (slice S2): only a change goes there.
+        const shapeBodies = () => (global.fetch as any).mock.calls
+            .filter((c: any[]) => c[0].includes('/api/local/admin/community-shape')).map((c: any[]) => JSON.parse(c[1].body));
 
-        it('shows the switch and how many are waiting, and saves the operator\'s choice', async () => {
+        it('shows the switch and how many are waiting, and saves the owner\'s choice under How this community works', async () => {
             mockKnockNode({ acceptKnocks: true }, 2);
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
@@ -1214,7 +1217,42 @@ describe('NodeIdentityPanel Component', () => {
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
             });
-            expect(nodeConfigBody()?.acceptKnocks).toBe(false);
+            expect('acceptKnocks' in nodeConfigBody()).toBe(false);
+            expect(shapeBodies()).toEqual([expect.objectContaining({ changes: { knocks: false } })]);
+        });
+
+        it('a Save with the switch as the node has it sends nothing to How this community works', async () => {
+            mockKnockNode({ acceptKnocks: true }, 0);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(document.getElementById('accept-knocks')).toBeInTheDocument());
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()).toBeDefined();
+            expect(shapeBodies()).toEqual([]);
+        });
+
+        it('an admin\'s change is refused there, in the node\'s words', async () => {
+            mockKnockNode({ acceptKnocks: true }, 0);
+            const base = (global.fetch as any).getMockImplementation();
+            (global.fetch as any).mockImplementation((url: string, init?: RequestInit) => url.includes('/api/local/admin/community-shape')
+                ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'Only an owner of this community can change how it works' }) })
+                : base(url, init));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            const toggle = await waitFor(() => {
+                const el = document.getElementById('accept-knocks') as HTMLInputElement;
+                expect(el).toBeInTheDocument();
+                return el;
+            });
+            await act(async () => { fireEvent.click(toggle); });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            await waitFor(() => expect(screen.getByText('Only an owner of this community can change how it works')).toBeInTheDocument());
         });
 
         it('says when nobody is waiting', async () => {
@@ -1238,6 +1276,7 @@ describe('NodeIdentityPanel Component', () => {
             });
             expect(nodeConfigBody()).toBeDefined();
             expect('acceptKnocks' in nodeConfigBody()).toBe(false);
+            expect(shapeBodies()).toEqual([]);
         });
     });
 
@@ -1255,8 +1294,10 @@ describe('NodeIdentityPanel Component', () => {
             const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
             return call ? JSON.parse(call[1].body) : undefined;
         };
+        const shapeBodies = () => (global.fetch as any).mock.calls
+            .filter((c: any[]) => c[0].includes('/api/local/admin/community-shape')).map((c: any[]) => JSON.parse(c[1].body));
 
-        it('shows the switch as the node has it, and saves the operator\'s choice', async () => {
+        it('shows the switch as the node has it, and saves the owner\'s choice under How this community works', async () => {
             mockRequestsNode({ dmRequests: false });
             await act(async () => {
                 render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
@@ -1275,7 +1316,8 @@ describe('NodeIdentityPanel Component', () => {
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
             });
-            expect(nodeConfigBody()?.dmRequests).toBe(true);
+            expect('dmRequests' in nodeConfigBody()).toBe(false);
+            expect(shapeBodies()).toEqual([expect.objectContaining({ changes: { dmRequests: true } })]);
         });
 
         it('hides the switch for a node that has no such setting, and never sends it there', async () => {
@@ -1289,6 +1331,7 @@ describe('NodeIdentityPanel Component', () => {
             });
             expect(nodeConfigBody()).toBeDefined();
             expect('dmRequests' in nodeConfigBody()).toBe(false);
+            expect(shapeBodies()).toEqual([]);
         });
     });
 
@@ -1430,8 +1473,11 @@ describe('NodeIdentityPanel Component', () => {
             });
             expect(nodeConfigBody()).toMatchObject({
                 publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
-                publishHealth: false, directoryPushIntervalHours: 0, serviceRadius: AREA, dmRequests: false,
+                publishHealth: false, directoryPushIntervalHours: 0, serviceRadius: AREA,
             });
+            // Requests to join and message requests, as the node has them: nowhere (node/config never takes them now).
+            expect('dmRequests' in nodeConfigBody() || 'acceptKnocks' in nodeConfigBody()).toBe(false);
+            expect((global.fetch as any).mock.calls.some((c: any[]) => c[0].includes('/api/local/admin/community-shape'))).toBe(false);
         });
     });
 

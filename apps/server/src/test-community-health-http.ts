@@ -151,8 +151,8 @@ async function main(): Promise<void> {
     // switches the dial off, as here for section 2.
     const fresh = await health(ada);
     assert(fresh.status === 200 && fresh.body?.known === true, `a fresh node is a known community: the dial is on by default (${show(fresh)})`);
-    const dialOff = await call('POST', null, '/api/local/admin/known-floor', { confirmation: false }, owner);
-    assert(dialOff.status === 200 && dialOff.body?.confirmation === false, `the owner switches the dial off (${show(dialOff)})`);
+    const dialOff = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }, owner);
+    assert(dialOff.status === 200 && dialOff.body?.shape?.settings?.knownFloor?.value?.on === false, `the owner switches the dial off (${show(dialOff)})`);
     const t0 = await health(ada);
     assert(t0.status === 200 && t0.body?.totals?.sumOfCredit >= 50 && typeof t0.body?.totals?.commonsPot === 'number'
         && t0.body?.totals?.tradesThisMonth === 0 && t0.body?.known === false,
@@ -176,8 +176,8 @@ async function main(): Promise<void> {
 
     // ── 3. the dial on ────────────────────────────────────────────────────────────────────────────
     console.log('── 3. the dial on ──');
-    const dial = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
-    assert(dial.status === 200 && dial.body?.confirmation === true, `the owner turns the dial on (${show(dial)})`);
+    const dial = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    assert(dial.status === 200 && dial.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the dial on (${show(dial)})`);
     // Each buys from Samwise through the marketplace, on their known floor; Ugolino and Rexford lose their confirmation after.
     const ugoConf = confirm(ugo, ada);
     for (const [m, beans] of [[kim, 600], [una, 600], [ugo, 600], [rex, 600], [lea, 100], [neo, 100]] as Array<[Id, number]>) {

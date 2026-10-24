@@ -23,16 +23,17 @@ import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession,
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
-import { noteSecurityEvent } from '../services/security-signal.js';
+import { noteSecurityEvent, actingAs } from '../services/security-signal.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE, directoryPromiseStatus, directoryPromiseSaved } from '../services/directory-publisher.js';
 import { listingFields, publicListingFields, setPromiseTicks } from '../engine/directory-promise.js';
-import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
-import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
+import { getConfiguredSwitches } from '../config/node-profile.js';
+import { getDoor } from '../config/door.js';
 import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
-import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
+import { KnownFloorError, knownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { readShape } from '../config/community-shape.js';
+import { applyShapeChanges, ShapeChangeError, SHAPE_OWNER_ONLY } from '../config/community-shape-write.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
@@ -253,10 +254,11 @@ function publicNodeConfig(config: NodeConfig, shown: PlaceShown) {
     };
 }
 
-// `acceptKnocks`: whether this community takes "ask to join" requests (G6, D4: on unless the operator turns it off). It is
+// `acceptKnocks`: whether this community takes "ask to join" requests (G6, D4: on unless an owner turns it off). It is
 // the `knocks` profile switch as configured, so it travels with the profile record (config/node-profile.ts), and it
 // is said here beside the directory settings because Settings shows them together. Public, like the switch itself in
-// /api/community/info; how many requests are waiting is the operator's only (/api/local/admin/knocks).
+// /api/community/info; how many requests are waiting is the operator's only (/api/local/admin/knocks). These three are
+// read here and changed only under How this community works (POST /api/local/admin/community-shape).
 // `door`: who may invite here (config/door.ts): `members`, `admins`, or `open` where the profile opens the door and takes
 // no invites. Public, as `features.door` in /api/community/info is.
 // `dmRequests`: whether a stranger's first message waits as a request until it is accepted (engine/dm-requests.ts): the
@@ -299,8 +301,9 @@ router.get('/api/node/config', async (ctx) => {
 });
 
 // The known floor (config/known-floor.ts, community modes slice 4): every owner and admin reads the settings, the
-// exceptions and the log; only an owner changes the dial, the known floor or the cap; an owner or admin sets one member's
-// exception. Every change is a line in the log.
+// exceptions and the log; only an owner changes the dial, the known floor or the cap, and only under How this community
+// works (POST /api/local/admin/community-shape `knownFloor`, below), which logs it and tells the members; an owner or admin
+// sets one member's exception. Every change is a line in the log.
 /** The owner's or admin's own key behind this session, or null: the node password and an automation token name nobody. */
 function ownKeySessionActor(ctx: any): string | null {
     const actor = ctx.state?.actor;
@@ -318,22 +321,32 @@ router.get('/api/local/admin/known-floor', async (ctx) => {
     ctx.body = { ...knownFloorSettings(), exceptions: knownFloorExceptions(), log: readKnownFloorLog(100) };
 });
 
-router.post('/api/local/admin/known-floor', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change the known floor or the cap.')) return;
-    try {
-        ctx.body = setKnownFloorSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
-    } catch (e) { knownFloorRefusal(ctx, e); }
-});
-
 // How this community works (config/community-shape.ts; the design's §6.1, slice S1): every structural setting as it is set
 // and as the node runs it, with each lock in the server's words. Every owner and admin reads it, and a read token; a
-// moderator's session never gets this far (checkAdminAuth). Reads only: nothing here changes a setting.
+// moderator's session never gets this far (checkAdminAuth).
 router.get('/api/local/admin/community-shape', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can read how it works.')) return;
     ctx.set('Cache-Control', 'no-store');
     ctx.body = readShape();
+});
+
+// The one place its owners change it (config/community-shape-write.ts; the design's §6.1, slice S2): `{ changes, note? }`,
+// all or nothing. An owner only: an admin is refused (403), and so is every automation token and the phone's hand-off past
+// its step-up (requireAdminRole); a standby changes nothing (409). Each lock answers 409 with its own sentence and code,
+// a bad request 400, and nothing is written. Answers `{ shape, told: 'members' | 'nobody' }`.
+router.post('/api/local/admin/community-shape', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], SHAPE_OWNER_ONLY)) return;
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        const { shape, told } = applyShapeChanges(actingAs(ctx.state, 'owner'), (ctx as any).requestBody || {});
+        ctx.body = { shape, told };
+    } catch (e) {
+        if (!(e instanceof ShapeChangeError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, ...(e.setting ? { setting: e.setting } : {}), ...(e.unlock ? { unlock: e.unlock } : {}) };
+    }
 });
 
 // The Community health panel in Settings (engine/community-health.ts): every owner and admin reads the totals, the two
@@ -404,31 +417,21 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         console.log("Auth failed for updateNodeConfig");
         return;
     }
+    const body = (ctx as any).requestBody || {};
     // `publishContacts`, the old single switch for both contacts, is not read: a page that still sends it turns nothing on.
-    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door, dmRequests } = (ctx as any).requestBody || {};
-    // Only when sent, and only true or false: a Settings page from before G6 doesn't send it, and must not turn it back on.
-    if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
+    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours } = body;
+    // Requests to join, message requests and who may invite are how this community works, changed only there, by an owner,
+    // logged and told to the members (POST /api/local/admin/community-shape; the design's §3.4). Sent here, the whole
+    // request is refused before anything in it is written: half a save would look like a whole one.
+    for (const [field, setting] of [['acceptKnocks', 'knocks'], ['dmRequests', 'dmRequests'], ['door', 'join']] as const) {
+        if (body[field] === undefined) continue;
         ctx.status = 400;
-        ctx.body = { error: 'acceptKnocks must be true or false' };
+        ctx.body = {
+            error: `${field} is changed under How this community works now, by an owner (POST /api/local/admin/community-shape, changes.${setting}). Nothing in this request was saved.`,
+            code: 'moved_to_community_shape',
+            setting,
+        };
         return;
-    }
-    // Message requests (engine/dm-requests.ts), the same way: a Settings page from before them doesn't send it.
-    if (dmRequests !== undefined && typeof dmRequests !== 'boolean') {
-        ctx.status = 400;
-        ctx.body = { error: 'dmRequests must be true or false' };
-        return;
-    }
-    // Who may invite (config/door.ts): only when sent, only by an owner (the node password is an owner's), and only a door
-    // this node can have; refused before anything in this request is written. An admin runs the community day to day
-    // but doesn't decide who may bring people into it (design §5: "an owner can also set each dial").
-    if (door !== undefined) {
-        if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change who may invite.')) return;
-        const refusal = doorSettingRefusal(door);
-        if (refusal) {
-            ctx.status = refusal.status;
-            ctx.body = { error: refusal.error, code: refusal.code };
-            return;
-        }
     }
     // The contact switches are an owner's choice to publish, so only a real true or false is taken.
     for (const [name, v] of [['publishContactEmail', publishContactEmail], ['publishContactPhone', publishContactPhone]] as const) {
@@ -445,14 +448,7 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
         return;
     }
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door, dmRequests });
-    if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
-    if (typeof dmRequests === 'boolean') setSwitchOverride('dmRequests', dmRequests);
-    if (door !== undefined && door !== getDoor()) {
-        setDoor(door as CommunityDoor);
-        // Who changed who may bring people in, for the owners: a member key under a key session, the password otherwise.
-        console.log(`🚪 Who may invite is now ${door === 'admins' ? 'only admins' : 'any member'}, set by ${(ctx.state as any)?.actor || 'owner:password'}.`);
-    }
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours });
     // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and the
     // location, member count and health switches read unset as "publish": a request that changed one switch published
     // the member count the community had turned off. Settings sends every field (null clears the service area).

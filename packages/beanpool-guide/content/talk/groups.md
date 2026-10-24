@@ -39,7 +39,7 @@ With Beans involved? Start a project or an enterprise instead, from the bottom o
 
 You can invite people on the phone and in the web app. On the phone, a new group's chat asks **Who do you want to invite?**
 
-- Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).
+- Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**). A short key prefix appears under each person's name so you can tell people with the same name apart.
 - Or tap **Not now** to skip it.
 
 Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet: there, they open the group and tap **Accept invitation**. When they join, the chat says so.

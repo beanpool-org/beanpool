@@ -2702,10 +2702,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         ) : (
                             <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🖼️</div>
                         )}
-                        <div style={{ minWidth: 0, flex: 1, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        {/* The question keeps room to read as a sentence: on a narrow screen the buttons go under it
+                            (at 320 px with 1.3x text it was one word a line beside them). */}
+                        <div style={{ minWidth: 0, flex: '1 1 8rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                             {draft.trim() ? t('Send this picture, with what you have typed as its caption?') : t('Send this picture?')}
                         </div>
-                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0, marginLeft: 'auto' }}>
                             <button
                                 type="button"
                                 onClick={clearPendingImage}

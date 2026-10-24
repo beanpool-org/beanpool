@@ -3054,6 +3054,9 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(beans).toHaveTextContent('−35 Beans · room to spend 165');
         expect(beans).toHaveTextContent('This month: 3 trades · +40 in · −25 out');
         expect(beans).toHaveTextContent('Resident');
+        expect(within(beans).getByRole('button', {
+            name: '−35 Beans · room to spend 165. This month: 3 trades · +40 in · −25 out. Resident. Opens the Ledger.',
+        })).toBeInTheDocument();
 
         // Community
         const comm = screen.getByTestId('home-card-community');

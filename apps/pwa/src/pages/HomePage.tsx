@@ -790,11 +790,12 @@ function BeansBody({
     const isNewcomer = !b.activated && Math.round(b.balance * 100) / 100 === 0;
     const tierBadge = !isNewcomer && b.tier ? tierWords(b.tier) : null;
     const note = isNewcomer ? lines.note : null;
+    const fullLine = [lines.line, month].filter(Boolean).join('. ');
 
     return (
         <HomeLine
             onClick={() => onNavigate('ledger')}
-            label={lines.note ? t('{line}. {note}. Opens the Ledger.', { line: lines.line, note: lines.note }) : t('{line}. Opens the Ledger.', { line: lines.line })}
+            label={lines.note ? t('{line}. {note}. Opens the Ledger.', { line: fullLine, note: lines.note }) : t('{line}. Opens the Ledger.', { line: fullLine })}
         >
             <span className="min-w-0 flex-1">
                 <span className="block break-words font-semibold">{lines.line}</span>

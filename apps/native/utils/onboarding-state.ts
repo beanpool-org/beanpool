@@ -93,7 +93,8 @@ export interface PendingOnboarding {
      * or another key: the phone already had this key (an established account joining another community), and Safety
      * Backup reads its words only once the phone's lock has passed (words-behind-lock.ts; PR #1205 review 4112404374).
      * A key, not a flag, as `freshKey` is: it never vouches for any key but that one. The invite wizard writes it as soon
-     * as its key is on the phone, before the redeem ({@link recordJoinKeyMade}).
+     * as its key is on the phone, before the redeem ({@link recordJoinKeyMade}). A door's key that a claim takes over keeps
+     * it in place of the door's `freshKey` (door-key.ts `adoptJoinKey`, `keepNewKey`): its words are still new.
      */
     newKey?: string;
     /**
@@ -214,9 +215,9 @@ export type ResumePlan =
     };
 
 /**
- * Whether `publicKey` is a key this join made on this phone: the wizard's own (`newKey`), or the global door's while its
- * record says so (`freshKey`), in `record` or in the invite join the door holds (`before`). False for a key the phone
- * already had, and for no record: then Safety Backup asks the phone's lock before the words.
+ * Whether `publicKey` is a key this join made on this phone: the wizard's own (`newKey`), or a door's (the global door's, a
+ * claim's) while its record says so (`freshKey`), in `record` or in the invite join the door holds (`before`). False for a
+ * key the phone already had, and for no record: then Safety Backup asks the phone's lock before the words.
  */
 export function keyMadeForThisJoin(record: PendingOnboarding | null | undefined, publicKey: string): boolean {
     if (!record || !publicKey) return false;

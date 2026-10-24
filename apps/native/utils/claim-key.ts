@@ -5,7 +5,9 @@
  *
  * - A phone with an account claims with it, as it always has: nothing is written to the phone for it, and it never comes
  *   off. A mark another door left on that key goes first (door-key.ts `adoptJoinKey`): the key is about to go to this
- *   community.
+ *   community. A key another join made on this phone, whose 12 words no wizard has shown yet (an invite's whose redeem
+ *   failed, a door's, a claim's held at another address), claims the same way; once in, it goes through the claim's
+ *   wizard as a key the claim made does, so its words are shown (`wordsUnseen`, #2433 review).
  * - A phone with none claims with a key made for it in memory (identity.ts `draftIdentity`), signed into the claim, and
  *   written to the phone with the wizard's record (flow `claim`, step `claim`) just before the POST: once the request
  *   is out the node may hold that key as its owner while the answer is lost, and the phone must never have thrown away
@@ -22,7 +24,7 @@ import {
 } from './door-key';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { claimAndHear, confirmLostClaim, type ClaimOutcome, type OwnerCheck } from './node-claim';
-import { claimInFlight, getPendingOnboarding, setPendingOnboarding } from './onboarding-state';
+import { claimInFlight, getPendingOnboarding, keyMadeForThisJoin, setPendingOnboarding } from './onboarding-state';
 import { communitySwitched } from './community-switch';
 import { assertPlainNodeAddress } from './node-url';
 import { addSavedNode, clearGuestNode } from './nodes';
@@ -85,6 +87,13 @@ export interface ClaimedWithKey {
     identity: BeanPoolIdentity;
     /** The key is the claim's own (made for this phone by the claim), not the phone's account. */
     madeHere: boolean;
+    /**
+     * The key's 12 words have never been shown on this phone: a key the claim made, or one another join made here that the
+     * wizard's record still names as new (onboarding-state.ts `keyMadeForThisJoin`: an invite's whose redeem failed, a
+     * door's, a claim's held at another address). Once in, such a key goes through {@link finishClaim} and the wizard,
+     * which show the words; only the phone's established account goes straight to the owner's card.
+     */
+    wordsUnseen: boolean;
     /** The claim's own key came off the phone again, with its record: another key owns the community. */
     released: boolean;
 }
@@ -100,11 +109,14 @@ export interface ClaimedWithKey {
  *   to take a key off (a node whose names changed after an earlier claim by this key landed answers a retry signed for
  *   the old host 409 too). Owner: in. Not owner: the key comes off with its record. No answer: check again.
  * - No clear answer: the key and the record stay.
+ * - The phone's account: whether its 12 words were ever shown here is read before the POST ({@link ClaimedWithKey}
+ *   `wordsUnseen`); nothing else about it changes.
  */
 export async function claimWithKey(req: ClaimWithKey): Promise<ClaimedWithKey> {
     const door = claimDoor(req.origin);
     const madeHere = req.key.createdHere;
     let identity: BeanPoolIdentity = madeHere ? { ...req.key.identity, callsign: req.callsign } : req.key.identity;
+    let wordsUnseen = madeHere;
     const beforePost = async () => {
         if (madeHere) {
             // Whether the key is the claim's is read again from the phone (door-key.ts): a key this screen made and never
@@ -114,7 +126,10 @@ export async function claimWithKey(req: ClaimWithKey): Promise<ClaimedWithKey> {
                 throw new Error("The claim couldn't be saved on this phone, so it was not sent. Try again.");
             }
         } else {
-            await adoptJoinKey(identity.publicKey);
+            // Read before adoptJoinKey takes another door's mark off the key, and that mark's other half, that the words
+            // are new, stays on the record (`newKey`): a tap after a wrong code or a lost answer still knows.
+            wordsUnseen = keyMadeForThisJoin(await getPendingOnboarding(), identity.publicKey);
+            await adoptJoinKey(identity.publicKey, { keepNewKey: true });
         }
         req.onSending?.();
     };
@@ -122,7 +137,7 @@ export async function claimWithKey(req: ClaimWithKey): Promise<ClaimedWithKey> {
         origin: req.origin, identity, code: req.code, codeId: req.codeId, salt: req.salt, callsign: req.callsign,
         isOwner: req.isOwner, fetchImpl: req.fetchImpl, beforePost,
     });
-    const answered = (out: ClaimOutcome, released = false): ClaimedWithKey => ({ outcome: out, identity, madeHere, released });
+    const answered = (out: ClaimOutcome, released = false): ClaimedWithKey => ({ outcome: out, identity, madeHere, wordsUnseen, released });
     if (!madeHere) return answered(outcome);
     switch (heard) {
         case 'refused':
@@ -179,7 +194,8 @@ export async function releaseClaimKey(origin: string, key: JoinKey): Promise<boo
 }
 
 /**
- * The claim is in, by a key the claim made: the phone is this community's from here (its anchor and its saved list), and
+ * The claim is in, by a key whose 12 words this phone has never shown ({@link ClaimedWithKey} `wordsUnseen`: a key the
+ * claim made, or one another join made here): the phone is this community's from here (its anchor and its saved list), and
  * the wizard's record moves on to Your Photo, which the welcome screen resumes: Your Photo, Safety Backup with the 12
  * words, How it Works, then the owner's card. As the global door's finish does for its own key (welcome.tsx
  * `finishGlobalJoin`), at the community's own address. Nothing goes to us: no copy at the key vault (Marty, 24 Oct).

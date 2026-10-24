@@ -147,11 +147,15 @@ export async function commitDoorKey(
  * reuses the phone's key): from here no door ever takes it off the phone. Its record loses `freshKey` now, before the key
  * is sent, so a join that lands with its answer lost is covered too; a join that works replaces the record anyway. Leaves
  * any other record alone.
+ *
+ * `keepNewKey`: the door's mark also said that the key's 12 words are new, never shown (onboarding-state.ts
+ * `keyMadeForThisJoin`), and the record keeps that half as `newKey`, which never takes a key off. For a claim by the key
+ * (claim-key.ts `claimWithKey`): a tap refused, or whose answer was lost, leaves the next tap knowing.
  */
-export async function adoptJoinKey(publicKey: string): Promise<void> {
+export async function adoptJoinKey(publicKey: string, { keepNewKey = false }: { keepNewKey?: boolean } = {}): Promise<void> {
     const record = await getPendingOnboarding();
     if (!record || !markedByADoor(record, publicKey)) return;
-    const adopted: PendingOnboarding = { ...record };
+    const adopted: PendingOnboarding = { ...record, ...(keepNewKey ? { newKey: publicKey } : {}) };
     delete adopted.freshKey;
     delete adopted.joinsOut;
     await setPendingOnboarding(adopted);

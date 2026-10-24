@@ -10,7 +10,8 @@
  * On a phone with no account the claim makes it (DESIGN-account-without-global-fable.md §2.2): a self-hosted community's
  * first owner needs nothing of ours. The name is typed here, and at the tap, after the phone's unlock, a key is made for
  * this phone and written to it just before the claim goes (utils/claim-key.ts); then the join wizard's photo, 12 words and
- * How it Works, and the owner's card last (app/welcome.tsx). A phone with an account claims with it, exactly as before.
+ * How it Works, and the owner's card last (app/welcome.tsx). A phone with an account claims with it, exactly as before;
+ * a key another join made on this phone, whose 12 words it has never shown, claims the same way and then takes that wizard.
  *
  * One column at 320dp and 1.3× font, 48dp targets, as settings-signin.tsx. The full address is shown wrapped, never
  * truncated: it is the one thing a phishing server cannot make look right.
@@ -278,12 +279,17 @@ export default function ClaimCommunityScreen() {
         setPhase('done');
     };
 
-    /** Where a claim's answer takes the member (DESIGN §2.2 "The answers"). */
-    const afterClaim = async (o: string, out: ClaimOutcome, claimedBy: BeanPoolIdentity, madeHere: boolean, cameOff: boolean) => {
+    /**
+     * Where a claim's answer takes the member (DESIGN §2.2 "The answers"). `wordsUnseen`: the key's 12 words have never been
+     * shown on this phone (utils/claim-key.ts `ClaimedWithKey`): a key the claim made, or one another join made here.
+     */
+    const afterClaim = async (o: string, out: ClaimOutcome, claimedBy: BeanPoolIdentity, wordsUnseen: boolean, cameOff: boolean) => {
         if (out.kind === 'owner') {
-            if (!madeHere) { await afterOwner(o); return; }
-            // The account the claim made: the join wizard's photo, 12 words, How it Works and the owner's card, from the
-            // record finishClaim writes (app/welcome.tsx resumes it). One welcome, never this screen under it.
+            // The phone's established account: the owner's card, as always.
+            if (!wordsUnseen) { await afterOwner(o); return; }
+            // The account the claim made, or another join's key: the join wizard's photo, 12 words, How it Works and the
+            // owner's card, from the record finishClaim writes (app/welcome.tsx resumes it), so the words come before the
+            // owner is sent anywhere. One welcome, never this screen under it.
             heldKey.current = null;
             try {
                 await finishClaim(o, claimedBy, namedAtClaim.current, out.callsign);
@@ -342,7 +348,7 @@ export default function ClaimCommunityScreen() {
             isOwner: ownerCheckViaRole,
             onSending: () => setPhase('claiming'),
         });
-        await afterClaim(o, result.outcome, result.identity, result.madeHere, result.released);
+        await afterClaim(o, result.outcome, result.identity, result.wordsUnseen, result.released);
     };
 
     /** Check again: did a claim by the claim's own key land? Asked of the node (utils/claim-key.ts checkOwnClaim). */

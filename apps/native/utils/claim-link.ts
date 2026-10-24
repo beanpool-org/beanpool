@@ -1,7 +1,8 @@
 /**
- * The claim link and the claim code's shape (utils/node-claim.ts has the claim itself). Kept apart, with nothing but
- * node-url.ts and core's audienceOf, so app/+native-intent.ts can route a `beanpool://claim` link without loading the
- * signer.
+ * The claim link, the claim code's shape and the server-written name's cleaning (utils/node-claim.ts has the claim
+ * itself). Kept apart, with nothing but node-url.ts and core's audienceOf, so app/+native-intent.ts can route a
+ * `beanpool://claim` link, and the wizard's record (utils/onboarding-state.ts) can read a claim back, without loading
+ * the signer.
  */
 import { audienceOf } from '@beanpool/core';
 import { isPlainNodeAddress, normalizeNodeUrl, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
@@ -67,6 +68,33 @@ export function claimProbeOrigin(typed: unknown): string | null {
     const s = typed.trim();
     if (!/[.:/]/.test(s)) return null;
     return claimNodeOrigin(s);
+}
+
+/** Breaks that would start a new line: become a space, so "Bean\nTown" reads "Bean Town". */
+const LINE_BREAKS = /[\t\n\v\f\r\u0085\u2028\u2029]/g;
+/**
+ * Control characters (C0, DEL, C1) and the invisible format characters (Unicode Cf, BMP): the soft hyphen, the Arabic
+ * number signs and letter mark (U+061C), the zero-width space and direction marks (U+200B, U+200E, U+200F; the non-joiner and joiner U+200C/D stay), every bidi embedding,
+ * override and isolate (U+202A-202E, U+2066-2069), the word joiner and invisible operators (U+2060-2064), the
+ * deprecated format controls (U+206A-206F), the BOM (U+FEFF) and the interlinear annotation marks (U+FFF9-FFFB).
+ * Listed by hand rather than as \p{Cc}\p{Cf}, so the set is explicit and does not hang on the JS engine's Unicode tables.
+ */
+// eslint-disable-next-line no-control-regex -- removing control characters is the point
+const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
+/** The same, beyond the basic plane (needs the u flag): tag characters U+E0000-E007F and musical format controls U+1D173-1D17A. */
+const INVISIBLE_ASTRAL = /[\u{E0000}-\u{E007F}\u{1D173}-\u{1D17A}]/gu;
+export const CLAIM_NAME_MAX = 80;
+
+/**
+ * A server-written community name made safe to show: one line, no invisible or direction-changing characters (the zero-width
+ * non-joiner and joiner, U+200C/U+200D, stay: scripts such as Persian and emoji sequences need them, and neither moves text), runs of
+ * whitespace as one space, trimmed, at most {@link CLAIM_NAME_MAX} characters. Null when nothing is left.
+ */
+export function cleanClaimName(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const flat = raw.replace(LINE_BREAKS, ' ').replace(INVISIBLE, '').replace(INVISIBLE_ASTRAL, '').replace(/\s+/g, ' ').trim();
+    const capped = Array.from(flat).slice(0, CLAIM_NAME_MAX).join('').trim();
+    return capped || null;
 }
 
 export interface ClaimLink {

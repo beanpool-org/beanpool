@@ -260,6 +260,12 @@ export function shopKindOf(raw: unknown): ShopKind | null {
     return isShopKind(kind) ? kind : null;
 }
 
+/** A shop's banner, its one photo's URL as the node gave it (keyed), or null: none, or a node from before banners. */
+export function shopPhotoOf(raw: unknown): string | null {
+    const url = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).photoUrl : null;
+    return typeof url === 'string' && url !== '' ? url : null;
+}
+
 /** "since Sep 2026", from when it started; null when the node didn't say. */
 export function sinceLine(since: unknown): string | null {
     if (typeof since !== 'string') return null;
@@ -329,13 +335,15 @@ export interface Face {
     howToDeal: string;
     /** A new logo, the picture the keeper chose (already the 800 px copy); absent for no change. */
     avatar?: string;
+    /** Its banner: a new photo the keeper chose (already the 800 px copy), null to take it down; absent for no change. */
+    banner?: string | null;
 }
 
 /**
  * What one Save sends, each field that changed to its own route: the name and purpose only from the lead (or an admin),
- * About and the logo from any keeper (PUT /api/treasury/:t/profile); the kind and how we deal from a keeper, who may
- * change its shop (PUT /api/treasury/:t/shop). Words are sent trimmed, as the node keeps them; how we deal emptied is
- * none (null).
+ * About and the logo from any keeper (PUT /api/treasury/:t/profile); the kind, how we deal and the banner photo from a
+ * keeper, who may change its shop (PUT /api/treasury/:t/shop). Words are sent trimmed, as the node keeps them; how we deal
+ * emptied is none (null), and so is a banner taken down.
  */
 export function faceChanges(was: Face, now: Face, may: { lead: boolean; shop: boolean }): { profile: Record<string, string>; shop: Record<string, string | null> } {
     const profile: Record<string, string> = {};
@@ -347,6 +355,7 @@ export function faceChanges(was: Face, now: Face, may: { lead: boolean; shop: bo
     if (now.avatar) profile.avatar = now.avatar;
     if (may.shop && now.kind !== was.kind) shop.kind = now.kind;
     if (may.shop && trimmed(now.howToDeal) !== trimmed(was.howToDeal)) shop.howToDeal = trimmed(now.howToDeal) || null;
+    if (may.shop && now.banner !== undefined) shop.photo = now.banner;
     return { profile, shop };
 }
 

@@ -491,6 +491,8 @@ async function main(): Promise<void> {
         { path: `/api/groups/${club.id}/picture` },
         // One shop: a visitor's is its id, kind and counts (routes/shops.ts), never its name, owner or words.
         { path: `/api/shops/${aliceShop}` },
+        // A shop's banner, without the key only a member's shop read hands out: 404 to anyone (routes/shops.ts).
+        { path: `/api/shops/${aliceShop}/photo` },
     ];
     for (const re of PATTERNS ?? []) {
         assert(patternExamples.some(e => re.test(e.path.split('?')[0])),
@@ -1452,8 +1454,8 @@ async function main(): Promise<void> {
             'POST /api/reports',
             // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
             'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',
-            // Shops (routes/shops.ts): near a place, one, the signer's own and its changes, and an enterprise's by a keeper.
-            'GET /api/shops', 'GET /api/shops/:id', 'GET /api/shops/mine', 'PUT /api/shops/mine', 'POST /api/shops/mine/close', 'POST /api/shops/mine/offers',
+            // Shops (routes/shops.ts): near a place, one, its banner, the signer's own and its changes, and an enterprise's by a keeper.
+            'GET /api/shops', 'GET /api/shops/:id', 'GET /api/shops/:id/photo', 'GET /api/shops/mine', 'PUT /api/shops/mine', 'POST /api/shops/mine/close', 'POST /api/shops/mine/offers',
             'GET /api/treasury/:treasury/shop', 'PUT /api/treasury/:treasury/shop', 'POST /api/treasury/:treasury/shop/close', 'POST /api/treasury/:treasury/shop/offers',
             // One of a shop's Offers on its shelf (routes/shops.ts), and an enterprise's face by a keeper (routes/treasury.ts, E2).
             'PUT /api/marketplace/posts/:id/feature', 'PUT /api/treasury/:treasury/profile', 'PUT /api/enterprise/:treasury/profile',

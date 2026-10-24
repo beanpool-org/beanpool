@@ -449,6 +449,7 @@ export const SUITES = [
     'test-shops',
     'test-shop-refusal',
     'test-enterprise-shopfront',
+    'test-shop-banner',
     'test-blocks-on-messaging',
     'test-dm-requests',
     'test-messaging-idor',

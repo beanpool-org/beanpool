@@ -28,6 +28,12 @@
  * - Featured (featureOffer; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 7, §4, and Marty's answers of 23 Oct):
  *   up to six of its Offers, stamped on the listing (posts.featured_at), so every copy of the listing knows. Out of the
  *   shop, or the shop closed, the stamp goes.
+ * - Its banner (round 3 §0 row 4; Marty, 24 Oct 2026): its one photo, set and taken down with its other words (changeShop
+ *   `photo`), by whoever may change those: its owner, or any keeper of the enterprise. Kept as a group's picture is, out of
+ *   its row (shop_photos, with its reference in shops.photo_ref, written together by setShopPhoto), under the photo rule
+ *   (a JPEG, PNG, WebP or GIF, its metadata stripped, no more pixels than a node stores, at most 2 MB) and charged to the
+ *   member who sends it (the day's photo budget). A member reads its URL, which carries its key; a visitor gets none. A
+ *   close takes it with a tombstone of its own.
  *
  * A plain table (engine/replication-manifest.ts): a standby holds every shop verbatim, and a close reaches it as a
  * tombstone keyed by the shop's id. Every write here is the main server's: a standby refuses it (assertPlainTablesWritable,
@@ -37,12 +43,16 @@
 import crypto from 'node:crypto';
 import {
     isShopKind, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, SHOP_NAME_LIMIT, SHOP_BLURB_LIMIT, SHOP_HOW_TO_DEAL_LIMIT,
-    SHOP_BACK_ON_MAX_DAYS, SHOP_FEATURED_MAX, word, type ShopCounts, type TextLimit,
+    SHOP_BACK_ON_MAX_DAYS, SHOP_FEATURED_MAX, MAX_PICTURE_BYTES, avatarRefOf, shopOfPhotoUrl, shopPhotoUrlOf, word, type ShopCounts,
+    type TextLimit,
 } from '@beanpool/core';
-import { getPosts, type MarketplacePost } from '@beanpool/engine';
+import { avatarVersionByNode, getPosts, type MarketplacePost } from '@beanpool/engine';
 import { db, writeTombstone } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { bumpPostsVersion } from './versions.js';
+import { avatarValueRefusal, photoRefusalText } from './avatar.js';
+import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { stripImageValue } from '../storage/image-metadata.js';
 
 /** A refusal meant for the member, in a sentence, with its status and code. */
 export class ShopRefusal extends Error {
@@ -68,6 +78,9 @@ export const SHOP_BACK_ON_REFUSED = word(`A shop is back on a day from today to 
 export const SHOP_BACK_ON_OPEN = 'A shop says when it is back only while it is closed for now.';
 export const SHOP_OFFERS_LIST_REFUSED = 'Send the Offers to put in the shop as postIds, a list of 1 to 200 listing ids.';
 export const SHOP_OFFERS_NOT_YOURS = 'Only your own live Offers for everyone here go in your shop, and some of these are not.';
+// The banner's refusals are marked with word('…') so the server's catalog (apps/server/words) holds them, as Featured's are.
+export const SHOP_PHOTO_REFUSED = word("A shop's photo must be a JPEG, PNG, WebP or GIF picture.");
+export const SHOP_PHOTO_TOO_LARGE = word('That photo is too large. Choose a smaller one.');
 
 /** How many deals on a shop's things are open, said in the refusal. */
 export function dealsOpenRefusal(n: number): ShopRefusal {
@@ -90,6 +103,8 @@ export interface ShopRow {
     back_on: string | null;
     paused_posts: string | null;
     updated_at: string;
+    /** Its banner's reference (avatarRefOf), or null: none. The photo is in shop_photos. */
+    photo_ref: string | null;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -188,6 +203,8 @@ export interface ShopChanges {
     howToDeal?: unknown;
     paused?: unknown;
     backOn?: unknown;
+    /** Its banner: a picture (a data URL), its own photo URL sent back (no change), or null or empty text to take it down. */
+    photo?: unknown;
 }
 
 /** A text field as it will be stored: undefined to leave it, null to clear it, else the trimmed text. Refused if too long. */
@@ -223,6 +240,55 @@ function cleanBackOn(raw: unknown, now: number): string | null | undefined {
     return raw;
 }
 
+/**
+ * A banner as it will be stored: undefined to leave it (none sent, or this shop's own photo URL sent back, which is the
+ * photo it has), null to take it down (null or empty text), else the picture with its metadata stripped and the image bytes
+ * it charges. Refused, in a sentence: anything that is no JPEG, PNG, WebP or GIF data URL the photo rule lets a node store
+ * (someone's URL, another shop's photo URL, a shipped picture's name, a face's URL, text: 400 photo_refused), one with more
+ * pixels than a node stores (400 photo_refused, the pixel rule's words), and one past MAX_PICTURE_BYTES (413
+ * photo_too_large).
+ */
+export function cleanShopPhoto(raw: unknown, shopId: string | undefined): { photo: string; bytes: number } | null | undefined {
+    if (raw === undefined) return undefined;
+    if (raw === null) return null;
+    if (typeof raw !== 'string') throw new ShopRefusal(400, 'photo_refused', SHOP_PHOTO_REFUSED);
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const named = shopOfPhotoUrl(trimmed);
+    if (named !== null) {
+        if (shopId !== undefined && named === shopId) return undefined;
+        throw new ShopRefusal(400, 'photo_refused', SHOP_PHOTO_REFUSED);
+    }
+    if (!/^data:/i.test(trimmed)) throw new ShopRefusal(400, 'photo_refused', SHOP_PHOTO_REFUSED);
+    const refusal = avatarValueRefusal(trimmed);
+    if (refusal) throw new ShopRefusal(400, 'photo_refused', photoRefusalText(refusal, SHOP_PHOTO_REFUSED));
+    const bytes = incomingPhotoBytes(trimmed);
+    if (bytes > MAX_PICTURE_BYTES) throw new ShopRefusal(413, 'photo_too_large', SHOP_PHOTO_TOO_LARGE);
+    return { photo: stripImageValue(trimmed), bytes };
+}
+
+/**
+ * Sets a shop's banner to `photo`, or takes it down (null): its shop_photos row and the shop row's photo_ref, together.
+ * The ONE writer of a shop's photo, so the reference always names the photo held. Taking one down, and a close, deletes
+ * its row with a tombstone keyed by the shop's id, so a standby's delta carries it. In the caller's transaction. Returns
+ * whether anything changed.
+ */
+export function setShopPhoto(shopId: string, photo: string | null): boolean {
+    const ref = photo === null ? null : avatarRefOf(photo, avatarVersionByNode);
+    if (ref === null) {
+        const gone = db.prepare('DELETE FROM shop_photos WHERE shop_id = ?').run(shopId).changes > 0;
+        if (gone) writeTombstone('shop_photos', shopId);
+        const unref = db.prepare('UPDATE shops SET photo_ref = NULL WHERE id = ? AND photo_ref IS NOT NULL').run(shopId).changes > 0;
+        return gone || unref;
+    }
+    const held = db.prepare('SELECT photo FROM shop_photos WHERE shop_id = ?').get(shopId) as { photo: string } | undefined;
+    if (held?.photo === photo && (shopById(shopId)?.photo_ref ?? null) === ref) return false;
+    db.prepare(`INSERT INTO shop_photos (shop_id, photo) VALUES (?, ?)
+                ON CONFLICT(shop_id) DO UPDATE SET photo = excluded.photo`).run(shopId, photo);
+    db.prepare('UPDATE shops SET photo_ref = ? WHERE id = ?').run(ref, shopId);
+    return true;
+}
+
 /** What a change did to the shop's listings, for the route to tell the apps. */
 export interface ShopListingsMoved {
     /** Offers a pause took off the board. */
@@ -233,12 +299,13 @@ export interface ShopListingsMoved {
 
 /**
  * Opens `owner`'s shop if need be and changes what the PUT names (ShopChanges), all of it or nothing. `enterprise`: the
- * owner is an enterprise, whose shop has the enterprise's name (a name sent is refused). Pausing and reopening move its
- * Offers (see the file's head). Refused, before anything is written: a text over its limit or not text, a kind that is
- * none of the fourteen, a back-on day that is not one, a back-on day for a shop that stays open, a pause while a deal is
- * open.
+ * owner is an enterprise, whose shop has the enterprise's name (a name sent is refused). `actor`: who sends it, the owner
+ * unless a keeper writes for an enterprise, charged for a new banner (the day's photo budget). Pausing and reopening move
+ * its Offers (see the file's head). Refused, before anything is written: a text over its limit or not text, a kind that is
+ * none of the fourteen, a back-on day that is not one, a banner the photo rule refuses (cleanShopPhoto) or past the
+ * actor's day of photos (429), a back-on day for a shop that stays open, a pause while a deal is open.
  */
-export function changeShop(owner: string, changes: ShopChanges, opts: { enterprise: boolean }, now: number = Date.now()): { shop: ShopRow } & ShopListingsMoved {
+export function changeShop(owner: string, changes: ShopChanges, opts: { enterprise: boolean; actor?: string }, now: number = Date.now()): { shop: ShopRow } & ShopListingsMoved {
     assertPlainTablesWritable();
     if (opts.enterprise && changes.name !== undefined && changes.name !== null) {
         throw new ShopRefusal(400, 'shop_name_is_enterprise', SHOP_NAME_IS_ENTERPRISE);
@@ -251,6 +318,9 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
     }
     if (changes.paused !== undefined && typeof changes.paused !== 'boolean') throw new ShopRefusal(400, 'shop_paused_refused', SHOP_PAUSED_NOT_A_FLAG);
     const backOn = cleanBackOn(changes.backOn, now);
+    const photo = cleanShopPhoto(changes.photo, shopOf(owner)?.id);
+    const actor = opts.actor ?? owner;
+    if (photo && photo.bytes > 0) assertMayStorePhotoBytes(actor, photo.bytes, now);
     const nowIso = iso(now);
     const moved: ShopListingsMoved = { paused: [], resumed: [] };
 
@@ -282,6 +352,7 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
             sets.push('paused_at = NULL', 'back_on = NULL', 'paused_posts = NULL');
         }
         if (sets.length > 0) db.prepare(`UPDATE shops SET ${sets.join(', ')} WHERE id = ?`).run(...values, before.id);
+        if (photo !== undefined && setShopPhoto(before.id, photo?.photo ?? null) && photo) recordStoredPhotoBytes(actor, photo.bytes, now);
         return shopById(before.id)!;
     })();
     if (moved.paused.length + moved.resumed.length > 0) bumpPostsVersion();
@@ -296,7 +367,7 @@ function putBackUp(shop: ShopRow, nowIso: string): string[] {
 
 /**
  * Closes `owner`'s shop: refused while a deal on one of its things is open (409), and when there is none (404). Its row
- * goes, with a tombstone keyed by its id; every listing that named it names it no more. Its live Offers stay as ordinary
+ * goes, with a tombstone keyed by its id, and its banner with one of its own; every listing that named it names it no more. Its live Offers stay as ordinary
  * Offers (those its pause took down back on the board), or, with `endOffers`, end as a removal ends them: taken off for
  * good, with any keeper's wage still owed on one cancelled (engine/posts.ts removePost's follow-ons; no deal is open).
  */
@@ -319,6 +390,7 @@ export function closeShop(owner: string, endOffers: boolean, now: number = Date.
             for (const id of ended) { end.run(nowIso, id); wages.run(id); }
         }
         db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(nowIso, shop.id);
+        setShopPhoto(shop.id, null);
         db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
         writeTombstone('shops', shop.id);
         return { shopId: shop.id, cleared: named, ended, paused: [] as string[], resumed };
@@ -359,13 +431,14 @@ export function addOffersToShop(owner: string, postIds: unknown, now: number = D
 
 /**
  * An account that is closed (a member's own deletion, an admin's removal: state-engine.ts purgeMemberSelf,
- * adminPruneUser) has no shop: its row goes with a tombstone, and its listings name it no more. Inside the caller's
+ * adminPruneUser) has no shop: its row and its banner go, each with a tombstone, and its listings name it no more. Inside the caller's
  * transaction. Returns the shop's id, or null when there was none.
  */
 export function dropShopOf(owner: string, now: number = Date.now()): string | null {
     const shop = shopOf(owner);
     if (!shop) return null;
     db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(iso(now), shop.id);
+    setShopPhoto(shop.id, null);
     db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
     writeTombstone('shops', shop.id);
     return shop.id;
@@ -521,6 +594,8 @@ export interface MemberShop extends VisitorShop {
     backOn: string | null;
     openedAt: string;
     updatedAt: string;
+    /** Its banner's URL, with its key (shopPhotoUrlOf), or null: none, and the apps draw a quiet block in its kind's colour. */
+    photoUrl: string | null;
 }
 
 export function visitorShop(shop: ShopRow, now: number = Date.now()): VisitorShop {
@@ -546,5 +621,6 @@ export function memberShop(shop: ShopRow, reader: string | undefined, now: numbe
         backOn: shop.back_on,
         openedAt: shop.opened_at,
         updatedAt: shop.updated_at,
+        photoUrl: shopPhotoUrlOf(shop.id, shop.photo_ref),
     };
 }

@@ -2827,10 +2827,26 @@ CREATE TABLE IF NOT EXISTS shops (
     back_on       TEXT CHECK (back_on IS NULL OR back_on GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
     paused_posts  TEXT,
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
-    updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Its banner, its one photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4): only its reference here
+    -- (@beanpool/core avatarRefOf: its version), which its URL is made from (shopPhotoUrlOf); the photo is in shop_photos,
+    -- written with it by its one writer (engine/shops.ts setShopPhoto). NULL: none, and the apps draw a quiet block in its
+    -- kind's colour. Last, as db.ts adds it to an older database, before this file runs.
+    photo_ref     TEXT
 );
 -- An account's shop (shopOf).
 CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);
+
+-- A shop's banner, exactly as it was set (a data URL, its metadata stripped, ≤ 2 MB of image bytes: @beanpool/core
+-- MAX_PICTURE_BYTES), out of its row so no read of shops reads it, as a group's picture is (group_pictures). Served by GET
+-- /api/shops/:id/photo to a URL carrying its key (engine/avatar-keys.ts). Copied to a standby verbatim (a plain table,
+-- engine/replication-manifest.ts); taking it down, and closing its shop, deletes it with a tombstone keyed by the shop's id.
+CREATE TABLE IF NOT EXISTS shop_photos (
+    shop_id    TEXT PRIMARY KEY,
+    photo      TEXT NOT NULL,
+    -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
+    updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 
 -- 30. Message requests (scratch/fable-design/DESIGN-message-a-friend-fable.md §4, slice S1; Marty, 23 Oct 2026): where the
 -- `dmRequests` switch is on, a direct conversation a member opened with someone who hasn't added them, written to them or

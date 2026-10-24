@@ -387,6 +387,21 @@ export class AvatarService {
         return this.serveStored(groupPictureCacheKey(groupId), row.picture.trim(), options);
     }
 
+    /**
+     * A shop's banner (shop_photos; engine/shops.ts setShopPhoto), by a group picture's rules to the letter, cached under
+     * a name of its own, so a shop's id never answers for a member key or a group.
+     */
+    async getShopPhoto(shopId: string, options: { ifNoneMatch?: string } = {}): Promise<AvatarResult> {
+        if (!shopId || typeof shopId !== 'string') {
+            return { status: 400, error: 'Invalid shop' };
+        }
+        const row = db.prepare('SELECT photo FROM shop_photos WHERE shop_id = ?').get(shopId) as { photo: string } | undefined;
+        if (!row || !row.photo.trim()) {
+            return { status: 404, error: 'Photo not found' };
+        }
+        return this.serveStored(`shop-photo|${shopId}`, row.photo.trim(), options);
+    }
+
     /** A stored picture value (a data URL, legacy bare base64 or a `bundled://` name) as bytes to serve. */
     private async serveStored(cacheKey: string, rawUrl: string, options: { ifNoneMatch?: string }): Promise<AvatarResult> {
         // Check in-memory L1 cache; if rawUrl matches, use cached decoded buffer and etag

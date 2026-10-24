@@ -6,7 +6,8 @@
  * At 320 px and 1.3× text every part is one column and wraps rather than clips; colours are the page's nature scale with
  * its dark pairs and the central bp-* tokens (@beanpool/core brand-colours); every word goes through t(). Pictures are the
  * node's own (the logo is the avatar, the tiles the listings' small copies), never a new copy, never enlarged past the
- * node's 800 px (memory: photos stay 800px). The banner is a quiet block in its kind's emoji: the shop row keeps no photo.
+ * node's 800 px (memory: photos stay 800px). The banner is its shop's one photo, which its keepers choose in Manage, or
+ * a quiet block in its kind's emoji when it has none.
  */
 import { useState, type ReactNode } from 'react';
 import { formatCount, listPhotoUrl, t, upperCase, type ShopKind } from '@beanpool/core';
@@ -35,12 +36,15 @@ function MoreLess({ open, onClick, testID }: { open: boolean; onClick: () => voi
 }
 
 /**
- * The top of the shopfront: the banner (a quiet block with its kind's emoji), the logo over its foot (the avatar the
- * account already has), the name, and the lines under it: its kind and since when, and any other.
+ * The top of the shopfront: the banner (its shop's one photo, across the top and cropped to fill it; none, or one that
+ * won't load, a quiet block with its kind's emoji), the logo over its foot (the avatar the account already has), the
+ * name, and the lines under it: its kind and since when, and any other.
  */
-export function ShopfrontHeader({ name, logoUrl, kind, fallbackEmoji, lines }: {
+export function ShopfrontHeader({ name, logoUrl, bannerUrl, kind, fallbackEmoji, lines }: {
     name: string;
     logoUrl: string | null | undefined;
+    /** Its shop's photo (the shop's `photoUrl`, keyed), or none. */
+    bannerUrl?: string | null;
     kind: ShopKind | null;
     /** The banner's and the logo's emoji when there is no kind or picture. */
     fallbackEmoji: string;
@@ -48,8 +52,11 @@ export function ShopfrontHeader({ name, logoUrl, kind, fallbackEmoji, lines }: {
     lines: Array<string | null | undefined>;
 }) {
     const [failed, setFailed] = useState<string | null>(null);
+    const [bannerFailed, setBannerFailed] = useState<string | null>(null);
     const logo = resolveAvatarUrl(logoUrl);
     const showLogo = !!logo && logo !== failed;
+    const banner = resolveAvatarUrl(bannerUrl);
+    const showBanner = !!banner && banner !== bannerFailed;
     return (
         <div data-testid="shopfront-header">
             <div
@@ -57,7 +64,9 @@ export function ShopfrontHeader({ name, logoUrl, kind, fallbackEmoji, lines }: {
                 aria-hidden="true"
                 className="h-32 rounded-2xl bg-bp-chip-ok-tint border border-nature-200 dark:border-nature-800 flex items-center justify-center text-5xl overflow-hidden"
             >
-                {kind ? SHOP_KIND_WORDS[kind].emoji : fallbackEmoji}
+                {showBanner ? (
+                    <img data-testid="shopfront-banner-photo" src={banner!} alt="" onError={() => setBannerFailed(banner)} className="w-full h-full object-cover" />
+                ) : (kind ? SHOP_KIND_WORDS[kind].emoji : fallbackEmoji)}
             </div>
             <div data-testid="shopfront-logo" className="-mt-8 ml-3 w-[4.5rem] h-[4.5rem] rounded-full border-4 border-white dark:border-nature-950 bg-white dark:bg-nature-950 overflow-hidden relative">
                 {showLogo ? (

@@ -227,14 +227,18 @@ describe('the phone\'s community address is written only after the plain-address
         'app/(tabs)/settings.tsx handleUpdateAnchor': /isPlainNodeAddress\(finalAnchorUrl\)/,
         // People's "Join another community", an approved knock, a directory pick; and the way back when a redeem fails.
         'utils/join-another-community.ts joinAnotherCommunity': /assertPlainNodeAddress\(targetUrl\)[\s\S]*isPlainNodeAddress\(opts\.returnUrl\)/,
+        // The claim made the account (utils/claim-key.ts finishClaim): the origin came through claimNodeOrigin on the claim
+        // screen; this is the write's own check.
+        'utils/claim-key.ts finishClaim': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
         // The claim's "Make ‹name› my community": the origin came through claimNodeOrigin; this is the write's own check.
         'app/claim-community.tsx makeMine': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
         // A re-key code bound this phone (app/rekey-code.tsx): the community the ask went to, a plain origin already
         // (utils/rekey-redeem.ts rekeyCommunityUrl), checked again before it is written.
         'app/rekey-code.tsx onBound': /assertPlainNodeAddress\(s\.community\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', s\.community\)/,
         'app/rekey-code.tsx moveOntoCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
-        // The header's community switcher.
-        'utils/use-communities.ts switchTo': /assertPlainNodeAddress\(url\)/,
+        // The header's community switcher (the BeanPool sheet's rows), and a tapped notice from another community the phone
+        // keeps (utils/push-notice-switch.ts): the one switch for both.
+        'utils/use-communities.ts switchCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
         // Both restores (12 words, sign-in).
         'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
         // Development discovery: only plain candidates are probed.

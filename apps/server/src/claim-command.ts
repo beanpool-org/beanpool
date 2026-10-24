@@ -52,8 +52,8 @@ export const CLAIM_USAGE = `Usage: beanpool claim [--ip <IPv4> | --name <label> 
        beanpool claim --key <64-hex public key> --callsign <name>
 
 The last step of an install: gives this community its address, then shows the one-time claim code and a QR code.
-On your phone, scan the QR code, or open BeanPool → Find a community, type this server's address in the search box and
-tap "Claim ‹name›": that phone becomes the owner.
+On your phone, scan the QR code, or open BeanPool and tap "Installed BeanPool on a server? Claim it": that phone becomes
+the owner, and the claim makes its BeanPool account if it has none.
 
   --ip <IPv4>         this server's public IP address, on a rented server with ports 80 and 443 open: it gets its own
                       certificate, and phones reach it at https://<IP>. A name survives a change of server; a number
@@ -534,25 +534,31 @@ const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
 
 /**
  * What to do next, in order, on the phone that will own the community (Dax, 23 Oct 2026: "the start seed prompt doesn't
- * specify exactly where to go", and half an hour went on finding out): the app from its store, an account on it, then the
- * QR. Named as the phone shows them: a phone with no account makes one on the first screen, whose open door with no
- * invite is "Explore BeanPool worldwide" (components/WelcomeDoors.tsx); the QR opens apps/native/app/claim-community.tsx
- * (titled "Claim ‹name›" once it knows the server, "Claim a community" while it asks for the address), which offers
- * "Make my account" to a phone scanned before it had one; by hand it is Find a community (app/find-community.tsx, reached
- * from Home's "Communities near you"), whose search box offers "Claim ‹name›" for a typed address with no owner.
- * test-claim-cli checks each label is still in those files.
+ * specify exactly where to go", and half an hour went on finding out): the app from its store, then the QR, whose claim
+ * makes the account (DESIGN-account-without-global-fable.md §2.2): a self-hosted community's first owner needs no invite
+ * and nothing of ours, so no step sends them to the global community first. Named as the phone shows them: the QR opens
+ * apps/native/app/claim-community.tsx (titled "Claim ‹name›" once it knows the server, "Claim a community" while it asks
+ * for the address); without the camera, the first screen's "Installed BeanPool on a server? Claim it" opens the same
+ * screen (app/welcome.tsx). test-claim-cli checks each label is still in those files.
  */
 function phoneSteps(address: string | null): string[] {
-    const finish = 'fill in "Your name here" and tap "Claim and become owner".';
+    const made = 'That makes your account on the phone, with 12 words to write on paper.';
     return [
-        'Next, on your phone (with BeanPool and your account on it already, go to 3):',
+        'Next, on your phone:',
         `  1. Install BeanPool: Google Play ${PLAY_STORE_URL}`,
         `     or the App Store ${APP_STORE_URL}`,
-        '  2. Open BeanPool and make your account (no invite? tap "Explore BeanPool worldwide"). It shows you 12 words: write them on paper.',
-        address
-            ? `  3. Scan this QR code with the phone's camera. BeanPool opens "Claim ‹name›" with the code filled in: ${finish}`
-            : `  3. Scan this QR code with the phone's camera. BeanPool opens "Claim a community" with the code filled in: type this server's address under "Server address", tap "Check this server", ${finish}`,
-        `  4. Or open BeanPool → Find a community ("Communities near you" on Home), type ${address ?? "this server's address"} in the search box, tap "Claim ‹name›", type the code under "Claim code", ${finish}`,
+        ...(address
+            ? [
+                '  2. Scan this QR code with the phone\'s camera. BeanPool opens "Claim ‹name›" with the code filled in:',
+                `     type your name under "Your name here" and tap "Claim and become owner". ${made}`,
+            ]
+            : [
+                '  2. Scan this QR code with the phone\'s camera. BeanPool opens "Claim a community" with the code filled in:',
+                `     type this server's address under "Server address", tap "Check this server", type your name under "Your name here" and tap "Claim and become owner". ${made}`,
+            ]),
+        `  3. Or open BeanPool, tap "Installed BeanPool on a server? Claim it", type ${address ?? "this server's address"} under "Server address", tap "Check this server",`,
+        '     type the code under "Claim code", your name under "Your name here", and tap "Claim and become owner".',
+        '  Already have BeanPool and an account on this phone? Scan the code: the account you have becomes the owner.',
         'That phone becomes the owner. The code works once.',
     ];
 }

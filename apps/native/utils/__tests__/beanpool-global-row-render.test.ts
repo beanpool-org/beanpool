@@ -583,6 +583,17 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(row().getAttribute('aria-label')).toBe('BeanPool Global, Connected. You are a member here.');
     });
 
+    it('not in use, with notices since it was last open: its number, as the rows beside it, read after its connection (utils/notice-counts.ts)', async () => {
+        list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];
+        scene.standing = 'member';
+        store.map.set('beanpool_anchor_url', RIVERSIDE.url);
+        store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: RIVERSIDE.url }, { url: GLOBAL }]));
+        store.map.set('beanpool_notice_counts', JSON.stringify({ [GLOBAL]: { n: 2, seen: {} } }));
+        await open();
+        expect(row().getAttribute('aria-label')).toBe('BeanPool Global, Connected. You are a member here., 2 new notifications');
+        expect(Array.from(row().querySelectorAll('span')).map((s) => s.textContent)).toContain('2');
+    });
+
     for (const door of ['shut', 'preview'] as const) {
         it(`a member's own saved row with the door ${door}, nothing kept: its address, never the strangers' words`, async () => {
             list.rows = [RIVERSIDE, { ...SAVED, status: 'online' }];

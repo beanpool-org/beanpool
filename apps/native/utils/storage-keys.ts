@@ -124,6 +124,13 @@ export const SAVED_NODES_STORE_KEY = 'beanpool_saved_nodes';
 export const PUSH_PINS_STORE_KEY = 'beanpool_push_pins';
 
 /**
+ * How many notices each community this phone keeps sent since the member last had it open (utils/notice-counts.ts): an
+ * object, community address → its count and the notice ids it has seen. Sign Out wipes it (utils/identity.ts
+ * wipeIdentityScopedStorage): the notices were the account's.
+ */
+export const NOTICE_COUNTS_STORE_KEY = 'beanpool_notice_counts';
+
+/**
  * This phone's push token as last registered for the account on it (services/push-notifications.ts; SecureStore, not
  * AsyncStorage). The account unregisters it on its communities as it leaves the phone (utils/account-leaves-phone.ts).
  */

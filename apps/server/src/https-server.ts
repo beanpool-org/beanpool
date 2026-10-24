@@ -128,7 +128,7 @@ import { createEnterpriseDecisionRoutes } from './routes/enterprise-decisions.js
 import { createGroupDecisionRoutes } from './routes/group-decisions.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
 import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview, type KeyedImageChecks } from './config/private-preview.js';
-import { avatarKeyMatches, groupPictureKeyMatches } from './engine/avatar-keys.js';
+import { avatarKeyMatches, groupPictureKeyMatches, shopPhotoKeyMatches } from './engine/avatar-keys.js';
 import { photoKeyMatches } from './engine/photo-keys.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
@@ -400,6 +400,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
     /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)
     /^\/api\/shops\/(?!mine$)[^/]+$/,                      // one shop: public only with the visitors' view on, kind and counts (PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS)
+    /^\/api\/shops\/[^/]+\/photo$/,                         // <img> a shop's banner binary; served only to a URL carrying its key, which only a member's shop read hands out (engine/avatar-keys.ts)
 ];
 
 // Reads on the allowlist that name members, and so are members' reads on every node: off the allowlist, the ordinary
@@ -1732,7 +1733,11 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
                 const refusal = membersOnlyRefusal(ctx.path);
-                ctx.body = refusal ? { ...refusal } : { error: word('Read access requires a member identity') };
+                // `not_a_member`: the signer reads as no member here, which the apps can tell from every other 403 of this
+                // gate (a spent nonce, a signature it could not check, a replaced or closed key). The claim's owner check
+                // reads it at GET /api/node-admin/me (native node-claim.ts ownerCheckViaRole): only this answer, never
+                // another 403, takes a claim's key off the phone.
+                ctx.body = refusal ? { ...refusal } : { error: word('Read access requires a member identity'), code: NOT_A_MEMBER_CODE };
                 return;
             }
 
@@ -1798,6 +1803,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             return !!row && photoKeyMatches(postId, orderNum, row.updated_at, k);
         },
         groupPicture: groupPictureKeyMatches,
+        shopPhoto: shopPhotoKeyMatches,
     };
     app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
     app.use(requireSignature);

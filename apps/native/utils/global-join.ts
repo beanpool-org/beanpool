@@ -59,7 +59,8 @@
  *
  * ## A key any node may hold is never taken off the phone
  *
- * The phone takes a key off only when all of these hold, each read from the saved record, never from memory:
+ * The rule is every door's (utils/door-key.ts), here at the global community's address. The phone takes a key off only
+ * when all of these hold, each read from the saved record, never from memory:
  * - the door made it (`freshKey`), and no other join has used it since. An invite join that reuses the key
  *   takes that mark away before it sends it (`adoptJoinKey`), and replaces the record once it has redeemed;
  * - every join it signed was refused by the node (`joinsOut` is 0). A join counts from just before it is
@@ -70,7 +71,7 @@
  * A key that is in answers `already_member` there once the door is open, and a member can restore instead.
  */
 
-import { importIdentity, loadIdentity, draftIdentity, discardUnjoinedIdentity, type BeanPoolIdentity } from './identity';
+import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { checkCallsignAvailable, suggestCallsigns } from './callsign-suggest';
 import {
@@ -87,7 +88,10 @@ import { checkVaultTicket } from '@beanpool/core';
 import { extractSub } from './sso-sheet-connect';
 import { enrolmentFromJoin, enrolmentFromVault, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
 import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError } from './vault';
-import { getPendingOnboarding, setPendingOnboarding, clearPendingOnboarding, type PendingOnboarding } from './onboarding-state';
+import {
+    adoptJoinKey, commitDoorKey, countDoorJoinOut, countDoorJoinRefused, keepJoinedIdentity, keyForThisPhone, releaseDoorKey,
+    type JoinKey, type KeyDoor,
+} from './door-key';
 import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
 import type { DoorWorkDoor } from '@beanpool/core';
 import type { DoorWorkOutcome, DoorWorkRun, DoorWorkSolution } from './door-work';
@@ -435,38 +439,25 @@ export function nameCheckMessage(name: string, check: NameCheck): string {
     }
 }
 
-/** The key the join signs with, and whether this door made it. */
-export interface JoinKey {
-    identity: BeanPoolIdentity;
-    /**
-     * True: made by this door, only in memory or with the door's own record saying so (`freshKey`). False: the
-     * phone already had it, or an invite join has taken it over since. What the screen shows and checks; nothing
-     * is written or taken off on it alone (`commitJoinKey` and `releaseJoinKey` read the record again).
-     */
-    createdHere: boolean;
-}
+export type { JoinKey } from './door-key';
+export { adoptJoinKey, keepJoinedIdentity };
 
-/** The saved record says the door made this key and no other join has used it (`adoptJoinKey` takes the mark away). */
-function madeByTheDoor(record: PendingOnboarding | null, publicKey: string): boolean {
-    return record?.flow === 'global' && typeof record.freshKey === 'string' && record.freshKey === publicKey;
+/** This door, to the key rule every door shares (utils/door-key.ts): its record's flow, at the global community's address. */
+function globalDoor(): KeyDoor {
+    return { flow: 'global', url: GLOBAL_NODE_URL };
 }
 
 /**
  * The phone's own key when it has one (never a second), otherwise `held` when it is a key this door made,
- * otherwise a new one in memory, not yet saved.
+ * otherwise a new one in memory, not yet saved (door-key.ts `keyForThisPhone`).
  *
  * Asked again at every sign-in, with the key the door already holds. A key made on an earlier visit and never
  * written never outranks one the phone has stored since (an invite join started in between): `commitJoinKey`
  * would write it over that account. Whether a stored key is the door's comes from the saved record, never from
  * `held`: an invite join that took the key over has replaced that record, and the key is its now.
  */
-export async function joinKeyForThisPhone(held: JoinKey | null = null): Promise<JoinKey> {
-    const stored = await loadIdentity();
-    if (stored) {
-        return { identity: stored, createdHere: madeByTheDoor(await getPendingOnboarding(), stored.publicKey) };
-    }
-    if (held?.createdHere) return held;
-    return { identity: await draftIdentity(), createdHere: true };
+export function joinKeyForThisPhone(held: JoinKey | null = null): Promise<JoinKey> {
+    return keyForThisPhone(globalDoor(), held);
 }
 
 /**
@@ -622,19 +613,13 @@ function refusedByTheNode(answer: DoorAnswer): boolean {
  * with its answer lost, or with the app stopped, is never forgotten (`joinsOut`). False when the count could
  * not be written; the join is then not sent. True when there is nothing to count (not the door's key).
  */
-async function countJoinOut(publicKey: string): Promise<boolean> {
-    const record = await getPendingOnboarding();
-    if (!record || !madeByTheDoor(record, publicKey)) return true;
-    const joinsOut = (record.joinsOut ?? 0) + 1;
-    await setPendingOnboarding({ ...record, joinsOut });
-    return (await getPendingOnboarding())?.joinsOut === joinsOut;
+function countJoinOut(publicKey: string): Promise<boolean> {
+    return countDoorJoinOut(globalDoor(), publicKey);
 }
 
 /** The node refused a join signed by the door's own key: it no longer counts. */
-async function countJoinRefused(publicKey: string): Promise<void> {
-    const record = await getPendingOnboarding();
-    if (!record || !madeByTheDoor(record, publicKey) || !record.joinsOut) return;
-    await setPendingOnboarding({ ...record, joinsOut: record.joinsOut - 1 });
+function countJoinRefused(publicKey: string): Promise<void> {
+    return countDoorJoinRefused(globalDoor(), publicKey);
 }
 
 /**
@@ -850,74 +835,8 @@ async function sendJoin(
  * only in memory is the door's; a stored one is the door's only while the door's record says so (`freshKey`).
  * The count of joins that key has signed (`joinsOut`) carries over from the door's earlier tries.
  */
-export async function commitJoinKey(key: JoinKey, callsign: string): Promise<BeanPoolIdentity> {
-    const identity = { ...key.identity, callsign };
-    const stored = await loadIdentity();
-    if (stored && stored.publicKey !== identity.publicKey) {
-        throw new Error('This phone holds a different BeanPool account, so the join was not sent.');
-    }
-    const current = await getPendingOnboarding();
-    const doorsOwn = madeByTheDoor(current, identity.publicKey);
-    const madeHere = stored ? doorsOwn : key.createdHere;
-    // A record with no key behind it describes nothing; only a key the phone already had has a wizard to keep.
-    const before = !stored ? null : current?.flow === 'global' ? current.before ?? null : current;
-    if (!stored || madeHere) await importIdentity(identity);
-    await setPendingOnboarding({
-        step: 'globalJoin',
-        flow: 'global',
-        inviteCode: '',
-        anchorUrl: GLOBAL_NODE_URL,
-        callsign,
-        redeemed: false,
-        ...(madeHere ? { freshKey: identity.publicKey, joinsOut: doorsOwn ? current?.joinsOut ?? 0 : 0 } : {}),
-        ...(before ? { before } : {}),
-    });
-    return identity;
-}
-
-/**
- * An invite join is about to send this key to its community (handleCreate reuses the phone's key): from here
- * the door never takes it off the phone. Its record loses `freshKey` now, before the invite is redeemed, so a
- * redeem that lands with its answer lost is covered too; a redeem that works replaces the record anyway.
- * Leaves any other record alone.
- */
-export async function adoptJoinKey(publicKey: string): Promise<void> {
-    const record = await getPendingOnboarding();
-    if (!record || !madeByTheDoor(record, publicKey)) return;
-    const adopted: PendingOnboarding = { ...record };
-    delete adopted.freshKey;
-    delete adopted.joinsOut;
-    await setPendingOnboarding(adopted);
-}
-
-/**
- * In: the key the node has just accepted is this phone's, under the name the node kept. Returns the identity
- * the phone now holds, which the rest of the wizard carries on with.
- *
- * Written here as well as at Join, for two reasons:
- * - The node may have kept a different name (it makes a taken one unique). The phone must hold that one,
- *   or a restart reads the old name back and the phone and the node disagree about who this is.
- * - A phone that learns at the sign-in that it is in already (`already_member`) never passes through
- *   `commitJoinKey`. Its key has to be on the phone before the wizard's record says it joined: a record
- *   with no key behind it is dropped on the next launch (onboarding-state.ts `resumePlan`).
- *
- * A key the phone already holds keeps everything but its name. Never writes over a different key: one
- * identity per device, and a phone that somehow holds another account refuses rather than replaces it.
- */
-export async function keepJoinedIdentity(identity: BeanPoolIdentity): Promise<BeanPoolIdentity> {
-    const stored = await loadIdentity();
-    if (stored && stored.publicKey !== identity.publicKey) {
-        throw new Error('This phone holds a different BeanPool account, so the join was not saved here.');
-    }
-    if (!stored) {
-        await importIdentity(identity);
-        return identity;
-    }
-    const callsign = identity.callsign || stored.callsign;
-    if (stored.callsign === callsign) return stored;
-    const kept = { ...stored, callsign };
-    await importIdentity(kept);
-    return kept;
+export function commitJoinKey(key: JoinKey, callsign: string): Promise<BeanPoolIdentity> {
+    return commitDoorKey(globalDoor(), key, callsign);
 }
 
 /**
@@ -967,20 +886,6 @@ export async function joinedUnderNodeName(
  *   way to the one the phone had before (`before`), or to none if it had none.
  * - With no door record on the phone (nothing was written for the door), nothing changes and nothing comes off.
  */
-export async function releaseJoinKey(key: JoinKey): Promise<boolean> {
-    const current = await getPendingOnboarding();
-    if (current?.flow !== 'global') return false;
-    const publicKey = key.identity.publicKey;
-    if (madeByTheDoor(current, publicKey)) {
-        if ((current.joinsOut ?? 0) > 0) return false;
-        const removed = await discardUnjoinedIdentity(publicKey);
-        await clearPendingOnboarding();
-        return removed;
-    }
-    if (current.before) {
-        await setPendingOnboarding(current.before);
-    } else {
-        await clearPendingOnboarding();
-    }
-    return false;
+export function releaseJoinKey(key: JoinKey): Promise<boolean> {
+    return releaseDoorKey(globalDoor(), key);
 }

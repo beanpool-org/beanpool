@@ -2,7 +2,7 @@
 slug: your-shop
 title: Your Shop
 summary: A front window on your own account, for the Offers you choose, under one name.
-help: Your Offers under one name. Name it, say what kind it is, close it for now, or close it.
+help: Your Offers under one name. Name it, say what kind it is, give it a banner photo, close it for now, or close it.
 related: posting, my-deals, browsing-the-market, holiday-mode
 ---
 
@@ -26,10 +26,11 @@ Each of these is one field. Fill them in any order, or not at all:
 - **Kind**: one of fourteen, such as **Tools and equipment**, **Repairs** or **Food from the garden or farm**. It helps neighbours find you and picks the tools shown. It changes nothing else.
 - **About**: what it is, in a few words.
 - **How I deal**: where to pick things up, and when they come back.
+- **Banner photo**: one photo across the top of your shop, as members see it. Tap it to choose one, or to change it; **Remove the banner photo** takes it down. With none, the top is a plain block with your shop's kind.
 
 ## How members see it
 
-Tap **See it as members do** on Your shop. It shows your shop as other members here see it: its name, kind and since when, your picture and trust level, About, the Offers you feature, its Offers in sections (**To buy**, **Book a time**, **To borrow**), How I deal, and a **Message** button that opens a chat with you. To change it, tap **Change your shop**.
+Tap **See it as members do** on Your shop. It shows your shop as other members here see it: its banner photo, its name, kind and since when, your picture and trust level, About, the Offers you feature, its Offers in sections (**To buy**, **Book a time**, **To borrow**), How I deal, and a **Message** button that opens a chat with you. To change it, tap **Change your shop**.
 
 ## Putting Offers in it
 
@@ -57,7 +58,7 @@ You can't close it, or close it for now, while a deal on one of its things is as
 
 ## On the global community
 
-A shop works the same on the global community. Someone who has not joined sees what kind of shop it is and how many things are in it, never its name or yours.
+A shop works the same on the global community. Someone who has not joined sees what kind of shop it is and how many things are in it, never its name, its banner photo or your name.
 
 ## In the web app
 

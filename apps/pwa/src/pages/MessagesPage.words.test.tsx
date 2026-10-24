@@ -234,7 +234,8 @@ describe('Talk on the web in the pseudo-locale', () => {
         expect(await screen.findByText(xx('No messages in this chat match.'))).toBeInTheDocument();
 
         fireEvent.paste(composer, { clipboardData: clipboardWith(picture()) });
-        expect(await screen.findByTestId('chat-image-notice')).toHaveTextContent(xx('Photos can only be sent in direct messages'));
+        // An old node's group chat, never locked here: its photo is refused with the chat's own notice (§2.6).
+        expect(await screen.findByTestId('chat-image-notice')).toHaveTextContent(xx(notice));
         expect(screen.getByRole('button', { name: xx('Close search') })).toBeInTheDocument();
         expect(bypassing(document.body, { others })).toEqual([]);
     });

@@ -1,17 +1,18 @@
 /**
  * Sending, editing and drawing a group chat's lines in the web app (group-chat-lines.ts): the sticky lock and the plan
  * that decides whether anything readable may go, the line-display rule's cases (DESIGN-group-chat-line-display-fable.md
- * §7: whose name goes on a line), and in-thread search. Against a node in memory; the real node is e2e/group-chat-check.mjs.
+ * §7: whose name goes on a line), a photo line's two parts (DESIGN-group-chat-photos-fable.md §2.2, §2.3), and in-thread
+ * search. Against a node in memory; the real node is e2e/group-chat-check.mjs.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { forgetGroupKeys, groupKeyring, memoryGroupLockStore, type GroupLockStore } from './group-chat-keys';
 import {
-    groupChatSendPlan, groupChatNotice, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread, groupLineShown,
+    groupChatSendPlan, groupChatNotice, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread, groupLineShown, getDecryptedGroupAttachment,
     GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_LOCKED_NOTICE, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_CHAT_UNREAD_TEXT,
     GROUP_LINE_UNSEALED_DETAILS, GROUP_LINE_DELETED_TEXT, GROUP_LINE_REMOVED_TEXT,
 } from './group-chat-lines';
 import { GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT, GROUP_LINE_NOT_IN_GROUP, searchShownLines } from './group-line-display';
-import { sealLine } from './group-chat-crypto';
+import { sealLine, openLine } from './group-chat-crypto';
 import { fakeGroupNode, person } from './group-chat-fake-node.test-support';
 
 const G = '7a1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
@@ -175,6 +176,130 @@ describe('whose name goes on a line (line-display design §7)', () => {
         const ring = groupKeyring(fakeGroupNode(G, [ana.publicKey, ben.publicKey]).as(ben.publicKey), ben, G, memoryGroupLockStore());
         const t = await openGroupThread(ring, { encryption: { current: epoch, stale: false, fromEpoch: epoch + 1 }, messages: [l] }, []);
         expect(groupLineShown(l, { locked: true, thread: t, me: ben.publicKey })?.hidden).toBe(true);
+    });
+});
+
+describe('a photo line: its caption and its photo under one message key (DESIGN-group-chat-photos-fable.md §2.2, §2.3)', () => {
+    const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
+    const OTHER = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAgAA';
+    const conflict = (code: string) => new Response(JSON.stringify({ error: 'epoch', code }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+    const served = (node: ReturnType<typeof fakeGroupNode>) => ({
+        encryption: { current: node.current(), stale: false, fromEpoch: 1 },
+        messages: node.lines.map((l) => ({ id: l.id, authorPubkey: l.author, ciphertext: l.ciphertext, nonce: l.nonce, metadata: JSON.stringify(l.metadata), type: l.type ?? 'text' })),
+    });
+    /** A member's opened key for an epoch, as a fresh page of theirs would hold it. */
+    async function keyOf(node: ReturnType<typeof fakeGroupNode>, who: { publicKey: string; privateKey: string }, store: GroupLockStore, epoch: number) {
+        forgetGroupKeys();
+        const ring = groupKeyring(node.as(who.publicKey), who, G, store);
+        await ring.sync([epoch]);
+        return (await ring.keyFor(epoch))!;
+    }
+
+    it('goes as type image: the caption sealed as part body, the photo as part attachment, one id, epoch and reply; nothing readable', async () => {
+        const ana = person(true);
+        const ben = person();
+        const node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
+        const store = memoryGroupLockStore();
+        const asked = uuid();
+        await sendSealedGroupLine(node.as(ben.publicKey), ben, store, { groupId: G, text: 'Is the gate fixed?', clientId: asked });
+        forgetGroupKeys();
+        const id = uuid();
+        await sendSealedGroupLine(node.as(ana.publicKey), ana, store, {
+            groupId: G, text: 'Fixed, @Ben', photo: PHOTO, clientId: id, replyToId: asked,
+            mentionCandidates: [{ pubkey: ben.publicKey, callsign: 'Ben' }],
+        });
+        const line = node.lines[1];
+        expect(line).toMatchObject({ id, type: 'image', metadata: { epoch: 1, replyToId: asked, mentions: [ben.publicKey] } });
+        const photo = { ciphertext: line.attachment?.data ?? '', nonce: line.attachment?.nonce ?? '' };
+        expect(line.attachment?.mime).toBe('image/jpeg');
+        expect(photo.nonce.startsWith('group-xc20p-v1:')).toBe(true);
+        expect(photo.nonce).not.toBe(line.nonce);
+        expect(Buffer.from(photo.ciphertext, 'base64').toString('latin1')).not.toContain('/9j/');
+
+        const key = await keyOf(node, ben, store, 1);
+        const bind = { groupId: G, epoch: 1, senderPubHex: ana.publicKey, messageId: id, replyToId: asked };
+        expect(openLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { ...bind, part: 'body' }, key).text).toBe('Fixed, @Ben');
+        expect(openLine(photo, { ...bind, part: 'attachment' }, key).text).toBe(PHOTO);
+        // Neither part stands in for the other, for another line's, or under another reply.
+        expect(() => openLine(photo, { ...bind, part: 'body' }, key)).toThrow();
+        expect(() => openLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { ...bind, part: 'attachment' }, key)).toThrow();
+        expect(() => openLine(photo, { ...bind, part: 'attachment', messageId: uuid() }, key)).toThrow();
+        expect(() => openLine(photo, { ...bind, part: 'attachment', replyToId: null }, key)).toThrow();
+    });
+
+    it('a 409 mid-send seals both parts again under the new epoch, once; a second 409 is the refusal', async () => {
+        const ana = person(true);
+        const ben = person();
+        const node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
+        const store = memoryGroupLockStore();
+        await groupKeyring(node.as(ben.publicKey), ben, G, store).prepareToSeal();
+        forgetGroupKeys();
+        // Epoch 1 goes stale between Ana's seal and her send (a member left): the node refuses the line once.
+        let refusals = 1;
+        node.lie = (method, path) => {
+            if (method !== 'POST' || !path.endsWith('/chat/message') || refusals === 0) return undefined;
+            refusals--;
+            node.stale = true;
+            return conflict('epoch_stale');
+        };
+        const id = uuid();
+        await sendSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, text: 'Gate', photo: PHOTO, clientId: id });
+        const posts = node.calls.filter((c) => c.method === 'POST' && c.path.endsWith('/chat/message'));
+        expect(posts.map((c) => [c.body.metadata.epoch, c.body.type, typeof c.body.attachment?.data])).toEqual([[1, 'image', 'string'], [2, 'image', 'string']]);
+        expect(posts[1].body.attachment.data).not.toBe(posts[0].body.attachment.data);
+        expect(node.lines).toHaveLength(1);
+        const line = node.lines[0];
+        expect(line).toMatchObject({ id, type: 'image', metadata: { epoch: 2 } });
+        const photo = { ciphertext: line.attachment?.data ?? '', nonce: line.attachment?.nonce ?? '' };
+        const bind = { groupId: G, senderPubHex: ana.publicKey, messageId: id };
+        const key2 = await keyOf(node, ben, store, 2);
+        expect(openLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { ...bind, epoch: 2, part: 'body' }, key2).text).toBe('Gate');
+        expect(openLine(photo, { ...bind, epoch: 2, part: 'attachment' }, key2).text).toBe(PHOTO);
+        const key1 = await keyOf(node, ben, store, 1);
+        expect(() => openLine(photo, { ...bind, epoch: 1, part: 'attachment' }, key1)).toThrow();
+
+        // Twice refused: answered once, then the node's refusal, and nothing stored.
+        forgetGroupKeys();
+        refusals = 2;
+        node.calls.length = 0;
+        await expect(sendSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, text: '', photo: OTHER, clientId: uuid() })).rejects.toMatchObject({ status: 409 });
+        expect(node.calls.filter((c) => c.method === 'POST' && c.path.endsWith('/chat/message'))).toHaveLength(2);
+        expect(node.lines).toHaveLength(1);
+    });
+
+    it('opens only once its words did, under the key that opened them: a swapped photo is nothing, and a line waiting, unverified or hidden asks for none', async () => {
+        const ana = person(true);
+        const ben = person();
+        const node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
+        const store = memoryGroupLockStore();
+        const [first, second] = [uuid(), uuid()];
+        await sendSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, text: 'The gate', photo: PHOTO, clientId: first });
+        await sendSealedGroupLine(node.as(ana.publicKey), ana, store, { groupId: G, text: '', photo: OTHER, clientId: second });
+        forgetGroupKeys();
+        const roster = [{ memberPubkey: ana.publicKey, callsign: 'Ana' }, { memberPubkey: ben.publicKey, callsign: 'Ben' }];
+        const ring = groupKeyring(node.as(ben.publicKey), ben, G, store);
+        const s = served(node);
+        const thread = await openGroupThread(ring, s, roster);
+        const [p1, p2] = s.messages;
+        const open = (line: typeof p1, view = thread.views.get(line.id)) =>
+            getDecryptedGroupAttachment(node.as(ben.publicKey), ben, store, { groupId: G, line, view });
+        expect(groupLineShown(p1, { locked: true, thread, me: ben.publicKey })).toMatchObject({ text: 'The gate', name: 'Ana', unattributed: false });
+        expect(await open(p1)).toBe(PHOTO);
+        expect(await open(p2)).toBe(OTHER);
+
+        // The node serves the second line's photo under the first's id: it opens as nothing, never as the other picture.
+        node.lines[0].attachment = node.lines[1].attachment;
+        expect(await open(p1)).toBeNull();
+
+        const asked = () => node.calls.filter((c) => c.path.includes('/attachment')).length;
+        const before = asked();
+        const v = thread.views.get(p2.id)!;
+        for (const view of [{ ...v, waitingKey: true }, { ...v, unverified: true }, { ...v, hidden: true }, { ...v, signer: null }, { ...v, epoch: null }, undefined]) {
+            expect(await open(p2, view)).toBeNull();
+        }
+        // A words line is no photo line, whatever its view.
+        expect(await open({ ...p2, type: 'text' })).toBeNull();
+        expect(asked()).toBe(before);
     });
 });
 

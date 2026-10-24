@@ -23,7 +23,7 @@ import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { claimInFlight, forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
-import { guestRedirect, memberRedirect } from '../utils/member-landing';
+import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { DrawnInLanguage, LanguageProvider, useWords, whenLanguagePicked } from '../components/LanguageProvider';
@@ -179,7 +179,10 @@ function RootLayoutNav() {
     // (DrawnInLanguage below), and nothing here routes or opens a link before it is there.
     const { settled: languageSettled } = useWords();
     const isLoading = identityLoading || !languageSettled;
-    const { recognition, recheck } = useNodeStatus();
+    const { recognition, nodeUrl, recheck } = useNodeStatus();
+    // The latest recheck, for a tapped notice that moves the phone to another community (services/push-notifications.ts).
+    const recheckRef = useRef(recheck);
+    recheckRef.current = recheck;
     const { theme, colors } = useTheme();
     const segments = useSegments();
     const router = useRouter();
@@ -753,9 +756,12 @@ function RootLayoutNav() {
         }
 
         // Stuck on the welcome screen or root with a valid identity → into the secure area: the tabs' index, or the one
-        // landing a screen asked for before it set the identity (utils/member-landing.ts).
+        // landing a screen asked for before it set the identity (utils/member-landing.ts). Then, over the tabs' index only,
+        // the screen of a notice tapped from the community the phone has just moved to for it (utils/push-notice-switch.ts).
         const landing = memberRedirect(segments as string[], identity.publicKey);
         if (landing) router.replace(landing);
+        const notice = landing === DEFAULT_MEMBER_LANDING ? takeOpenAfterLanding(identity.publicKey, nodeUrl) : null;
+        if (notice) router.push(notice);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 
     // Register for push notifications when identity is available. One that doesn't land is tried again as the app comes
@@ -844,7 +850,7 @@ function RootLayoutNav() {
 
     // Set up notification deep-link handler
     useEffect(() => {
-        const subscription = setupNotificationResponseHandler();
+        const subscription = setupNotificationResponseHandler({ recheck: () => recheckRef.current() });
         return () => subscription.remove();
     }, []);
 

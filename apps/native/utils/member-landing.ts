@@ -11,7 +11,11 @@
  * Kept in memory for this run only, read once, and only for the account it was asked for: a landing left over (the
  * node called the restored key a stranger, so the guard never reached its landing) is dropped when another account, or
  * none, is on the phone, so a later account never lands on it (PR #1357 confirmation, N1).
+ *
+ * And one after the landing: the screen of a notice tapped from another community, which the phone has just moved to for
+ * it ({@link openAfterLanding}), opens over the tabs' index once the guard has let the member in there.
  */
+import type { NoticeRoute } from './push-notice-check';
 
 export type MemberLanding = '/(tabs)' | '/(tabs)/settings';
 
@@ -75,4 +79,39 @@ export function guestRedirect(segments: readonly string[], publicKey: string | n
     const to = next.to;
     next = null;
     return to;
+}
+
+/**
+ * How long a tapped notice waits for the guard's landing. The switch asks for it just before its bounce through Welcome,
+ * and the guard lands within the next few frames; this only stops one the guard never landed (it held the member
+ * elsewhere) from opening much later, on another switch to the same community.
+ */
+export const NOTICE_LANDING_MS = 60_000;
+
+let notice: { route: NoticeRoute; community: string; publicKey: string; until: number } | null = null;
+
+const sameCommunity = (a: string | null, b: string | null) => !!a && !!b && a.trim().replace(/\/+$/, '') === b.trim().replace(/\/+$/, '');
+
+/**
+ * A notice tapped from `community` (utils/push-notice-switch.ts): the phone has moved there for it and is about to bounce
+ * through Welcome. Once the guard lands `publicKey` from welcome on the tabs' index, with that community in use, `route`
+ * opens over it ({@link takeOpenAfterLanding}). Anywhere else the guard sends the member (the join wizard, the
+ * not-recognised screen, a recovery prompt, a claim or a landing a screen asked for), it doesn't. The latest ask
+ * replaces any before it. Call it before the bounce, and don't navigate: the guard does.
+ */
+export function openAfterLanding(route: NoticeRoute, community: string, publicKey: string, now: number = Date.now()): void {
+    notice = { route, community, publicKey, until: now + NOTICE_LANDING_MS };
+}
+
+/**
+ * The root guard's look after it lands a member from welcome on the tabs' index (app/_layout.tsx): the notice to open over
+ * it, taken once, when it was asked for this account and `community` is the one the phone is in now (the node status's
+ * address, read again before the bounce). Null otherwise; one for another account, or out of time, is dropped.
+ */
+export function takeOpenAfterLanding(publicKey: string, community: string | null, now: number = Date.now()): NoticeRoute | null {
+    if (notice && (notice.publicKey !== publicKey || !(now < notice.until))) notice = null;
+    if (!notice || !sameCommunity(notice.community, community)) return null;
+    const { route } = notice;
+    notice = null;
+    return route;
 }

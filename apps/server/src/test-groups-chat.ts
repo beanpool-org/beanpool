@@ -291,7 +291,8 @@ async function main(): Promise<void> {
     const oldDm = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...lockedDm(), metadata: viaSend.metadata });
     assert(oldDm.status === 400, "a DM's sealed form is refused in a group chat too (another prefix)");
     const oldImage = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...lockedGroupLine(db, garden.id), type: 'image', attachment: { data: 'x', nonce: 'y' } });
-    assert(oldImage.status === 400, 'no photos in a group chat through the old route');
+    // Group chat photos S2: a sealed photo goes through this route as through the group's (test-group-chat-photo); a readable one never.
+    assert(oldImage.status === 400 && oldImage.body?.code === 'not_encrypted', 'a readable photo is refused in a group chat through the old route');
     const oldLong = await mpost('/api/messages/send', bob, { conversationId: garden.id, authorPubkey: bob, ...lockedGroupLine(db, garden.id, { bytes: GROUP_LINE_MAX_BYTES + 1 }) });
     assert(oldLong.status === 400, 'the 2000-character cap holds through the old route');
     // Chat parity (2026-09-23): slice 1 refused an edit and a reaction on a group chat message here, because

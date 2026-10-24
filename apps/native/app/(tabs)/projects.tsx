@@ -64,7 +64,8 @@ export default function ProjectsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
-    // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
+    // A community with Beans off (the worldwide one) hides this tab when Decisions are off too (with Decisions on,
+    // the tab stays for Decide and groups); where hidden, a link still opens it (Talk's "Find groups",
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
     // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
     const reader = useReaderFeatures();

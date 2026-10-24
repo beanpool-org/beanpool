@@ -54,7 +54,7 @@ If you take an invitation back and invite the same person again, they get no sec
 - Write **@** and someone's name to alert them. See "Mentions".
 - The newest message sits just above the message box, and stays there when the keyboard opens. Scroll up to read back; a new message arriving then waits for you rather than dragging you down.
 
-A group's chat is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions.
+A group's chat is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, the emoji reactions, and which lines are photos and how large each one is.
 
 - You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words or photos.
 - When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.

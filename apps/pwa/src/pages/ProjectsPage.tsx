@@ -825,12 +825,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </div>
                             )}
 
-                            {/* Photo / Avatar upload */}
+                            {/* Its logo, the one picture made with it (its avatar). Its banner is its shop's photo, which a keeper
+                                chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
                             <div>
-                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                    {t('Cover Photo / Avatar (Optional)')}
+                                <label htmlFor="propose-logo" className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                    {t('Logo (optional)')}
                                 </label>
+                                <p className="m-0 mb-1 text-xs text-nature-400">{t('Its banner photo is chosen later, in Manage.')}</p>
                                 <input
+                                    id="propose-logo"
                                     type="file"
                                     accept="image/*"
                                     onChange={handlePhotoUpload}

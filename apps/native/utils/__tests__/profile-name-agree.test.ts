@@ -330,16 +330,21 @@ const settle = async (n = 10) => {
     for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 };
 
-// The node behind fetch: every profile Save it receives, or a transport failure for an offline one.
-const mockNode = ({ offline = false } = {}) => {
+// The node behind fetch: every profile Save it receives, or a transport failure for an offline one. A name in `taken` is
+// someone else's there: refused as the server's profile route refuses it (409 `callsign_taken`, in its words).
+const TAKEN_WORDS = 'That name is already taken on this community. Try another.';
+const mockNode = ({ offline = false, taken = [] as string[] } = {}) => {
     const updates: any[] = [];
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: any) => {
         if (String(url).includes('/api/profile/update')) {
             if (offline) throw new TypeError('Network request failed');
             const body = JSON.parse(init.body);
             updates.push(body);
+            if (typeof body.callsign === 'string' && taken.includes(body.callsign)) {
+                return new Response(JSON.stringify({ error: 'callsign_taken', message: TAKEN_WORDS }), { status: 409 });
+            }
             if (typeof body.callsign === 'string') mockDb.remoteCallsign = body.callsign;
-            return new Response(JSON.stringify({ success: true }), { status: 200 });
+            return new Response(JSON.stringify({ success: true, profile: { publicKey: KEY, callsign: mockDb.remoteCallsign } }), { status: 200 });
         }
         return new Response('{}', { status: 200 });
     }) as typeof fetch;
@@ -711,6 +716,87 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(mockDb.localProfile.callsign).toBe('Marty Elsewhere');
         expect(host.textContent).toContain('Marty Elsewhere');
         expect(waitingIn(NODE)?.callsign).toBe('Marty Renamed');
+    });
+
+    // Review of #2461 (r4368601839): a waiting name the community refuses for good.
+    it('a waiting name the community refused at a background retry is said here once, in its words, and the field shows the community\'s name again', async () => {
+        const { keepPendingProfileChange, pendingProfileChange, pendingNameRefused } = await import('../pending-profile-sync');
+        await keepPendingProfileChange(NODE, KEY, { callsign: 'Taken' });
+        // What pillar-sync's retry (db.ts pushProfileToServer) leaves when the community answers 409 callsign_taken.
+        await pendingNameRefused(NODE, (await pendingProfileChange(NODE, KEY))!, 'Taken', { status: 409, message: TAKEN_WORDS });
+        mockDb.localProfile = { public_key: KEY, callsign: 'Taken' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode();
+
+        await renderSettings();
+        expect(alerts.said.filter((s) => s === 'Name Taken')).toHaveLength(1);
+        expect(alerts.said.filter((s) => s === TAKEN_WORDS)).toHaveLength(1);
+        expect(mockDb.localProfile.callsign).toBe('Marty party');
+        expect(host.textContent).toContain('Marty party');
+        await press('✏️ Edit');
+        expect(field('Callsign')).toBe('Marty party');
+
+        await pull();
+        expect(alerts.said.filter((s) => s === 'Name Taken')).toHaveLength(1);
+    });
+
+    it('a Save told the waiting name is taken drops it: the next Save, the name left alone or set back, never sends it again', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Taken');
+        await press('Save Profile');
+        expect(waitingIn(NODE)).toEqual({ publicKey: KEY, callsign: 'Taken' });
+        // The members sync writes the name the node holds over the row, and the screen reads it from there.
+        mockDb.localProfile = { ...mockDb.localProfile, callsign: 'Marty party' };
+        await pull();
+
+        // Back online, and the name is someone else's there.
+        const { updates } = mockNode({ taken: ['Taken'] });
+        await press('✏️ Edit');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+        expect(alerts.said).toContain('Name Taken');
+        expect(alerts.said).toContain(TAKEN_WORDS);
+
+        // The editor is still open: the member sets the name back and saves again.
+        await type('Callsign', 'Marty party');
+        await press('Save Profile');
+        expect(updates.filter((u) => u.callsign === 'Taken')).toHaveLength(1);
+        const sent = updates.at(-1);
+        expect(sent.callsign).not.toBe('Taken');
+        expect(sent.bio).toBe('Grows tomatoes');
+        expect(mockDb.remoteCallsign).toBe('Marty party');
+        expect(mockDb.localProfile.callsign).toBe('Marty party');
+        expect(alerts.said.filter((s) => s === 'Name Taken')).toHaveLength(1);
+        expect(waitingIn(NODE)?.callsign).toBeUndefined();
+    });
+
+    it('a Save never sends a waiting name the community refused, still in the field when the community could not be asked, and the row takes the name the community holds', async () => {
+        const { keepPendingProfileChange, pendingProfileChange, pendingNameRefused } = await import('../pending-profile-sync');
+        await keepPendingProfileChange(NODE, KEY, { callsign: 'Taken' });
+        await pendingNameRefused(NODE, (await pendingProfileChange(NODE, KEY))!, 'Taken');
+        // The row still holds the refused name, and the community's own record can't be read as the screen opens.
+        mockDb.localProfile = { public_key: KEY, callsign: 'Taken' };
+        mockDb.remoteCallsign = null;
+        await renderSettings();
+
+        // The Save reaches it: it holds 'Marty party' for this key.
+        mockDb.remoteCallsign = 'Marty party';
+        const { updates } = mockNode({ taken: ['Taken'] });
+        await press('✏️ Edit');
+        expect(field('Callsign')).toBe('Taken');
+        await type('Bio', 'Grows tomatoes');
+        await press('Save Profile');
+
+        expect(updates).toHaveLength(1);
+        expect(updates[0].callsign).toBeUndefined();
+        expect(updates[0].bio).toBe('Grows tomatoes');
+        expect(alerts.said).not.toContain('Name Taken');
+        expect(mockDb.localProfile.callsign).toBe('Marty party');
+        expect(host.textContent).toContain('Marty party');
     });
 
     it.each([

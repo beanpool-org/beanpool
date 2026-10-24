@@ -89,14 +89,18 @@ const pendingModule = () => import('../pending-profile-sync');
 
 /**
  * Each community's node: what it holds of the member (from accepted updates), every profile update it was sent, and
- * how it answers the next ones: 'ok', 'offline' (the request throws), 'refuse' (409 Name Taken) or 'busy' (503).
+ * how it answers the next ones: 'ok', 'offline' (the request throws), 'refuse' (a 409 whose code says nothing about the
+ * name) or 'busy' (503). Like the server's profile route (apps/server/src/routes/community.ts), it refuses for good a new
+ * name someone else holds there (`taken`: 409 `callsign_taken`) or one under 2 characters (400 `callsign_too_short`).
  */
 type NodeMode = 'ok' | 'offline' | 'refuse' | 'busy';
-const nodes = new Map<string, { mode: NodeMode; held: { callsign: string; avatar: string | null; bio: string | null }; updates: any[] }>();
+const TAKEN_WORDS = 'That name is already taken on this community. Try another.';
+const TOO_SHORT_WORDS = 'Your name needs at least 2 characters.';
+const nodes = new Map<string, { mode: NodeMode; held: { callsign: string; avatar: string | null; bio: string | null }; taken: Set<string>; updates: any[] }>();
 function nodeAt(origin: string) {
     let n = nodes.get(origin);
     if (!n) {
-        n = { mode: 'ok', held: { callsign: 'Marty', avatar: null, bio: null }, updates: [] };
+        n = { mode: 'ok', held: { callsign: 'Marty', avatar: null, bio: null }, taken: new Set(), updates: [] };
         nodes.set(origin, n);
     }
     return n;
@@ -119,6 +123,10 @@ const fetchMock = vi.fn(async (url: string, init?: { method?: string; body?: str
         node.updates.push(body);
         if (node.mode === 'refuse') return answer(409, JSON.stringify({ error: 'name_taken', message: 'That name is taken here.' }));
         if (node.mode === 'busy') return answer(503, JSON.stringify({ error: 'busy' }));
+        if (typeof body.callsign === 'string' && body.callsign.trim() !== node.held.callsign) {
+            if (body.callsign.trim().length < 2) return answer(400, JSON.stringify({ error: 'callsign_too_short', message: TOO_SHORT_WORDS }));
+            if (node.taken.has(body.callsign.trim())) return answer(409, JSON.stringify({ error: 'callsign_taken', message: TAKEN_WORDS }));
+        }
         if (body.callsign !== undefined) node.held.callsign = body.callsign;
         if (body.avatar !== undefined) node.held.avatar = body.avatar;
         if (body.bio !== undefined) node.held.bio = body.bio;
@@ -378,6 +386,92 @@ describe('a change made in one community while offline is kept for that communit
     });
 });
 
+/** The name in this community's row for the member, as the screens read it. */
+const rowName = async () =>
+    (await (await getDb()).getFirstAsync<{ callsign: string }>('SELECT callsign FROM members WHERE public_key = ?', [ME]))?.callsign;
+
+// Review of #2461 (r4368601839): a waiting name the community refuses for good was sent again at every sync and refused
+// every time, and the photo and bio waiting with it never arrived. On main the retry sent the row's name, which the
+// members sync had put back, and they landed at the next sync.
+const NAME_REFUSALS = [
+    ['given to someone else there (409 callsign_taken)', 'Taken', 409, TAKEN_WORDS],
+    ['too short (400 callsign_too_short)', 'M', 400, TOO_SHORT_WORDS],
+] as const;
+
+describe('a name the community refuses for good leaves the change, and the rest goes without it', () => {
+    it.each(NAME_REFUSALS)('a waiting name %s: refused once, then the photo and bio reach A, the row has A\'s name again, and nothing waits', async (_case, name) => {
+        const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
+        nodeAt(A).taken.add('Taken');
+        await openCommunity(A);
+        await rowHere({ callsign: name, avatar_url: PHOTO, bio: 'Grows tomatoes' });
+        await keepPendingProfileChange(A, ME, { callsign: name, avatar: PHOTO });
+
+        for (let i = 0; i < 4; i++) await performSync();
+
+        expect(sentTo(A).filter(u => u.callsign === name)).toHaveLength(1);
+        expect(sentTo(A)).toHaveLength(2);
+        expect(sentTo(A)[1]).toMatchObject({ avatar: PHOTO, bio: 'Grows tomatoes' });
+        expect(nodeAt(A).held).toEqual({ callsign: 'Marty', avatar: PHOTO, bio: 'Grows tomatoes' });
+        expect(await pendingProfileChange(A, ME)).toBeNull();
+        expect(await rowName()).toBe('Marty');
+        expect(sentTo(B)).toEqual([]);
+    });
+
+    it.each(NAME_REFUSALS)('a waiting name %s: the member is told what A said, in A\'s words, once, in A, and under this account only', async (_case, name, status, words) => {
+        const { keepPendingProfileChange, takeNameRefusal } = await pendingModule();
+        nodeAt(A).taken.add('Taken');
+        await openCommunity(A);
+        await rowHere({ callsign: name, avatar_url: PHOTO });
+        await keepPendingProfileChange(A, ME, { callsign: name, avatar: PHOTO });
+        await performSync();
+        await performSync();
+
+        expect(await takeNameRefusal(B, ME)).toBeNull();
+        expect(await takeNameRefusal(A, SOMEONE_ELSE)).toBeNull();
+        // Two readers at once (Settings loads on mount and on focus): one of them says it.
+        const both = await Promise.all([takeNameRefusal(A, ME), takeNameRefusal(A, ME)]);
+        expect(both.filter(Boolean)).toEqual([{ status, message: words }]);
+        expect(await takeNameRefusal(A, ME)).toBeNull();
+    });
+
+    it.each(['busy', 'offline'] as const)('a %s community keeps the name, the photo and the bio waiting, says nothing, and takes all three once it answers', async (mode) => {
+        const { keepPendingProfileChange, pendingProfileChange, takeNameRefusal } = await pendingModule();
+        await openCommunity(A);
+        await rowHere({ callsign: 'Marty Renamed', avatar_url: PHOTO, bio: 'Grows tomatoes' });
+        await keepPendingProfileChange(A, ME, { callsign: 'Marty Renamed', avatar: PHOTO });
+        nodeAt(A).mode = mode;
+
+        await performSync();
+        await performSync();
+        expect(await pendingProfileChange(A, ME)).toEqual({ publicKey: ME, callsign: 'Marty Renamed', avatar: PHOTO });
+        expect(await takeNameRefusal(A, ME)).toBeNull();
+
+        nodeAt(A).mode = 'ok';
+        await performSync();
+        expect(nodeAt(A).held).toEqual({ callsign: 'Marty Renamed', avatar: PHOTO, bio: 'Grows tomatoes' });
+        expect(await pendingProfileChange(A, ME)).toBeNull();
+    });
+
+    it('a change kept while the refused update was out stays as it is, its new name and all, for the next sync', async () => {
+        const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
+        nodeAt(A).taken.add('Taken');
+        await openCommunity(A);
+        await rowHere({ callsign: 'Taken', avatar_url: PHOTO });
+        await keepPendingProfileChange(A, ME, { callsign: 'Taken', avatar: PHOTO });
+        // An offline Save in A names someone new while the refusal is on its way.
+        const asNodesAnswer = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementationOnce(async (url: string, init?: { method?: string; body?: string }) => {
+            const res = await asNodesAnswer(url, init);
+            await keepPendingProfileChange(A, ME, { callsign: 'Marty Again' });
+            return res;
+        });
+
+        expect(await pushProfileToServer({ community: A })).toBe(false);
+        expect(sentTo(A)).toHaveLength(1);
+        expect(await pendingProfileChange(A, ME)).toEqual({ publicKey: ME, callsign: 'Marty Again', avatar: PHOTO });
+    });
+});
+
 describe('a community leaving the phone takes its waiting change with it', () => {
     it('removing A from the saved list clears A\'s change and leaves B\'s', async () => {
         const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
@@ -460,6 +554,8 @@ describe('a phone updated from a build with one flag for the phone', () => {
 
     it('the moved change is the account\'s on the phone, read as A\'s', async () => {
         const { pendingProfileChange } = await pendingModule();
+        // A is open at the move: the photo goes with the flag (the case below where it doesn't).
+        store.set('beanpool_anchor_url', A);
         store.set('pending_profile_sync', 'true');
         store.set('pending_profile_sync_anchor', `${A}/`);
         store.set('pending_profile_avatar', PHOTO);
@@ -477,12 +573,65 @@ describe('a phone updated from a build with one flag for the phone', () => {
         store.set('pending_profile_sync_anchor', A);
         store.set('pending_profile_avatar', PHOTO);
 
-        // As acceptAddressFollow does (address-follow.ts): the change follows, then A's row goes.
+        // As acceptAddressFollow does (address-follow.ts): the phone switches to the new address, the change follows,
+        // then A's row goes.
+        store.set('beanpool_anchor_url', NEW_A);
         await carryPendingProfileChange(A, NEW_A);
         await removeSavedNode(A);
 
         expect(await pendingProfileChange(NEW_A, ME)).toEqual({ publicKey: ME, avatar: PHOTO });
         expect(await pendingProfileChange(A, ME)).toBeNull();
         for (const old of ['pending_profile_sync', 'pending_profile_sync_anchor', 'pending_profile_avatar']) expect(store.has(old)).toBe(false);
+    });
+
+    // Review of #2461 (r4368601890): the anchor names the community of the last settings Save made offline, and the older
+    // build never retired it (a successful retry removed only the flag); Re-run Setup and a first join set the flag and
+    // parked a photo without touching it. So a stale A anchor with a flag and photo set later in B leaves the same
+    // storage as a Save in A followed by a switch to B.
+    it('a stale anchor naming A, with the flag and a photo set later in B (Re-run Setup offline there): nothing of B\'s reaches A', async () => {
+        await openCommunity(A);
+        await rowHere({ callsign: 'Marty', bio: 'Bio in A' });
+        await openCommunity(B);
+        await rowHere({ callsign: 'Marty in B', avatar_url: OTHER_PHOTO, bio: 'Bio in B' });
+        store.set('pending_profile_sync', 'true');
+        store.set('pending_profile_sync_anchor', A);
+        store.set('pending_profile_avatar', OTHER_PHOTO);
+
+        await performSync();
+        await openCommunity(A);
+        await performSync();
+        await performSync();
+
+        expect(sentTo(A).map(u => u.avatar)).not.toContain(OTHER_PHOTO);
+        expect(JSON.stringify(sentTo(A))).not.toContain('in B');
+        expect(nodeAt(A).held).toEqual({ callsign: 'Marty', avatar: null, bio: 'Bio in A' });
+        expect(sentTo(B)).toEqual([]);
+        for (const old of ['pending_profile_sync', 'pending_profile_sync_anchor', 'pending_profile_avatar']) expect(store.has(old)).toBe(false);
+    });
+
+    it('a flag naming a community other than the one open moves bare: that community republishes its own row, with no photo', async () => {
+        const { pendingProfileChange } = await pendingModule();
+        await openCommunity(B);
+        store.set('pending_profile_sync', 'true');
+        store.set('pending_profile_sync_anchor', A);
+        store.set('pending_profile_avatar', PHOTO);
+
+        expect(await pendingProfileChange(B, ME)).toBeNull();
+        expect(await pendingProfileChange(A, ME)).toEqual({ publicKey: ME });
+    });
+
+    it('a flag naming the community open at the move takes its photo there, where the older build would have sent it', async () => {
+        const { pendingProfileChange } = await pendingModule();
+        await openCommunity(A);
+        // The row as a members sync leaves it, A's own photo URL in it: only the parked photo carries the pick.
+        await rowHere({ callsign: 'Marty', avatar_url: `/api/avatar/${ME}?size=thumb&v=1` });
+        store.set('pending_profile_sync', 'true');
+        store.set('pending_profile_sync_anchor', A);
+        store.set('pending_profile_avatar', PHOTO);
+
+        expect(await pendingProfileChange(A, ME)).toEqual({ publicKey: ME, avatar: PHOTO });
+        await performSync();
+        expect(sentTo(A).map(u => u.avatar)).toEqual([PHOTO]);
+        expect(await pendingProfileChange(A, ME)).toBeNull();
     });
 });

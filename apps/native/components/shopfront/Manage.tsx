@@ -61,11 +61,12 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
     const plan = faceSaveOf(before, draft, lead, keeper);
     const name = typeof (detail as Record<string, unknown> | null)?.name === 'string' ? (detail as Record<string, string>).name : '';
     const logoShown = draft.logo ?? (sentLogo && sentLogo.over === logoUrl ? sentLogo.uri : null) ?? logoUrl ?? null;
-    // Its banner as it will be: the photo just picked, none once taken down, the one just sent until the enterprise is read
-    // with it (`over`: its shop's when it was sent), else its shop's.
+    // Its shop's banner: the one just sent until the enterprise is read with it (`over`: its shop's when it was sent), else
+    // its shop's as read. Its banner as it will be: the photo just picked, none once taken down, else its shop's.
     const heldBanner = shopPhotoOf((detail as Record<string, unknown> | null)?.shop);
     const [sentBanner, setSentBanner] = useState<{ value: string | null; over: string | null } | null>(null);
-    const bannerValue = draft.banner !== undefined ? draft.banner : sentBanner && sentBanner.over === heldBanner ? sentBanner.value : heldBanner;
+    const shopBanner = sentBanner && sentBanner.over === heldBanner ? sentBanner.value : heldBanner;
+    const bannerValue = draft.banner !== undefined ? draft.banner : shopBanner;
     const bannerShown = useNodeUri(bannerValue);
     const [pickingBanner, setPickingBanner] = useState(false);
     const pickBanner = async () => {
@@ -81,8 +82,8 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
             setPickingBanner(false);
         }
     };
-    // Taking down a photo only just picked leaves its shop as it is when it has none.
-    const removeBanner = () => edit({ banner: heldBanner ? null : undefined });
+    // Taking down a photo only just picked leaves its shop as it is when it has none; one just sent is its shop's.
+    const removeBanner = () => edit({ banner: shopBanner ? null : undefined });
 
     const edit = (next: Partial<FaceForm>) => {
         setForm((f) => ({ ...f, draft: { ...f.draft, ...next } }));

@@ -150,3 +150,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-12 - Replace catch err any in OffboardMemberWizard
 **Learning:** `OffboardMemberWizard.tsx` used `catch (err: any)` in async preview loading and offboard execution handlers, weakening error handling type safety.
 **Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.
+
+## 2026-12-13 - Replace any types with unknown in CommunityShapeSection
+**Learning:** `CommunityShapeSection.tsx` used `any` types for `draftValue` state, row handlers, and `catch (err: any)` blocks, weakening type safety across setting updates.
+**Action:** Replace `any` types with `unknown` and safe `err instanceof Error ? err.message : ...` type guards or typed local helpers.

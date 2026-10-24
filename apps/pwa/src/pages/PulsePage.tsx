@@ -413,7 +413,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                 )
             ) : (
                 <div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
                         {visibleItems.map(item => (
                             <PulseFeedCard
                                 key={item.id}

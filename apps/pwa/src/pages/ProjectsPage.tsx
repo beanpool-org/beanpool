@@ -686,7 +686,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                     )
                 ) : (
-                    <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+                    <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
                         {filteredEnterprises.map(t => <EnterpriseCard key={t.publicKey} treasury={t} onOpen={onOpenTreasury} />)}
                 </div>
                 )}

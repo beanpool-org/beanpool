@@ -8,7 +8,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
-import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
@@ -68,7 +68,13 @@ export default function ProjectsScreen() {
     // "Groups you could join" (decision 7).
     const yourGroupsLive = useYourGroups(identity?.publicKey);
     const yourGroupsState = yourGroupsPaneState(yourGroupsLive.items, yourGroupsLive.error);
-    const yourGroups = useMemo(() => yourGroupsLive.items || [], [yourGroupsLive.items]);
+    const yourGroups = useMemo(() => {
+        const all = yourGroupsLive.items || [];
+        if (!enterprisesOn(reader.effective)) {
+            return all.filter(g => g.kind !== 'enterprise');
+        }
+        return all;
+    }, [yourGroupsLive.items, reader.effective]);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.

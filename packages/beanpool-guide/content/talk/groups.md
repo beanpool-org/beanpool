@@ -78,7 +78,7 @@ Two or more messages in a row that their authors deleted show as one line, such 
 
 Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
 
-In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo someone else swaps on the server reads **Image unavailable**. A photo message cannot be edited; it can be deleted like any message (the author; a convenor can remove it).
+In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. On the phone it can be deleted like any message (the author; a convenor can remove it).
 
 A deal cannot be started in a group's chat: deals belong in a chat between two people. See "Messages".
 

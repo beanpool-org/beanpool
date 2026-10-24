@@ -35,6 +35,7 @@ If your community's server is too old to keep blocks, a block made in the phone 
 - If you unblock them, nothing they sent while blocked arrives. Only messages they send after that reach you.
 - If they react to one of your messages, or change one of their old messages, you do not see it.
 - You get no notification when they write in a group chat, even when they mention you with @.
+- If they invite you to a group, the invitation still shows in **Needs you** and in **Commons**, with no notification. You can say no to it.
 - If they ask for a deal on one of your listings, the request waits in your deals with no notification. If you leave it, it ends after 7 days, also with no notification.
 - If they accept one of your Offers straight away, you get no notification, and none if they then cancel that deal. The deal still shows in your deals, and its messages in your chat with them, as with anyone. Their Beans are held and given back as usual.
 - They cannot make a listing addressed only to you.

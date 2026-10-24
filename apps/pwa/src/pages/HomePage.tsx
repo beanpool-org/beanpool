@@ -1811,6 +1811,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 case 'enterprise': return onNavigate('enterprise', target.id);
                 // A group's vote lands on the group: its info, where its Decisions block is; never the Messages list.
                 case 'group': return onNavigate('group', target.id);
+                // An invitation: the group's info, which offers Join to the member invited; several, Commons, where each
+                // group shows as invited.
+                case 'invite': return onNavigate('group', target.id);
+                case 'invites': return onNavigate('projects');
                 default: return undefined;
             }
         };

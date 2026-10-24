@@ -3790,7 +3790,8 @@ const styles = StyleSheet.create({
     wipeLabel: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, letterSpacing: 1, marginTop: 8, marginBottom: 8 },
     dangerBtn: { backgroundColor: colors.feedback.danger.solid, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     dangerBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
-    backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
+    // A 48dp target at 320dp and 1.3x text, as every button on these steps: 10 of padding round one line measured 41.
+    backBtn: { marginTop: 16, alignItems: 'center', justifyContent: 'center', padding: 10, minHeight: 48 },
     /** A way off "Your Name" while Next is out: drawn faded, as well as disabled. */
     closedWhileNextIsOut: { opacity: 0.4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },

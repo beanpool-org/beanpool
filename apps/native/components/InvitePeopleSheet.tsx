@@ -117,7 +117,9 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
         },
         searchInput: { flex: 1, fontSize: 15, color: colors.text.body, paddingVertical: 8, marginLeft: 6 },
         row: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 16, gap: 12 },
-        name: { flex: 1, minWidth: 0, fontSize: 16, fontWeight: '600', color: colors.text.body },
+        nameCol: { flex: 1, minWidth: 0, justifyContent: 'center' },
+        name: { fontSize: 16, fontWeight: '600', color: colors.text.body },
+        keyPrefix: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
         already: { fontSize: 12, color: colors.text.muted, flexShrink: 0 },
         empty: { padding: 24, textAlign: 'center', color: colors.text.secondary, fontSize: 14 },
         emptyTitle: { paddingTop: 24, paddingHorizontal: 24, textAlign: 'center', color: colors.text.body, fontSize: 15, fontWeight: '700' },
@@ -229,7 +231,10 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                                     }
                                 >
                                     <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.publicKey} callsign={item.callsign} size={36} />
-                                    <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
+                                    <View style={styles.nameCol}>
+                                        <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
+                                        <Text style={styles.keyPrefix} numberOfLines={1}>{item.publicKey.slice(0, 8)}</Text>
+                                    </View>
                                     {already && <Text style={styles.already}>{t('In the group')}</Text>}
                                     {isInvited && <Text style={styles.already}>{t('Invited')}</Text>}
                                     {isPending && <Text style={styles.already}>{t('Asked to join')}</Text>}

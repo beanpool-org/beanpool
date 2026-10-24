@@ -20,7 +20,7 @@ Chats that belong to a group, an enterprise or an event are under **Groups**, no
 
 In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter.
 
-At the top of a chat, tapping the name opens their profile (an enterprise's page for an enterprise), on the phone and the web.
+At the top of a chat with one person, tapping their name opens their profile (an enterprise's page for an enterprise), on the phone and the web.
 
 ## Starting a chat
 
@@ -91,4 +91,4 @@ Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notificati
 
 ## Blocking someone from a chat
 
-Tap their name at the top of the chat to open their profile (an enterprise's page for an enterprise), on the phone and the web. Tap **Block**, then **Block User**. In the web app, tap **Block** at the top of the chat, then **OK**. See "Blocking someone".
+Tap their name at the top of the chat to open their profile (an enterprise's page for an enterprise), on the phone and the web. Tap **Block**, then confirm: **Block User** in the phone app (**Block** on an enterprise's page), **OK** in the web app. In the web app you can also tap **Block** at the top of the chat, then **OK**. See "Blocking someone".

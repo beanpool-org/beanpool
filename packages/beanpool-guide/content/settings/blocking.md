@@ -12,7 +12,7 @@ related: reporting, messages, privacy, getting-help
 - On one of their posts (phone app): tap **Block User**. A post in the web app has no block button.
 - From a chat: tap their name at the top to open their profile (an enterprise's page for an enterprise), on the phone and the web, then **Block**. In the web app, a chat with one person also has **Block** at the top.
 
-In the phone app, confirm with **Block User**. In the web app, your browser asks you to confirm: tap **OK**.
+In the phone app, confirm with **Block User** (**Block** on an enterprise's page). In the web app, your browser asks you to confirm: tap **OK**.
 
 ## What it does
 

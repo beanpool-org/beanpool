@@ -64,6 +64,11 @@ export default function ProjectsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
+    // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
+    // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
+    // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
+    const reader = useReaderFeatures();
+    const showsBeans = beansOn(reader.effective);
     // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
     // "Groups you could join" (decision 7).
     const yourGroupsLive = useYourGroups(identity?.publicKey);
@@ -76,11 +81,6 @@ export default function ProjectsScreen() {
         return all;
     }, [yourGroupsLive.items, reader.effective]);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
-    // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
-    // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
-    // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
-    const reader = useReaderFeatures();
-    const showsBeans = beansOn(reader.effective);
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
     // have, so the row never leads to an empty screen. From the reader's features this screen already has: no read of its
     // own (the Tools screen asks each tool with the community's profile too).

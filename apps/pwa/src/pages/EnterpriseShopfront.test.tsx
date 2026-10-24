@@ -538,7 +538,7 @@ describe("the keepers' Manage tab", () => {
         fireEvent.click(within(panel).getByRole('button', { name: 'Step down as a keeper' }));
         await wordsOnTop('You have stepped down as a keeper.');
         // Step down sits far down Manage: the page goes back up to the words.
-        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+        await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0 }));
         cleanup();
 
         // Finalising a wind-up releases every keeper (the node deletes them all), so it ends the lead's Manage too.
@@ -557,7 +557,7 @@ describe("the keepers' Manage tab", () => {
         fireEvent.click(found(ACTIONS.find((a) => a.what === 'finalise the wind-up')!, panel) as HTMLElement);
         fireEvent.click(within(panel).getByRole('button', { name: 'Finalise Wind-Up' }));
         await wordsOnTop('Wind-up finalised. Swept 40 🫘 to Commons and released keepers.');
-        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+        await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0 }));
     });
 
     describe('its face, with one Save', () => {

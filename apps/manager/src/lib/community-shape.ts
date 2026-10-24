@@ -255,7 +255,7 @@ export function getConsequenceSentence(
         case 'beans': {
             if (targetValue === false) {
                 // Folded fix 1:
-                const openDoorSet = s.openDoor.value || currentShape.kind === 'global';
+                const openDoorSet = s.openDoor.configured;
                 if (openDoorSet) {
                     return t("No prices, sends, escrow, enterprises or crowdfunding. Switching Beans off is one-way: while the open door is set, Beans cannot be switched back on.");
                 }

@@ -408,6 +408,21 @@ describe('CommunityShapeSection — Folded fixes from PR #2415 review', () => {
         const shapeWithoutOpenDoor = makeDefaultShape();
         const normalConsequence = getConsequenceSentence('beans', false, shapeWithoutOpenDoor);
         expect(normalConsequence).toMatch(/You can't switch Beans off once anyone has traded\./);
+
+        // Private preview: openDoor.configured is true, but openDoor.value is false
+        const previewShape = makeDefaultShape({
+            openDoor: { value: false, configured: true, source: 'server', lock: null },
+            preview: { value: true, configured: true, source: 'server', lock: null },
+        });
+        expect(getConsequenceSentence('beans', false, previewShape))
+            .toMatch(/Switching Beans off is one-way: while the open door is set, Beans cannot be switched back on\./);
+
+        // Global kind with open door shut by operator: openDoor.configured is false
+        const globalShutDoorShape = makeDefaultShape({
+            openDoor: { value: false, configured: false, source: 'owner', lock: null },
+        }, { kind: 'global' });
+        expect(getConsequenceSentence('beans', false, globalShutDoorShape))
+            .toMatch(/You can't switch Beans off once anyone has traded\./);
     });
 
     it('getConsequenceSentence returns unpause consequence when changing from paused', () => {

@@ -89,6 +89,8 @@ export const OWNER_ALERT_WORDS = {
     communityRenamed: "The community's name was changed, by an admin.",
     callsignChanged: "The community's callsign was changed, by an admin.",
     contactsChanged: "The community's contact details were changed, by an admin.",
+    /** How this community works (config/community-shape-write.ts): every change, the owner's own too, `settings` their names. */
+    shapeChanged: (settings: string) => `How this community works was changed, by an owner: ${settings}. Every change is listed under How it works.`,
     channelChanged: (community: string) => `${community}: the alert channel was changed, by an owner. This is the last alert sent here.`,
     channelRemoved: (community: string) => `${community}: the alert channel was removed, by an owner. This is the last alert sent here.`,
     /** To the same channel, with its old token, when only the token changed (#2033 C1-N2): not "the last alert sent here". */

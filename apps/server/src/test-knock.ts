@@ -22,9 +22,10 @@
  *      duplicate's answer, for 30 days from the decline; after that the status is `none` and a knock is a new row
  *   9. a knock lapses 30 days after it was made: off the members' list, can't be answered, `none` to the applicant,
  *      and their next knock reopens the same row; an approved knock whose invite expired unused reads `none` too
- *  10. the operator: acceptKnocks=false (Settings) → every knock route 404 feature_off, /api/community/info says
- *      knocks false, the count still answers; a Settings save from before G6 (no acceptKnocks) keeps it off; a bad
- *      value is 400; back on, the override is gone; the global profile takes no knocks
+ *  10. the owner: requests to join off under How this community works (POST /api/local/admin/community-shape, slice S2)
+ *      → every knock route 404 feature_off, /api/community/info says knocks false, the count still answers; a node/config
+ *      save keeps it off, and node/config's old acceptKnocks is refused (400); a bad value is 400; back on, the override is
+ *      gone; the global profile takes no knocks
  *  11. privacy: nothing about knocks is in a public read; the status read answers only for the signer
  *  12. a member who once knocked deletes their account: what they wrote goes, the record stays
  *  13. replication: every row reaches a standby (never the address hash); an approved knock's invite comes with the copy
@@ -435,10 +436,15 @@ async function main(): Promise<void> {
     assert(noAuth.status === 401, `the count is the operator's only (${noAuth.status})`);
     const cfg0 = await call(null, 'GET', '/api/node/config');
     assert(cfg0.body?.acceptKnocks === true, 'GET /api/node/config says acceptKnocks true');
-    const badValue = await admin('POST', '/api/local/admin/node/config', { acceptKnocks: 'no' });
-    assert(badValue.status === 400, `acceptKnocks "no" → 400 (${badValue.status})`);
-    const off = await admin('POST', '/api/local/admin/node/config', { acceptKnocks: false });
-    assert(off.status === 200 && off.body?.acceptKnocks === false, `the operator turns knocks off (${off.status})`);
+    const SHAPE = '/api/local/admin/community-shape';
+    const badValue = await admin('POST', SHAPE, { changes: { knocks: 'no' } });
+    assert(badValue.status === 400, `knocks "no" → 400 (${badValue.status})`);
+    const oldWay = await admin('POST', '/api/local/admin/node/config', { acceptKnocks: false });
+    assert(oldWay.status === 400 && oldWay.body?.code === 'moved_to_community_shape' && (await call(null, 'GET', '/api/node/config')).body?.acceptKnocks === true,
+        `node/config's old acceptKnocks is refused, and changes nothing (${oldWay.text})`);
+    const off = await admin('POST', SHAPE, { changes: { knocks: false } });
+    assert(off.status === 200 && off.body?.shape?.settings?.knocks?.configured === false && (await call(null, 'GET', '/api/node/config')).body?.acceptKnocks === false,
+        `the owner turns requests to join off under How this community works (${off.status})`);
     const info = await call(null, 'GET', '/api/community/info');
     assert(info.body?.features?.knocks === false, '/api/community/info says knocks false, so the apps hide the section');
     const offRoutes: Array<[string, Promise<Res>]> = [
@@ -457,11 +463,11 @@ async function main(): Promise<void> {
     assert(countOff.status === 200 && countOff.body?.acceptKnocks === false && countOff.body?.open === openNow, 'the operator still sees the count, beside the switch');
     const oldSettings = await admin('POST', '/api/local/admin/node/config', { publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false, publishHealth: true });
     assert(oldSettings.status === 200 && oldSettings.body?.acceptKnocks === false && (await call(null, 'GET', '/api/node/config')).body?.acceptKnocks === false,
-        'a Settings save that doesn\'t send acceptKnocks (a page from before G6) leaves it off');
+        'a node/config save (which never sends acceptKnocks now) leaves it off');
     const overrideRow = db.prepare("SELECT value FROM node_config WHERE key = 'nodeProfile.knocks'").get() as any;
     assert(overrideRow?.value === 'false', 'it is kept as the knocks switch\'s override, so it travels with the profile record');
-    const on = await admin('POST', '/api/local/admin/node/config', { acceptKnocks: true });
-    assert(on.status === 200 && on.body?.acceptKnocks === true && (await status(bob)).body?.status === 'pending', 'turned back on, the routes answer again');
+    const on = await admin('POST', SHAPE, { changes: { knocks: true } });
+    assert(on.status === 200 && on.body?.shape?.settings?.knocks?.value === true && (await status(bob)).body?.status === 'pending', 'turned back on, the routes answer again');
     assert(!db.prepare("SELECT 1 FROM node_config WHERE key = 'nodeProfile.knocks'").get(), 'and matching the default, the override is gone');
 
     process.env.NODE_PROFILE = 'global';

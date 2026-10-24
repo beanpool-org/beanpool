@@ -147,8 +147,8 @@ async function main(): Promise<void> {
     const sink = makeMember('Sink');
     for (let i = 0; i < 2; i++) createPost('offer', 'produce', `Sink goods ${i}`, 'Goods', 10, 'fixed', sink.pk);
     const dial = async (on: boolean) => {
-        const r = await call('POST', null, '/api/local/admin/known-floor', { confirmation: on }, owner);
-        assert(r.status === 200 && r.body?.confirmation === on, `the owner turns the confirmation dial ${on ? 'on' : 'off'} (${show(r)})`);
+        const r = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: on } } }, owner);
+        assert(r.status === 200 && r.body?.shape?.settings?.knownFloor?.value?.on === on, `the owner turns the confirmation dial ${on ? 'on' : 'off'} (${show(r)})`);
     };
 
     // The figures every check reads: the spend check's floor, the balance read over HTTPS (any member may read an

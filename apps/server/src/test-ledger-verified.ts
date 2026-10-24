@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     const ada = makeMember('Ada');
     grantNodeRole(ada.pk, 'admin', 'SYSTEM');
     db.prepare(`INSERT INTO names_generations (id, n, parent_id, maker, drops, statement, signature) VALUES (?, 1, NULL, ?, '', 'fixture', 'fixture')`).run(KEY_ID, ada.pk);
-    const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
+    const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
     assert(on.status === 200, `setup: known floor dial on (${show(on)})`);
 
     const sam = makeMember('Sam', 2000);

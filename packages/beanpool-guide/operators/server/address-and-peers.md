@@ -110,6 +110,8 @@ The contact email and phone are not sent unless you turn each on here: **Share E
 
 It is on by default on a global community, where anyone can join with 12 words, and off on a local community, where everyone was let in by someone. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat. One a member ignored stays out of their chats until one of the two writes in it again. Turned on again, a chat the member replied in, or whose sender they added, while it was off stays an ordinary chat; one they never answered is a request again. Like every profile switch, it travels with backups and to standbys.
 
+Only an owner can turn it on or off, and the same goes for **Take Requests to Join** beside it: an admin sees both, and saving a change to either is refused. Each change is logged with who made it, the owners get an alert, and every member is told in a notice from the community.
+
 ### When the directory doesn't list your community
 
 Your server sends the directory nothing while either of these is true. **Node Identity** says which, in a line under **Publish Now**, and so does the server's own settings page:

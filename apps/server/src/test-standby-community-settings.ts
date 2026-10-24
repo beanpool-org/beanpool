@@ -480,8 +480,8 @@ async function main(): Promise<void> {
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
         // Keeping fewer than the default 7 asks the owner's fresh proof (#1984 confirmation N-2): Manage on the phone, just now.
         built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
-        built('only its admins invite (the owner, with the password)', await A('/api/local/admin/node/config', { door: 'admins' }));
-        built("its owner switches the known floor's confirmations off", await A('/api/local/admin/known-floor', { confirmation: false }));
+        built('only its admins invite (the owner, under How this community works)', await A('/api/local/admin/community-shape', { changes: { join: 'admins' } }));
+        built("its owner switches the known floor's confirmations off", await A('/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }));
         // The listing promise's two ticks and a closing day (mothership A2, engine/directory-promise.ts): the community's word.
         built('its owners make the listing promise and say when it closes', await A('/api/local/admin/directory/promise', {
             reports: true, notice: true, closingOn: new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10) }));

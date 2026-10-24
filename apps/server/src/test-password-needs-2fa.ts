@@ -93,6 +93,7 @@ const ADMIN_ROUTES: Array<[string, string]> = [
     ['POST', '/api/local/admin/auth/break-glass/issue'],
     ['POST', '/api/local/admin/2fa/setup'],
     ['POST', '/api/local/admin/node/config'],
+    ['POST', '/api/local/admin/community-shape'],
     ['POST', '/api/admin/thresholds/get'],
     ['POST', '/api/admin/seed-invite'],
     ['POST', '/api/local/change-password'],

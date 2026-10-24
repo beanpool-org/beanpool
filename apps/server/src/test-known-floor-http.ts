@@ -154,9 +154,19 @@ async function main(): Promise<void> {
     const samSells = (beans: number) => createPost('offer', 'produce', `Sam's ${beans}-Bean basket`, 'Veg', beans, 'fixed', sam.pk)!.id;
     const buy = (who: Id, postId: string) => call('POST', who, '/api/marketplace/posts/accept', { postId, buyerPublicKey: who.pk });
     const balanceOf = (who: Id) => call('GET', who, `/api/ledger/balance/${who.pk}`);
-    const settings = (headers: Record<string, string>, body: unknown) => call('POST', null, '/api/local/admin/known-floor', body, headers);
     const exception = (headers: Record<string, string>, body: unknown) => call('POST', null, '/api/local/admin/known-floor/exception', body, headers);
     const read = () => call('GET', null, '/api/local/admin/known-floor', undefined, owner);
+    // The dial, the known floor and the cap are changed under How this community works (POST /api/local/admin/community-shape
+    // `knownFloor`, slice S2; the known floor's own POST is gone): sent as its `knownFloor`, and read back as the settings.
+    const asShapeChange = (body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }) => ({ changes: { knownFloor: {
+        ...(body.confirmation !== undefined ? { on: body.confirmation } : {}),
+        ...(body.knownFloor !== undefined ? { floor: body.knownFloor } : {}),
+        ...(body.creditCap !== undefined ? { cap: body.creditCap } : {}),
+    } } });
+    const settings = async (headers: Record<string, string>, body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }) => {
+        const r = await call('POST', null, '/api/local/admin/community-shape', asShapeChange(body), headers);
+        return r.status === 200 ? { ...r, body: (await read()).body } : r;
+    };
 
     // ── 1. the dial off: main's floor ──────────────────────────────────────────────────────────
     console.log('── 1. the dial off ──');
@@ -176,7 +186,7 @@ async function main(): Promise<void> {
     console.log('── 2. who sets them ──');
     const adminTries = await settings(adaAdmin, { confirmation: true });
     assert(adminTries.status === 403, `an admin can't turn the dial on (${show(adminTries)})`);
-    const memberTries = await call('POST', kim, '/api/local/admin/known-floor', { confirmation: true });
+    const memberTries = await call('POST', kim, '/api/local/admin/community-shape', asShapeChange({ confirmation: true }));
     assert(memberTries.status === 401 || memberTries.status === 403, `nor can a member who is no admin (${show(memberTries)})`);
     const aboveCap = await settings(owner, { confirmation: true, knownFloor: 2500 });
     assert(aboveCap.status === 400 && aboveCap.body?.code === 'floor_above_cap', `a known floor above the cap is refused (${show(aboveCap)})`);

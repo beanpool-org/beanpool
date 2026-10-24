@@ -9,7 +9,9 @@
  *      pushDirectoryNow's hold-backs, the door setting's refusal); its configured value and source are the stored rows; a
  *      lock is there exactly where the gate refuses the change it names (probed by making the change and rolling it back);
  *      and the read writes nothing.
- *   2. Every profile switch has a place in the shape, and every lock code appears, each with a sentence.
+ *   2. Every profile switch has a place in the shape, and every lock code appears, each with a sentence. A directory
+ *      switch reads `owner` only where it differs from its default: never for bookkeeping (a directory push stamps the
+ *      stored object), nor on a standby whose copy is an untouched main server's (S1's deciding review, folded into S2).
  *   3. The log: community_settings_log and the known floor's community lines, newest first, at most 50; `version` is the
  *      newest community_settings_log id; the copy a standby is sent carries every line, and a standby's importer takes them.
  *   4. Over HTTPS, through the real middleware: an owner, an admin, a read token and an admin token read it; a moderator,
@@ -96,7 +98,7 @@ async function main(): Promise<void> {
     const { isPrivatePreview } = await import('./config/private-preview.js');
     const { ENABLE_PEER_CONNECTORS } = await import('./connector-manager.js');
     const { setNodeRole } = await import('./config/node-role.js');
-    const { keepMainServerCommunitySettings, KEPT_COMMUNITY_SETTINGS_KEY } = await import('./config/community-settings.js');
+    const { keepMainServerCommunitySettings, KEPT_COMMUNITY_SETTINGS_KEY, readCommunitySettings } = await import('./config/community-settings.js');
     const { importPlainTables } = await import('./engine/plain-tables.js');
     const shape = await import('./config/community-shape.js');
     const { readShape, SHAPE_LOCK_CODES, SHAPE_SWITCH_PLACES } = shape;
@@ -161,7 +163,15 @@ async function main(): Promise<void> {
         else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
     };
     const rowOf = (key: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? null;
-    const storedNodeConfig = () => { try { return JSON.parse(rowOf('node_config') ?? '{}'); } catch { return {}; } };
+    // What getNodeConfig reads each directory switch as with nothing stored: probed, never assumed.
+    const ROLLBACK_EARLY = new Error('rollback');
+    let emptyDirectory: Record<string, unknown> = {};
+    try {
+        db.transaction(() => { setRow('node_config', null); emptyDirectory = { ...se.getNodeConfig() }; throw ROLLBACK_EARLY; })();
+    } catch (e) { if (e !== ROLLBACK_EARLY) throw e; }
+    const SHARE_FIELDS = ['publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth'] as const;
+    assert(SHARE_FIELDS.every((f) => emptyDirectory[f] === shape.DIRECTORY_SWITCH_DEFAULTS[f]),
+        `the share switches' defaults are what getNodeConfig reads with nothing stored (${JSON.stringify(Object.fromEntries(SHARE_FIELDS.map((f) => [f, emptyDirectory[f]])))})`);
     const snapshot = () => JSON.stringify({
         nodeConfig: db.prepare('SELECT key, value FROM node_config ORDER BY key').all(),
         shapeLog: db.prepare('SELECT COUNT(*) AS n FROM community_settings_log').get(),
@@ -320,8 +330,11 @@ async function main(): Promise<void> {
         tally.check('beans.value is the Beans gate', S.beans.value === features.beans && S.beans.value === beansOn(), label);
         tally.check('beans.configured', S.beans.configured === cfg.beans && S.beans.source === owned('beans'), label);
         const beansWouldStayOn = probe(() => setOverrideRow('beans', false), () => np.getNodeFeatures().beans);
-        tally.check('beans.lock is where switching Beans off would not take', lockOf(S.beans) === (beansWouldStayOn ? 'ledger_moved' : null),
-            () => `${label()} shape=${lockOf(S.beans)} stillOn=${beansWouldStayOn}`);
+        // Where they are off and the open door is set, switching them on is refused (S2): the first Bean that moved would
+        // shut the door for good (lockToLedger).
+        const beansLock = beansWouldStayOn ? 'ledger_moved' : cfg.openJoin && !cfg.beans ? 'profile' : null;
+        tally.check('beans.lock is where switching Beans off would not take, or on would shut the open door', lockOf(S.beans) === beansLock,
+            () => `${label()} shape=${lockOf(S.beans)} stillOn=${beansWouldStayOn} want=${beansLock}`);
         tally.check('beans.includes are the escrow, enterprise, treasury and crowdfund gates', isDeepStrictEqual(S.beans.includes,
             { escrow: featureOn('escrow'), enterprises: featureOn('enterprises'), treasuries: featureOn('treasuries'), crowdfund: featureOn('crowdfund') }), label);
 
@@ -367,21 +380,27 @@ async function main(): Promise<void> {
             const interval = se.getNodeConfig().directoryPushIntervalHours;
             const wouldGo = pushed.error === 'P2P node not ready';
             tally.check('listed.value is whether a push goes, on the schedule', S.listed.value === (wouldGo && interval !== 0), () => `${label()} shape=${S.listed.value} push=${JSON.stringify(pushed)} interval=${interval}`);
-            const listedLock = pushed.heldBack === 'unlisted' ? 'server_env'
+            // On the global kind Listed is its kind's (design §2.3), whatever the push does.
+            const listedLock = st.profile === 'global' ? 'profile'
+                : pushed.heldBack === 'unlisted' ? 'server_env'
                 : eff.publishToDirectory && interval === 0 ? 'schedule_never'
                 : pushed.heldBack ? 'held_back' : null;
             tally.check('listed.lock is the push\'s hold-back, or the schedule', lockOf(S.listed) === listedLock, () => `${label()} shape=${lockOf(S.listed)} want=${listedLock}`);
+            if (listedLock === 'schedule_never') {
+                tally.check('the schedule\'s Never says Publish Now still sends', /Publish Now/.test(S.listed.lock!.why) && !/nothing is sent/i.test(S.listed.lock!.why),
+                    () => `${label()} ${S.listed.lock!.why}`);
+            }
         }
         tally.check('listed.configured is publishToDirectory', S.listed.configured === cfg.publishToDirectory && S.listed.source === owned('publishToDirectory'), label);
 
-        // What the directory is sent.
+        // What the directory is sent. No store records who chose a directory switch (the object is stored whole, bookkeeping
+        // and all), so `owner` is a value that is not the default.
         const n = se.getNodeConfig();
-        const stored = storedNodeConfig();
         for (const [key, field] of [['shareLocation', 'publishLocation'], ['shareMemberCount', 'publishMembers'], ['shareEmail', 'publishContactEmail'],
             ['sharePhone', 'publishContactPhone'], ['shareHealth', 'publishHealth']] as const) {
             const s = S[key];
             tally.check(`${key} is getNodeConfig().${field}`, s.value === n[field] && s.configured === n[field] && s.lock === null
-                && s.source === (field in stored ? 'owner' : 'default'), label);
+                && s.source === (n[field] !== emptyDirectory[field] ? 'owner' : 'default'), label);
         }
 
         // Visitors.
@@ -642,12 +661,43 @@ async function main(): Promise<void> {
         setNodeRole('primary');
         const asMain = readShape().settings.listed;
         setNodeRole('backup');
-        assert(asStandby.value === false && asStandby.lock === null && isDeepStrictEqual(asStandby, asMain),
-            `a standby whose switch is off (${label}): Listed is off with nothing locked, as the main server's (${JSON.stringify(asStandby)}; main ${JSON.stringify(asMain)})`);
+        // On the global kind the lock is its kind's, a standby's as its main server's; elsewhere nothing is locked.
+        const wantLock = process.env.NODE_PROFILE === 'global' ? 'profile' : null;
+        assert(asStandby.value === false && (asStandby.lock?.code ?? null) === wantLock && isDeepStrictEqual(asStandby, asMain),
+            `a standby whose switch is off (${label}): Listed is off, locked only by the kind, as the main server's (${JSON.stringify(asStandby)}; main ${JSON.stringify(asMain)})`);
         process.env.NODE_PROFILE = '';
         setRow(OVERRIDE_PREFIX + 'publishToDirectory', null);
     }
     setNodeRole('primary');
+
+    // ── 7. Who chose a directory switch ─────────────────────────────────────────────────────────
+    console.log('\n── 7. a directory switch reads `owner` only where it is not the default ──');
+    const shareSources = (sh: Shape) => ['shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth']
+        .map((k) => (sh.settings as unknown as Record<string, ShapeSetting<boolean>>)[k].source);
+    clearState();
+    setRow('node_config', null);
+    const untouched = readShape();
+    assert(shareSources(untouched).every((s) => s === 'default'), `a main server nobody changed: every share switch reads default (${shareSources(untouched).join(', ')})`);
+    se.updateNodeConfig({ lastDirectoryPush: new Date().toISOString() });
+    const afterPush = readShape();
+    assert(rowOf('node_config') !== null && shareSources(afterPush).every((s) => s === 'default'),
+        `after a directory push stamps the stored object (every field written, defaults included), still default (${shareSources(afterPush).join(', ')})`);
+    // Its standby, with a copy of that untouched main server's settings, as a copy carries them: every directory field.
+    const mainsRecord = readCommunitySettings();
+    assert(SHARE_FIELDS.every((f) => (mainsRecord.directory as Record<string, unknown>)[f] !== undefined), 'the copy carries every directory field, defaults included');
+    setNodeRole('backup');
+    keepMainServerCommunitySettings(mainsRecord, '2026-10-24T08:00:00.000Z');
+    const standbyOfUntouched = readShape();
+    assert(shareSources(standbyOfUntouched).every((s) => s === 'default')
+        && isDeepStrictEqual(shareSources(standbyOfUntouched), shareSources(afterPush)),
+        `its standby reads the same: default, as its main server does (${shareSources(standbyOfUntouched).join(', ')})`);
+    setNodeRole('primary');
+    se.updateNodeConfig({ publishContactEmail: true, publishHealth: false });
+    const chosen = readShape();
+    assert(chosen.settings.shareEmail.source === 'owner' && chosen.settings.shareHealth.source === 'owner' && chosen.settings.shareLocation.source === 'default',
+        `a switch changed from its default reads owner, the rest default (${shareSources(chosen).join(', ')})`);
+    se.updateNodeConfig({ publishContactEmail: false, publishHealth: true });
+    setRow(KEPT_COMMUNITY_SETTINGS_KEY, null);
     const mainAgain = readShape();
     assert(mainAgain.standby === false && mainAgain.copiedAt === undefined && mainAgain.settings.join.value === 'members',
         `back as a main server it reads its own rows again (${mainAgain.settings.join.value})`);

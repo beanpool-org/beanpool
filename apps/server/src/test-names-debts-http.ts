@@ -169,8 +169,8 @@ async function main(): Promise<void> {
     const ada = makeMember('Ada');
     grantNodeRole(ada.pk, 'admin', 'SYSTEM');
     db.prepare(`INSERT INTO names_generations (id, n, parent_id, maker, drops, statement, signature) VALUES (?, 1, NULL, ?, '', 'fixture', 'fixture')`).run(KEY_ID, ada.pk);
-    const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
-    assert(on.status === 200 && on.body?.confirmation === true, `setup: the owner turns the known floor's dial on (${show(on)})`);
+    const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
+    assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true, `setup: the owner turns the known floor's dial on (${show(on)})`);
 
     const sam = makeMember('Sam', 50);
     /** A member who has traded (with a partner of their own), so they may propose a Decision (one open at a time each). */

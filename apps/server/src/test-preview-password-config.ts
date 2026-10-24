@@ -93,7 +93,7 @@ function managerSaveBody(cfg: any): Record<string, unknown> {
         publishHealth: cfg.publishHealth !== undefined ? Boolean(cfg.publishHealth) : true,
         directoryPushIntervalHours: cfg.directoryPushIntervalHours !== undefined ? Number(cfg.directoryPushIntervalHours) : 12,
         serviceRadius: cfg.serviceRadius && typeof cfg.serviceRadius === 'object' ? cfg.serviceRadius : null,
-        ...(typeof cfg.acceptKnocks === 'boolean' ? { acceptKnocks: cfg.acceptKnocks } : {}),
+        // Requests to join are saved under How this community works now (slice S2), never in this body.
     };
 }
 

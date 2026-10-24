@@ -13,7 +13,9 @@
  *   POST /api/join/knocks/:id/decline           → { knock: { id, status: 'declined' } }   ("Not now")
  * The operator (the admin session or password, like the rest of Settings):
  *   GET  /api/local/admin/knocks                → { acceptKnocks, takingKnocks, open }
- *   and `acceptKnocks` in GET /api/node/config and POST /api/local/admin/node/config (routes/settings.ts).
+ *   and `acceptKnocks` in GET /api/node/config (routes/settings.ts), read only: an owner changes it as `knocks` on
+ *   POST /api/local/admin/community-shape (config/community-shape-write.ts), and node/config refuses it (400
+ *   `moved_to_community_shape`).
  *
  * Every /api/join/knock route answers 404 `feature_off` while the `knocks` switch is off (the global node, or a
  * community whose operator opted out), before any handler runs (routes/profile-feature-gate.ts). An unsigned write

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DoorSettingPanel, DOOR_PRESETS, doorChangeConsequence, readDoor } from './DoorSettingPanel';
+import { DoorSettingPanel, DOOR_PRESETS, doorChangeConsequence, readDoor, readJoinLock, unpauseConsequence } from './DoorSettingPanel';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -8,8 +8,12 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 /**
  * People & Safety → Invites & QR → "Who may invite" (the door, community modes slice 1; apps/server config/door.ts):
- * the presets Invite (any member invites) and Known (only admins invite), read from /api/node/config and saved alone
- * by an owner. A node older than the door shows nothing; the global node's open door is shown, not offered.
+ * the presets Invite (any member invites) and Known (only admins invite), read from /api/node/config and saved as How
+ * this community works' `join` (POST /api/local/admin/community-shape) by an owner. A node older than the door shows nothing; the global node's open door is shown, not offered.
+ * Whether new members are paused is read from the shape (GET /api/local/admin/community-shape `join`): saving a door takes
+ * them again, so a paused node says so first, and a node that won't say is offered no save (#2415 review r4360287590).
+ * Where who can join is locked (the private preview, a shut open door), the lock is said first and nothing is offered, and
+ * a save says every member was told only when the node says it told them (#2415 review r4360594247).
  */
 
 const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
@@ -21,15 +25,39 @@ type Answer = { ok: boolean; status?: number; body: unknown };
 
 const ADMIN_ROW = { member_pubkey: 'a'.repeat(64), role: 'admin', granted_at: '2026-01-01', granted_by: null };
 
-function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, body: { success: true } }, roles: unknown[] | 'fail' = [ADMIN_ROW]) {
-    const fetchMock = vi.fn().mockImplementation((url: string) => {
+type Join = 'members' | 'admins' | 'paused' | 'open';
+
+/** The shape's lock on who can join, as the server words it (apps/server config/community-shape.ts LOCK_WORDS). */
+const PREVIEW_LOCK = {
+    code: 'private_preview',
+    why: 'While the private preview is on, only owners and admins invite, and nobody can ask to join.',
+    unlock: 'Turn the private preview off on the server (PRIVATE_PREVIEW).',
+};
+
+/** How this community works as the node reads it: only `join` matters here. 'fail': the node won't say. */
+function shapeAnswer(join: Join | 'fail', lock: unknown = null) {
+    return join === 'fail'
+        ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'Internal Server Error' }) })
+        : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ kind: 'local', standby: false, settings: { join: { value: join, configured: join, source: 'default', lock } } }) });
+}
+
+/** What the route answers when who can join changed: the shape, and that every member was told. */
+const CHANGED: Answer = { ok: true, body: { shape: {}, told: 'members' } };
+
+function mockNode(config: Record<string, unknown>, save: Answer = CHANGED, roles: unknown[] | 'fail' = [ADMIN_ROW],
+    join: Join | 'fail' = readDoor(config.door) ?? 'members', lock: unknown = null) {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         if (url.includes('/api/local/admin/node-roles')) {
             return roles === 'fail'
                 ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'no' }) })
                 : Promise.resolve({ ok: true, json: () => Promise.resolve({ roles }) });
         }
-        if (url.includes('/api/local/admin/node/config')) {
+        if (url.includes('/api/local/admin/community-shape')) {
+            if (init?.method !== 'POST') return shapeAnswer(join, lock);
             return Promise.resolve({ ok: save.ok, status: save.status ?? (save.ok ? 200 : 403), json: () => Promise.resolve(save.body) });
+        }
+        if (url.includes('/api/local/admin/node/config')) {
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) });
         }
         if (url.includes('/api/node/config')) {
             return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishLocation: true, serviceRadius: null, ...config }) });
@@ -40,7 +68,11 @@ function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, bo
     return fetchMock;
 }
 
+/** The door's saves: How this community works' route, the one place who can join changes (its GET is the read of it). */
 const saveCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.filter((c: any[]) => String(c[0]).includes('/api/local/admin/community-shape') && c[1]?.method === 'POST');
+/** Node Identity's own save, which never carries the door. */
+const configCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
     fetchMock.mock.calls.filter((c: any[]) => String(c[0]).includes('/api/local/admin/node/config'));
 
 const radio = (name: RegExp) => screen.getByRole('radio', { name });
@@ -105,10 +137,10 @@ describe('Who may invite, for an owner', () => {
             const calls = saveCalls(fetchMock);
             expect(calls).toHaveLength(1);
             expect(calls[0][1].method).toBe('POST');
-            // The door alone: the node keeps every other setting as it is.
-            expect(JSON.parse(calls[0][1].body)).toEqual({ password: 'pw', door: 'admins' });
+            // Who can join alone: the node keeps every other setting as it is.
+            expect(JSON.parse(calls[0][1].body)).toEqual({ password: 'pw', changes: { join: 'admins' } });
             expect(calls[0][1].headers['X-Admin-Password']).toBe('pw');
-            await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Only admins invite now.'));
+            await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Only admins invite now, and every member is told.'));
             expect(saveButton()).toBeDisabled();
         });
     }
@@ -119,8 +151,8 @@ describe('Who may invite, for an owner', () => {
         await waitFor(() => expect(radio(/Known: only admins invite/)).toBeChecked());
         await act(async () => { fireEvent.click(radio(/Invite: any member invites/)); });
         await act(async () => { fireEvent.click(saveButton()); });
-        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).door).toBe('members');
-        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Any member invites now.'));
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).changes.join).toBe('members');
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Any member invites now, and every member is told.'));
     });
 
     it("a refusal is shown in the node's words, and the door stays as the node has it", async () => {
@@ -131,6 +163,145 @@ describe('Who may invite, for an owner', () => {
         await act(async () => { fireEvent.click(saveButton()); });
         await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('The node said no.'));
         expect(screen.getByText(/\(now\)/).closest('label')).toHaveTextContent(/Invite: any member invites/);
+    });
+});
+
+describe('Who may invite, while no new members are being taken', () => {
+    const PAUSED_NOTE = /no new members are being taken for now/;
+
+    it('says the community is paused, marks no door as now, and saving a door says it takes new members again', async () => {
+        const fetchMock = mockNode({ door: 'members' }, undefined, [ADMIN_ROW], 'paused');
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(screen.getByText(PAUSED_NOTE)).toBeInTheDocument());
+        expect(screen.getByTestId('door-paused')).toHaveTextContent(/Saving a choice here takes new members again, and every member is told/);
+        // The door row still reads members, but nobody invites while paused: no choice is shown as the one in use.
+        expect(radio(/Invite: any member invites/)).not.toBeChecked();
+        expect(radio(/Known: only admins invite/)).not.toBeChecked();
+        expect(screen.queryByText(/\(now\)/)).toBeNull();
+        expect(screen.getByText(/\(before the pause\)/).closest('label')).toHaveTextContent(/Invite: any member invites/);
+        expect(saveButton()).toBeDisabled();
+
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        expect(screen.getByText(unpauseConsequence('admins'))).toBeInTheDocument();
+        expect(unpauseConsequence('admins')).toMatch(/^New members will be taken again/);
+        expect(screen.getByText(doorChangeConsequence('members', 'admins'))).toBeInTheDocument();
+        expect(saveButton()).not.toBeDisabled();
+
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(1);
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body)).toEqual({ password: 'pw', changes: { join: 'admins' } });
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved. New members are taken again: only admins invite, and every member is told.'));
+        expect(screen.queryByText(PAUSED_NOTE)).toBeNull();
+        expect(screen.getByText(/\(now\)/).closest('label')).toHaveTextContent(/Known: only admins invite/);
+        expect(saveButton()).toBeDisabled();
+    });
+
+    it('the door it had before the pause can be saved too, which takes new members again with it', async () => {
+        const fetchMock = mockNode({ door: 'members' }, undefined, [ADMIN_ROW], 'paused');
+        await renderPanel(PASSWORD);
+        await waitFor(() => expect(screen.getByText(PAUSED_NOTE)).toBeInTheDocument());
+        await act(async () => { fireEvent.click(radio(/Invite: any member invites/)); });
+        expect(screen.getByText(unpauseConsequence('members'))).toBeInTheDocument();
+        expect(saveButton()).not.toBeDisabled();
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).changes).toEqual({ join: 'members' });
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved. New members are taken again: any member invites, and every member is told.'));
+    });
+
+    it('a node that will not say whether it is paused: the door is shown, and nothing is saved on a guess', async () => {
+        const fetchMock = mockNode({ door: 'members' }, undefined, [ADMIN_ROW], 'fail');
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(screen.getByText(/Couldn't check whether new members are being taken here/)).toBeInTheDocument());
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        expect(saveButton()).toBeDisabled();
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(0);
+    });
+
+    it('taking new members: no pause note', async () => {
+        mockNode({ door: 'admins' });
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(radio(/Known: only admins invite/)).toBeChecked());
+        expect(screen.queryByText(PAUSED_NOTE)).toBeNull();
+        expect(screen.queryByText(/Couldn't check whether new members are being taken here/)).toBeNull();
+    });
+});
+
+describe('Who may invite, where the node locks it', () => {
+    const NOTHING_CHANGED = 'Nothing changed: the node already had this, so nobody was told.';
+
+    it('the lock in its own words, with what would unlock it', () => {
+        expect(readJoinLock(null)).toBeNull();
+        expect(readJoinLock(undefined)).toBeNull();
+        expect(readJoinLock(PREVIEW_LOCK)).toEqual({ why: PREVIEW_LOCK.why, unlock: PREVIEW_LOCK.unlock });
+        // A lock the node names without a reason still refuses: never read as no lock.
+        expect(readJoinLock({ code: 'private_preview' })?.why).toMatch(/takes no change to who may invite/);
+    });
+
+    it('a private preview with the row at members: the lock is said first, no door is offered, and nothing is sent', async () => {
+        // The door as it works is admins under the preview (doorFor); the row still says members.
+        const fetchMock = mockNode({ door: 'admins' }, CHANGED, [ADMIN_ROW], 'members', PREVIEW_LOCK);
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(screen.getByTestId('door-locked')).toHaveTextContent(PREVIEW_LOCK.why));
+        expect(screen.getByTestId('door-locked')).toHaveTextContent(PREVIEW_LOCK.unlock);
+        const lockLine = screen.getByTestId('door-locked');
+        const heading = screen.getByRole('heading', { name: /Who may invite/ });
+        expect(heading.compareDocumentPosition(lockLine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(lockLine.compareDocumentPosition(radio(/Invite: any member invites/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // Gated, pointing at the lock's words, as a control that is not the viewer's.
+        expect(radio(/Invite: any member invites/)).toHaveAttribute('aria-disabled', 'true');
+        expect(radio(/Invite: any member invites/).getAttribute('aria-describedby')).toContain(lockLine.id);
+        expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+
+        await act(async () => { fireEvent.click(radio(/Invite: any member invites/)); });
+        expect(radio(/Invite: any member invites/)).not.toBeChecked();
+        expect(screen.queryByText(doorChangeConsequence('admins', 'members'))).toBeNull();
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(0);
+        expect(screen.queryByText(/every member is told/)).toBeNull();
+    });
+
+    it('paused under the preview: the pause is said, but not that saving takes new members again', async () => {
+        const fetchMock = mockNode({ door: 'admins' }, CHANGED, [ADMIN_ROW], 'paused', PREVIEW_LOCK);
+        await renderPanel(PASSWORD);
+        await waitFor(() => expect(screen.getByTestId('door-locked')).toHaveTextContent(PREVIEW_LOCK.why));
+        expect(screen.getByTestId('door-paused')).toHaveTextContent(/no new members are being taken for now/);
+        expect(screen.getByTestId('door-paused')).not.toHaveTextContent(/Saving a choice here/);
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(0);
+    });
+
+    it('an admin on a locked node reads both reasons', async () => {
+        mockNode({ door: 'admins' }, CHANGED, [ADMIN_ROW], 'members', PREVIEW_LOCK);
+        await renderPanel(ADMIN_KEY);
+        await waitFor(() => expect(screen.getByTestId('door-locked')).toBeInTheDocument());
+        const described = saveButton().getAttribute('aria-describedby') ?? '';
+        expect(described.split(' ')).toHaveLength(2);
+        expect(described).toContain(screen.getByTestId('door-locked').id);
+        expect(described).toContain(screen.getByText('Only an owner of this community can change who may invite.').id);
+    });
+
+    it('a 200 that told nobody changed nothing: never "every member is told", and the door stays as the node has it', async () => {
+        const fetchMock = mockNode({ door: 'members' }, { ok: true, body: { shape: {}, told: 'nobody' } });
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(radio(/Invite: any member invites/)).toBeChecked());
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(1);
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(NOTHING_CHANGED));
+        expect(screen.queryByText(/every member is told/)).toBeNull();
+        expect(screen.getByText(/\(now\)/).closest('label')).toHaveTextContent(/Invite: any member invites/);
+    });
+
+    it('a 200 that does not say who was told claims nobody was', async () => {
+        mockNode({ door: 'members' }, { ok: true, body: { success: true } });
+        await renderPanel(PASSWORD);
+        await waitFor(() => expect(radio(/Invite: any member invites/)).toBeChecked());
+        await act(async () => { fireEvent.click(radio(/Known: only admins invite/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(NOTHING_CHANGED));
+        expect(screen.queryByText(/every member is told/)).toBeNull();
     });
 });
 
@@ -171,7 +342,7 @@ describe('nodes with no door to choose', () => {
 
 describe('Node Identity: who answers a request to join follows the door', () => {
     const nodeConfigBody = (fetchMock: ReturnType<typeof vi.fn>) => {
-        const call = saveCalls(fetchMock)[0];
+        const call = configCalls(fetchMock)[0];
         return call ? JSON.parse(call[1].body) : undefined;
     };
 
@@ -238,7 +409,7 @@ describe('Known with nobody to act on it', () => {
         await act(async () => { fireEvent.click(radio(/Known/)); });
         await act(async () => { fireEvent.click(saveButton()); });
         expect(saveCalls(fetchMock)).toHaveLength(1);
-        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).door).toBe('admins');
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).changes.join).toBe('admins');
     });
 
     it('says nothing when an owner or an admin holds a role', async () => {

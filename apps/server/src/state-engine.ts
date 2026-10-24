@@ -53,7 +53,7 @@ import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-cha
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
-import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS } from './engine/moderation-notices.js';
+import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
@@ -8943,6 +8943,22 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     } catch (e: any) {
         console.error('[Push Announcement] Failed to send push notification broadcast:', e.message);
     }
+}
+
+/**
+ * One notice to every member (config/community-shape-write.ts: how this community works changed). Not
+ * adminBroadcastAnnouncement's live copy for all: each member's copy is kept (engine/kept-notices.ts), so a web member
+ * whose tab is closed sees it when it next opens, and goes live to their own sockets with that copy's id, so a web app
+ * that shows it live never shows it again; then one push to them all, "Your community has a notice for you" (D3). Not to
+ * a visitor's row, an enterprise's key or a closed account, which keep no notice, nor the node's own SYSTEM row. Returns
+ * how many it was for.
+ */
+export function noticeToEveryMember(title: string, body: string, data: Record<string, unknown>): number {
+    const members = (db.prepare(`SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned' AND public_key != 'SYSTEM'
+                                 AND COALESCE(is_visitor, 0) = 0 AND COALESCE(is_treasury, 0) = 0`).all() as { public_key: string }[])
+        .map(m => m.public_key);
+    tellMembers(moderationNoticeCb, members, title, body, data);
+    return members.length;
 }
 
 export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {

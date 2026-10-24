@@ -1857,7 +1857,8 @@ CREATE TABLE IF NOT EXISTS known_floor_log (
 -- Every change to how this community works (config/community-shape.ts; DESIGN-community-shape-settings-fable.md §2.5): one
 -- row per setting changed, newest the highest id, which the owners' page reads as the shape's `version`. Every owner and
 -- admin reads it. `actor_pubkey` is the key behind the session, or `owner:password`; `note` is the owner's own sentence to
--- the members, if any. Nothing writes it yet: the write path is slice S2. Known-floor changes keep their own log too.
+-- the members, if any. Written only by config/community-shape-write.ts. Known-floor changes keep their own log too,
+-- stamped alike, and the shape reads such a change once.
 CREATE TABLE IF NOT EXISTS community_settings_log (
     id             INTEGER PRIMARY KEY,
     actor_pubkey   TEXT NOT NULL,

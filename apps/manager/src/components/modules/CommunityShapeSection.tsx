@@ -1063,35 +1063,33 @@ function ShapeRow({
             <div
                 data-testid={`shape-expand-${id}`}
                 onClick={canExpand ? onToggle : undefined}
-                className={`flex items-start justify-between gap-3 min-h-[48px] flex-wrap min-w-0 ${canExpand ? 'cursor-pointer hover:opacity-90' : ''}`}
+                className={`min-h-[48px] space-y-1.5 ${canExpand ? 'cursor-pointer hover:opacity-90' : ''}`}
             >
-                <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                    <span className="text-base select-none" aria-hidden="true">{icon}</span>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-bold text-white break-words">{name}</span>
-                        </div>
-                        <p className="text-[11px] text-nature-400 m-0 mt-0.5 leading-normal break-words">{summary}</p>
-                        {extraLine && (
-                            <p className="text-[11px] text-nature-400 m-0 mt-0.5 leading-normal break-words">{extraLine}</p>
+                <div className="flex items-start justify-between gap-2 flex-wrap min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-base select-none shrink-0" aria-hidden="true">{icon}</span>
+                        <span className="text-xs font-bold text-white break-words">{name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                        <span data-testid={`shape-val-${id}`} className="text-xs font-medium text-white break-words">
+                            {displayValue}
+                        </span>
+                        {serverBadge && (
+                            <span className="text-[10px] text-nature-400 bg-nature-900 border border-nature-800 px-1.5 py-0.5 rounded break-words text-right">
+                                {serverBadge}
+                            </span>
+                        )}
+                        {canExpand && (
+                            <span className="text-nature-400 text-xs font-mono select-none" aria-hidden="true">
+                                {isOpen ? '▲' : '›'}
+                            </span>
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <span data-testid={`shape-val-${id}`} className="text-xs font-medium text-white break-words">
-                        {displayValue}
-                    </span>
-                    {serverBadge && (
-                        <span className="text-[10px] text-nature-400 bg-nature-900 border border-nature-800 px-1.5 py-0.5 rounded">
-                            {serverBadge}
-                        </span>
-                    )}
-                    {canExpand && (
-                        <span className="text-nature-400 text-xs font-mono select-none" aria-hidden="true">
-                            {isOpen ? '▲' : '›'}
-                        </span>
-                    )}
-                </div>
+                <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{summary}</p>
+                {extraLine && (
+                    <p className="text-[11px] text-nature-400 m-0 leading-normal break-words pl-6">{extraLine}</p>
+                )}
             </div>
 
             {/* Lock Line */}

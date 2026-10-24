@@ -1030,9 +1030,81 @@ const RESTORE_POINTS = [
         keptAtLeastUntil: '2026-10-20T22:47:03.090Z', keptAtMostUntil: '2026-11-12T22:47:03.090Z' },
 ];
 
+/** How this community works (GET/POST /api/local/admin/community-shape) */
+const COMMUNITY_SHAPE = {
+    kind: 'local',
+    standby: false,
+    version: 4,
+    settings: {
+        join: { value: 'members', configured: 'members', source: 'default', lock: null },
+        openDoor: { value: false, configured: false, source: 'default', lock: null },
+        knocks: { value: true, configured: true, source: 'default', lock: null },
+        preview: { value: false, configured: false, source: 'server', lock: null },
+        beans: {
+            value: true,
+            configured: true,
+            source: 'default',
+            lock: {
+                code: 'ledger_moved',
+                why: "Can't be turned off: Beans have moved here (48 completed trades), and switching them off would freeze what members hold.",
+            },
+            includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true },
+        },
+        knownFloor: {
+            value: { on: true, floor: 1000, cap: 2000, capMax: 5000 },
+            configured: { on: true, floor: 1000, cap: 2000, capMax: 5000 },
+            source: 'default',
+            lock: null,
+        },
+        dmRequests: { value: true, configured: true, source: 'default', lock: null },
+        decisions: { value: true, configured: true, source: 'default', lock: null },
+        listed: { value: true, configured: true, source: 'default', lock: null },
+        shareLocation: { value: true, configured: true, source: 'default', lock: null },
+        shareMemberCount: { value: true, configured: true, source: 'default', lock: null },
+        shareEmail: { value: false, configured: false, source: 'default', lock: null },
+        sharePhone: { value: false, configured: false, source: 'default', lock: null },
+        shareHealth: { value: true, configured: true, source: 'default', lock: null },
+        visitors: { value: 'nothing', configured: 'nothing', source: 'default', lock: null },
+        probation: { value: false, configured: false, source: 'default', lock: null },
+        autoHide: { value: false, configured: false, source: 'default', lock: null },
+        autoMute: { value: false, configured: false, source: 'default', lock: null },
+        connections: { value: false, configured: false, source: 'server', lock: null },
+    },
+    kindOnly: [],
+    log: [
+        {
+            id: 'log-1',
+            kept: 'community_settings_log',
+            at: '2026-10-23T14:02:00.000Z',
+            actor: pubkey(MEMBER_NAMES[0]),
+            actorCallsign: 'Bartholomew_Featherstonehaugh1',
+            actorRole: 'owner',
+            setting: 'Who can join',
+            from: 'only admins invite',
+            to: 'any member invites',
+            note: 'Open for spring festival',
+        },
+    ],
+};
+
 export function mockResponse(method, pathname, searchParams, bodyText) {
     const ok = (json) => ({ status: 200, json });
     const m = (method || 'GET').toUpperCase();
+
+    // ---- how this community works ----
+    if (pathname === '/api/local/admin/community-shape') {
+        if (m === 'POST') {
+            const body = bodyText ? JSON.parse(bodyText) : {};
+            const changes = body.changes || {};
+            for (const [k, v] of Object.entries(changes)) {
+                if (COMMUNITY_SHAPE.settings[k]) {
+                    COMMUNITY_SHAPE.settings[k].value = v;
+                }
+            }
+            return ok({ shape: COMMUNITY_SHAPE, told: 'members' });
+        }
+        return ok(COMMUNITY_SHAPE);
+    }
 
     // ---- diagnostics & health ----
     if (pathname === '/api/local/admin/diagnostics') return ok(DIAGNOSTICS);

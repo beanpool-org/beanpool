@@ -716,7 +716,6 @@ export function NodeIdentityPanel({
                                 disabled={directory !== 'loaded'}
                                 className="bg-nature-900 border border-nature-700 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-terra-500 disabled:opacity-50"
                             >
-                                <option value={0}>Never (Disabled)</option>
                                 <option value={1}>Every 1 hour</option>
                                 <option value={6}>Every 6 hours</option>
                                 <option value={12}>Every 12 hours</option>

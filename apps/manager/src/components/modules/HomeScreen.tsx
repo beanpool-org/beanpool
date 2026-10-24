@@ -524,7 +524,7 @@ export function HomeScreen({
                     onClick={() => onNavigate('shape')}
                     className="w-full p-4 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md text-left flex items-center justify-between gap-3 text-xs text-nature-300 hover:text-white"
                 >
-                    <span className="truncate">{shapeCardText}</span>
+                    <span className="break-words leading-relaxed">{shapeCardText}</span>
                 </button>
             )}
 

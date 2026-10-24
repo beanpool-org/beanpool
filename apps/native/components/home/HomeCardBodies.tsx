@@ -16,7 +16,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TierName, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -557,11 +557,17 @@ export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans
     const s = homeStyles(colors);
     const { main, sub } = beansLines(card);
     if (card.month) {
-        const monthText = t('This month: {trades} · +{in} in · −{out} out', {
-            trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
-            in: formatBeans(card.month.in),
-            out: formatBeans(card.month.out),
-        });
+        const monthText = card.month.more
+            ? t('This month (partial): {trades} · +{in} in · −{out} out', {
+                trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
+                in: formatBeans(card.month.in),
+                out: formatBeans(card.month.out),
+            })
+            : t('This month: {trades} · +{in} in · −{out} out', {
+                trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
+                in: formatBeans(card.month.in),
+                out: formatBeans(card.month.out),
+            });
         const tier = card.tier && Object.prototype.hasOwnProperty.call(TIER_WORDS, card.tier) ? t(TIER_WORDS[card.tier as keyof typeof TIER_WORDS]) : card.tier || null;
         const tierKey = card.tier ? card.tier.toLowerCase() : undefined;
         const trustToken = tierKey && tierKey !== 'star' && tierKey in colors.trust

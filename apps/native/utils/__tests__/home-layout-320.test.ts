@@ -409,6 +409,7 @@ describe('new fixed strings at 320dp x 1.3 (Home slice W5)', () => {
             'waiting on them · 1d ago',
             'Balance 340 Beans · 3 keepers',
             'This month: 5 trades · +120 in · −60 out',
+            'This month (partial): 5 trades · +120 in · −60 out',
             'Latest: +12 Beans from Ana · 2h ago',
             'Latest: −20 Beans to Ana · 2h ago',
             'Latest: −5 Beans to the Commons · 2h ago',

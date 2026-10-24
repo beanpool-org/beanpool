@@ -3471,6 +3471,29 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(card.textContent).toContain('Resident');
     });
 
+    it('beans card: shows partial indicator when month.more is set so partial totals are never presented as complete', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                beans: {
+                    balance: 150,
+                    room: 250,
+                    tier: 'Resident',
+                    activated: true,
+                    frozen: false,
+                    month: { trades: 200, in: 1200, out: 800, fees: 0, more: true },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-beans"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('This month (partial): 200 trades · +1,200 in · −800 out');
+    });
+
     it('community card: draws narrow rows on local community (members/joined, trades/commons, listings/events)', async () => {
         const base = localMember();
         node.answer = {

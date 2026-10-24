@@ -126,8 +126,8 @@ export async function claimWithKey(req: ClaimWithKey): Promise<ClaimedWithKey> {
                 throw new Error("The claim couldn't be saved on this phone, so it was not sent. Try again.");
             }
         } else {
-            // Read before adoptJoinKey takes another door's mark off the key, and that mark's other half, that the words
-            // are new, stays on the record (`newKey`): a tap after a wrong code or a lost answer still knows.
+            // Whether the key's words are new is read before adoptJoinKey takes another door's mark off it. The record
+            // keeps that half of the mark (`newKey`), so a tap after a wrong code or a lost answer still knows.
             wordsUnseen = keyMadeForThisJoin(await getPendingOnboarding(), identity.publicKey);
             await adoptJoinKey(identity.publicKey, { keepNewKey: true });
         }

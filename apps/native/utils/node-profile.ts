@@ -402,7 +402,7 @@ export type HideableTab = 'projects' | 'ledger';
  * `showcase` is on: then both stay, and show Example Valley in preview (design §1 rows 3 and 6).
  *
  * Marty's decision (board, 24 Oct 18:52): On a Beans-off community where Decisions are on, the Commons tab
- * stays for Decide (formal Decisions and polls) and Groups (chat groups only). The Ledger tab stays hidden.
+ * stays for Decide (formal Decisions) and Groups (chat groups only). The Ledger tab stays hidden.
  * The routes stay (a link to them still opens), only the tab strip changes.
  */
 export function hiddenTabsFor(features: NodeFeatures | null | undefined): HideableTab[] {

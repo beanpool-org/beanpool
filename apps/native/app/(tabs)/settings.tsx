@@ -1190,7 +1190,11 @@ export default function SettingsScreen() {
                     bio: bio.trim(),
                     contact: contact.trim() ? { value: contact.trim(), visibility: contactVisibility } : null,
                 };
-                if (renames) payloadObj.callsign = newCallsign;
+                // An offline rename still waiting for pillar-sync's retry is a rename too: this Save may retire that retry
+                // (retireParkedPickAfterPublish), so it carries the name the member chose, or the node keeps the old one
+                // and the next answer from the community writes it back (#2439 review).
+                const pendingRename = (await AsyncStorage.getItem('pending_profile_sync')) === 'true' && newCallsign.length >= 2;
+                if (renames || pendingRename) payloadObj.callsign = newCallsign;
                 // The one shared rule decides, so this Save cannot disagree with the wizard or
                 // with the pending-sync retry. It sends a photo picked in this session, else a
                 // pick an earlier offline save parked and nothing has managed to publish yet;

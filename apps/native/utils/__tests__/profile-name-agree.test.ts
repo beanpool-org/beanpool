@@ -565,6 +565,27 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         expect(mockDb.updatedProfiles.filter((u) => u.callsign === 'Marty party')).toEqual([]);
     });
 
+    it('after an offline rename, the next online Save that carries a photo still sends the NEW name before the retry is retired (#2439 review r4367199161)', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+        expect(store.map.get('pending_profile_sync')).toBe('true');
+        // A photo the offline Save parked (or one picked now) rides on the next online Save.
+        store.map.set('pending_profile_avatar', 'data:image/png;base64,UElDSw==');
+
+        const { updates } = mockNode();
+        await press('✏️ Edit');
+        await press('Save Profile');
+        const sent = updates.at(-1);
+        expect(sent, 'the online Save reached the node').toBeDefined();
+        expect(sent.callsign).toBe('Marty Renamed');
+        expect(mockDb.remoteCallsign).toBe('Marty Renamed');
+    });
+
     it.each([
         ['no row yet (a community this phone has not synced)', null],
         ['a row with no photo', { public_key: KEY, callsign: 'Old Stale Marty', avatar_url: null }],

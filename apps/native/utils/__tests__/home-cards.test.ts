@@ -14,7 +14,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 
 import {
     HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardCaption, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
-    DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
+    DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, decideOnNode, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
@@ -793,6 +793,14 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
         expect(decideLines(card, GLOBAL.features, NOW).map(l => l.id)).toEqual(['polls']);
         // A node with Beans but no Decisions: the same.
         expect(decideLines(card, { ...LOCAL.features, decisions: false }, NOW).map(l => l.id)).toEqual(['polls']);
+        // A node with Beans off but Decisions on: Commons tab stays, Decision row reaches Decide.
+        expect(decideLines(card, { beans: false, decisions: true }, NOW).map(l => l.id)).toEqual(['decisions', 'polls']);
+        expect(decideLines(card, { beans: false }, NOW).map(l => l.id)).toEqual(['decisions', 'polls']);
+        expect(decideOnNode({ beans: false, decisions: true })).toBe(true);
+        expect(decideOnNode({ beans: false })).toBe(true);
+        // A node with Beans off and Decisions off: no Decisions line.
+        expect(decideLines(card, { beans: false, decisions: false }, NOW).map(l => l.id)).toEqual(['polls']);
+        expect(decideOnNode({ beans: false, decisions: false })).toBe(false);
     });
 
     it('a member tailors their Home; a visitor\'s answer (no `me`) tailors nothing', () => {

@@ -278,14 +278,16 @@ export default function ProposeProjectModal() {
                         </>
                     )}
 
-                    {/* Photos / Avatar */}
+                    {/* Its logo, the one picture made with it (its avatar, drawn round). Its banner is its shop's photo, which a
+                        keeper chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>{t('COVER PHOTO / AVATAR (OPTIONAL)')}</Text>
+                        <Text style={styles.label}>{t('LOGO (OPTIONAL)')}</Text>
+                        <Text style={{ fontSize: 13, lineHeight: 19, color: colors.text.secondary }}>{t('Its banner photo is chosen later, in Manage.')}</Text>
                         <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, padding: 4 }}>
                             {photos.map((uri, idx) => (
                                 uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                     <View key={idx} style={{ position: 'relative' }}>
-                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: colors.surface.subtle }} accessibilityLabel={t('Initiative photo')} />
+                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: colors.surface.subtle }} accessibilityLabel={t('Its logo')} />
                                         <Pressable
                                             onPress={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
                                             style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.feedback.danger.solid, borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
@@ -297,13 +299,13 @@ export default function ProposeProjectModal() {
                                     </View>
                                 ) : null
                             ))}
-                            {photos.length < 3 && (
-                                <Pressable 
+                            {photos.length < 1 && (
+                                <Pressable
                                     onPress={async () => {
                                         const res = await ImagePicker.launchImageLibraryAsync({
                                             mediaTypes: ['images'],
                                             allowsEditing: true,
-                                            aspect: [16, 9],
+                                            aspect: [1, 1],
                                             quality: 0.8,
                                             base64: false,
                                         });
@@ -318,9 +320,9 @@ export default function ProposeProjectModal() {
                                             }
                                         }
                                     }}
-                                    style={{ width: 80, height: 80, borderRadius: 12, borderWidth: 2, borderColor: colors.border.default, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.app }}
+                                    style={{ width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: colors.border.default, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.app }}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t('Add photo')}
+                                    accessibilityLabel={t('Choose a logo')}
                                 >
                                     <MaterialCommunityIcons name="image-plus" size={28} color={colors.text.muted} />
                                 </Pressable>

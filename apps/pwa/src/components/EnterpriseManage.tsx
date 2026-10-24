@@ -5,9 +5,11 @@
  *
  * - The face, with one Save: any keeper (or a node admin) its About and logo (PUT /api/treasury/:t/profile); only the lead
  *   (its sole keeper, or an admin) its name and what it is for, the others shown them and told why; a keeper its shop's
- *   kind and how it deals (PUT /api/treasury/:t/shop, which opens the shop if need be). Only what changed is sent, each to
- *   its own route, the profile first; a refusal is the node's own sentence and nothing after it is sent. The logo is the
- *   picture the keeper chose, made 800 px here before it goes (lib/photo-resize.ts; memory: photos stay 800px).
+ *   kind, how it deals and its banner photo (PUT /api/treasury/:t/shop, which opens the shop if need be; Marty, 24 Oct:
+ *   the logo and the banner are two pictures, each labelled, each with its own choice). Only what changed is sent, each to
+ *   its own route, the profile first; a refusal is the node's own sentence and nothing after it is sent. The logo and the
+ *   banner are the pictures the keeper chose, made 800 px here before they go (lib/photo-resize.ts; memory: photos stay
+ *   800px).
  * - Featured: its live Offers in its shop, each on the shelf or off it (PUT /api/marketplace/posts/:id/feature), six at
  *   most, said once; its live Offers for everyone not in its shop yet go in with one tap; no shop yet, one tap opens it.
  *
@@ -22,7 +24,7 @@ import { addEnterpriseShopOffers, changeEnterpriseFace, changeEnterpriseShop, fe
 import { resolveAvatarUrl } from '../lib/avatar';
 import { resizePhotoFile } from '../lib/photo-resize';
 import {
-    faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, type Face, type ShopfrontListing,
+    faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, shopPhotoOf, type Face, type ShopfrontListing,
 } from '../lib/shopfront';
 
 const card = 'bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4';
@@ -75,19 +77,26 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
     const dirty = Object.keys(changes.profile).length > 0 || Object.keys(changes.shop).length > 0;
     const set = (patch: Partial<Face>) => { setForm((f) => ({ ...f, ...patch })); setSaved(false); setError(null); };
     const logo = form.avatar ?? resolveAvatarUrl(detail?.avatar);
+    // Its banner as it will be: the photo just chosen, none once taken down, else the one its shop has.
+    const heldBanner = shopPhotoOf(detail?.shop);
+    const banner = form.banner === null ? null : form.banner ?? resolveAvatarUrl(heldBanner);
 
-    const pickLogo = async (file: File | undefined) => {
+    // Both pictures are made 800 px here before they go (lib/photo-resize.ts; memory: photos stay 800px).
+    const pick = async (file: File | undefined, which: 'avatar' | 'banner') => {
         if (!file) return;
         setPicking(true);
         setError(null);
         try {
-            set({ avatar: await resizePhotoFile(file) });
+            const picture = await resizePhotoFile(file);
+            set(which === 'avatar' ? { avatar: picture } : { banner: picture });
         } catch {
             setError(t("That picture couldn't be read. Try another."));
         } finally {
             setPicking(false);
         }
     };
+    // Taking down a photo only just chosen leaves the shop as it is when it has none.
+    const removeBanner = () => set({ banner: heldBanner ? null : undefined });
 
     const save = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -107,6 +116,8 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
             if (Object.keys(changes.shop).length > 0) {
                 await changeEnterpriseShop(treasury, changes.shop);
                 setWas((w) => ({ ...w, kind: form.kind, howToDeal: form.howToDeal }));
+                // The banner is the node's now: its page and this form read it again (onSaved).
+                setForm((f) => ({ ...f, banner: undefined }));
             }
             setSaved(true);
             onSaved();
@@ -125,29 +136,59 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
                 <h2 id={`${id}-heading`} className={heading}>{project ? t('Its page: what members see') : t('Its shopfront: what members see')}</h2>
                 <p className={`${muted} mt-1`}>
                     {project
-                        ? t('Any collaborator can change the picture, About, the kind of shop and how you deal.')
-                        : t('Any keeper can change the picture, About, the kind of shop and how you deal.')}
+                        ? t('Any collaborator can change the logo, the banner photo, About, the kind of shop and how you deal.')
+                        : t('Any keeper can change the logo, the banner photo, About, the kind of shop and how you deal.')}
                 </p>
             </div>
 
-            <div className="flex items-center gap-3">
-                {logo ? (
-                    <img data-testid="manage-face-logo-image" src={logo} alt={t('Its picture')} className="w-16 h-16 rounded-full object-cover border border-nature-200 dark:border-nature-700 shrink-0" />
-                ) : (
-                    <span aria-hidden="true" className="w-16 h-16 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-3xl shrink-0">{project ? '🌱' : '🏛️'}</span>
-                )}
-                <label data-testid="manage-face-logo" htmlFor={`${id}-logo`} className={`${secondary} inline-flex items-center cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500`}>
-                    {picking ? t('Reading the picture…') : t('Change the picture')}
-                    <input
-                        id={`${id}-logo`}
-                        data-testid="manage-face-logo-input"
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        onChange={(e) => { void pickLogo(e.target.files?.[0]); e.target.value = ''; }}
-                    />
-                </label>
+            <div>
+                <p data-testid="manage-face-logo-label" className={label}>{t('Logo')}</p>
+                <div className="flex items-center gap-3">
+                    {logo ? (
+                        <img data-testid="manage-face-logo-image" src={logo} alt={t('Its picture')} className="w-16 h-16 rounded-full object-cover border border-nature-200 dark:border-nature-700 shrink-0" />
+                    ) : (
+                        <span aria-hidden="true" className="w-16 h-16 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-3xl shrink-0">{project ? '🌱' : '🏛️'}</span>
+                    )}
+                    <label data-testid="manage-face-logo" htmlFor={`${id}-logo`} className={`${secondary} inline-flex items-center cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500`}>
+                        {picking ? t('Reading the picture…') : t('Change the picture')}
+                        <input
+                            id={`${id}-logo`}
+                            data-testid="manage-face-logo-input"
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => { void pick(e.target.files?.[0], 'avatar'); e.target.value = ''; }}
+                        />
+                    </label>
+                </div>
             </div>
+
+            {shopEditable && (
+                <div>
+                    <p data-testid="manage-face-banner-label" className={label}>{t('Banner photo')}</p>
+                    {banner && (
+                        <img data-testid="manage-face-banner-image" src={banner} alt={t('Its banner photo')} className="w-full h-24 rounded-xl object-cover border border-nature-200 dark:border-nature-700" />
+                    )}
+                    <div className={`flex flex-wrap items-center gap-2 ${banner ? 'mt-2' : ''}`}>
+                        <label data-testid="manage-face-banner" htmlFor={`${id}-banner`} className={`${secondary} inline-flex items-center cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500`}>
+                            {picking ? t('Reading the picture…') : banner ? t('Change the banner photo') : t('Choose a banner photo')}
+                            <input
+                                id={`${id}-banner`}
+                                data-testid="manage-face-banner-input"
+                                type="file"
+                                accept="image/*"
+                                className="sr-only"
+                                onChange={(e) => { void pick(e.target.files?.[0], 'banner'); e.target.value = ''; }}
+                            />
+                        </label>
+                        {banner && (
+                            <button type="button" data-testid="manage-face-banner-remove" onClick={removeBanner} className={secondary}>
+                                {t('Remove the banner photo')}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {lead ? (
                 <>

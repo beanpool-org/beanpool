@@ -3,20 +3,22 @@
  * answers of 23 Oct 2026), drawn by app/treasury-manage.tsx: the enterprise's face as one form with one Save, and its
  * Featured shelf. Their rules are utils/enterprise-manage.ts; the node's routes utils/shop.ts.
  *
- * - The face: any keeper its About, logo, kind and how we deal; its lead its name and what it is for, which every other
- *   keeper reads with the sentence why (never hidden without saying). A node admin who keeps none of it gets no kind and
- *   no how we deal (its shop's routes take its keepers only), and no Featured (drawn by the console for keepers). One Save sends what changed; the node's refusal
+ * - The face: any keeper its About, logo, banner photo, kind and how we deal; its lead its name and what it is for, which
+ *   every other keeper reads with the sentence why (never hidden without saying). A node admin who keeps none of it gets
+ *   no banner photo, kind or how we deal (its shop's routes take its keepers only), and no Featured (drawn by the console for keepers). One Save sends what changed; the node's refusal
  *   shows in its own words, and no answer says so, keeping what was typed. The console reads the enterprise again after
  *   any action on it, and what was typed and not saved stays through that (faceOnRead).
  * - Featured: each of its live Offers in its shop, on the shelf or off it with one tap (six at most, said once when
  *   full); its live Offers not in its shop yet go in with one tap; no shop yet, one tap opens it.
  *
  * One column, every target at least 48 dp, words through t(), colours from the central tokens (tools/ui.tsx, Home's
- * card parts), at 320 dp and 1.3× text. Photos are the phone's small copy (512 px, utils/image-processing.ts), never more.
+ * card parts), at 320 dp and 1.3× text. The logo is the phone's small copy (512 px, utils/image-processing.ts) and the banner
+ * photo a listing photo's (800 px, utils/banner-photo.ts), never more.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, formatCount, t, tn } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
@@ -26,6 +28,9 @@ import { ToolButton, ToolButtons, ToolField, ToolInput, ToolNote, ToolRow, ToolS
 import { ShopKindSheet } from '../shop/ShopSheets';
 import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, featureOffer, shopKindLabel, type ShopListing } from '../../utils/shop';
 import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm, type FaceSave, type FaceState } from '../../utils/enterprise-manage';
+import { shopPhotoOf } from '../../utils/shopfront';
+import { pickBannerPhoto } from '../../utils/banner-photo';
+import { useNodeUri } from './Shopfront';
 
 /** Its face: one form, one Save. `onSaved` reads the enterprise again once anything was written. */
 export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, onSaved }: {
@@ -56,6 +61,29 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
     const plan = faceSaveOf(before, draft, lead, keeper);
     const name = typeof (detail as Record<string, unknown> | null)?.name === 'string' ? (detail as Record<string, string>).name : '';
     const logoShown = draft.logo ?? (sentLogo && sentLogo.over === logoUrl ? sentLogo.uri : null) ?? logoUrl ?? null;
+    // Its shop's banner: the one just sent until the enterprise is read with it (`over`: its shop's when it was sent), else
+    // its shop's as read. Its banner as it will be: the photo just picked, none once taken down, else its shop's.
+    const heldBanner = shopPhotoOf((detail as Record<string, unknown> | null)?.shop);
+    const [sentBanner, setSentBanner] = useState<{ value: string | null; over: string | null } | null>(null);
+    const shopBanner = sentBanner && sentBanner.over === heldBanner ? sentBanner.value : heldBanner;
+    const bannerValue = draft.banner !== undefined ? draft.banner : shopBanner;
+    const bannerShown = useNodeUri(bannerValue);
+    const [pickingBanner, setPickingBanner] = useState(false);
+    const pickBanner = async () => {
+        if (busy || pickingBanner) return;
+        setPickingBanner(true);
+        setError(null);
+        try {
+            const photo = await pickBannerPhoto();
+            if (photo) edit({ banner: photo });
+        } catch {
+            setError(t("That picture couldn't be read. Try another."));
+        } finally {
+            setPickingBanner(false);
+        }
+    };
+    // Taking down a photo only just picked leaves its shop as it is when it has none; one just sent is its shop's.
+    const removeBanner = () => edit({ banner: shopBanner ? null : undefined });
 
     const edit = (next: Partial<FaceForm>) => {
         setForm((f) => ({ ...f, draft: { ...f.draft, ...next } }));
@@ -75,6 +103,7 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
         const went = (sent: FaceSave) => {
             setForm((f) => faceAfterSave(f, typed, sent));
             if (sent.face.avatar) setSentLogo({ uri: sent.face.avatar, over: logoUrl });
+            if (sent.shop.photo !== undefined) setSentBanner({ value: sent.shop.photo, over: heldBanner });
         };
         try {
             if (Object.keys(plan.face).length > 0) {
@@ -124,6 +153,23 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
                     </ToolButtons>
                 </View>
             </View>
+            {/* Its banner: its shop's one photo, across the top of its page (Marty, 24 Oct: the logo and the banner are two
+                pictures). Its shop's, so its keepers' only; picked here as the 800 px copy, sent with the one Save. */}
+            {keeper ? (
+                <View style={styles.bannerRow} testID="manage-face-banner-row">
+                    <Text style={[styles.logoLabel, { color: colors.text.body }]}>{t('Banner photo')}</Text>
+                    {bannerShown ? (
+                        <View style={[styles.bannerPreview, { borderColor: colors.border.default, backgroundColor: colors.surface.subtle }]} testID="manage-face-banner-image">
+                            <Image source={{ uri: bannerShown }} style={styles.bannerImage} contentFit="cover" accessibilityLabel={t('Its banner photo')} />
+                        </View>
+                    ) : null}
+                    <ToolButtons>
+                        <ToolButton text={pickingBanner ? t('Reading the picture…') : bannerValue ? t('Change the banner photo') : t('Choose a banner photo')}
+                            onPress={() => { void pickBanner(); }} disabled={busy || pickingBanner} testID="manage-face-banner" />
+                        {bannerValue ? <ToolButton text={t('Remove the banner photo')} onPress={removeBanner} disabled={busy || pickingBanner} testID="manage-face-banner-remove" /> : null}
+                    </ToolButtons>
+                </View>
+            ) : null}
             <ToolInput label={t('About')} value={draft.about} onChange={(v) => edit({ about: v })} max={ENTERPRISE_ABOUT_LIMIT.chars} lines={4} testID="manage-face-about" />
             {/* Its kind in a row, the fourteen in the sheet Your shop uses: picked here, sent with the one Save. Its shop's, so
                 its keepers' only. */}
@@ -268,5 +314,9 @@ const styles = StyleSheet.create({
     logoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
     logoText: { flex: 1, minWidth: 0 },
     logoLabel: { fontSize: 13, fontWeight: '700' },
+    bannerRow: { paddingVertical: 6, gap: 8 },
+    // The banner as its page draws it, a little smaller: the full width, cropped to fill.
+    bannerPreview: { height: 96, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+    bannerImage: { width: '100%', height: '100%' },
     waits: { opacity: 0.6, minHeight: HOME_TARGET_DP },
 });

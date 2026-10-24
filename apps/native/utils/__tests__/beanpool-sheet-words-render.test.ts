@@ -126,6 +126,7 @@ import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { getBundledGuide, searchGuide } from '../guide';
 import BeanPoolSheet from '../../app/beanpool';
+import { NOTICE_COUNTS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const RIVERSIDE = 'https://riverside.example';
 const HILLS = 'https://hills.example';
@@ -264,6 +265,48 @@ describe('the BeanPool sheet in the pseudo-locale: every word on it came through
         expect(n).toBeGreaterThan(1);
         expect(host.textContent).toContain(xx('{n} PAGES', { n: String(n) }));
         expect(bypassing(), 'found').toEqual([]);
+    });
+
+    // Marty, 24 Oct: "the node list should have little numbers if there are notifications on a node" (utils/notice-counts.ts).
+    it('each other community\'s row shows how many notices it sent since it was last open, and TalkBack reads it; the one in use and 0 show nothing', async () => {
+        const seen = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`${i}`.padStart(32, '0'), 1_800_000_000]));
+        store.map.set('beanpool_anchor_url', RIVERSIDE);
+        store.map.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE }, { url: HILLS }]));
+        store.map.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [HILLS]: { n: 3, seen: seen(3) }, [RIVERSIDE]: { n: 2, seen: seen(2) } }));
+        await renderIn('xx');
+        const hills = host.querySelector(`[aria-label="${xx('{row}, {notices}', {
+            row: xx('{name}, {state}', { name: 'Hills', state: pseudoLocalise("Can't reach it right now") }),
+            notices: xx('{n} new notifications', { n: '3' }),
+        })}"]`);
+        expect(hills).not.toBeNull();
+        expect(Array.from(hills!.querySelectorAll('span')).map((s) => s.textContent)).toContain('3');
+        // The community in use: its row as before, no number (the phone is on it).
+        const riverside = host.querySelector(`[aria-label="${xx('{name}, {state}, in use', { name: 'Riverside', state: pseudoLocalise('Connected. You are a member here.') })}"]`);
+        expect(riverside).not.toBeNull();
+        expect(Array.from(riverside!.querySelectorAll('span')).map((s) => s.textContent)).not.toContain('2');
+        expect(bypassing()).toEqual([]);
+
+        // In English, one and many; more than 99 drawn as 99+.
+        act(() => root.unmount());
+        root = createRoot(host);
+        store.map.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [HILLS]: { n: 1, seen: seen(1) } }));
+        await renderIn('en');
+        expect(host.querySelector('[aria-label="Hills, Can\'t reach it right now, 1 new notification"]')).not.toBeNull();
+        act(() => root.unmount());
+        root = createRoot(host);
+        store.map.set(NOTICE_COUNTS_STORE_KEY, JSON.stringify({ [HILLS]: { n: 120, seen: seen(1) } }));
+        await renderIn('en');
+        const many = host.querySelector('[aria-label="Hills, Can\'t reach it right now, 120 new notifications"]');
+        expect(Array.from(many!.querySelectorAll('span')).map((s) => s.textContent)).toContain('99+');
+
+        // None counted: the row is as it was.
+        act(() => root.unmount());
+        root = createRoot(host);
+        store.map.delete(NOTICE_COUNTS_STORE_KEY);
+        await renderIn('en');
+        const plain = host.querySelector('[aria-label="Hills, Can\'t reach it right now"]');
+        expect(plain).not.toBeNull();
+        expect(Array.from(plain!.querySelectorAll('span')).map((s) => s.textContent)).toEqual(['Hills', 'hills.example']);
     });
 
     it('in English nothing is bracketed, and the words are as they were', async () => {

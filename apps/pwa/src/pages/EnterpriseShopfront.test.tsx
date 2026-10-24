@@ -278,6 +278,22 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(within(opened).getByText('Income & Spend (P&L)')).toBeInTheDocument();
     });
 
+    it("the banner is its shop's photo, drawn across the top; with none, or one that won't load, a quiet block in its kind's emoji", async () => {
+        const BANNER = `/api/shops/${SHOP_ID}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
+        await open({ detail: membersView({ shop: { ...SHOP, photoUrl: BANNER } }), keeperOf: [] });
+        const photo = within(byId('shopfront-banner')!).getByTestId('shopfront-banner-photo');
+        expect(photo.getAttribute('src')).toBe(BANNER);
+        expect(photo.className).toContain('object-cover');
+        expect(byId('shopfront-banner')?.textContent).toBe('');
+        fireEvent.error(photo);
+        expect(byId('shopfront-banner-photo')).toBeNull();
+        expect(byId('shopfront-banner')?.textContent).toBe('🍞');
+        cleanup();
+        await open({ detail: membersView(), keeperOf: [] });
+        expect(byId('shopfront-banner-photo')).toBeNull();
+        expect(byId('shopfront-banner')?.textContent).toBe('🍞');
+    });
+
     it("a project's goal card sits above About", async () => {
         await open({ detail: quietProject({ keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }], isLeadOrSoleKeeperOrAdmin: false }), keeperOf: [] });
         before(screen.getByText('Funding Progress'), byId('shopfront-about'), 'the goal before About');
@@ -580,6 +596,64 @@ describe("the keepers' Manage tab", () => {
             expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } }]);
         });
 
+        it('the logo and the banner photo are two pictures, each labelled, each with its own choice', async () => {
+            await open();
+            const panel = await manage();
+            expect(within(panel).getByTestId('manage-face-logo-label').textContent).toBe('Logo');
+            expect(within(panel).getByTestId('manage-face-banner-label').textContent).toBe('Banner photo');
+            expect(within(panel).getByTestId('manage-face-banner').textContent).toBe('Choose a banner photo');
+            expect(within(panel).queryByTestId('manage-face-banner-remove')).toBeNull();
+            expect(within(panel).getByTestId('manage-face-banner-input')).toHaveAttribute('accept', 'image/*');
+        });
+
+        it('a keeper puts up a banner photo, made 800 px, sent to its shop alone', async () => {
+            const PICKED = 'data:image/jpeg;base64,/9j/BBBB';
+            const resize = vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue(PICKED);
+            await open();
+            const panel = await manage();
+            const file = new File(['x'], 'banner.jpg', { type: 'image/jpeg' });
+            fireEvent.change(within(panel).getByTestId('manage-face-banner-input'), { target: { files: [file] } });
+            await waitFor(() => expect(byId('manage-face-banner-image')?.getAttribute('src')).toBe(PICKED));
+            expect(resize).toHaveBeenCalledWith(file);
+            expect(byId('manage-face-banner')?.textContent).toBe('Change the banner photo');
+            fireEvent.click(byId('manage-face-save')!);
+            await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
+            expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: PICKED } }]);
+        });
+
+        it('the banner photo it has shows in Manage; Remove takes it down with one Save, and the page shows the quiet block', async () => {
+            const BANNER = `/api/shops/${SHOP_ID}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
+            const opts: NodeOpts = {
+                detail: leadsView({ shop: { ...SHOP, photoUrl: BANNER } }),
+                write: (method, path, body) => {
+                    if (path.endsWith('/shop')) opts.detail = leadsView({ shop: { ...SHOP, photoUrl: null } });
+                    return okWrites(method, path, body);
+                },
+            };
+            await open(opts);
+            const panel = await manage();
+            expect(within(panel).getByTestId('manage-face-banner-image').getAttribute('src')).toBe(BANNER);
+            fireEvent.click(within(panel).getByTestId('manage-face-banner-remove'));
+            expect(byId('manage-face-banner-image')).toBeNull();
+            expect(byId('manage-face-banner-remove')).toBeNull();
+            fireEvent.click(byId('manage-face-save')!);
+            await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
+            expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
+            fireEvent.click(screen.getByRole('tab', { name: 'Page' }));
+            await waitFor(() => expect(byId('shopfront-banner')?.textContent).toBe('🍞'));
+            expect(byId('shopfront-banner-photo')).toBeNull();
+        });
+
+        it('a banner photo that cannot be read says so, and nothing is sent', async () => {
+            vi.spyOn(photoResize, 'resizePhotoFile').mockRejectedValue(new Error('bad'));
+            await open();
+            const panel = await manage();
+            fireEvent.change(within(panel).getByTestId('manage-face-banner-input'), { target: { files: [new File(['x'], 'b.heic')] } });
+            await waitFor(() => expect(byId('manage-face-error')?.textContent).toBe("That picture couldn't be read. Try another."));
+            expect(byId('manage-face-save')).toBeDisabled();
+            expect(writes()).toEqual([]);
+        });
+
         it("a keeper who does not lead reads its name and purpose, and why they are the lead's; their About goes alone", async () => {
             await open({ detail: leadsView({ isLeadOrSoleKeeperOrAdmin: false, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }] }) });
             const panel = await manage();
@@ -686,6 +760,7 @@ describe("the keepers' Manage tab", () => {
             expect(within(panel).getByTestId('manage-face-name')).toBeInTheDocument();
             expect(within(panel).queryByTestId('manage-face-kind')).toBeNull();
             expect(within(panel).queryByTestId('manage-face-how')).toBeNull();
+            expect(within(panel).queryByTestId('manage-face-banner')).toBeNull();
             expect(within(panel).queryByTestId('manage-featured')).toBeNull();
         });
     });

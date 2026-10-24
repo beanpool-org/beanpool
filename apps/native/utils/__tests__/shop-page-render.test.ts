@@ -207,6 +207,16 @@ for (const dark of [false, true]) {
         beforeEach(() => { theme.dark = dark; });
         const colors = () => (dark ? darkColors : lightColors);
 
+        it("its banner is the photo its owner chose, from its community; the same layout as an enterprise's", async () => {
+            const PHOTO = `/api/shops/${SHOP}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
+            net.answer = node({ status: 200, json: memberShop({ photoUrl: PHOTO }) });
+            await renderIn();
+            const banner = byId('shopfront-banner');
+            expect(banner?.querySelector('img')?.getAttribute('src')).toBe(`${NODE}${PHOTO}`);
+            expect(banner?.textContent).toBe('');
+            expect(byId('shopfront-name')?.textContent).toBe("Dave's Tool Shed");
+        });
+
         it('a member reads its shopfront in order, and Message writes to its owner', async () => {
             await renderIn();
             expect(byId('shopfront-banner')?.textContent).toBe('🛠️');

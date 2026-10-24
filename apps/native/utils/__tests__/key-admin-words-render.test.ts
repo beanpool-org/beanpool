@@ -169,6 +169,8 @@ vi.mock('../node-claim', async (importOriginal) => ({
     readClaimStatus: async () => claim.status,
     readNodeAddresses: async () => ['beans.example.org'],
     claimCommunity: async () => claim.outcome,
+    // The claim the screen sends (utils/claim-key.ts claimWithKey), with what the node said to it.
+    claimAndHear: async () => ({ outcome: claim.outcome, heard: 'refused' }),
 }));
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';

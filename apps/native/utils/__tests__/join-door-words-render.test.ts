@@ -350,7 +350,8 @@ describe('the global door\'s sentences from the files that sign the join: each o
 
     it('and every fixed sentence those files write is in the table, or named here with why it is not', () => {
         // Each plain string that reads as a sentence, two joined with + read as one. A template has a time or a name in it.
-        const written = ['global-join.ts', 'global-join-existing.ts', 'door-work.ts'].flatMap((file) => {
+        // door-key.ts: the key rule every door shares (DESIGN-account-without-global §2.1), lifted out of global-join.ts.
+        const written = ['global-join.ts', 'door-key.ts', 'global-join-existing.ts', 'door-work.ts'].flatMap((file) => {
             const sf = ts.createSourceFile(file, fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true);
             const text = (node: ts.Node): string | null => {
                 if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
@@ -377,7 +378,7 @@ describe('the global door\'s sentences from the files that sign the join: each o
             [nameCheckMessage('Wren', { kind: 'timed_out' })]: 'doorNameCheckWords says it (the next test)',
             [DOOR_WORK_MESSAGES.settingUp]: "components/WordsDoor's, with the first screen's sweep",
             "That sign-in did not say who you are, so it can't be used. Try again.": "providerSignIn's exception, shown as it came",
-            'This phone holds a different BeanPool account, so the join was not sent.': "commitJoinKey's: the first screen's join, never this door's",
+            'This phone holds a different BeanPool account, so the join was not sent.': "commitJoinKey's (door-key.ts commitDoorKey): the first screen's join, never this door's",
             'This phone holds a different BeanPool account, so the join was not saved here.': "keepJoinedIdentity's: the first screen's join, never this door's",
         };
         setLanguage('xx');

@@ -35,7 +35,7 @@ import {
 } from '../components/shopfront/Shopfront';
 import {
     featuredOf, hasShopfront, leadKeeperOf, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings,
-    readsAsMember, shopKindOf, shopSectionsOf, sinceLine, type ShopfrontListing,
+    readsAsMember, shopKindOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
 } from '../utils/shopfront';
 import { mayManage } from '../utils/enterprise-manage';
 import { decodeThreadMessage } from '../utils/enterprise-thread';
@@ -559,6 +559,7 @@ export default function TreasuryDetailScreen() {
                             ownerKey={treasuryKey ?? ''}
                             logoUrl={avatar}
                             kind={shopKindOf(detail?.shop)}
+                            bannerPhoto={shopPhotoOf(detail?.shop)}
                             fallbackEmoji={detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
                             lines={[kindSinceLine(shopKindOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
                         />

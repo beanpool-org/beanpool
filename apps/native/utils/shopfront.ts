@@ -255,6 +255,12 @@ export function shopKindOf(raw: unknown): ShopKind | null {
     return isShopKind(kind) ? kind : null;
 }
 
+/** A shop's banner, its one photo's address as the node gave it (keyed), or null: none, a visitor's view, or a node from before banners. */
+export function shopPhotoOf(raw: unknown): string | null {
+    const url = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).photoUrl : null;
+    return typeof url === 'string' && url.trim() ? url : null;
+}
+
 /** A shop's page: a member's shop, an enterprise's (its own page draws it), a visitor's view, none, or no answer. */
 export type ShopPageRead =
     | { state: 'shop'; shop: ShopfrontShop }

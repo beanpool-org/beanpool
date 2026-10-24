@@ -198,3 +198,41 @@ export function isSelfGroupPictureUrl(value: unknown): boolean {
     if (typeof value !== 'string') return false;
     return /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/groups\/[^/?#\s]+\/picture(?:[?#]\S*)?$/i.test(value.trim());
 }
+
+/**
+ * A SHOP's banner, its one photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4), kept as a group's picture
+ * is: in its own table (the server's `shop_photos`), with its reference in the shop's row (`shops.photo_ref`,
+ * avatarRefOf), so a read of shops never reads it. Its route is `/api/shops/:id/photo`, which serves it only to a URL
+ * carrying its key: a shop's whole read is its members', and an `<img>` cannot sign, so the key rides in the URL. The
+ * server installs the keyer at every boot.
+ */
+export type ShopPhotoKeyer = (shopId: string, version: string) => string;
+let shopPhotoKeyer: ShopPhotoKeyer | null = null;
+
+/** Installs (or, with null, removes) the key every emitted shop photo URL carries. */
+export function configureShopPhotoKeys(keyer: ShopPhotoKeyer | null): void {
+    shopPhotoKeyer = keyer;
+}
+
+/**
+ * The URL to emit for a shop's banner, from the shop row's `photo_ref` (avatarRefOf of the photo): null for none,
+ * otherwise `/api/shops/<id>/photo?v=<version>` with its key where one is installed (configureShopPhotoKeys). Relative,
+ * as a member's photo URL is: both apps draw it against their node.
+ */
+export function shopPhotoUrlOf(shopId: string, ref: string | null | undefined): string | null {
+    if (!ref) return null;
+    const url = `/api/shops/${encodeURIComponent(shopId)}/photo?v=${ref}`;
+    return shopPhotoKeyer ? `${url}&k=${shopPhotoKeyer(shopId, ref)}` : url;
+}
+
+/**
+ * The shop a shop photo URL sent back names (relative, or absolute on any host, with or without its query), or null when
+ * the string is no shop photo URL. An editor that read the shop back holds the URL, not the photo: its own shop's means
+ * "unchanged", as isSelfGroupPictureUrl's does for a group's picture.
+ */
+export function shopOfPhotoUrl(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const m = /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/shops\/([^/?#\s]+)\/photo(?:[?#]\S*)?$/i.exec(value.trim());
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch { return null; }
+}

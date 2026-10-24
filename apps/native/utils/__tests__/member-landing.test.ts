@@ -22,7 +22,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createContext, createElement as h, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, landOnClaim, memberRedirect } from '../member-landing';
+import {
+    DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, memberRedirect, NOTICE_LANDING_MS, openAfterLanding, takeOpenAfterLanding,
+} from '../member-landing';
 
 type Route = 'welcome' | '(tabs)/index' | '(tabs)/settings';
 
@@ -212,39 +214,27 @@ describe('memberRedirect: the root guard\'s landing from welcome', () => {
     });
 });
 
-describe('a claim waiting for the account (the claim screen\'s Make my account, Dax 23 Oct)', () => {
-    const CLAIM = '/claim-community?node=https%3A%2F%2Fbeans.example.org&id=0a1b2c3d&code=claim-a1b2-c3d4-e5f6-7890' as const;
-    const NOW = 1_000_000;
-    afterEach(() => { landOnClaim(null); });
-
-    it('lands on the claim screen from welcome or the bare root, for any account, every time until it is gone', () => {
-        landOnClaim({ route: CLAIM, until: NOW + 1 });
-        expect(memberRedirect(['welcome'], 'pk-a', NOW)).toBe(CLAIM);
-        // Not taken once: a restart part-way through comes back to it.
-        expect(memberRedirect([], 'pk-b', NOW)).toBe(CLAIM);
-        expect(memberRedirect(['welcome'], null, NOW)).toBe(CLAIM);
-        landOnClaim(null);
-        expect(memberRedirect(['welcome'], null, NOW)).toBe('/(tabs)');
-    });
-
-    it('ahead of a landing asked for, which it uses up', () => {
+describe('a claim no longer waits for an account made elsewhere: the claim makes it (DESIGN-account-without-global §2.2)', () => {
+    // #2412's detour kept the claim for an account made by another door, and every landing from welcome went back to the
+    // claim screen for a day. The claim screen makes the account now, and a claim whose answer is not in is the wizard's
+    // record, which the guard holds on the claim screen itself (auth-return.ts setupRedirect `claimOut`).
+    it('from welcome or the bare root, any account lands on the tabs, or on the landing asked for, taken once', () => {
+        for (const key of ['pk-a', 'pk-b', null]) {
+            expect(memberRedirect(['welcome'], key)).toBe('/(tabs)');
+            expect(memberRedirect([], key)).toBe('/(tabs)');
+        }
         landNextOn('/(tabs)/settings');
-        landOnClaim({ route: CLAIM, until: NOW + 1 });
-        expect(memberRedirect(['welcome'], null, NOW)).toBe(CLAIM);
-        landOnClaim(null);
-        expect(memberRedirect(['welcome'], null, NOW)).toBe('/(tabs)');
+        expect(memberRedirect(['welcome'])).toBe('/(tabs)/settings');
+        expect(memberRedirect(['welcome'])).toBe('/(tabs)');
     });
 
-    it('anywhere else: stay, the claim screen itself included', () => {
-        landOnClaim({ route: CLAIM, until: NOW + 1 });
-        for (const segments of [['(tabs)'], ['claim-community'], ['node-mismatch']]) expect(memberRedirect(segments, null, NOW)).toBeNull();
+    it('the claim screen, like anywhere else but welcome: stay', () => {
+        for (const segments of [['(tabs)'], ['claim-community'], ['node-mismatch']]) expect(memberRedirect(segments, 'pk-a')).toBeNull();
     });
 
-    it('not once it has run out', () => {
-        landOnClaim({ route: CLAIM, until: NOW });
-        expect(memberRedirect(['welcome'], null, NOW)).toBe('/(tabs)');
-        // And it stays out: a later landing is the tabs too.
-        expect(memberRedirect(['welcome'], null, NOW - 10)).toBe('/(tabs)');
+    it('nothing in the module lands on a claim any more', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../member-landing.ts'), 'utf8');
+        expect(src).not.toMatch(/landOnClaim|ClaimLanding|claim-community/);
     });
 });
 
@@ -266,6 +256,41 @@ describe('a landing is only for the account it was asked for (PR #1357 confirmat
         landNextOn('/(tabs)/settings', 'key-A');
         expect(memberRedirect(['(tabs)'], 'key-A')).toBeNull();
         expect(memberRedirect(['welcome'], 'key-A')).toBe('/(tabs)/settings');
+    });
+});
+
+describe('a tapped notice opens after the landing, for its community and account only (push-notice-switch.ts)', () => {
+    const BYRON = 'https://byron.example.net';
+    const NOW = 1_800_000_000_000;
+
+    it('taken once, by the account it was asked for, with its community in use (written with or without a trailing slash)', () => {
+        openAfterLanding('/post/3f2b8c1e-5a6d-4e7f-8a9b-0c1d2e3f4a5b', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-A', 'https://mullum.beanpool.org', NOW)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', null, NOW)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', `${BYRON}/`, NOW + 1000)).toBe('/post/3f2b8c1e-5a6d-4e7f-8a9b-0c1d2e3f4a5b');
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW + 1000)).toBeNull();
+    });
+
+    it('another account on the phone drops it; so does its time running out', () => {
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-B', BYRON, NOW)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBeNull();
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW + NOTICE_LANDING_MS)).toBeNull();
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW + 1)).toBeNull();
+    });
+
+    it('the latest tap replaces any before it', () => {
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        openAfterLanding('/(tabs)/market', BYRON, 'key-A', NOW);
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/market');
+    });
+
+    it('leaves the landings from welcome as they were', () => {
+        openAfterLanding('/(tabs)/chats', BYRON, 'key-A', NOW);
+        expect(memberRedirect(['welcome'], 'key-A')).toBe(DEFAULT_MEMBER_LANDING);
+        expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
+        expect(takeOpenAfterLanding('key-A', BYRON, NOW)).toBe('/(tabs)/chats');
     });
 });
 
@@ -300,11 +325,13 @@ describe('guestRedirect: a chosen guest the root guard finds on welcome (PR #232
 describe('the model is the app', () => {
     const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), 'utf8');
 
+    // Since 24 Oct the guard's last two lines open, over the tabs' index only, a notice tapped from the community the phone
+    // just moved to for it (push-notice-switch.test.ts drives that); the landing itself is as before.
     it("app/_layout.tsx's guard ends by landing where memberRedirect says, and replaces to the tabs nowhere else from welcome", () => {
         const layout = read('../../app/_layout.tsx');
         const guard = layout.slice(layout.indexOf('        if (isLoading) return;\n        const root = (segments as string[])[0];'));
         const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding]);'));
-        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*$/);
+        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);\n\s*$/);
         expect(body).not.toMatch(/root === 'welcome'\) \{\s*router\.replace/);
     });
 

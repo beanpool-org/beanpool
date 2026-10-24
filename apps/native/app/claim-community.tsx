@@ -282,7 +282,15 @@ export default function ClaimCommunityScreen() {
             // The account the claim made: the join wizard's photo, 12 words, How it Works and the owner's card, from the
             // record finishClaim writes (app/welcome.tsx resumes it). One welcome, never this screen under it.
             heldKey.current = null;
-            await finishClaim(o, claimedBy, namedAtClaim.current, out.callsign);
+            try {
+                await finishClaim(o, claimedBy, namedAtClaim.current, out.callsign);
+            } catch (e: any) {
+                // The node has this phone's key as its owner, and the key is on the phone: only the wizard's next step
+                // couldn't be written. Said, and the claim can be tapped again (the node answers it as the claim was).
+                setPhase('form');
+                setError(e?.message ? keyLineWords(e.message) : t("This phone couldn't save the claim. Try again."));
+                return;
+            }
             if (router.canDismiss()) router.dismissAll();
             router.replace('/welcome');
             return;

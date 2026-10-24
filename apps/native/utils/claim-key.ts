@@ -24,6 +24,7 @@ import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { claimAndHear, confirmLostClaim, type ClaimOutcome, type OwnerCheck } from './node-claim';
 import { claimInFlight, getPendingOnboarding, setPendingOnboarding } from './onboarding-state';
 import { communitySwitched } from './community-switch';
+import { assertPlainNodeAddress } from './node-url';
 import { addSavedNode, clearGuestNode } from './nodes';
 
 /** The claim, as a door: its record's flow, at the community's own address (an origin, claim-link.ts `claimNodeOrigin`). */
@@ -191,6 +192,8 @@ export async function finishClaim(
 ): Promise<BeanPoolIdentity> {
     // On the phone first, under the name the node kept: the record below means nothing without it.
     const identity = await keepJoinedIdentity(keptName ? { ...claimed, callsign: keptName } : claimed);
+    // The origin came through claimNodeOrigin on the claim screen; this is the write's own check.
+    assertPlainNodeAddress(origin);
     await AsyncStorage.setItem('beanpool_anchor_url', origin);
     // The update screen asks the community now in use (utils/community-switch.ts).
     communitySwitched();

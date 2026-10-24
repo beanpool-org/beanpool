@@ -250,6 +250,30 @@ describe('a group chat\'s photos: kept by message id in the group\'s own folder,
         expect(mockDeleteAsync).toHaveBeenCalledWith(`/tmp/cache/chat-images/groups/${g}/${id}.jpg`, { idempotent: true });
     });
 
+    it('a removed line\'s photo the OS failed to take off is asked again on the next read, and once taken off, never again', async () => {
+        // Review of #2456: the file was marked taken off before the delete answered, so one failure kept the photo for
+        // the rest of the session.
+        const g = randomUUID();
+        const id = randomUUID();
+        const file = `/tmp/cache/chat-images/groups/${g}/${id}.jpg`;
+        fetchMock.mockResolvedValue(reply(200, {
+            messages: [{ id, type: 'removed', authorPubkey: me.publicKey, ciphertext: '', nonce: 'plaintext-v1', metadata: { removed: true } }],
+            encryption: { current: 1, stale: false, fromEpoch: 1 },
+        }));
+        const deletesOf = () => mockDeleteAsync.mock.calls.filter((c) => c[0] === file).length;
+        const settled = () => new Promise((r) => setTimeout(r, 0));
+        mockDeleteAsync.mockRejectedValueOnce(new Error('EBUSY'));
+        await getGroupChat(g);
+        await settled();
+        expect(deletesOf()).toBe(1);
+        await getGroupChat(g);
+        await settled();
+        expect(deletesOf()).toBe(2);
+        await getGroupChat(g);
+        await settled();
+        expect(deletesOf()).toBe(2);
+    });
+
     it('an id that is not a plain id never names a file: nothing is kept or cleared outside the folder', async () => {
         vi.mocked(FileSystem.writeAsStringAsync).mockClear();
         expect(await groupPhotoCache.get('../..', randomUUID())).toBeNull();

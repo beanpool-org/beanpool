@@ -54,7 +54,10 @@ export async function forgetGroupPhotos(groupId: string): Promise<void> {
     try { await FileSystem.deleteAsync(folder, { idempotent: true }); } catch { /* the OS trims its cache folder anyway */ }
 }
 
-/** The kept files this session already took off for a removed line: each is asked once, not on every poll. */
+/**
+ * The kept files this session already took off for a removed line: each is asked once, not on every poll. One the OS
+ * failed to take off leaves the set, so the next read asks again: the photo never stays for the session's want of a retry.
+ */
 const removedPhotos = new Set<string>();
 
 /**
@@ -69,6 +72,6 @@ export function forgetRemovedGroupPhotos(groupId: string, messages: unknown): vo
         if (!file || removedPhotos.has(file)) continue;
         if (removedPhotos.size >= 5000) removedPhotos.clear();
         removedPhotos.add(file);
-        FileSystem.deleteAsync(file, { idempotent: true }).catch(() => { /* the line is gone either way */ });
+        FileSystem.deleteAsync(file, { idempotent: true }).catch(() => { removedPhotos.delete(file); });
     }
 }

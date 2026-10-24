@@ -95,7 +95,7 @@ If another community on this phone still has you, or can't be reached, the app l
 
 When a community removes a member, it keeps their profile, so that a vote can bring them back. You can still delete your account. In the phone app, the page that says your account there was closed has **Delete my account at** (the community's name), which opens **Permanently Delete Account** in **Settings**: the steps above. Then:
 
-- Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.
+- Your name, photo, bio, contact details, friends and any sign-in recovery copy that community still kept are erased, and so are the words, photos and places of your posts, except your polls.
 - Every message you wrote reads **This message was deleted**, and the photos you sent are deleted.
 - After that, your community cannot vote to bring the account back. To come back, join again with a new invite. The global community takes no invites, and a sign-in it removed cannot join it again.
 - If a deal of yours is still under way, the other member or an admin must close it first.

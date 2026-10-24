@@ -531,6 +531,7 @@ export const SUITES = [
     'test-group-description-limit',
     'test-groups-sync-and-removal',
     'test-groups-chat',
+    'test-group-chat-photo',
     'test-chat-parity',
     'test-dm-never-plaintext',
     'test-group-keys-http',

@@ -151,20 +151,32 @@ const { KEY, PRIV, NODE } = vi.hoisted(() => ({
     NODE: 'https://mullum.example',
 }));
 
-const identityState = vi.hoisted(() => ({
-    identity: {
-        publicKey: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-        privateKey: 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
-        callsign: 'Marty',
-    } as any,
-}));
+// The real setIdentity is a useState setter: the SAME function on every render, and calling it re-renders with
+// the new identity. A fresh function per render re-ran the profile loader on every render, which hid the
+// order-dependent bugs below (the review of #2439 measured each one with this one change).
+const identityState = vi.hoisted(() => {
+    const listeners = new Set<() => void>();
+    const state = {
+        identity: {
+            publicKey: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+            privateKey: 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+            callsign: 'Marty',
+        } as any,
+        subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
+        setIdentity: (id: any) => { state.identity = id; listeners.forEach((l) => l()); },
+    };
+    return state;
+});
 
-vi.mock('../../app/IdentityContext', () => ({
-    useIdentity: () => ({
-        identity: identityState.identity,
-        setIdentity: (id: any) => { identityState.identity = id; },
-    }),
-}));
+vi.mock('../../app/IdentityContext', async () => {
+    const { useSyncExternalStore } = await import('react');
+    return {
+        useIdentity: () => ({
+            identity: useSyncExternalStore(identityState.subscribe, () => identityState.identity),
+            setIdentity: identityState.setIdentity,
+        }),
+    };
+});
 
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('../../components/KeeperProtectionPanel', () => ({ KeeperProtectionPanel: () => null }));
@@ -278,6 +290,8 @@ vi.mock('../use-global-guest-visit', () => ({ useGlobalGuestVisit: () => ({ visi
 
 import SettingsScreen from '../../app/(tabs)/settings';
 import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
+import { resolveProfilePublishAvatar } from '../avatar-value';
+import { CANONICAL_PROFILE_STORE_KEY } from '../storage-keys';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -292,7 +306,9 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE, alias: 'Mullum Commons' }]));
     identityState.identity = { publicKey: KEY, privateKey: PRIV, callsign: 'Marty' };
+    params.now = {};
     mockDb.localProfile = null;
+    mockDb.remoteCallsign = null;
     mockDb.updatedProfiles.length = 0;
     mockDb.updatedIdentities.length = 0;
     mockDb.invitablePeople = [
@@ -302,13 +318,52 @@ beforeEach(() => {
     ];
 });
 
+const realFetch = globalThis.fetch;
+
 afterEach(async () => {
     await act(async () => { root?.unmount(); });
     host?.remove();
+    globalThis.fetch = realFetch;
 });
 
 const settle = async (n = 10) => {
     for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+};
+
+// The node behind fetch: every profile Save it receives, or a transport failure for an offline one.
+const mockNode = ({ offline = false } = {}) => {
+    const updates: any[] = [];
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: any) => {
+        if (String(url).includes('/api/profile/update')) {
+            if (offline) throw new TypeError('Network request failed');
+            const body = JSON.parse(init.body);
+            updates.push(body);
+            if (typeof body.callsign === 'string') mockDb.remoteCallsign = body.callsign;
+            return new Response(JSON.stringify({ success: true }), { status: 200 });
+        }
+        return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+    return { updates };
+};
+
+const renderSettings = async () => {
+    await act(async () => { root.render(createElement(SettingsScreen) as any); });
+    await settle();
+};
+const press = async (text: string) => {
+    const btn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes(text));
+    expect(btn, `a "${text}" button`).toBeDefined();
+    await act(async () => { (btn as HTMLElement).click(); });
+    await settle();
+};
+const pull = async () => {
+    await act(async () => { (host.querySelector('[data-testid="refresh-control"]') as HTMLElement).click(); });
+    await settle();
+};
+const field = (label: string) => (host.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement | null)?.value;
+const type = async (label: string, value: string) => {
+    await act(async () => { inputSetters.get(label)?.(value); });
+    await settle(2);
 };
 
 describe('profile-name-agree: My Profile and Invite picker', () => {
@@ -459,6 +514,101 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
         // 3. Wrote to device-wide identity
         expect(mockDb.updatedIdentities).toContain('Marty Renamed');
         expect(identityState.identity.callsign).toBe('Marty Renamed');
+    });
+
+    // Edit on your own profile (public-profile.tsx) and the home photo step open Settings with section: 'profile', so the
+    // editor is open before the loader has read anything. The device-wide name is "Marty" throughout.
+    it.each([
+        ['the community answers', 'Marty party', 'Marty party', 'Marty party'],
+        ['the community cannot be reached (the cached row)', 'Marty party', null, 'Marty party'],
+        ['the cached row is stale (renamed on the web)', 'Marty party', 'Marty P', 'Marty P'],
+    ])('opened straight into the editor, the name field starts from this community\'s record when %s, and an untouched Save renames no one', async (_case, row, remote, community) => {
+        params.now = { section: 'profile' };
+        mockDb.localProfile = { public_key: KEY, callsign: row };
+        mockDb.remoteCallsign = remote;
+        const node = mockNode();
+
+        await renderSettings();
+        expect(field('Callsign')).toBe(community);
+
+        await press('Save Profile');
+        expect(node.updates).toHaveLength(1);
+        // No name, or the one this community already holds: never the device-wide "Marty", never the stale row.
+        expect([undefined, community]).toContain(node.updates[0].callsign);
+        expect(mockDb.localProfile.callsign).toBe(community);
+        expect(identityState.identity.callsign).toBe('Marty');
+        expect(mockDb.updatedIdentities).toEqual([]);
+    });
+
+    it('an offline rename survives the next answer from the community, so the queued retry publishes the NEW name', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party' };
+        // The node holds the old name until the queued retry lands.
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode({ offline: true });
+
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Callsign', 'Marty Renamed');
+        await press('Save Profile');
+
+        expect(alerts.said).toContain('Offline Mode');
+        expect(store.map.get('pending_profile_sync')).toBe('true');
+        // pillar-sync's retry (pushProfileToServer) publishes `profile?.callsign || identity.callsign` from this row.
+        expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
+        expect(host.textContent).toContain('Marty Renamed');
+
+        // A pull asks the community again, and it still answers the old name.
+        await pull();
+        expect(mockDb.localProfile.callsign).toBe('Marty Renamed');
+        expect(host.textContent).toContain('Marty Renamed');
+        expect(host.textContent).not.toContain('Marty party');
+        expect(mockDb.updatedProfiles.filter((u) => u.callsign === 'Marty party')).toEqual([]);
+    });
+
+    it.each([
+        ['no row yet (a community this phone has not synced)', null],
+        ['a row with no photo', { public_key: KEY, callsign: 'Old Stale Marty', avatar_url: null }],
+    ])('the background write never puts the canonical photo into the row with %s, so a catch-up publish cannot send it over a newer one the node holds', async (_case, row) => {
+        const OLDER_PHOTO = 'data:image/png;base64,T0xERVI=';
+        store.map.set(CANONICAL_PROFILE_STORE_KEY, JSON.stringify({ avatar: OLDER_PHOTO, bio: 'Canonical bio' }));
+        mockDb.localProfile = row;
+        mockDb.remoteCallsign = 'Marty party';
+
+        await renderSettings();
+        expect(mockDb.localProfile?.callsign).toBe('Marty party');
+        expect(mockDb.localProfile.avatar_url ?? null).toBeNull();
+
+        // The post-redeem publish, told by the node that it holds a photo, decides from this row.
+        const decision = await resolveProfilePublishAvatar({
+            catchUp: { localRow: mockDb.localProfile.avatar_url, canonical: OLDER_PHOTO, nodeHasNoPhoto: false },
+        });
+        expect(decision.avatar).toBeNull();
+    });
+
+    it('a pull inside the profile editor keeps what the member is typing and refreshes only what they have not touched', async () => {
+        mockDb.localProfile = { public_key: KEY, callsign: 'Marty party', bio: 'Old bio', contact_value: 'old@x', contact_visibility: 'community' };
+        mockDb.remoteCallsign = 'Marty party';
+        mockNode();
+
+        await renderSettings();
+        await press('✏️ Edit');
+        await type('Bio', 'New bio typed');
+        await type('Contact details', 'new@x');
+
+        // Renamed on the web meanwhile: the untouched name field follows the community.
+        mockDb.remoteCallsign = 'Marty P';
+        await pull();
+        expect(field('Bio')).toBe('New bio typed');
+        expect(field('Contact details')).toBe('new@x');
+        expect(field('Callsign')).toBe('Marty P');
+
+        // And a name being typed is kept like the rest.
+        await type('Callsign', 'Marty Typed');
+        mockDb.remoteCallsign = 'Marty Q';
+        await pull();
+        expect(field('Callsign')).toBe('Marty Typed');
+        expect(field('Bio')).toBe('New bio typed');
+        expect(field('Contact details')).toBe('new@x');
     });
 
     it('shows short key prefix under each name in the invite picker to tell same/similar names apart', async () => {

@@ -49,11 +49,14 @@ describe('HomeCard menu', () => {
             </HomeCard>,
         );
         const heading = screen.getByRole('heading', { name: 'Decide' });
-        expect(heading.className).toContain('shrink-0');
+        // The heading wraps (a community's own name is its title, up to 60 characters) and never shrinks below its longest
+        // word; the aside takes only the room left and wraps too. Measured in Chromium at 320 px, 100% and 130% text (#2429).
+        expect(heading.className).toContain('break-words');
+        expect(heading.className).not.toContain('shrink-0');
         expect(heading.className).not.toContain('min-w-0');
         const asideContainer = container.querySelector('.flex.items-start.justify-between > div:last-child');
         expect(asideContainer?.className).toContain('min-w-0');
-        expect(asideContainer?.className).toContain('flex-1');
+        expect(asideContainer?.className).not.toContain('flex-1');
         expect(asideContainer?.className).not.toContain('shrink-0');
     });
 });

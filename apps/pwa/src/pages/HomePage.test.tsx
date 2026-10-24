@@ -3446,7 +3446,8 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-decide');
         const heading = within(card).getByRole('heading', { name: 'Decide' });
-        expect(heading.className).toContain('shrink-0');
+        expect(heading.className).toContain('break-words');
+        expect(heading.className).not.toContain('shrink-0');
         expect(heading.className).not.toContain('min-w-0');
         const asideText = within(card).getByText(/2 Decisions open.*2 polls open/);
         expect(asideText.className).toContain('min-w-0');

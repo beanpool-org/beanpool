@@ -260,6 +260,7 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).not.toContain('Enterprises Section');
         expect(block(src, '{sections.length > 1 && (')).toContain("accessibilityLabel={t('Groups Section')}");
         expect(src).toContain('const kindChips = groupKindChips(reader.effective);');
+        expect(src).toContain('yourGroupsLive.items === null ? null : yourGroups');
         expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);');
         expect(src).toContain("data={activeSection === 'decide' ? [] : groupRows}");
         expect(src).toContain('const heading = commonsHeading(reader.effective);');

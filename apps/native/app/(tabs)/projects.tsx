@@ -72,7 +72,6 @@ export default function ProjectsScreen() {
     // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
     // "Groups you could join" (decision 7).
     const yourGroupsLive = useYourGroups(identity?.publicKey);
-    const yourGroupsState = yourGroupsPaneState(yourGroupsLive.items, yourGroupsLive.error);
     const yourGroups = useMemo(() => {
         const all = yourGroupsLive.items || [];
         if (!enterprisesOn(reader.effective)) {
@@ -80,6 +79,10 @@ export default function ProjectsScreen() {
         }
         return all;
     }, [yourGroupsLive.items, reader.effective]);
+    const yourGroupsState = yourGroupsPaneState(
+        yourGroupsLive.items === null ? null : yourGroups,
+        yourGroupsLive.error
+    );
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
     // have, so the row never leads to an empty screen. From the reader's features this screen already has: no read of its

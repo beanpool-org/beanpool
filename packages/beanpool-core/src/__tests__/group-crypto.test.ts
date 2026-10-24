@@ -17,8 +17,8 @@ import { toEd25519Pkcs8 } from '../ed25519-key.js';
 import { mintGroupVectorRng } from '../group-vector-rng.js';
 import * as core from '../index.js';
 import {
-    checkGroupCryptoVectors, groupVectorRandom, GROUP_LINE_VECTORS, GROUP_VECTOR_GROUP, GROUP_VECTOR_KEY_HEX, GROUP_VECTOR_PEOPLE,
-    GROUP_VECTOR_RECORD, GROUP_VECTOR_TOP_UP,
+    checkGroupCryptoVectors, checkGroupPhotoVector, groupVectorRandom, GROUP_LINE_VECTORS, GROUP_PHOTO_VECTOR, GROUP_VECTOR_GROUP, GROUP_VECTOR_KEY_HEX,
+    GROUP_VECTOR_PEOPLE, GROUP_VECTOR_RECORD, GROUP_VECTOR_TOP_UP,
 } from '../group-line-vectors.js';
 
 // Group chats become unreadable to the node (design: DESIGN-group-chat-encryption-fable.md §2, §7; Marty's picks of
@@ -135,6 +135,58 @@ describe('the frozen vectors', () => {
         const now = JSON.stringify({ wraps: GROUP_VECTOR_RECORD.wraps, topUp: GROUP_VECTOR_TOP_UP, lines: GROUP_LINE_VECTORS.map((l) => l.payload) });
         expect(now.length).toBe(2289);
         expect(bytesToHex(sha256(utf8ToBytes(now)))).toBe('eba76f3284a2fa6cd71cba424b401893d0378f3c24aafb4f9310abc57fa552e5');
+    });
+
+    it('a group photo is what the photos design says (§2.2): caption as part body, the data URI as part attachment, one message key, a nonce each', () => {
+        const { caption, photo } = GROUP_PHOTO_VECTOR;
+        expect([caption.part, photo.part]).toEqual(['body', 'attachment']);
+        expect([caption.messageId, caption.from, caption.replyToId]).toEqual([photo.messageId, photo.from, photo.replyToId]);
+        expect(photo.replyToId).toBeTruthy();
+        const sender = GROUP_VECTOR_PEOPLE[photo.from].publicKey;
+        const mk = hkdf(sha256, hexToBytes(GROUP_VECTOR_KEY_HEX), utf8ToBytes(photo.messageId), utf8ToBytes('beanpool-group-line/1'), 32);
+        expect([caption.messageKeyHex, photo.messageKeyHex]).toEqual([bytesToHex(mk), bytesToHex(mk)]);
+        for (const v of [caption, photo]) {
+            const aad = utf8ToBytes(`["beanpool-group-line/1","${GROUP_VECTOR_GROUP}","3","${sender}","${v.messageId}","${v.part}","${v.replyToId}"]`);
+            const nonce = new Uint8Array(Buffer.from(v.payload.nonce.slice('group-xc20p-v1:'.length), 'base64'));
+            expect(bytesToHex(nonce)).toBe(bytesToHex(groupVectorRandom(v.rng)(24)));
+            const frame = xchacha20poly1305(mk, nonce, aad).decrypt(new Uint8Array(Buffer.from(v.payload.ciphertext, 'base64')));
+            expect(frame[0]).toBe(1);
+            const sig = frame.subarray(1, 65);
+            const unsigned = concatBytes(frame.subarray(0, 1), frame.subarray(65));
+            const after = v.after ? utf8ToBytes(v.after) : new Uint8Array(0);
+            expect(bytesToHex(unsigned)).toBe(bytesToHex(new Uint8Array([1, after.length, ...after, ...utf8ToBytes(v.text)])));
+            expect(ed25519.verify(sig, sha256(concatBytes(aad, nonce, unsigned)), hexToBytes(sender), { zip215: false })).toBe(true);
+        }
+        // One key, so the two nonces must differ; the caption names the newest line its sender had, the photo none (§2.2).
+        expect(caption.payload.nonce).not.toBe(photo.payload.nonce);
+        expect([caption.after !== null, photo.after]).toEqual([true, null]);
+        // The photo is the JPEG data URI it says it is (S3 and S4 show it): SOI first, EOI last.
+        expect(photo.text.startsWith('data:image/jpeg;base64,')).toBe(true);
+        const jpeg = Buffer.from(photo.text.slice('data:image/jpeg;base64,'.length), 'base64');
+        expect([jpeg[0], jpeg[1], jpeg[jpeg.length - 2], jpeg[jpeg.length - 1]]).toEqual([0xff, 0xd8, 0xff, 0xd9]);
+    });
+
+    it('the photo pair re-makes, opens and refuses as frozen (checkGroupPhotoVector), and its bytes are pinned', () => {
+        checkGroupPhotoVector(gc);
+        // SHA-256 of JSON.stringify({ caption, photo }) over the two frozen payloads, as group photos S1 froze them.
+        const now = JSON.stringify({ caption: GROUP_PHOTO_VECTOR.caption.payload, photo: GROUP_PHOTO_VECTOR.photo.payload });
+        expect(now.length).toBe(1039);
+        expect(bytesToHex(sha256(utf8ToBytes(now)))).toBe('a1c0981dd83e894168bab43a1366e248c24ffaffefbfaf58df09eee14c1301db');
+    });
+
+    it('the photo check fails a door that opens any part, or that opens with the epoch key whatever message key it is handed', () => {
+        const anyPart = {
+            ...gc,
+            openGroupLine: (p: GroupLinePayload, r: GroupLineBinding, k: Uint8Array) => {
+                for (const part of ['body', 'attachment', 'edit'] as const) {
+                    try { return gc.openGroupLine(p, { ...r, part }, k); } catch { /* the next part */ }
+                }
+                throw new GroupLineNotVerifiedError();
+            },
+        };
+        expect(() => checkGroupPhotoVector(anyPart)).toThrow(/as another part of its message opened/);
+        const anyMessageKey = { ...gc, openGroupLineWithMessageKey: (p: GroupLinePayload, r: GroupLineBinding) => gc.openGroupLine(p, r, hexToBytes(GROUP_VECTOR_KEY_HEX)) };
+        expect(() => checkGroupPhotoVector(anyMessageKey)).toThrow(/opened with the photo message's key/);
     });
 
     it('the top-up is signed by its wrapper over its canonical array', () => {

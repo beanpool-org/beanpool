@@ -24,7 +24,7 @@ On the phone, the same list is in **Commons**, under **Groups**, as **Your group
 
 ## Starting a group
 
-- On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. In a community with Beans, both ask what kind first: **Chat group**, **Project** or **Enterprise**. Picking **Chat group** opens the group form.
+- On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.
 - In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
 - Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.
@@ -33,7 +33,7 @@ On the phone, the same list is in **Commons**, under **Groups**, as **Your group
 
 You can start up to 5 groups in any 24 hours.
 
-With Beans involved? Start a project or an enterprise instead: pick **Project** or **Enterprise** when you tap **+** or **New group** (or from the link at the bottom of the group form, **Start a project or an enterprise →**; on the web **Start a project** or **Start an enterprise**). See "Projects and enterprises".
+With Beans involved? Start a project or an enterprise instead: tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**; on the web **Start a project** or **Start an enterprise**). See "Projects and enterprises".
 
 ## Inviting people
 

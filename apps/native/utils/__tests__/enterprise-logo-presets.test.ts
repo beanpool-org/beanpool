@@ -226,8 +226,8 @@ describe('enterprise logo presets (phone)', () => {
         await type(goalInput, '200');
 
         // Submit initiative
-        const submitBtn = host.querySelector('[aria-label="Start initiative"]');
-        await click(submitBtn, 'Start initiative');
+        const submitBtn = Array.from(host.querySelectorAll('[aria-label]')).find((el) => el.getAttribute('aria-label') === 'Start the project 🌱') as HTMLElement | null;
+        await click(submitBtn, 'Start the project');
 
         expect(createdEnterprises.calls).toHaveLength(1);
         expect(createdEnterprises.calls[0].avatar).toBe('bundled://leaf');
@@ -260,8 +260,8 @@ describe('enterprise logo presets (phone)', () => {
         const goalInput = host.querySelector('input[placeholder="0"]');
         await type(goalInput, '150');
 
-        const submitBtn = host.querySelector('[aria-label="Start initiative"]');
-        await click(submitBtn, 'Start initiative');
+        const submitBtn = Array.from(host.querySelectorAll('[aria-label]')).find((el) => el.getAttribute('aria-label') === 'Start the project 🌱') as HTMLElement | null;
+        await click(submitBtn, 'Start the project');
 
         expect(createdEnterprises.calls).toHaveLength(1);
         expect(createdEnterprises.calls[0].avatar).toMatch(/^data:image\/jpeg;base64,/);

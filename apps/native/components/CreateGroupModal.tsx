@@ -25,7 +25,6 @@ import { GROUP_CATEGORY_OPTIONS, GROUP_JOIN_POLICY_OPTIONS, CREATE_GROUP_DEFAULT
 import { router } from 'expo-router';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn } from '../utils/node-profile';
-import { enterprisesOn } from '../utils/commons-sections';
 import { t } from '@beanpool/core';
 import { signedRequestWords } from './signed-request-lines';
 
@@ -53,24 +52,6 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to it on a community with Beans off.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
-    const showsEnterprises = enterprisesOn(nodeProfile?.features);
-    const hasKinds = showsBeans && showsEnterprises;
-    const [step, setStep] = useState<'kind' | 'form'>(hasKinds ? 'kind' : 'form');
-
-    React.useEffect(() => {
-        if (isOpen) {
-            setStep(hasKinds ? 'kind' : 'form');
-        }
-    }, [isOpen, hasKinds]);
-
-    const handleClose = () => {
-        setName('');
-        setDescription('');
-        setCategory(CREATE_GROUP_DEFAULTS.category);
-        setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
-        setStep(hasKinds ? 'kind' : 'form');
-        onClose();
-    };
 
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
@@ -106,47 +87,6 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             marginRight: -12,
             alignItems: 'center',
             justifyContent: 'center',
-        },
-        backBtn: {
-            width: 44,
-            height: 44,
-            marginLeft: -8,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        kindCard: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: colors.surface.subtle,
-            borderRadius: 14,
-            padding: 14,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            marginBottom: 12,
-        },
-        kindIconWrap: {
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: colors.surface.card,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: 12,
-        },
-        kindTextWrap: {
-            flex: 1,
-            marginRight: 8,
-        },
-        kindLabel: {
-            fontSize: 15,
-            fontWeight: '700',
-            color: colors.text.heading,
-        },
-        kindDesc: {
-            fontSize: 12,
-            color: colors.text.secondary,
-            marginTop: 2,
-            lineHeight: 16,
         },
         // Padding on contentContainerStyle, not the ScrollView's style: on Android, padding on the
         // ScrollView itself is not part of the scroll range, so the last 20dp could never be reached.
@@ -284,7 +224,11 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             onCreated: (group) => {
                 hapticSuccess();
                 onCreated(group);
-                handleClose();
+                setName('');
+                setDescription('');
+                setCategory(CREATE_GROUP_DEFAULTS.category);
+                setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
+                onClose();
             },
             onInvalidName: () => Alert.alert(t('Invalid Name'), t('Group name must be at least 2 characters long.')),
             // The node's own reason is shown as it sent it (its words are slice S4); db.ts's own sentences are worded.
@@ -297,7 +241,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             visible={isOpen}
             animationType="slide"
             transparent
-            onRequestClose={handleClose}
+            onRequestClose={onClose}
         >
             <View
                 style={[styles.backdrop, { paddingTop: insets.top + 8 }]}
@@ -305,23 +249,10 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             >
                 <View style={[styles.sheet, { paddingBottom: insets.bottom, maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
                     <View style={styles.header}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            {step === 'form' && hasKinds && (
-                                <Pressable
-                                    style={styles.backBtn}
-                                    onPress={() => setStep('kind')}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={t('Back')}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <MaterialCommunityIcons name="arrow-left" size={22} color={colors.text.heading} />
-                                </Pressable>
-                            )}
-                            <Text style={styles.title}>{t('Create a Group')}</Text>
-                        </View>
+                        <Text style={styles.title}>{t('Create a Group')}</Text>
                         <Pressable
                             style={styles.closeBtn}
-                            onPress={handleClose}
+                            onPress={onClose}
                             accessibilityRole="button"
                             accessibilityLabel={t('Close create group modal')}
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -330,82 +261,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         </Pressable>
                     </View>
 
-                    {step === 'kind' ? (
-                        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-                            <View style={styles.infoNotice}>
-                                <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
-                                <Text style={styles.infoNoticeText}>
-                                    {t('A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.')}
-                                </Text>
-                            </View>
-
-                            <Pressable
-                                style={styles.kindCard}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('Chat group')}
-                                accessibilityHint={t('A place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.')}
-                                onPress={() => {
-                                    hapticTick();
-                                    setStep('form');
-                                }}
-                            >
-                                <View style={styles.kindIconWrap}>
-                                    <Text style={{ fontSize: 22 }} allowFontScaling={false}>👥</Text>
-                                </View>
-                                <View style={styles.kindTextWrap}>
-                                    <Text style={styles.kindLabel}>{t('Chat group')}</Text>
-                                    <Text style={styles.kindDesc}>
-                                        {t('A place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.')}
-                                    </Text>
-                                </View>
-                                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
-                            </Pressable>
-
-                            <Pressable
-                                style={styles.kindCard}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('Project: a leader, a goal, an end date')}
-                                onPress={async () => {
-                                    hapticTick();
-                                    await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-                                    handleClose();
-                                    router.push({ pathname: '/propose-project', params: { kind: 'bounded' } });
-                                }}
-                            >
-                                <View style={styles.kindIconWrap}>
-                                    <Text style={{ fontSize: 22 }} allowFontScaling={false}>🌱</Text>
-                                </View>
-                                <View style={styles.kindTextWrap}>
-                                    <Text style={styles.kindLabel}>{t('Project')}</Text>
-                                    <Text style={styles.kindDesc}>{t('A leader, a goal, an end date')}</Text>
-                                </View>
-                                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
-                            </Pressable>
-
-                            <Pressable
-                                style={styles.kindCard}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('Enterprise: keepers, it keeps going')}
-                                onPress={async () => {
-                                    hapticTick();
-                                    await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-                                    handleClose();
-                                    router.push({ pathname: '/propose-project', params: { kind: 'ongoing' } });
-                                }}
-                            >
-                                <View style={styles.kindIconWrap}>
-                                    <Text style={{ fontSize: 22 }} allowFontScaling={false}>🏛️</Text>
-                                </View>
-                                <View style={styles.kindTextWrap}>
-                                    <Text style={styles.kindLabel}>{t('Enterprise')}</Text>
-                                    <Text style={styles.kindDesc}>{t('Keepers; it keeps going')}</Text>
-                                </View>
-                                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
-                            </Pressable>
-                        </ScrollView>
-                    ) : (
-                    /* flexShrink: at 320dp x 569dp with the keyboard up the sheet has ~250dp; without it the ScrollView
-                        kept its content height, the sheet overflowed, and only the title showed, under the status bar. */
+                    {/* flexShrink: at 320dp x 569dp with the keyboard up the sheet has ~250dp; without it the ScrollView
+                        kept its content height, the sheet overflowed, and only the title showed, under the status bar. */}
                     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                         <View style={styles.infoNotice}>
                             <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
@@ -474,7 +331,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                             accessibilityLabel={t('{question} {action}', { question: t(START_ENTERPRISE_BRIDGE.lead), action: t(START_ENTERPRISE_BRIDGE.link) })}
                             onPress={async () => {
                                 await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
-                                handleClose();
+                                onClose();
                                 router.push(START_ENTERPRISE_BRIDGE.route);
                             }}
                         >
@@ -535,7 +392,6 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                             )}
                         </Pressable>
                     </ScrollView>
-                    )}
                 </View>
             </View>
         </Modal>

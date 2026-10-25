@@ -74,7 +74,8 @@ export function startRows(features: NodeFeatures | null | undefined, options?: S
     if (showDecision) {
         const canPropose = options?.canPropose ?? true;
         let standingLine: WordKey | undefined;
-        if (!canPropose) {
+        // Not in the decisions preview (the global showcase): decisions are off there and a tap explains where they live.
+        if (!canPropose && !options?.decisionsPreview) {
             standingLine = beansOn(features)
                 ? word('Opens after your first completed trade.')
                 : word('Node admins propose here.');

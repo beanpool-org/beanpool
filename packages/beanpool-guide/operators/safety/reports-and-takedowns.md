@@ -12,7 +12,7 @@ In the app, members report a post, an event, a Pulse item, a project, an enterpr
 - A member can file at most **10 reports an hour**.
 - Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.
 - Nobody can report themselves, or their own message.
-- A message in a group's chat can be reported once by each member, whatever became of their first report, and only by a member who can read it: someone who joined after it was written can't.
+- A message in a group's chat can be reported once by each member, and only by a member who can read it: someone who joined after it was written can't. Once their report is dismissed or handled, reporting the message again does nothing new, unless they choose **Child safety**: that comes in as a new report, and you are told as for any child-safety report. The report you closed stays as you left it.
 
 The report form tells members their note goes to moderators. It goes to everyone who looks after reports: the owners, the admins, and any moderators you have made (see Owners, admins and moderators).
 

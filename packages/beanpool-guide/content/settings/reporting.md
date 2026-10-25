@@ -21,7 +21,7 @@ Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, *
 
 ## A person or a message
 
-A group's chat is end-to-end encrypted, so your community's moderators can't read it. When you report a message there, your app sends that one message's own key with the report. With it the moderators can open that message, its photo if it has one, and see who sent it, and check that it really is theirs: a message someone changed, or one made up, shows them **Could not be verified**. The key opens nothing else in the chat. The report box tells you what goes. You can report each message once.
+A group's chat is end-to-end encrypted, so your community's moderators can't read it. When you report a message there, your app sends that one message's own key with the report. With it the moderators can open that message, its photo if it has one, and see who sent it, and check that it really is theirs: a message someone changed, or one made up, shows them **Could not be verified**. The key opens nothing else in the chat. The report box tells you what goes. You can report each message once. The one exception is **Child safety**: if a moderator has already dealt with your report and you then choose **Child safety**, it goes to them as a new report.
 
 There is no separate button to report a person, or a message in a chat with one person, in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See "Blocking someone".
 

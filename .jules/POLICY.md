@@ -1034,3 +1034,8 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** DELIBERATE DECISION
 - **Claim:** take `[0]` of a repeated parameter on the tool screen.
 - **Why not to re-file:** a repeated parameter is refused on purpose. Re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-24 — Scout: test coverage for event-post routes (#2476) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing test coverage for `routes/event-post.ts` (`createEventFromBody` and `eventTimeAnswer`).
+- **Why not to re-file:** Landed in PR #2476. Added integration test suite `apps/server/src/test-event-post.ts` and registered it in `scripts/server-suites.mjs`. Fully resolved on `main`.

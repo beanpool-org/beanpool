@@ -450,7 +450,7 @@ async function main(): Promise<void> {
     try {
         const res = await ssrfSafeFetch('https://example.com');
         const body = await res.text();
-        if ((res.status === 200 && body.includes('Example Domain')) || res.status === 503) {
+        if (res.status === 200 && body.includes('Example Domain')) {
             publicHttpsOk = true;
         } else {
             publicHttpsError = new Error(`Unexpected status ${res.status} or missing body text`);
@@ -466,7 +466,7 @@ async function main(): Promise<void> {
     try {
         const res = await ssrfSafeFetch('http://example.com');
         const body = await res.text();
-        if ((res.status === 200 && body.includes('Example Domain')) || res.status === 503) {
+        if (res.status === 200 && body.includes('Example Domain')) {
             publicHttpOk = true;
         } else {
             publicHttpError = new Error(`Unexpected status ${res.status} or missing body text`);

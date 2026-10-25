@@ -88,3 +88,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 **Gap found:** `POST /api/node/owner/lock-open-check` in `apps/server/src/routes/owner-unlock.ts` had no corresponding test file.
 **Learning:** Testing lock open check endpoint requires validating signature auth middleware behavior (401 for unsigned/stale timestamp, 403 for non-owners) and verifying that valid owner requests record report data into `owner_lock_opens` database table.
 **Action:** Created `test-owner-lock-open-check.ts` and registered it in `scripts/server-suites.mjs`.
+
+## 2026-10-24 - [Event Post Helper Routes Coverage]
+**Gap found:** `createEventFromBody` and `eventTimeAnswer` in `apps/server/src/routes/event-post.ts` had no dedicated test file.
+**Learning:** `createEventFromBody` shared helper maps raw request bodies to state-engine `createPost`, enforcing community defaults and option callbacks (`beforeWrite`, `out`).
+**Action:** Created `test-event-post.ts` and registered it in `scripts/server-suites.mjs`.

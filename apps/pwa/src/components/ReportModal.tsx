@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { reportAbuse } from '../lib/api';
 import { useCoversScreen } from '../lib/screen-cover';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
@@ -15,6 +16,15 @@ interface Props {
     /** Reporting a Pulse item: the node resolves the reported member from the item's owner. */
     targetPulseItemId?: string;
     onReported?: () => void;
+    /**
+     * Sends the report another way than POST /api/reports, with the reason as it goes to the node: one line of a locked group
+     * chat, with its key (MessagesPage, lib/group-chat-lines.ts reportSealedGroupLine). Throws the node's refusal.
+     */
+    onSubmitReason?: (reason: string) => Promise<void>;
+    /** The card's title in place of "Report {name}". */
+    title?: string;
+    /** One sentence under the title: what the moderators get with this report. */
+    note?: string;
 }
 
 export function ReportModal({
@@ -26,6 +36,9 @@ export function ReportModal({
     targetPostId,
     targetPulseItemId,
     onReported,
+    onSubmitReason,
+    title,
+    note,
 }: Props) {
     useCoversScreen(isOpen);
     // Nothing is picked until the member chooses: a pre-picked "Spam or scam" let a hurried tap send the wrong reason
@@ -83,7 +96,8 @@ export function ReportModal({
                 ? `${selectedReason}: ${details.trim()}`
                 : selectedReason;
 
-            await reportAbuse(reporterPubkey, targetPubkey, finalReason, targetPostId, targetPulseItemId);
+            if (onSubmitReason) await onSubmitReason(finalReason);
+            else await reportAbuse(reporterPubkey, targetPubkey, finalReason, targetPostId, targetPulseItemId);
             setSent(true);
         } catch (e: any) {
             // The choice and the words stay, so the member can send again without retyping.
@@ -93,12 +107,14 @@ export function ReportModal({
         }
     }
 
-    return (
+    // On document.body, above the app's own header and tabs (zIndex 100, App.tsx) and its banner (z-[120]): drawn inside a
+    // tab's page, as in a chat, the card sat under them, its title and its Submit cut at 320 px with 130% text.
+    return <>{createPortal(
         <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="report-modal-title"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
         >
             <div
                 ref={modalCardRef}
@@ -107,7 +123,7 @@ export function ReportModal({
             >
                 <div className="flex items-center justify-between border-b border-nature-100 dark:border-nature-800 pb-3">
                     <h3 id="report-modal-title" className="text-base font-bold text-nature-950 dark:text-white flex items-center gap-2">
-                        <span aria-hidden="true">🚩</span> {t('Report {name}', { name: targetName })}
+                        <span aria-hidden="true">🚩</span> {title ?? t('Report {name}', { name: targetName })}
                     </h3>
                     <button
                         type="button"
@@ -120,6 +136,9 @@ export function ReportModal({
                     </button>
                 </div>
 
+                {note && !sent && (
+                    <p data-testid="report-note" className="m-0 text-xs text-nature-700 dark:text-nature-300">{note}</p>
+                )}
                 {sent ? (
                     <>
                         <p role="status" data-testid="report-sent" className="m-0 text-sm font-semibold text-bp-ink-success">
@@ -212,6 +231,7 @@ export function ReportModal({
                 </div>
                 </>)}
             </div>
-        </div>
-    );
+        </div>,
+        document.body,
+    )}</>;
 }

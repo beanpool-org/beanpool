@@ -14,7 +14,9 @@
  *     mentions and the reply go with it, later edits and reactions are refused, deleting twice is a no-op
  *     success, it reaches the chat live and it never pushes.
  *  4. A convenor's removal of somebody else's message still works and is told apart by `metadata.removedBy`.
- *  5. Reports keep their evidence: a report never referenced a message, so a delete destroys none of it.
+ *  5. Reports keep their evidence: a report of a member, a post or a Pulse item references no message, so a delete
+ *     destroys none of it. The one report that names a message (a locked group chat's line with its key, S6) is
+ *     test-group-chat-report.ts's.
  *  6. REPLY in a group chat: `metadata.replyToId`, refused for a message in another chat or a system line, and
  *     carried through the old apps' /api/messages/send path too.
  *  7. A muted DM sends no push.
@@ -396,15 +398,20 @@ async function main(): Promise<void> {
 
     // ── 5. Reports keep their evidence ──────────────────────────────────────────────────────
     console.log('\n--- 5. A reported message keeps its evidence ---');
-    // A report has never referenced a message: abuse_reports targets a MEMBER, a posts row (target_post_id) or a
-    // pulse item, and the moderation list reads the joined posts/pulse_items row for what was said. There is no
-    // report path in any app that names a chat message, so a delete destroys no moderator's copy — the evidence
-    // a report holds is its own `reason` text plus the joined row, and both survive untouched.
+    // A report of a member, a post or a Pulse item references no message: abuse_reports targets a MEMBER, a posts row
+    // (target_post_id) or a pulse item, and the moderation list reads the joined posts/pulse_items row for what was said,
+    // so a delete destroys no moderator's copy — the evidence such a report holds is its own `reason` text plus the joined
+    // row, and both survive untouched. Since group chat photos S6 one report kind names a message: one line of a locked
+    // group chat, reported with its key (target_message_id; engine/group-chat-report.ts). Its evidence is that line as the
+    // node stores it, so its author's delete takes the words and the moderators' view says it is gone
+    // (test-group-chat-report.ts §7). That is the only message reference the table has, and a report of a member has none.
     const reportable = bobLine();
     const report = submitReport(erin, bob, 'Rude in the Repair Crew chat', undefined, undefined)!;
     const messageColumns = (db.prepare('PRAGMA table_info(abuse_reports)').all() as any[]).map(c => c.name);
-    assert(!messageColumns.some(c => /message/i.test(c)),
-        `abuse_reports holds no message reference at all (${messageColumns.join(', ')}) — nothing to snapshot before a delete`);
+    assert(JSON.stringify(messageColumns.filter(c => /message/i.test(c))) === JSON.stringify(['target_message_id']),
+        `abuse_reports' only message reference is a group chat line report's target_message_id (${messageColumns.join(', ')})`);
+    assert((db.prepare('SELECT target_message_id FROM abuse_reports WHERE id = ?').get(report.id) as any)?.target_message_id === null,
+        'and a report of a member names no message: nothing of it to snapshot before a delete');
     await del(bob, reportable.id);
     const afterDelete = getReports('pending').reports.find(r => r.id === report.id)!;
     assert(!!afterDelete && afterDelete.reason === 'Rude in the Repair Crew chat' && afterDelete.targetPubkey === bob,

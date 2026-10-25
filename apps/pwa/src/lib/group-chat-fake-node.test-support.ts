@@ -28,6 +28,8 @@ export interface FakeGroupNode {
     /** The lines stored; a photo line is type 'image' with its sealed photo (DESIGN-group-chat-photos-fable.md §2.2). */
     lines: { id: string; author: string; ciphertext: string; nonce: string; metadata: any; type?: string; attachment?: { data: string; nonce: string; mime?: string } }[];
     calls: { method: string; path: string; body?: any; as: string }[];
+    /** Reports of one line with its key (POST …/chat/report, S6), as the node keeps them: who, which line, the body. */
+    reports: { reporter: string; messageId: string; reason: string; disclosure: unknown }[];
     /** Answer one request as a dishonest node would: return a Response to use it, undefined to answer honestly. */
     lie: ((method: string, path: string, me: string, body?: any) => Response | undefined) | null;
     as(me: string): GroupKeysTransport;
@@ -37,7 +39,7 @@ export interface FakeGroupNode {
 export function fakeGroupNode(groupId: string, members: string[]): FakeGroupNode {
     const node: FakeGroupNode = {
         groupId, epochs: new Map(), topUps: [], roster: [...members].sort(), shown: [...members], stale: false,
-        fromEpoch: new Map(members.map((m) => [m, 1])), lines: [], calls: [], lie: null,
+        fromEpoch: new Map(members.map((m) => [m, 1])), lines: [], calls: [], reports: [], lie: null,
         current() { return node.epochs.size ? Math.max(...node.epochs.keys()) : null; },
         as(me) {
             const go = async (method: string, path: string, body?: any): Promise<Response> => {
@@ -119,6 +121,16 @@ export function fakeGroupNode(groupId: string, members: string[]): FakeGroupNode
                 type: body.type ?? 'text', ...(body.attachment ? { attachment: body.attachment } : {}),
             });
             return json(201, { success: true });
+        }
+        // A line reported with its key (S6): one the reporter may read and didn't write; one report per reporter per line.
+        if (method === 'POST' && p === `${base}/chat/report`) {
+            const l = node.lines.find((x) => x.id === body?.messageId);
+            if (!l) return json(404, { error: 'Message not found', code: 'not_found' });
+            if (l.author === me) return json(400, { error: 'You cannot report your own message.', code: 'own_message' });
+            const onFile = node.reports.find((r) => r.reporter === me && r.messageId === l.id);
+            if (onFile) return json(200, { success: true, duplicate: true, report: { id: `report-${l.id}` } });
+            node.reports.push({ reporter: me, messageId: l.id, reason: body.reason, disclosure: body.disclosure });
+            return json(200, { success: true, report: { id: `report-${l.id}`, targetMessageId: l.id } });
         }
         // A line's photo (GET /api/messages/:id/attachment, S2): to the group's members, as its words are; 404 otherwise.
         const attachmentRoute = p.match(/^\/api\/messages\/([^/]+)\/attachment$/);

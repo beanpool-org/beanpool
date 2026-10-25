@@ -106,6 +106,9 @@ export interface SyncAbuseReport {
     createdAt: string;
     status?: string;
     updatedAt?: string | null;
+    /** A report of one group chat message: its id, and the key its reporter handed over, JSON { epoch, mk } (S6). */
+    targetMessageId?: string | null;
+    disclosure?: string | null;
 }
 
 export interface SyncCreatorChannel {
@@ -1203,6 +1206,8 @@ function abuseReportOfRow(row: any): SyncAbuseReport {
         createdAt: row.created_at,
         status: row.status || 'pending',
         updatedAt: row.updated_at || row.created_at,
+        targetMessageId: row.target_message_id ?? null,
+        disclosure: row.disclosure ?? null,
     };
 }
 

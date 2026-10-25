@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { useEffect, useRef } from 'react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as api from '../lib/api';
 import * as sync from '../lib/sync';
-import { HeaderControls } from './HeaderControls';
+import { HeaderControls, HeaderTitle } from './HeaderControls';
 import { NeedsYouIcons } from './NeedsYouIcons';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
@@ -41,7 +40,72 @@ const makeHomeAnswer = (items: NeedsItem[] = []) => ({
     },
 });
 
+/**
+ * App's mobile header row as MobileHeader (AppHeader.tsx) composes it: the tab's name with the needs-you icons beside it
+ * (HeaderTitle's `end`), the map's logo where there is no name (`title` null), then the pill.
+ */
+function HeaderRow({ title = 'Commons', activeTab, onNavigate, className }: {
+    title?: string | null;
+    activeTab?: string;
+    onNavigate?: (tab: string, ctxId?: string) => void;
+    className?: string;
+}) {
+    return (
+        <header className={className}>
+            <HeaderTitle
+                title={title}
+                end={<NeedsYouIcons identityPubkey={ME.publicKey} onNavigate={onNavigate} activeTab={activeTab} besideLogo={title === null} />}
+            />
+            {title === null && <div data-testid="header-logo" className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10" />}
+            <HeaderControls showSettings={false} setShowSettings={() => {}} identityPubkey={ME.publicKey} onOpenProfile={() => {}} />
+        </header>
+    );
+}
+
+/**
+ * The row as Chromium lays it out, for jsdom (which lays nothing out): the needs slot is as wide as the row's CSS makes it,
+ * here `layout.slot` px (no wider than its own max-width, which the map's logo sets), the row's middle ends at
+ * `layout.middleRight` and the map's logo at `layout.logoRight`. ResizeObserver tells every observer at once, as after a
+ * layout; `relayout()` does it again after the test changes `layout`.
+ */
+function stubRowLayout(layout: { slot: number; middleRight?: number; logoRight?: number }) {
+    const observers = new Set<{ cb: ResizeObserverCallback; targets: Set<Element> }>();
+    vi.stubGlobal('ResizeObserver', class {
+        private entry: { cb: ResizeObserverCallback; targets: Set<Element> };
+        constructor(cb: ResizeObserverCallback) { this.entry = { cb, targets: new Set() }; observers.add(this.entry); }
+        observe(target: Element) {
+            this.entry.targets.add(target);
+            this.entry.cb([{ target, contentRect: target.getBoundingClientRect() } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }
+        unobserve(target: Element) { this.entry.targets.delete(target); }
+        disconnect() { observers.delete(this.entry); }
+    });
+    const box = (left: number, right: number) => ({ width: right - left, height: 44, top: 0, left, right, bottom: 44, x: left, y: 0, toJSON() {} }) as DOMRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const el = this as HTMLElement;
+        const middleRight = layout.middleRight ?? 300;
+        if (el.dataset.needsSlot !== undefined) {
+            const cap = el.style.maxWidth ? parseFloat(el.style.maxWidth) : Infinity;
+            const width = Math.min(layout.slot, cap);
+            return box(middleRight - width, middleRight);
+        }
+        if (el.dataset.headerMiddle !== undefined) return box(0, middleRight);
+        if (el.dataset.testid === 'header-logo') return box(0, layout.logoRight ?? 0);
+        return box(0, 0);
+    });
+    return () => act(() => {
+        for (const o of [...observers]) {
+            const entries = [...o.targets].map(target => ({ target, contentRect: target.getBoundingClientRect() })) as unknown as ResizeObserverEntry[];
+            if (entries.length) o.cb(entries, {} as ResizeObserver);
+        }
+    });
+}
+
 describe('HeaderControls needs-you alert icons', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
     it('an invite → the envelope shows with its accessible name and opens the invitation', async () => {
         const onNavigate = vi.fn();
         const inviteItem: NeedsItem = {
@@ -58,15 +122,7 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([inviteItem]) as any,
         });
 
-        render(
-            <HeaderControls
-                showSettings={false}
-                setShowSettings={() => {}}
-                identityPubkey={ME.publicKey}
-                onOpenProfile={() => {}}
-                onNavigate={onNavigate}
-            />
-        );
+        render(<HeaderRow onNavigate={onNavigate} />);
 
         const envelope = await screen.findByRole('button', { name: "You're invited to join Garden Club" });
         expect(envelope).toBeInTheDocument();
@@ -83,14 +139,7 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([]) as any,
         });
 
-        render(
-            <HeaderControls
-                showSettings={false}
-                setShowSettings={() => {}}
-                identityPubkey={ME.publicKey}
-                onOpenProfile={() => {}}
-            />
-        );
+        render(<HeaderRow />);
 
         // Allow any background loads to complete
         await act(async () => {
@@ -139,15 +188,7 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([dealItem, voteItem, messageItem, groupItem]) as any,
         });
 
-        render(
-            <HeaderControls
-                showSettings={false}
-                setShowSettings={() => {}}
-                identityPubkey={ME.publicKey}
-                onOpenProfile={() => {}}
-                onNavigate={onNavigate}
-            />
-        );
+        render(<HeaderRow onNavigate={onNavigate} />);
 
         // 1. Deal
         const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
@@ -187,16 +228,10 @@ describe('HeaderControls needs-you alert icons', () => {
             }]) as any,
         });
 
-        // Render Home page and HeaderControls on Home tab together
+        // Render Home page and the header row on Home tab together
         render(
             <div>
-                <HeaderControls
-                    showSettings={false}
-                    setShowSettings={() => {}}
-                    identityPubkey={ME.publicKey}
-                    onOpenProfile={() => {}}
-                    activeTab="home"
-                />
+                <HeaderRow title="Home" activeTab="home" />
                 <HomePage identity={ME} onNavigate={() => {}} />
             </div>
         );
@@ -250,84 +285,47 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([dealItem, voteItem, msgItem, grpItem]) as any,
         });
 
-        // Provide header element with narrow width (400px -> maxSlotWidth = 80px -> holds 2 slots of 38px: 1 item + more)
-        const header = document.createElement('header');
-        document.body.appendChild(header);
-        header.getBoundingClientRect = () => ({
-            width: 400,
-            height: 50,
-            top: 0,
-            left: 0,
-            bottom: 50,
-            right: 400,
-            x: 0,
-            y: 0,
-            toJSON: () => {},
-        });
+        // The row leaves the slot 88 px beside the title: two 44 px slots, one icon and •••.
+        stubRowLayout({ slot: 88 });
 
-        const originalRO = globalThis.ResizeObserver;
-        globalThis.ResizeObserver = class {
-            callback: ResizeObserverCallback;
-            constructor(cb: ResizeObserverCallback) { this.callback = cb; }
-            observe(target: Element) {
-                this.callback([{ target, contentRect: { width: 400 } as any } as any], this as any);
-            }
-            unobserve() {}
-            disconnect() {}
-        } as any;
+        render(<HeaderRow onNavigate={onNavigate} />);
 
-        try {
-            render(
-                <HeaderControls
-                    showSettings={false}
-                    setShowSettings={() => {}}
-                    identityPubkey={ME.publicKey}
-                    onOpenProfile={() => {}}
-                    onNavigate={onNavigate}
-                />,
-                { container: header }
-            );
+        // With 88px room, 2 slots: highest priority (deal) + more (3 more things need you)
+        const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
+        expect(dealBtn).toBeInTheDocument();
 
-            // With 80px room, 2 slots: highest priority (deal) + more (3 more things need you)
-            const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
-            expect(dealBtn).toBeInTheDocument();
+        const moreBtn = screen.getByRole('button', { name: '3 more things need you' });
+        expect(moreBtn).toBeInTheDocument();
+        // Tap targets floor: 44 px tall, matching pill and tour-check
+        expect(moreBtn.className).toContain('h-[44px]');
 
-            const moreBtn = screen.getByRole('button', { name: '3 more things need you' });
-            expect(moreBtn).toBeInTheDocument();
-            // Tap targets floor: 44 px tall, matching pill and tour-check
-            expect(moreBtn.className).toContain('h-[44px]');
+        // Clicking more opens the dialog sheet (focusing opener first as real user click)
+        moreBtn.focus();
+        fireEvent.click(moreBtn);
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+        expect(dialog).toHaveAttribute('aria-labelledby', 'needs-sheet-title');
 
-            // Clicking more opens the dialog sheet (focusing opener first as real user click)
-            moreBtn.focus();
-            fireEvent.click(moreBtn);
-            const dialog = screen.getByRole('dialog');
-            expect(dialog).toBeInTheDocument();
-            expect(dialog).toHaveAttribute('aria-modal', 'true');
-            expect(dialog).toHaveAttribute('aria-labelledby', 'needs-sheet-title');
+        // Escape closes the dialog and returns focus to opener
+        fireEvent.keyDown(dialog, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(document.activeElement).toBe(moreBtn);
 
-            // Escape closes the dialog and returns focus to opener
-            fireEvent.keyDown(dialog, { key: 'Escape' });
-            expect(screen.queryByRole('dialog')).toBeNull();
-            expect(document.activeElement).toBe(moreBtn);
+        // Reopen to test item selection
+        moreBtn.focus();
+        fireEvent.click(moreBtn);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-            // Reopen to test item selection
-            moreBtn.focus();
-            fireEvent.click(moreBtn);
-            expect(screen.getByRole('dialog')).toBeInTheDocument();
-
-            // Clicking an item in the sheet navigates and closes sheet
-            const sheetMsg = screen.getByRole('button', { name: 'Unread message from Ana' });
-            fireEvent.click(sheetMsg);
-            expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-ana');
-            expect(screen.queryByTestId('needs-sheet')).toBeNull();
-        } finally {
-            globalThis.ResizeObserver = originalRO;
-            if (header.parentNode) {
-                document.body.removeChild(header);
-            }
-        }
+        // Clicking an item in the sheet navigates and closes sheet
+        const sheetMsg = screen.getByRole('button', { name: 'Unread message from Ana' });
+        fireEvent.click(sheetMsg);
+        expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-ana');
+        expect(screen.queryByTestId('needs-sheet')).toBeNull();
     });
 
+    // The slot measures its own width (the phone's onLayout) whenever the row lays it out again: a window resized or turned
+    // is a new width for it, and the old header-width breakpoints (and their max-width strings) are gone.
     it('responds dynamically to header and window resize events', async () => {
         const dealItem: NeedsItem = {
             kind: 'deal',
@@ -350,93 +348,43 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([dealItem, voteItem]) as any,
         });
 
-        let roCallback: ResizeObserverCallback | null = null;
-        const observedElements: Element[] = [];
-        const originalRO = globalThis.ResizeObserver;
-        globalThis.ResizeObserver = class {
-            constructor(cb: ResizeObserverCallback) { roCallback = cb; }
-            observe(target: Element) { observedElements.push(target); }
-            unobserve() {}
-            disconnect() {}
-        } as any;
+        // Wide: the slot has its two 44 px slots.
+        const layout = { slot: 88 };
+        const relayout = stubRowLayout(layout);
 
-        try {
-            const header = document.createElement('header');
-            document.body.appendChild(header);
+        render(<HeaderRow />);
 
-            let headerWidth = 800;
-            header.getBoundingClientRect = () => ({
-                width: headerWidth,
-                height: 50,
-                top: 0,
-                left: 0,
-                bottom: 50,
-                right: headerWidth,
-                x: 0,
-                y: 0,
-                toJSON: () => {},
-            });
+        const iconsContainer = await screen.findByTestId('header-needs-icons');
+        expect(iconsContainer).toBeInTheDocument();
+        // Initially wide: all items show
+        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
+        expect(screen.queryByTestId('header-needs-more')).toBeNull();
 
-            render(
-                <HeaderControls
-                    showSettings={false}
-                    setShowSettings={() => {}}
-                    identityPubkey={ME.publicKey}
-                    onOpenProfile={() => {}}
-                />,
-                { container: header }
-            );
+        // A narrow window (320 px): the row leaves the slot one slot
+        layout.slot = 46;
+        relayout();
+        expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
+        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+        expect(screen.queryByTestId('header-needs-vote')).toBeNull();
 
-            const iconsContainer = await screen.findByTestId('header-needs-icons');
-            expect(iconsContainer).toBeInTheDocument();
-            // Initially wide (800px) -> maxSlotWidth is undefined, all items show
-            expect(iconsContainer.style.maxWidth).toBe('');
-            expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-            expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
-            expect(screen.queryByTestId('header-needs-more')).toBeNull();
+        // Back up to a wide window
+        layout.slot = 88;
+        relayout();
+        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
+        expect(screen.queryByTestId('header-needs-more')).toBeNull();
 
-            // Resize header down to 320px
-            headerWidth = 320;
-            // Trigger ResizeObserver callback for header
-            act(() => {
-                roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
-            });
-            expect(iconsContainer.style.maxWidth).toBe('46px');
-            expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
-            expect(screen.queryByTestId('header-needs-deal')).toBeNull();
-            expect(screen.queryByTestId('header-needs-vote')).toBeNull();
+        // And again, without a ratchet: what is drawn never narrows the slot
+        layout.slot = 46;
+        relayout();
+        expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
 
-            // Resize back up to 800px via window resize event
-            headerWidth = 800;
-            act(() => {
-                window.dispatchEvent(new Event('resize'));
-            });
-            expect(iconsContainer.style.maxWidth).toBe('');
-            expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-            expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
-            expect(screen.queryByTestId('header-needs-more')).toBeNull();
-
-            // Also verify ResizeObserver on header restores wide state without ratchet
-            headerWidth = 320;
-            act(() => {
-                roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
-            });
-            expect(iconsContainer.style.maxWidth).toBe('46px');
-            expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
-
-            headerWidth = 800;
-            act(() => {
-                roCallback?.([{ target: header, contentRect: { width: 800 } as any } as any], {} as any);
-            });
-            expect(iconsContainer.style.maxWidth).toBe('');
-            expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-            expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
-            expect(screen.queryByTestId('header-needs-more')).toBeNull();
-
-            document.body.removeChild(header);
-        } finally {
-            globalThis.ResizeObserver = originalRO;
-        }
+        layout.slot = 88;
+        relayout();
+        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
+        expect(screen.queryByTestId('header-needs-more')).toBeNull();
     });
 
     it('collapses to a single count chip if even ••• does not fit beside title', async () => {
@@ -462,43 +410,9 @@ describe('HeaderControls needs-you alert icons', () => {
         });
 
         // 320px header where "Commons" title leaves only 35px (< 44px)
-        const HeaderWithTitle = () => {
-            return (
-                <header
-                    ref={el => {
-                        if (el) {
-                            el.getBoundingClientRect = () => ({
-                                width: 320, height: 50, top: 0, left: 0, bottom: 50, right: 320, x: 0, y: 0, toJSON: () => {},
-                            });
-                        }
-                    }}
-                    style={{ display: 'flex', width: '320px' }}
-                >
-                    <div>
-                        <span
-                            data-testid="header-title"
-                            ref={el => {
-                                if (el) {
-                                    el.getBoundingClientRect = () => ({
-                                        width: 140, height: 30, top: 10, left: 40, bottom: 40, right: 180, x: 40, y: 10, toJSON: () => {},
-                                    });
-                                }
-                            }}
-                        >
-                            Commons
-                        </span>
-                    </div>
-                    <HeaderControls
-                        showSettings={false}
-                        setShowSettings={() => {}}
-                        identityPubkey={ME.publicKey}
-                        onOpenProfile={() => {}}
-                    />
-                </header>
-            );
-        };
+        stubRowLayout({ slot: 35 });
 
-        render(<HeaderWithTitle />);
+        render(<HeaderRow />);
 
         // When room is < 44px, it must collapse to a single count chip, not cut title
         const chip = await screen.findByTestId('header-needs-chip');
@@ -527,47 +441,15 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([inviteItem]) as any,
         });
 
-        // At 320px, Map tab logo right edge is at 247px, pill left is at 208px (overlap)
-        const HeaderWithMapLogo = () => {
-            return (
-                <header
-                    ref={el => {
-                        if (el) {
-                            el.getBoundingClientRect = () => ({
-                                width: 320, height: 50, top: 0, left: 0, bottom: 50, right: 320, x: 0, y: 0, toJSON: () => {},
-                            });
-                        }
-                    }}
-                    style={{ display: 'flex', width: '320px' }}
-                >
-                    <div
-                        data-testid="header-logo"
-                        className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10"
-                        ref={el => {
-                            if (el) {
-                                el.getBoundingClientRect = () => ({
-                                    width: 174, height: 40, top: 5, left: 73, bottom: 45, right: 247, x: 73, y: 5, toJSON: () => {},
-                                });
-                            }
-                        }}
-                    />
-                    <HeaderControls
-                        showSettings={false}
-                        setShowSettings={() => {}}
-                        identityPubkey={ME.publicKey}
-                        onOpenProfile={() => {}}
-                        activeTab="map"
-                    />
-                </header>
-            );
-        };
+        // At 320px, Map tab logo right edge is at 247px, pill left (the row's middle's right) is at 208px (overlap)
+        stubRowLayout({ slot: 88, middleRight: 208, logoRight: 247 });
 
-        const { container } = render(<HeaderWithMapLogo />);
+        render(<HeaderRow title={null} activeTab="map" />);
 
-        // Layering: HeaderControls container must have z-[5] and NOT z-10
-        const controlsWrapper = container.querySelector('[data-testid="header-pill"]')?.parentElement;
-        expect(controlsWrapper?.className).toContain('z-[5]');
-        expect(controlsWrapper?.className).not.toContain('z-10');
+        // Layering: the pill (HeaderControls) must have z-[5] and NOT z-10, under the logo's z-10
+        const pill = screen.getByTestId('header-pill');
+        expect(pill.className).toContain('z-[5]');
+        expect(pill.className).not.toContain('z-10');
 
         // At 320px on map tab, logo meets pill, so icons must be hidden (0 slots)
         await act(async () => {
@@ -600,15 +482,7 @@ describe('HeaderControls needs-you alert icons', () => {
                 answer: makeHomeAnswer([inviteItem]) as any,
             });
 
-            const { rerender } = render(
-                <HeaderControls
-                    showSettings={false}
-                    setShowSettings={() => {}}
-                    identityPubkey={ME.publicKey}
-                    onOpenProfile={() => {}}
-                    activeTab="messages"
-                />
-            );
+            const { rerender } = render(<HeaderRow title="Chat" activeTab="messages" />);
 
             // Wait for initial render and promise resolution
             await act(async () => {
@@ -637,15 +511,7 @@ describe('HeaderControls needs-you alert icons', () => {
 
             // Tab change (e.g. going to commons) triggers refresh via gate
             await act(async () => {
-                rerender(
-                    <HeaderControls
-                        showSettings={false}
-                        setShowSettings={() => {}}
-                        identityPubkey={ME.publicKey}
-                        onOpenProfile={() => {}}
-                        activeTab="commons"
-                    />
-                );
+                rerender(<HeaderRow title="Commons" activeTab="commons" />);
                 // Advance past NODE_MIN_GAP_MS
                 vi.advanceTimersByTime(16_000);
             });
@@ -685,16 +551,8 @@ describe('HeaderControls needs-you alert icons', () => {
                             variant="sidebar"
                         />
                     </div>
-                    {/* Mobile header (md:hidden) */}
-                    <header className="md:hidden">
-                        <HeaderControls
-                            showSettings={false}
-                            setShowSettings={() => {}}
-                            identityPubkey={ME.publicKey}
-                            onOpenProfile={() => {}}
-                            activeTab="messages"
-                        />
-                    </header>
+                    {/* Mobile header (md:hidden), with its own icons beside the title */}
+                    <HeaderRow className="md:hidden" title="Chat" activeTab="messages" />
                 </div>
             );
 
@@ -788,8 +646,9 @@ describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
         expect(screen.queryByTestId('header-needs-deal')).toBeNull();
         expect(screen.queryByTestId('header-needs-message')).toBeNull();
 
-        // The header's own read is the header's: it never stands in for Home's answer.
-        expect(freshHomeForHeader(ME.publicKey)).toBeNull();
+        // The header's own read is the header's: it never stands in for Home's answer, which is still Home's own (and
+        // still under two minutes old, for Home).
+        expect(freshHomeForHeader(ME.publicKey)?.cards?.needs?.items.map(i => i.kind)).toEqual(['deal', 'message']);
     });
 
     it("a tap on an icon or a line of the sheet forgets Home's copy: that need is about to change", async () => {

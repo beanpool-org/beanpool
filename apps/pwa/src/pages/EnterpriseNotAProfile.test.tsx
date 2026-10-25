@@ -197,9 +197,11 @@ describe('every door on the web lands on the enterprise page', () => {
         }
         // §1.1's eleven web components (the header's own-profile button included), and a message request's sender on its
         // card and in the chat's header (message requests S3): each opens someone by key through onOpenProfile, which
-        // App.tsx (above) sends to the one profile overlay.
+        // App.tsx (above) sends to the one profile overlay. App's mobile header row (AppHeader.tsx, out of App.tsx for
+        // PR #2478) hands App's onOpenProfile to that own-profile button, as App.tsx did.
         expect(doors.sort()).toEqual([
             path.join('components', 'ActivityWaterfall.tsx'),
+            path.join('components', 'AppHeader.tsx'),
             path.join('components', 'EventCard.tsx'),
             path.join('components', 'HeaderControls.tsx'),
             path.join('components', 'MarketplaceCard.tsx'),

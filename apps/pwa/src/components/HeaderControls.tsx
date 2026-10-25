@@ -1,9 +1,6 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { t } from '@beanpool/core';
 import { openHelp } from '../lib/tour-store';
-import { NeedsYouIcons } from './NeedsYouIcons';
-
-export { NeedsYouIcons };
 
 /**
  * The pill's width: profile, the "?" and Settings, a third each. Kept at 100 px when the icons grew (14 Oct 2026): three
@@ -19,8 +16,14 @@ export const HEADER_PILL_PX = 100;
  * even that leaves too little room is the name cut, with an ellipsis. The padding is
  * room for the words' glow (text-rainbow's shadow; the cut clips at the padding box), given back by the margins so the
  * words sit where they always did. `children`: what opens under the title (the community's status).
+ *
+ * `end`: what shares that room, at its right (the needs-you icons). The name takes its words first, by the row's own CSS
+ * and no measure: its box never shrinks (flex 1 0 auto) and grows into what `end` leaves, but is never wider than the room
+ * (max-width 100%), so `end` gives way first, to nothing, before the name gives a pixel, and the name is cut only where it
+ * wouldn't fit alone. The room is the same whatever `end` draws, so the chip's choice doesn't depend on it. `title`: null on
+ * the map, whose logo is drawn over the room (`end` alone); the same element either way, so `end` stays mounted across tabs.
  */
-export function HeaderTitle({ title, onClick, children }: { title: string; onClick?: () => void; children?: ReactNode }) {
+export function HeaderTitle({ title, onClick, children, end }: { title: string | null; onClick?: () => void; children?: ReactNode; end?: ReactNode }) {
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (!onClick) return;
         if (e.key === 'Enter' || e.key === ' ') {
@@ -29,21 +32,26 @@ export function HeaderTitle({ title, onClick, children }: { title: string; onCli
         }
     };
     return (
-        <div className="relative z-10 flex-1 min-w-0 flex justify-center items-center" style={{ padding: '0 6px' }}>
-            <span
-                data-testid="header-title"
-                className={`font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center truncate ${
-                    onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill rounded-lg' : ''
-                }`}
-                style={{ margin: '-2px -6px -10px', padding: '10px 6px' }}
-                onClick={onClick}
-                role={onClick ? 'button' : undefined}
-                tabIndex={onClick ? 0 : undefined}
-                onKeyDown={onClick ? handleKeyDown : undefined}
-            >
-                {title}
-            </span>
-            {children}
+        <div data-header-middle className="relative z-10 flex-1 min-w-0 flex justify-end items-center">
+            {title !== null && (
+                <div className="relative min-w-0 flex justify-center items-center" style={{ flex: '1 0 auto', maxWidth: '100%', padding: '0 6px' }}>
+                    <span
+                        data-testid="header-title"
+                        className={`font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center truncate ${
+                            onClick ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill rounded-lg' : ''
+                        }`}
+                        style={{ margin: '-2px -6px -10px', padding: '10px 6px' }}
+                        onClick={onClick}
+                        role={onClick ? 'button' : undefined}
+                        tabIndex={onClick ? 0 : undefined}
+                        onKeyDown={onClick ? handleKeyDown : undefined}
+                    >
+                        {title}
+                    </span>
+                    {children}
+                </div>
+            )}
+            {end}
         </div>
     );
 }
@@ -53,9 +61,11 @@ export function HeaderTitle({ title, onClick, children }: { title: string; onCli
  * its words and the pill (at 320 px with 130% text, "Commons" and "The Pulse" were cut to "Com…" and "The P…"). Measured
  * in the row as laid out, again whenever the row, the chip or the title changes size: the chip at its dot alone keeps its
  * words laid out but hidden (SyncChip), so the room the title would have beside them is known either way. The words come
- * back only with a pixel to spare, so the chip can't flick between the two at the edge. `title`: null where the row has
- * no HeaderTitle (the map's). Returns the ref for the header row (a callback, so a row that mounts after the first render,
- * as App's does after loading, is measured) and whether the chip is at its dot alone.
+ * back only with a pixel to spare, so the chip can't flick between the two at the edge. The room is HeaderTitle's whole
+ * middle, not the title's box: the icons beside the title (its `end`) give way before the title does, so they never send
+ * the chip to its dot, and nothing they draw changes the room. `title`: null where the row has no title (the map's).
+ * Returns the ref for the header row (a callback, so a row that mounts after the first render, as App's does after
+ * loading, is measured) and whether the chip is at its dot alone.
  */
 export function useDotOnlyChip(title: string | null): [(row: HTMLElement | null) => void, boolean] {
     const [el, setRow] = useState<HTMLElement | null>(null);
@@ -68,7 +78,7 @@ export function useDotOnlyChip(title: string | null): [(row: HTMLElement | null)
         const chip = el.querySelector<HTMLElement>('[data-testid="sync-chip"]');
         const words = chip?.querySelector<HTMLElement>('[data-chip-words]');
         const span = el.querySelector<HTMLElement>('[data-testid="header-title"]');
-        const box = span?.parentElement;
+        const box = span?.closest<HTMLElement>('[data-header-middle]');
         if (!chip || !words || !span || !box) return;
         const measure = () => {
             if (!el.getBoundingClientRect().width) return; // hidden (the md: layout)
@@ -88,7 +98,7 @@ export function useDotOnlyChip(title: string | null): [(row: HTMLElement | null)
             cancelAnimationFrame(frame);
             frame = requestAnimationFrame(measure);
         });
-        for (const e of [el, chip, words, span]) observer.observe(e);
+        for (const e of [el, chip, words, span, box]) observer.observe(e);
         let live = true;
         document.fonts?.ready.then(() => live && measure());
         return () => {
@@ -124,39 +134,18 @@ const PILL_ICON = 'w-[24px] h-[24px] shrink-0';
  * pill sat under it, dimmed with the photo), still under the map tab's logo where they meet. Settings open: a gold disc with a charcoal icon in it (the pair as the
  * library draws it), so the open state is a filled shape and not a change of colour alone.
  */
-export function HeaderControls({
-    showSettings,
-    setShowSettings,
-    identityPubkey,
-    onOpenProfile,
-    onNavigate,
-    activeTab,
-}: {
-    showSettings: boolean;
-    setShowSettings: (v: boolean) => void;
-    identityPubkey?: string;
-    onOpenProfile: (pk: string) => void;
-    onNavigate?: (tab: string, ctxId?: string) => void;
-    activeTab?: string;
-}) {
+export function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
-        <div className="relative z-[5] flex items-center gap-1.5 shrink-0">
-            <NeedsYouIcons
-                identityPubkey={identityPubkey}
-                onNavigate={onNavigate}
-                activeTab={activeTab}
-                isHome={activeTab === 'home'}
-            />
-            <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: '9999px',
-                border: '1px solid var(--border-secondary)',
-                height: '38px',
-                width: `${HEADER_PILL_PX}px`,
-                flexShrink: 0,
-                justifyContent: 'center',
-            }}>
+        <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: '9999px',
+            border: '1px solid var(--border-secondary)',
+            height: '38px',
+            width: `${HEADER_PILL_PX}px`,
+            flexShrink: 0,
+            justifyContent: 'center',
+        }}>
             <button
                 onClick={() => identityPubkey && onOpenProfile(identityPubkey)}
                 aria-label={t('My profile')}
@@ -193,7 +182,6 @@ export function HeaderControls({
                     </svg>
                 </span>
             </button>
-            </div>
         </div>
     );
 }

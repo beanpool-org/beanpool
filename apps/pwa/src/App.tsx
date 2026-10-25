@@ -20,7 +20,6 @@ import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
 import { useOwnAvatar } from './lib/useOwnAvatar';
-import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
@@ -43,8 +42,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
-import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
-import { NeedsYouIcons } from './components/NeedsYouIcons';
+import { MobileHeader, SidebarStatus } from './components/AppHeader';
 import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
@@ -729,10 +727,9 @@ export function App() {
     ];
     const activeTabEntry = TABS.find(tb => tb.id === activeTab);
 
-    // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
-    // where the title wouldn't fit beside the chip's words (a hook, so above the returns before the app).
+    // The mobile header's title (none on the map, which shows the community's name); MobileHeader sends the sync chip to its
+    // dot alone where the title wouldn't fit beside the chip's words.
     const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
-    const [headerRef, chipDotOnly] = useDotOnlyChip(headerTitle);
 
     if (loading || (!identity && visitorView.kind === 'checking')) {
         return (
@@ -879,19 +876,14 @@ export function App() {
 
                 {/* Sidebar Footer Controls */}
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
-                    <div className="flex items-center justify-between px-2 py-1">
-                        <SyncStatus isMember={!isGuest} />
-                        <div className="flex items-center gap-1">
-                            <NeedsYouIcons
-                                identityPubkey={identity?.publicKey}
-                                onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
-                                activeTab={activeTab}
-                                isHome={activeTab === 'home'}
-                                variant="sidebar"
-                            />
-                            <SidebarControls showSettings={settingsSeen} setShowSettings={setSettingsFromCog} />
-                        </div>
-                    </div>
+                    <SidebarStatus
+                        isGuest={isGuest}
+                        identityPubkey={identity?.publicKey}
+                        activeTab={activeTab}
+                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                        settingsSeen={settingsSeen}
+                        setShowSettings={setSettingsFromCog}
+                    />
 
                     {identity && (
                         <button
@@ -948,59 +940,20 @@ export function App() {
                 <FormerAddressBanner signedIn />
 
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
-                <header ref={headerRef} className="relative shadow-md md:hidden" style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.3rem 0.75rem',
-                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid #111',
-                    position: (activeTab === 'map' && !showSettings) ? 'absolute' : 'sticky',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 100,
-                    backgroundImage: "url('/assets/neon-vines-banner.png')",
-                    backgroundSize: '150% auto',
-                    backgroundPosition: 'center',
-                }}>
-                    <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
-
-                    <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
-                        <SyncStatus isMember={!isGuest} stacked dotOnly={chipDotOnly} />
-                    </div>
-
-                    {headerTitle !== null ? (
-                        // The tab's own name, as the lobby's, in the room between the chip and the pill (never under either).
-                        <HeaderTitle title={headerTitle} onClick={toggleCommunityStatus}>
-                            {communityStatus}
-                        </HeaderTitle>
-                    ) : (
-                        <div data-testid="header-logo" className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
-                            <div 
-                                className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
-                                style={{ transform: 'translateX(-12px) translateY(-2px)' }}
-                                onClick={toggleCommunityStatus}
-                            >
-                                <img src="/bean.png" alt={t('BeanPool Icon')} style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
-                                <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{t('BeanPool')}</span>
-                                <span
-                                    className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider whitespace-nowrap"
-                                    aria-label={t('Version {version}', { version: displayVersion })}
-                                >{t('v{version}', { version: displayVersion })}</span>
-                            </div>
-                            {communityStatus}
-                        </div>
-                    )}
-
-                    <HeaderControls
-                        showSettings={settingsSeen}
-                        setShowSettings={setSettingsFromCog}
-                        identityPubkey={identity?.publicKey}
-                        onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
-                        activeTab={activeTab}
-                    />
-                </header>
+                <MobileHeader
+                    activeTab={activeTab}
+                    showSettings={showSettings}
+                    title={headerTitle}
+                    isGuest={isGuest}
+                    identityPubkey={identity?.publicKey}
+                    displayVersion={displayVersion}
+                    communityStatus={communityStatus}
+                    onTitleClick={toggleCommunityStatus}
+                    settingsSeen={settingsSeen}
+                    setShowSettings={setSettingsFromCog}
+                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                />
 
                 {/* Main Scrollable Canvas */}
                 <main style={{

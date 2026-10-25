@@ -26,7 +26,6 @@ import {
 import type { OwnDecisionVote } from './decision-own-vote';
 import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer } from './home-cards';
-import { recordHomeAnswer } from './home-store';
 import { ringProfileSaved } from './profile-saved';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
@@ -2833,9 +2832,7 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache' });
     if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
     if (!res.ok) throw await refusalError(res);
-    const answer = await res.json() as HomeAnswer;
-    recordHomeAnswer(answer, identity?.publicKey);
-    return { notModified: false, answer, etag: sameOrigin ? res.headers.get('ETag') : null };
+    return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };
 }
 
 /**

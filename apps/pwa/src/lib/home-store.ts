@@ -2,11 +2,13 @@
  * Shared Home answer store for the web app.
  *
  * Like the phone's utils/home-store.ts (§5.2):
- * - The header reads Home's answer: while one is fresher than 2 minutes,
- *   HeaderControls draws the node's needs lines from it rather than asking the node itself;
- *   on Home it waits a moment for the read Home has under way (one fetch shared with Home).
- * - When not on Home and no fresh answer exists, the header asks the node for cards=needs.
- * - Sockets or user actions can clear the store via forgetHomeForHeader().
+ * - The header reads Home's answer: on Home, while one is fresher than 2 minutes, the needs-you icons draw from it
+ *   rather than asking the node themselves, and wait a moment for the read Home has under way (one fetch shared with Home).
+ * - Away from Home it stands in only while it is younger than the header's own 15 s between reads: the phone reads its
+ *   deals and unread messages again on every page change (its own database), and the web's come from the node, so a need
+ *   dealt with goes at the next tab change. Older than that, the header asks the node for cards=needs.
+ * - Only Home's own reads are recorded here (HomePage); the header's own read is never taken for Home's answer.
+ * - Sockets or user actions (a tap on a need) clear it via forgetHomeForHeader().
  */
 
 import type { HomeAnswer } from './home-cards';
@@ -59,21 +61,21 @@ export function isHomeInflight(): boolean {
     return inflight !== null;
 }
 
-/** Fresh Home answer for the header if fresher than HOME_FRESH_FOR_HEADER_MS. */
-export function freshHomeForHeader(publicKey?: string | null, now: number = Date.now()): HomeAnswer | null {
+/** Home's answer for the header if younger than `maxAgeMs` (HOME_FRESH_FOR_HEADER_MS unless said). */
+export function freshHomeForHeader(publicKey?: string | null, now: number = Date.now(), maxAgeMs: number = HOME_FRESH_FOR_HEADER_MS): HomeAnswer | null {
     if (!latest) return null;
     if ((publicKey ?? null) !== latest.publicKey) return null;
-    return (now - latest.at >= 0 && now - latest.at < HOME_FRESH_FOR_HEADER_MS) ? latest.answer : null;
+    return (now - latest.at >= 0 && now - latest.at < maxAgeMs) ? latest.answer : null;
 }
 
 /**
  * Home's answer for the header:
- * - Returns a fresh copy immediately if available (< 2 minutes old).
+ * - Returns a fresh copy immediately if available (younger than `maxAgeMs`: 2 minutes unless said).
  * - When waitMs is given (e.g. on Home screen), waits for the read under way or starting up to waitMs.
  * - Otherwise returns null, allowing the header to trigger its own needs read.
  */
-export function homeForHeader(publicKey: string | null | undefined, waitMs: number): Promise<HomeAnswer | null> {
-    const fresh = freshHomeForHeader(publicKey);
+export function homeForHeader(publicKey: string | null | undefined, waitMs: number, maxAgeMs: number = HOME_FRESH_FOR_HEADER_MS): Promise<HomeAnswer | null> {
+    const fresh = freshHomeForHeader(publicKey, Date.now(), maxAgeMs);
     if (fresh || !publicKey) return Promise.resolve(fresh);
     const waiting = isHomeInflight();
     if (!waiting && waitMs <= 0) return Promise.resolve(null);
@@ -88,7 +90,7 @@ export function homeForHeader(publicKey: string | null | undefined, waitMs: numb
             done = true;
             if (timer) clearTimeout(timer);
             if (unsubscribe) unsubscribe();
-            resolve(ans ?? freshHomeForHeader(publicKey));
+            resolve(ans ?? freshHomeForHeader(publicKey, Date.now(), maxAgeMs));
         };
 
         unsubscribe = onHomeRead((ans, pk) => {

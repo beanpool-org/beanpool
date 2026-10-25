@@ -1,18 +1,25 @@
 /**
- * Small icons in the web header showing what needs you right now.
- * Parity with the phone's apps/native/components/NeedsYouIcons.tsx.
+ * Small icons showing what needs you right now: parity with the phone's apps/native/components/NeedsYouIcons.tsx. One
+ * icon per kind, only while something of that kind does; the highest-priority icon sits nearest the "?" and Settings,
+ * and the lowest fold first into "•••", which opens the "Needs you" sheet (@beanpool/core needs-you.ts, as the phone's).
+ * Members only.
  *
- * Shown to members only, between the title/logo and the pill.
- * Stacks from the right: the highest-priority icon sits nearest the pill.
- * When several needs show and width is constrained (e.g. 320 px × 130%),
- * collapses into "•••" which opens the "Needs you" sheet.
+ * Where they are drawn (AppHeader.tsx):
+ * - The mobile header (under 768 px): beside the tab's name, in the room between the sync chip and the pill
+ *   (HeaderTitle's `end`). The row's CSS gives the name its words first and this slot what is left, up to a slot per kind,
+ *   so nothing measured here can cut the name. The slot measures its own width, as the phone's row does (onLayout), and
+ *   draws what fits in it; what it draws never changes that width, and it stays mounted on every tab, so every change of
+ *   tab, needs or width is measured. On the map the logo is drawn over that room: the slot stops 4 px short of it (at
+ *   320–430 px there is no room at all). Between 28 and 44 px, a count chip in place of the icons.
+ * - The side bar (768 px and up): a row of their own above the connection status, the "?" and Settings, wrapping rather
+ *   than pushing them (five kinds fit in its 232 px).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createRefreshGate, fitNeedsYou, isOwnInviteChange, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } from '@beanpool/core';
 import { t, tn } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
-import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS, recordHomeAnswer, forgetHomeForHeader } from '../lib/home-store';
+import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS, forgetHomeForHeader } from '../lib/home-store';
 import { onSyncActivity } from '../lib/sync';
 import { useDialogFocus } from './dialog-focus';
 import * as api from '../lib/api';
@@ -20,9 +27,18 @@ import * as api from '../lib/api';
 const NODE_MIN_GAP_MS = 15_000;
 const SAFETY_POLL_MS = 120_000;
 const WS_SETTLE_MS = 3_000;
+/** On the map: the room kept between the logo's right edge and the first icon. */
+const LOGO_CLEAR_PX = 4;
+/** The count chip, where the slot has room for it but not for one icon. */
+const COUNT_CHIP_PX = 28;
 
 export function moreLabel(hidden: number): string {
     return tn(hidden, '{n} more thing needs you', '{n} more things need you');
+}
+
+/** The name of a control that stands for every need at once (the count chip, or "•••" with no icon beside it). */
+export function allNeedsLabel(kinds: number): string {
+    return tn(kinds, '{n} thing needs you', '{n} things need you');
 }
 
 /** Where a tap on a need lands in the web app. Parity with HomePage.tsx:1802-1820. */
@@ -101,20 +117,30 @@ function fetchNeedsDeduped(): Promise<any> {
 export function NeedsYouIcons({
     identityPubkey,
     onNavigate,
-    isHome: _isHome = false,
     activeTab,
+    besideLogo = false,
     variant = 'header',
 }: {
     identityPubkey?: string;
     onNavigate?: (tab: string, ctxId?: string) => void;
-    isHome?: boolean;
     activeTab?: string;
+    /** The map's header row: its logo is drawn over the room, and the slot stops short of it. */
+    besideLogo?: boolean;
     variant?: 'header' | 'sidebar';
 }) {
     const [entries, setEntries] = useState<NeedsItem[]>([]);
     const [sheet, setSheet] = useState(false);
-    const [availableRoom, setAvailableRoom] = useState<number | undefined>(undefined);
-    const containerRef = useRef<HTMLDivElement | null>(null);
+    // The header's slot: the element (a callback ref, so the effects below measure whichever is mounted), its width as laid
+    // out (null until measured: with no ResizeObserver, as in jsdom, everything is drawn), and on the map how far it may
+    // reach before the logo.
+    const [slot, setSlotState] = useState<HTMLDivElement | null>(null);
+    const [slotWidth, setSlotWidth] = useState<number | null>(null);
+    const [logoRoom, setLogoRoom] = useState<number | undefined>(undefined);
+    const slotRef = useRef<HTMLDivElement | null>(null);
+    const setSlot = useCallback((el: HTMLDivElement | null) => {
+        slotRef.current = el;
+        setSlotState(el);
+    }, []);
 
     const gate = useRef<ReturnType<typeof createRefreshGate> | null>(null);
     const identityRef = useRef(identityPubkey);
@@ -130,25 +156,12 @@ export function NeedsYouIcons({
         return [...supported].sort((a, b) => rank(a.kind) - rank(b.kind));
     }, []);
 
+    // Not on screen: the side bar shows from 768 px, the mobile header (md:hidden) below it. Only the one on screen reads.
     const isHidden = useCallback(() => {
-        if (variant === 'sidebar') {
-            if (typeof window !== 'undefined') {
-                if (window.matchMedia?.('(max-width: 767px)').matches || window.innerWidth < 768) {
-                    return true;
-                }
-            }
-        } else {
-            const el = containerRef.current;
-            const header = el?.closest('header');
-            if (header?.classList.contains('md:hidden')) {
-                if (typeof window !== 'undefined') {
-                    if (window.matchMedia?.('(min-width: 768px)').matches || window.innerWidth >= 768) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        if (typeof window === 'undefined') return false;
+        const wide = !!window.matchMedia?.('(min-width: 768px)').matches || window.innerWidth >= 768;
+        if (variant === 'sidebar') return !wide;
+        return wide && !!slotRef.current?.closest('header')?.classList.contains('md:hidden');
     }, [variant]);
 
     const refresh = useCallback(async () => {
@@ -157,16 +170,17 @@ export function NeedsYouIcons({
         busyRef.current = true;
         try {
             const onHome = activeTabRef.current === 'home';
-            const ans = await homeForHeader(pk, onHome ? HOME_HEADER_WAIT_MS : 0);
+            // On Home: Home's answer (fresher than two minutes, or the read Home has under way). Elsewhere it stands in only
+            // while it is younger than the gap between the header's own reads: the phone reads its deals and unread
+            // messages again on every page change, so a need dealt with goes at the next tab change here too.
+            const ans = onHome ? await homeForHeader(pk, HOME_HEADER_WAIT_MS) : await homeForHeader(pk, 0, NODE_MIN_GAP_MS);
             if (ans?.cards?.needs?.items) {
                 setEntries(filterAndSort(ans.cards.needs.items));
             } else if (!onHome) {
+                // The header's own read is the header's: never recorded as Home's answer (only Home's reads stand in).
                 const read = await fetchNeedsDeduped();
-                if (read && !read.notModified && read.answer) {
-                    recordHomeAnswer(read.answer, pk);
-                    if (read.answer.cards?.needs?.items) {
-                        setEntries(filterAndSort(read.answer.cards.needs.items));
-                    }
+                if (identityRef.current === pk && read && !read.notModified && read.answer?.cards?.needs?.items) {
+                    setEntries(filterAndSort(read.answer.cards.needs.items));
                 }
             }
         } catch {
@@ -216,7 +230,8 @@ export function NeedsYouIcons({
         gate.current?.request();
     }, [activeTab]);
 
-    // Returning to the tab, debounced WebSocket activity, and safety poll
+    // Returning to the tab, debounced WebSocket activity, the safety poll, and the window crossing 768 px (the header and
+    // the side bar trade places, and the one now on screen hasn't read)
     useEffect(() => {
         if (!identityPubkey) return;
 
@@ -250,6 +265,8 @@ export function NeedsYouIcons({
         if (typeof window !== 'undefined') {
             window.addEventListener('focus', onFocus);
         }
+        const wide = typeof window !== 'undefined' ? window.matchMedia?.('(min-width: 768px)') : undefined;
+        wide?.addEventListener?.('change', poke);
 
         const unsubSync = onSyncActivity((data?: unknown) => {
             if (isOwnInviteChange(data, identityPubkey)) {
@@ -267,266 +284,210 @@ export function NeedsYouIcons({
             if (typeof window !== 'undefined') {
                 window.removeEventListener('focus', onFocus);
             }
+            wide?.removeEventListener?.('change', poke);
             unsubSync();
             if (settleTimer) clearTimeout(settleTimer);
         };
     }, [identityPubkey]);
 
-    // Measure available room dynamically to keep tab titles unclipped and map logo uncovered
+    // The slot's own width as the row lays it out (the phone's onLayout), again whenever it changes: a tab's name, the
+    // needs, the window, the text size. Its width is the row's CSS, never what is drawn in it, so this can't loop.
     useLayoutEffect(() => {
-        if (variant === 'sidebar') return;
-
-        const el = containerRef.current;
-        if (!el) return;
-
-        const header = el.closest('header');
-        if (!header) return;
-
-        const measure = () => {
-            const headerRect = header.getBoundingClientRect();
-            if (headerRect.width <= 0) return;
-
-            const pill = header.querySelector<HTMLElement>('[data-testid="header-pill"]');
-            const pillRect = pill?.getBoundingClientRect();
-            const pillWidth = (pillRect && pillRect.width > 0) ? pillRect.width : 100;
-
-            const titleSpan = header.querySelector<HTMLElement>('[data-testid="header-title"]');
-            const logo = header.querySelector<HTMLElement>('.absolute.left-1\\/2') ?? header.querySelector<HTMLElement>('[data-testid="header-logo"]');
-
-            if (titleSpan) {
-                // Non-map tab: HeaderTitle must keep its full width
-                let titleNeeded: number;
-                try {
-                    const range = document.createRange();
-                    range.selectNodeContents(titleSpan);
-                    const rect = range.getBoundingClientRect();
-                    titleNeeded = rect.width || titleSpan.getBoundingClientRect().width;
-                } catch {
-                    titleNeeded = titleSpan.getBoundingClientRect().width;
-                }
-                const cs = typeof window !== 'undefined' ? window.getComputedStyle(titleSpan) : null;
-                const titlePadding = cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0;
-
-                const chip = header.querySelector<HTMLElement>('[data-testid="sync-chip"]');
-                const chipBox = chip?.parentElement;
-                const chipWidth = chipBox ? chipBox.getBoundingClientRect().width : (chip?.getBoundingClientRect().width ?? 0);
-
-                const headerStyle = typeof window !== 'undefined' ? window.getComputedStyle(header) : null;
-                const padL = (headerStyle && parseFloat(headerStyle.paddingLeft)) || 12;
-                const padR = (headerStyle && parseFloat(headerStyle.paddingRight)) || 12;
-                const headerPadding = padL + padR;
-                const totalInnerWidth = headerRect.width - headerPadding;
-
-                // Title container has padding 0 6px (12px total)
-                const neededTitleSpace = titleNeeded + titlePadding + 12;
-                // Available for right controls (icons + gap + pill)
-                const maxRightSpace = totalInnerWidth - chipWidth - neededTitleSpace;
-                const room = Math.max(0, maxRightSpace - pillWidth - 6);
-                setAvailableRoom(room);
-            } else if (logo) {
-                // Map tab: logo is absolutely centred, nothing may overlap it
-                const logoRect = logo.getBoundingClientRect();
-                const pillLeft = (pillRect && pillRect.width > 0 && pillRect.left > 0) ? pillRect.left : (headerRect.width - 12 - pillWidth);
-                // Icons sit between logo.right and pill.left (leaving 4px margin from logo)
-                const room = Math.max(0, (pillLeft - 6) - (logoRect.right + 4));
-                setAvailableRoom(room);
-            } else {
-                const total = headerRect.width;
-                if (total > 0 && total <= 360) {
-                    setAvailableRoom(HEADER_ALERT_SLOT_PX + 2);
-                } else if (total > 0 && total <= 480) {
-                    setAvailableRoom(HEADER_ALERT_SLOT_PX * 2 + 4);
-                } else if (total > 0 && total <= 640) {
-                    setAvailableRoom(HEADER_ALERT_SLOT_PX * 3 + 4);
-                } else {
-                    setAvailableRoom(undefined);
-                }
-            }
-        };
-
+        if (!slot || typeof ResizeObserver === 'undefined') return;
+        const measure = () => setSlotWidth(slot.getBoundingClientRect().width);
         measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(slot);
+        return () => observer.disconnect();
+    }, [slot]);
 
-        const scheduleMeasure = () => {
-            measure();
+    // On the map: the logo, centred on the header, is drawn over the room, and the slot reaches no further left than 4 px
+    // short of its right edge. Both are where the row puts them whatever the slot draws.
+    useLayoutEffect(() => {
+        const room = slot?.parentElement;
+        const logo = besideLogo ? slot?.closest('header')?.querySelector<HTMLElement>('[data-testid="header-logo"]') : null;
+        if (!room || !logo) {
+            setLogoRoom(undefined);
+            return;
+        }
+        const measure = () => {
+            const r = room.getBoundingClientRect();
+            if (!r.width) return; // hidden (the md: layout)
+            setLogoRoom(Math.max(0, Math.floor(r.right - logo.getBoundingClientRect().right - LOGO_CLEAR_PX)));
         };
-
+        measure();
         let observer: ResizeObserver | null = null;
         if (typeof ResizeObserver !== 'undefined') {
-            observer = new ResizeObserver(scheduleMeasure);
-            observer.observe(header);
-            const titleSpan = header.querySelector('[data-testid="header-title"]');
-            if (titleSpan) observer.observe(titleSpan);
-            const logo = header.querySelector('.absolute.left-1\\/2');
-            if (logo) observer.observe(logo);
+            observer = new ResizeObserver(measure);
+            observer.observe(room);
+            observer.observe(logo);
         }
-
-        if (typeof window !== 'undefined') {
-            window.addEventListener('resize', scheduleMeasure);
-        }
-
         let live = true;
         document.fonts?.ready?.then(() => {
             if (live) measure();
         });
-
         return () => {
             live = false;
-            if (observer) observer.disconnect();
-            if (typeof window !== 'undefined') {
-                window.removeEventListener('resize', scheduleMeasure);
-            }
+            observer?.disconnect();
         };
-    }, [entries.length, activeTab, variant]);
+    }, [slot, besideLogo]);
+
+    // And at once, before the browser paints, when the slot's own rule changes: the needs (its basis), the logo's room (its
+    // max-width) or the tab (the name beside it). The observer above would hear of it too, but a frame late.
+    useLayoutEffect(() => {
+        if (slot && typeof ResizeObserver !== 'undefined') setSlotWidth(slot.getBoundingClientRect().width);
+    }, [slot, logoRoom, entries.length, activeTab]);
 
     if (!identityPubkey) return null;
 
-    if (isHidden() || entries.length === 0) {
-        return <div ref={containerRef} style={{ display: 'none' }} />;
-    }
+    const isSidebar = variant === 'sidebar';
+    // A tap on a need: that need is about to change, so Home's copy of it no longer stands in.
+    const go = (target: NeedsTarget) => {
+        forgetHomeForHeader();
+        goToWebNeedsTarget(target, onNavigate);
+    };
+    const sheetEl = sheet && (
+        <NeedsSheet
+            entries={entries}
+            onClose={() => setSheet(false)}
+            onPick={go}
+        />
+    );
 
-    const slotPx = HEADER_ALERT_SLOT_PX;
-    const countChipPx = 28;
-
-    // In unmeasured/jsdom test environments, default allows showing icons without collapsing
-    const effectiveWidth = availableRoom !== undefined ? availableRoom : 240;
-
-    if (effectiveWidth < countChipPx) {
-        return null;
-    }
-
-    const isChipOnly = effectiveWidth < slotPx;
-    const hasAccent = entries.some(e => e.accent);
-
-    if (isChipOnly) {
-        const totalCount = entries.reduce((acc, e) => acc + (e.count || 1), 0);
-        const label = moreLabel(entries.length);
+    const needButton = (entry: NeedsItem) => {
+        const k = entry.kind;
+        const isAccent = entry.accent;
+        const iconColor = isSidebar
+            ? (isAccent ? 'text-bp-ink-warning' : 'text-text-secondary')
+            : (isAccent ? 'text-amber-300' : 'text-white');
         return (
-            <div
-                ref={containerRef}
-                data-testid="header-needs-icons"
-                className="flex items-center justify-end min-w-0 flex-shrink"
-                style={{ height: '38px', maxWidth: `${countChipPx}px` }}
+            <button
+                key={k}
+                onClick={() => go(entry.target)}
+                aria-label={entry.label}
+                title={entry.label}
+                data-testid={`header-needs-${k}`}
+                data-kind={k}
+                className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] ${iconColor} ${
+                    isSidebar
+                        ? 'rounded-lg hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                        : 'rounded-full focus-visible:ring-inset hover:bg-white/15'
+                }`}
+                style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
             >
-                <button
-                    onClick={() => setSheet(true)}
-                    aria-label={label}
-                    title={label}
-                    data-testid="header-needs-chip"
-                    className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px]`}
-                    style={{ width: `${countChipPx}px`, height: '44px' }}
-                >
+                <NeedSvg kind={k} />
+                {entry.count > 1 && (
                     <span
-                        className={`min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-black flex items-center justify-center leading-none ${
-                            hasAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
+                        className={`absolute top-2 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
+                            isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
                         }`}
                     >
-                        {totalCount > 9 ? '9+' : totalCount}
+                        {entry.count > 9 ? '9+' : entry.count}
                     </span>
-                </button>
-                {sheet && (
-                    <NeedsSheet
-                        entries={entries}
-                        onClose={() => setSheet(false)}
-                        onNavigate={onNavigate}
-                    />
                 )}
+            </button>
+        );
+    };
+
+    if (isSidebar) {
+        if (entries.length === 0) return null;
+        return (
+            <div data-testid="sidebar-needs-row" className="flex flex-wrap items-center justify-end">
+                {needsYouRowOrder({ shown: entries, hidden: 0 }).map(k => {
+                    const entry = entries.find(e => e.kind === k);
+                    return entry ? needButton(entry) : null;
+                })}
             </div>
         );
     }
 
-    const fit = fitNeedsYou(entries, effectiveWidth, slotPx);
+    const room = slotWidth ?? Infinity;
+    const fit = fitNeedsYou(entries, room, HEADER_ALERT_SLOT_PX);
     const byKind = new Map(fit.shown.map(e => [e.kind, e]));
-    const rowOrder = needsYouRowOrder(fit);
-    const isSidebar = variant === 'sidebar';
+    const countChip = entries.length > 0 && fit.shown.length === 0 && fit.hidden === 0 && room >= COUNT_CHIP_PX;
+    const hasAccent = entries.some(e => e.accent);
 
-    return (
-        <div
-            ref={containerRef}
-            data-testid="header-needs-icons"
-            className="flex items-center justify-end min-w-0 flex-shrink"
-            style={{
-                height: isSidebar ? undefined : '38px',
-                maxWidth: availableRoom !== undefined ? `${availableRoom}px` : undefined,
-            }}
-        >
-            {rowOrder.map(k => {
-                if (k === 'more') {
-                    const label = moreLabel(fit.hidden);
-                    return (
-                        <button
-                            key="more"
-                            onClick={() => setSheet(true)}
-                            aria-label={label}
-                            title={label}
-                            data-testid="header-needs-more"
-                            className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px] ${
-                                isSidebar
-                                    ? 'rounded-lg text-nature-700 dark:text-nature-200 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
-                                    : 'rounded-full text-white hover:bg-white/15'
-                            }`}
-                            style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
-                        >
-                            <NeedSvg kind="more" />
-                        </button>
-                    );
-                }
-
-                const entry = byKind.get(k);
-                if (!entry) return null;
-                const isAccent = entry.accent;
-
-                const iconColor = isSidebar
-                    ? (isAccent ? 'text-amber-600 dark:text-amber-400' : 'text-nature-700 dark:text-nature-200')
-                    : (isAccent ? 'text-amber-300' : 'text-white');
-
+    let drawn: ReactNode = null;
+    if (countChip) {
+        const label = allNeedsLabel(entries.length);
+        drawn = (
+            <button
+                onClick={() => setSheet(true)}
+                aria-label={label}
+                title={label}
+                data-testid="header-needs-chip"
+                className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px]"
+                style={{ width: `${COUNT_CHIP_PX}px`, height: '44px' }}
+            >
+                <span
+                    className={`min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-black flex items-center justify-center leading-none ${
+                        hasAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
+                    }`}
+                >
+                    {entries.length > 9 ? '9+' : entries.length}
+                </span>
+            </button>
+        );
+    } else if (fit.shown.length > 0 || fit.hidden > 0) {
+        drawn = needsYouRowOrder(fit).map(k => {
+            if (k === 'more') {
+                // With icons beside it, "•••" is the rest; alone, it is all of them.
+                const label = fit.shown.length > 0 ? moreLabel(fit.hidden) : allNeedsLabel(entries.length);
                 return (
                     <button
-                        key={k}
-                        onClick={() => goToWebNeedsTarget(entry.target, onNavigate)}
-                        aria-label={entry.label}
-                        title={entry.label}
-                        data-testid={`header-needs-${k}`}
-                        data-kind={k}
-                        className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px] ${iconColor} ${
-                            isSidebar
-                                ? 'rounded-lg hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
-                                : 'rounded-full hover:bg-white/15'
-                        }`}
+                        key="more"
+                        onClick={() => setSheet(true)}
+                        aria-label={label}
+                        title={label}
+                        data-testid="header-needs-more"
+                        className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] rounded-full text-white hover:bg-white/15"
                         style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
                     >
-                        <NeedSvg kind={k} />
-                        {entry.count > 1 && (
-                            <span
-                                className={`absolute top-2 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
-                                    isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
-                                }`}
-                            >
-                                {entry.count > 9 ? '9+' : entry.count}
-                            </span>
-                        )}
+                        <NeedSvg kind="more" />
                     </button>
                 );
-            })}
+            }
+            const entry = byKind.get(k);
+            return entry ? needButton(entry) : null;
+        });
+    }
 
-            {sheet && (
-                <NeedsSheet
-                    entries={entries}
-                    onClose={() => setSheet(false)}
-                    onNavigate={onNavigate}
-                />
-            )}
-        </div>
+    return (
+        <>
+            {/* The slot: a slot per kind wide at most, shrinking to nothing before the title gives way (HeaderTitle), and on
+                the map no further than the logo. 44 px tall for the targets, 38 px in the row (as the pill's). */}
+            <div
+                ref={setSlot}
+                data-needs-slot
+                className="flex items-center justify-end"
+                style={{
+                    flex: `0 1 ${entries.length * HEADER_ALERT_SLOT_PX}px`,
+                    minWidth: 0,
+                    maxWidth: logoRoom !== undefined ? `${logoRoom}px` : undefined,
+                    height: '44px',
+                    margin: '-3px 0',
+                    overflow: 'hidden',
+                }}
+            >
+                {drawn && (
+                    <div data-testid="header-needs-icons" className="flex items-center justify-end h-full">
+                        {drawn}
+                    </div>
+                )}
+            </div>
+            {sheetEl}
+        </>
     );
 }
 
 function NeedsSheet({
     entries,
     onClose,
-    onNavigate,
+    onPick,
 }: {
     entries: NeedsItem[];
     onClose: () => void;
-    onNavigate?: (tab: string, ctxId?: string) => void;
+    onPick: (target: NeedsTarget) => void;
 }) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialogRef, onClose);
@@ -570,12 +531,12 @@ function NeedsSheet({
                             key={e.kind}
                             onClick={() => {
                                 onClose();
-                                goToWebNeedsTarget(e.target, onNavigate);
+                                onPick(e.target);
                             }}
                             aria-label={e.label}
                             className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px]"
                         >
-                            <span className={e.accent ? 'text-amber-500 dark:text-amber-400' : 'text-text-secondary'}>
+                            <span className={e.accent ? 'text-bp-ink-warning' : 'text-text-secondary'}>
                                 <NeedSvg kind={e.kind} />
                             </span>
                             <span className={`flex-1 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>

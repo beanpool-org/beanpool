@@ -42,54 +42,11 @@ mkdir -p "$H/scripts" "$H/bin" "$H/apps/native/e2e" "$H/logs"
 # Copy the real scripts under test
 cp "$ROOT/scripts/test-all.sh" "$ROOT/scripts/test-all-lib.sh" "$H/scripts/"
 
-# Stub dependencies and helper scripts called by test-all.sh
-for s in \
-  check-deps-installed.mjs \
-  check-suite-registration.sh \
-  check-undeclared-imports.mjs \
-  check-balance-writes.mjs \
-  check-migrations-unchanged.sh \
-  check-workflows.test.mjs \
-  no-google-fonts.test.mjs \
-  website-colours.test.mjs \
-  website-contrast.mjs \
-  website-status.test.mjs \
-  website-global-link.test.mjs \
-  website-lang.test.mjs \
-  setup-backup.test.mjs \
-  automation-token.test.mjs \
-  bootstrap-community-eggs.test.mjs \
-  grant-operator.test.mjs \
-  credential-redirects.test.mjs \
-  rotate-node-env.test.mjs \
-  reddit-inbox.test.mjs \
-  check-compose-log-caps.mjs \
-  test-deploy-preserve.sh \
-  test-deploy-no-fleet-secrets.sh \
-  test-deploy-health.sh \
-  test-deploy-package.sh \
-  test-failing-tests-summary.sh \
-  test-merge-gate.sh; do
-  case "$s" in
-    *.sh)
-      cat > "$H/scripts/$s" << 'EOF'
-#!/bin/bash
-exit 0
-EOF
-      chmod +x "$H/scripts/$s"
-      ;;
-    *.mjs|*.js)
-      echo 'process.exit(0)' > "$H/scripts/$s"
-      ;;
-  esac
+# Stub every script test-all.sh names (its own lib excepted), so a check added later needs nothing here
+grep -oE '(scripts|apps)/[A-Za-z0-9_./-]+\.(sh|mjs)' "$H/scripts/test-all.sh" | grep -v '^scripts/test-all' | sort -u | while read -r p; do
+  mkdir -p "$H/$(dirname "$p")"
+  case "$p" in *.sh) printf '#!/bin/bash\nexit 0\n' > "$H/$p" ;; *) echo 'process.exit(0)' > "$H/$p" ;; esac
 done
-
-mkdir -p "$H/scripts/tools" "$H/scripts/words"
-for s in check-tool-budgets.mjs check-tool-budgets.test.mjs scaffold.test.mjs fence.test.mjs; do
-  echo 'process.exit(0)' > "$H/scripts/tools/$s"
-done
-echo 'process.exit(0)' > "$H/scripts/words/words.test.mjs"
-echo 'process.exit(0)' > "$H/apps/native/e2e/locked-history-320.mjs"
 
 # Stub pnpm that checks for --continue when running turbo run test
 cat > "$H/bin/pnpm" << 'STUB'
@@ -131,7 +88,8 @@ chmod +x "$H/bin/pnpm"
 # ── Run test-all.sh --fast ──────────────────────────────────────────────────────────
 OUT=""
 RC=0
-OUT=$(cd "$H" && env PATH="$H/bin:$PATH" TEST_ALL_LOG_DIR="$H/logs" bash "$H/scripts/test-all.sh" --fast 2>&1) || RC=$?
+# The harness's wait returns 127 after really waiting (the old marks trusted wait's status; this makes them fail here)
+OUT=$(cd "$H" && env PATH="$H/bin:$PATH" TEST_ALL_LOG_DIR="$H/logs" bash -c 'wait() { builtin wait "$@"; return 127; }; export -f wait; exec bash "$0" --fast' "$H/scripts/test-all.sh" 2>&1) || RC=$?
 TEST_LOG="$H/logs/test.log"
 
 # 1. Exit code: stage and overall run must fail (be red)
@@ -152,7 +110,7 @@ assert_has "report marks build as PASS (build.rc was 0)" "$OUT" "build          
 assert_lacks "report does not mark build as FAIL" "$OUT" "build            ❌ FAIL"
 assert_has "report marks lint as PASS (lint.rc was 0)" "$OUT" "lint             ✅ PASS"
 assert_has "report marks typecheck as PASS (typecheck.rc was 0)" "$OUT" "typecheck        ✅ PASS"
-assert_has "report totals count exactly 1 failed" "$OUT" "1 failed"
+assert_has "report totals count exactly 1 failed" "$OUT" ", 1 failed,"
 
 # 4. Failure details names EVERY failing package and file
 assert_has "failure summary names first failing package" "$OUT" "── @beanpool/core#test ──"

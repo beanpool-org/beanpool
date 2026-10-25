@@ -67,8 +67,8 @@ export function yoursRows(
         }
     }
 
-    // Also include active group memberships from groups list if yourChats has not loaded
-    if (!yourChats && myPubkey && allGroups) {
+    // Also include active group memberships from groups list if not already present from yourChats
+    if (myPubkey && allGroups) {
         for (const g of allGroups) {
             if (seenGroups.has(g.id)) continue;
             if (g.viewerStatus === 'active' || (!g.viewerStatus && !!g.viewerRole)) {

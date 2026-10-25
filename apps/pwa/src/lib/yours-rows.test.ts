@@ -177,7 +177,7 @@ describe('yoursRows', () => {
         expect(result.kept).toHaveLength(0);
     });
 
-    it('does not run treasuries or groups fallback when yourChats is provided (even if empty)', () => {
+    it('does not run treasuries fallback when yourChats is provided (even if empty)', () => {
         const treasuries: Treasury[] = [
             {
                 publicKey: 'ent-active',
@@ -191,23 +191,7 @@ describe('yoursRows', () => {
             },
         ];
 
-        const allGroups: Group[] = [
-            {
-                id: 'grp-active',
-                slug: 'active',
-                name: 'Active Group',
-                category: 'social',
-                joinPolicy: 'open',
-                memberCount: 2,
-                viewerStatus: 'active',
-                viewerRole: 'member',
-                createdAt: '',
-                createdBy: '',
-            },
-        ];
-
-        const result = yoursRows([], treasuries, 'my-key', allGroups);
+        const result = yoursRows([], treasuries, 'my-key');
         expect(result.kept).toHaveLength(0);
-        expect(result.groups).toHaveLength(0);
     });
 });

@@ -1200,6 +1200,9 @@ async function main(): Promise<void> {
             'POST /api/invite/redeem-offline': { ticketB64, publicKey: alice.pk, callsign: 'Sentinel joiner' },
             // A Pulse item's id, and the report names its owner.
             'POST /api/reports': { targetPulseItemId: 'item_sentinel', reason: 'Sentinel check' },
+            // One line of the pruned club's chat, reported with a key of the right shape: past the body checks to who may read it.
+            'POST /api/groups/:id/chat/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
+                disclosure: { epoch: 1, mk: Buffer.alloc(32, 7).toString('base64') } },
             // The pruned convenor: inviting Grid, changing Alice's role, renaming the group.
             'POST /api/groups/:id/members': { targetPubkey: grid.pk },
             'PATCH /api/groups/:id/members/:pubkey': { role: 'member' },
@@ -1311,7 +1314,7 @@ async function main(): Promise<void> {
             'GET /api/global/communities', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
             'DELETE /api/global/watches/:id',
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
-            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join',
+            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/chat/report', 'POST /api/groups/:id/join',
             'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
             'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
@@ -1374,7 +1377,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/pulse/channels/remove', 'POST /api/local/admin/replication-access', 'POST /api/local/admin/replication-config/get',
             'POST /api/local/admin/replication-config/save', 'POST /api/local/admin/replication-resync', 'POST /api/local/admin/replication-token/clear',
             'POST /api/local/admin/replication-token/generate', 'POST /api/local/admin/replication-token/mode',
-            'POST /api/local/admin/replication-token/status', 'GET /api/local/admin/reports', 'POST /api/local/admin/reports/:id/action',
+            'POST /api/local/admin/replication-token/status', 'GET /api/local/admin/reports', 'POST /api/local/admin/reports/:id/action', 'GET /api/local/admin/reports/:id/message',
             'POST /api/local/admin/reports/:id/dismiss', 'POST /api/local/admin/restore', 'POST /api/local/admin/restore/phone/wait',
             'GET /api/local/admin/restore-points', 'POST /api/local/admin/restore-points/roll-back',
             'GET /api/local/admin/shutdown-status', 'POST /api/local/admin/shutdown-status', 'POST /api/local/admin/shutdown-status/acknowledge',

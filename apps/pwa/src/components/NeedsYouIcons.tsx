@@ -13,7 +13,7 @@ import { fitNeedsYou, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } 
 import { t, tn } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
 import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS } from '../lib/home-store';
-import { getHome } from '../lib/api';
+import * as api from '../lib/api';
 
 export function moreLabel(hidden: number): string {
     return tn(hidden, '{n} more thing needs you', '{n} more things need you');
@@ -126,14 +126,16 @@ export function NeedsYouIcons({
                 setEntries(filterAndSort(ans.cards.needs.items));
             } else if (!isHome) {
                 // Not on Home and no fresh copy: fetch cards=needs
-                getHome({ cards: ['needs'] }).then((read) => {
-                    if (!mounted || read.notModified) return;
-                    if (read.answer?.cards?.needs?.items) {
-                        setEntries(filterAndSort(read.answer.cards.needs.items));
-                    }
-                }).catch(() => {
-                    // Network errors keep whatever was drawn
-                });
+                if ('getHome' in api && typeof api.getHome === 'function') {
+                    api.getHome({ cards: ['needs'] }).then((read) => {
+                        if (!mounted || read.notModified) return;
+                        if (read.answer?.cards?.needs?.items) {
+                            setEntries(filterAndSort(read.answer.cards.needs.items));
+                        }
+                    }).catch(() => {
+                        // Network errors keep whatever was drawn
+                    });
+                }
             }
         });
 

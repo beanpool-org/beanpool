@@ -692,6 +692,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         {identity && (
                             <button
                                 onClick={() => {
+                                    setNewLifecycle('bounded');
                                     setShowNewModal(true);
                                     setCreateError(null);
                                 }}

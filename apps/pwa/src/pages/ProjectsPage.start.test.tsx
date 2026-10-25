@@ -277,4 +277,35 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         expect(screen.getByRole('dialog', { name: /Create a Group/i })).toBeInTheDocument();
         expect(focusSpy).not.toHaveBeenCalled();
     });
+
+    it('empty-state "+ Propose a Project" button resets lifecycle to bounded even after bridge set it to empty', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        // 1. Open Chat group and click bridge to set newLifecycle = ''
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Chat group/i }));
+
+        const groupModal = screen.getByRole('dialog', { name: /Create a Group/i });
+        const bridge = within(groupModal).getByText(/Start a project or an enterprise →/i);
+        fireEvent.click(bridge);
+
+        // Propose modal is open unselected
+        let proposeModal = screen.getByRole('dialog', { name: /Start a project or an enterprise/i });
+        expect(within(proposeModal).getByRole('button', { name: /Choose a project or an enterprise first/i })).toBeDisabled();
+
+        // Close propose modal
+        fireEvent.click(within(proposeModal).getByRole('button', { name: /Close dialog/i }));
+        expect(screen.queryByRole('dialog', { name: /Start a project or an enterprise/i })).toBeNull();
+
+        // 2. Click empty-state "+ Propose a Project"
+        const emptyProposeBtn = screen.getByRole('button', { name: /\+ Propose a Project/i });
+        fireEvent.click(emptyProposeBtn);
+
+        // Modal should open with "Start a project" and submit enabled
+        proposeModal = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(proposeModal).toBeInTheDocument();
+        expect(within(proposeModal).getByRole('button', { name: /Start the project 🌱/i })).toBeInTheDocument();
+    });
 });

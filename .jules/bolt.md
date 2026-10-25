@@ -276,3 +276,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-23 - Batch pre-fetch own decision votes in group and enterprise decision routes
 **Learning:** In `apps/server/src/routes/group-decisions.ts` and `apps/server/src/routes/enterprise-decisions.ts`, rendering decision cards ran `getOwnDecisionVotes(actor, [d.id])` individually inside `.map()` loops over decision items, triggering N+1 separate SQLite query executions per list request.
 **Action:** Batch pre-fetched all own decision votes for the listed decisions in a single call (`getOwnDecisionVotes(actor, decisions.map(d => d.id))`) prior to mapping cards, passing the resulting lookup Map into `card(...)` for O(1) vote retrievals.
+
+## 2026-10-24 - O(1) Member Lookups in GroupDetailModal Component
+**Learning:** In `apps/pwa/src/components/GroupDetailModal.tsx` and `apps/native/components/GroupDetailModal.tsx`, resolving `myMembership` ran `members.find(m => m.memberPubkey === myPubkey)` on every render cycle ($O(M)$ complexity).
+**Action:** Pre-computed `membersMap` using `useMemo` indexed by `memberPubkey` in both PWA and Native `GroupDetailModal` components, converting `myMembership` resolution into constant-time $O(1)$ Map lookups.

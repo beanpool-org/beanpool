@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     getGroup,
     getGroupMembers,
@@ -135,9 +135,18 @@ export function GroupDetailModal({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose, inviteOpen]);
 
+    // ⚡ Bolt: O(1) Map lookup for group member membership instead of O(M) .find() scans
+    const membersMap = useMemo(() => {
+        const map = new Map<string, GroupMember>();
+        for (const m of members) {
+            map.set(m.memberPubkey, m);
+        }
+        return map;
+    }, [members]);
+
     if (!isOpen || !groupData) return null;
 
-    const myMembership = members.find(m => m.memberPubkey === myPubkey);
+    const myMembership = myPubkey ? membersMap.get(myPubkey) : undefined;
     const isConvenor = groupData.viewerRole === 'convenor' || (myMembership?.role === 'convenor' && myMembership?.status === 'active');
     const isMember = (myMembership && myMembership.status === 'active') || groupData.viewerStatus === 'active';
     const isPending = (myMembership && myMembership.status === 'pending_approval') || groupData.viewerStatus === 'pending_approval';

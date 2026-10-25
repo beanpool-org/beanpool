@@ -931,8 +931,6 @@
   "Posted by": "द्वारा पोस्ट किया गया",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "अभी कोई रेटिंग नहीं",
-  "✅ Action Required: Release Credits": "✅ कार्रवाई आवश्यक: क्रेडिट जारी करें",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "आप भुगतानकर्ता हैं। एक बार जब {name} शर्तें पूरी कर ले, तो लेन-देन पूरा करने के लिए ट्रस्ट में रखी गई धनराशि जारी करें।",
   "Finalize Transaction": "लेनदेन पूरा करें",
   "e.g. {amount}": "उदा. {amount}",
   "Transferring {n} B to {name}": "{name} को {n} B स्थानांतरित कर रहे हैं",

@@ -932,8 +932,6 @@
   "Posted by": "Publicado por",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "Nenhuma avaliação ainda",
-  "✅ Action Required: Release Credits": "✅ Ação necessária: Liberar créditos",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "Você é o pagador. Assim que {name} cumprir os termos, libere os recursos em custódia para concluir a transação.",
   "Finalize Transaction": "Finalizar transação",
   "e.g. {amount}": "ex.: {amount}",
   "Transferring {n} B to {name}": "Transferindo {n} B para {name}",

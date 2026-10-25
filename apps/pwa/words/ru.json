@@ -963,8 +963,6 @@
   "Posted by": "Опубликовано",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "Пока нет оценок",
-  "✅ Action Required: Release Credits": "✅ Требуется действие: перевести кредиты",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "Вы плательщик. Когда {name} выполнит условия, переведите средства с доверительного счёта для завершения сделки.",
   "Finalize Transaction": "Завершить сделку",
   "e.g. {amount}": "напр., {amount}",
   "Transferring {n} B to {name}": "Перевод {n} B для {name}",

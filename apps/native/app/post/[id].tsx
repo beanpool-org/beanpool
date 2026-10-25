@@ -22,6 +22,7 @@ import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
+import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
@@ -38,7 +39,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -524,6 +525,7 @@ export default function PostDetailModal() {
     const [submittingReport, setSubmittingReport] = useState(false);
     const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
+    const [showDealsSheet, setShowDealsSheet] = useState(false);
 
     // Request Rejection Modal State
     const [rejectModalTxId, setRejectModalTxId] = useState<string | null>(null);
@@ -1228,12 +1230,24 @@ export default function PostDetailModal() {
                     <View style={styles.ownPostActions}>
                         {isPayer ? (
                             <>
-                                <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                                    {t('✅ Action Required: Release Credits')}
+                                {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
+                                    deal's own date, never the post's while the deals are still loading. */}
+                                {!isOwnPost && !!(activeTx?.created_at || activeTx?.createdAt) && (
+                                    <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                                        {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                            date: formatDate(new Date(activeTx.created_at || activeTx.createdAt), 'day-month'),
+                                            n: formatNumber(activeTx.credits ?? post.credits),
+                                        })}
+                                    </Text>
+                                )}
+                                <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: post.type === 'offer' && !!post.repeatable ? 4 : 12, paddingHorizontal: 16 }}>
+                                    {t("Release the Beans when it's done.")}
                                 </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: 12, paddingHorizontal: 16 }}>
-                                    {t('You are the Payer. Once {name} has fulfilled the terms, release the funds to complete the transaction.', { name: targetPeerCallsign })}
-                                </Text>
+                                {post.type === 'offer' && !!post.repeatable && (
+                                    <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: 12, paddingHorizontal: 16 }}>
+                                        {t('You can take it up again once this one is done.')}
+                                    </Text>
+                                )}
                                 
                                 {showCompleteConfirm ? (
                                     <View style={styles.confirmBox}>
@@ -1367,6 +1381,19 @@ export default function PostDetailModal() {
                                 ]);
                             }}>
                                 <Text style={styles.cancelTxBtnText}>{t('❌ Cancel Trust Hold')}</Text>
+                            </Pressable>
+
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('All your deals')}
+                                onPress={() => {
+                                    setShowDealsSheet(true);
+                                }}
+                                style={{ alignItems: 'center', marginTop: 8, paddingVertical: 4 }}
+                            >
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
+                                    {t('All your deals ›')}
+                                </Text>
                             </Pressable>
                         </View>
                     </View>
@@ -2028,6 +2055,14 @@ export default function PostDetailModal() {
                         setPromptReviewForTx(null);
                         if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                     }}
+                />
+            )}
+            {showDealsSheet && (
+                <MyDealsSheet
+                    visible={showDealsSheet}
+                    identity={identity}
+                    onClose={() => setShowDealsSheet(false)}
+                    initialTab="pending"
                 />
             )}
             

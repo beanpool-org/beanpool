@@ -36,6 +36,8 @@ describe('chat-mute helpers', () => {
 
         const mute = { conversationId: 'c1', mutedUntil: null, always: true };
         expect(chatMuteFromAnswer({ mute })).toEqual(mute);
+        expect(chatMuteFromAnswer({}, mute)).toEqual(mute);
+        expect(chatMuteFromAnswer({ mute: null }, mute)).toBeNull();
     });
 
     it('groupHeaderDetail formats member count and muted suffix properly', () => {

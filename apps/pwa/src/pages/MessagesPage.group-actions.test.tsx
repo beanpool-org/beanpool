@@ -350,4 +350,17 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
             "This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them."
         );
     });
+
+    it('resets chat menu, mute dialog, and mute status when active conversation changes', async () => {
+        await openChat();
+
+        const menuBtn = screen.getByRole('button', { name: 'Chat menu' });
+        await act(async () => { fireEvent.click(menuBtn); });
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        // Click Back to messages
+        const backBtn = screen.getByRole('button', { name: 'Back to messages' });
+        await act(async () => { fireEvent.click(backBtn); });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
 });

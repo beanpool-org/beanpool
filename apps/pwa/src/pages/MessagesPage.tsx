@@ -48,7 +48,7 @@ import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, 
 import { ReportModal } from '../components/ReportModal';
 import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
 import { ChatMenuModal } from '../components/ChatMenuModal';
-import { isMuted, groupHeaderDetail } from '../lib/chat-mute';
+import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
@@ -344,12 +344,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function handleSetMute(duration: '8h' | '1w' | 'always' | 'off') {
         if (!activeConv) return;
+        const targetId = activeConv.id;
+        const convId = activeConv.type === 'group_thread' ? groupIdKey(activeConv.id) : activeConv.id;
         setChatMenuOpen(false);
         setMuteDialogOpen(false);
         try {
-            const res = await muteChatApi(activeConv.id, duration);
-            const next = duration === 'off' ? null : (res?.mute ?? { conversationId: activeConv.id, mutedUntil: null, always: duration === 'always' });
-            setChatMute(next);
+            const res = await muteChatApi(convId, duration);
+            if (res?.success) {
+                if (activeConvIdRef.current !== targetId) return;
+                const next = res.mute ?? null;
+                setChatMute(next);
+                setConversations(prev => prev.map(c => c.id === targetId ? { ...c, mute: next } : c));
+                setActiveConv(prev => prev && prev.id === targetId ? { ...prev, mute: next } : prev);
+            }
         } catch (e: any) {
             alert(e?.message || t('Could not reach the node.'));
         }
@@ -506,6 +513,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     useEffect(() => {
         activeConvIdRef.current = activeConv?.id ?? null;
+        setChatMute(null);
+        setChatMenuOpen(false);
+        setMuteDialogOpen(false);
+        setConfirmDeleteMsg(null);
+        setConfirmRemoveMsg(null);
         if (activeConv) {
             messageRequestIdRef.current++;
             setGroupChat(null);
@@ -788,7 +800,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             return true;
         }));
         setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, thread, roster });
-        setChatMute(answer?.mute ?? null);
+        setChatMute(prev => chatMuteFromAnswer(answer, prev));
         if (answer) {
             markConversationReadApi(identity.publicKey, convId).catch(() => {});
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));

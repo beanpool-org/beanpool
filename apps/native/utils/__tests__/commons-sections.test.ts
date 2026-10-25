@@ -20,7 +20,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import {
     commonsSections, commonsSectionFor, commonsHeading, findGroupsInTalk, FIND_GROUPS_HREF,
     groupKindChips, commonsGroupRows, commonsGroupsEmpty, type GroupKind,
-    enterprisesOn,
+    enterprisesOn, yoursRows, findHeading, yoursEmpty,
 } from '../commons-sections';
 import type { GroupItem } from '../db';
 import { decisionsOn, readNodeProfile, type NodeFeatures } from '../node-profile';
@@ -66,7 +66,7 @@ describe('the Commons screen shows the sections a node has', () => {
             expect(commonsSections(f)).toEqual(['decide', 'groups']);
             expect(commonsHeading(f)).toEqual({
                 title: 'Commons',
-                description: 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.',
+                description: 'What this community runs together: its pool, decisions, enterprises and groups.',
             });
             expect(commonsSectionFor(undefined, f)).toBe('decide');
             for (const s of ['decide', 'groups']) expect(commonsSectionFor(s, f)).toBe(s);
@@ -81,7 +81,7 @@ describe('the Commons screen shows the sections a node has', () => {
 
     it('on the worldwide community: the groups list, and nothing else', () => {
         expect(commonsSections(GLOBAL)).toEqual(['groups']);
-        expect(commonsHeading(GLOBAL)).toEqual({ title: 'Groups', description: 'Find a group to join, or start your own with +.' });
+        expect(commonsHeading(GLOBAL)).toEqual({ title: 'Groups', description: 'Groups to join here, or start your own with +.' });
         for (const wanted of ['decide', 'enterprises', 'groups', '', undefined, null, 'junk']) {
             expect(commonsSectionFor(wanted, GLOBAL)).toBe('groups');
         }
@@ -106,10 +106,10 @@ describe('the Commons screen shows the sections a node has', () => {
         expect(commonsSections({ ...LOCAL, decisions: false })).toEqual(['groups']);
         expect(commonsSectionFor('decide', { ...LOCAL, decisions: false })).toBe('groups');
         expect(commonsHeading({ ...LOCAL, decisions: false }).description).not.toMatch(/decision|vote/i);
-        expect(commonsHeading({ ...LOCAL, decisions: false }).description).toMatch(/Projects, enterprises/);
+        expect(commonsHeading({ ...LOCAL, decisions: false }).description).toMatch(/pool, enterprises and groups/);
         expect(commonsSections({ ...GLOBAL, decisions: true })).toEqual(['decide', 'groups']);
         expect(commonsHeading({ ...GLOBAL, decisions: true }).title).toBe('Commons');
-        expect(commonsHeading({ ...GLOBAL, decisions: true }).description).not.toMatch(/enterprise/i);
+        expect(commonsHeading({ ...GLOBAL, decisions: true }).description).toMatch(/decisions and groups/);
     });
 });
 
@@ -197,7 +197,7 @@ describe('the screens go through the helpers (source check)', () => {
         expect(findGroupsInTalk(offDecide)).toBe(false);
         expect(commonsHeading(offDecide)).toEqual({
             title: 'Commons',
-            description: 'Community decisions and groups. Propose binding actions and vote on what matters.',
+            description: 'What this community runs together: its decisions and groups.',
         });
 
         // Even if enterprises are not explicitly false in features, beans: false drops them
@@ -216,7 +216,7 @@ describe('the screens go through the helpers (source check)', () => {
         expect(findGroupsInTalk(allOff)).toBe(true);
         expect(commonsHeading(allOff)).toEqual({
             title: 'Groups',
-            description: 'Find a group to join, or start your own with +.',
+            description: 'Groups to join here, or start your own with +.',
         });
     });
 
@@ -277,5 +277,143 @@ describe('the screens go through the helpers (source check)', () => {
         const src = read('components/NeedsYouIcons.tsx');
         expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,');
         expect(read('utils/needs-you.ts')).toContain('label: adminLabel(adminItems, { decisions: i.admin?.decisions }),');
+    });
+});
+
+describe('yoursRows: kept enterprises and projects first (lead first, then by name), then groups', () => {
+    it('puts kept enterprises/projects (lead first) before groups and drops events', () => {
+        const kept1 = {
+            id: 'ent-1',
+            kind: 'enterprise' as const,
+            name: 'Zeta Bakery',
+            role: 'keeper',
+            lifecycle: 'ongoing' as const,
+            badge: null,
+            conversationId: 'ent-1',
+            avatarUrl: null,
+            readOnly: false,
+            lastMessage: null,
+            unreadCount: 0,
+            mute: null,
+        };
+        const kept2 = {
+            id: 'ent-2',
+            kind: 'enterprise' as const,
+            name: 'Alpha Shade House',
+            role: 'lead',
+            lifecycle: 'bounded' as const,
+            badge: null,
+            conversationId: 'ent-2',
+            avatarUrl: null,
+            readOnly: false,
+            lastMessage: null,
+            unreadCount: 0,
+            mute: null,
+        };
+        const kept3 = {
+            id: 'ent-3',
+            kind: 'enterprise' as const,
+            name: 'Beta Eggs',
+            role: 'lead',
+            lifecycle: 'ongoing' as const,
+            badge: null,
+            conversationId: 'ent-3',
+            avatarUrl: null,
+            readOnly: false,
+            lastMessage: null,
+            unreadCount: 0,
+            mute: null,
+        };
+        const grp = {
+            id: 'grp-1',
+            kind: 'group' as const,
+            name: 'Garden Crew',
+            role: 'convenor',
+            badge: null,
+            conversationId: 'grp-1',
+            avatarUrl: null,
+            readOnly: false,
+            lastMessage: null,
+            unreadCount: 0,
+            mute: null,
+        };
+        const ev = {
+            id: 'ev-1',
+            kind: 'event' as const,
+            name: 'Dinner Feast',
+            role: 'going',
+            badge: null,
+            conversationId: 'ev-1',
+            avatarUrl: null,
+            readOnly: false,
+            lastMessage: null,
+            unreadCount: 0,
+            mute: null,
+        };
+
+        const summaries = [
+            { publicKey: 'ent-1', balance: 100, liveOffers: 2 },
+            { publicKey: 'ent-2', balance: 40, goalAmount: 500, currentAmount: 120 },
+            { publicKey: 'ent-3', balance: 40, liveOffers: 3 },
+        ];
+
+        const res = yoursRows([kept1, grp, kept2, ev, kept3] as any, summaries as any);
+
+        // Kept lead first (ent-2 Alpha, ent-3 Beta), then non-lead (ent-1 Zeta)
+        expect(res.kept.map(k => k.chat.id)).toEqual(['ent-2', 'ent-3', 'ent-1']);
+        // Joined summary by publicKey
+        expect(res.kept[0].summary).toEqual(summaries[1]);
+        expect(res.kept[1].summary).toEqual(summaries[2]);
+        expect(res.kept[2].summary).toEqual(summaries[0]);
+
+        // Groups kept
+        expect(res.groups.map(g => g.id)).toEqual(['grp-1']);
+
+        // Event dropped completely
+        expect(res.kept.some(k => k.chat.id === 'ev-1')).toBe(false);
+        expect(res.groups.some(g => g.id === 'ev-1')).toBe(false);
+    });
+
+    it('joins balance/goal from summary when summary is missing', () => {
+        const kept = {
+            id: 'ent-orphan',
+            kind: 'enterprise' as const,
+            name: 'Solo Enterprise',
+            role: 'lead',
+            lifecycle: 'ongoing' as const,
+        };
+        const res = yoursRows([kept] as any, []);
+        expect(res.kept).toHaveLength(1);
+        expect(res.kept[0].chat.id).toBe('ent-orphan');
+        expect(res.kept[0].summary).toBeUndefined();
+    });
+});
+
+describe('findHeading: names the kinds shown per chip, or groups only where enterprises are off', () => {
+    it('names the heading per chip on a local community', () => {
+        expect(findHeading('all', LOCAL)).toBe('Groups, projects and enterprises here');
+        expect(findHeading('projects', LOCAL)).toBe('Projects to back');
+        expect(findHeading('enterprises', LOCAL)).toBe('Enterprises here');
+        expect(findHeading('chat', LOCAL)).toBe('Groups you could join');
+    });
+
+    it('names groups you could join when enterprises are off, whatever the chip', () => {
+        for (const chip of ['all', 'projects', 'enterprises', 'chat'] as const) {
+            expect(findHeading(chip, GLOBAL)).toBe('Groups you could join');
+            expect(findHeading(chip, { ...LOCAL, enterprises: false })).toBe('Groups you could join');
+            expect(findHeading(chip, { ...LOCAL, beans: false })).toBe('Groups you could join');
+        }
+    });
+});
+
+describe('yoursEmpty: quiet line variant based on community shape', () => {
+    it('offers start or find when beans + enterprises on', () => {
+        expect(yoursEmpty(LOCAL)).toBe('Nothing of yours yet. Start something with +, or find one below.');
+    });
+
+    it('offers start or join when beans or enterprises off', () => {
+        expect(yoursEmpty(GLOBAL)).toBe('No groups of yours yet. Start one with +, or join one below.');
+        expect(yoursEmpty({ ...LOCAL, enterprises: false })).toBe('No groups of yours yet. Start one with +, or join one below.');
+        expect(yoursEmpty({ ...LOCAL, beans: false })).toBe('No groups of yours yet. Start one with +, or join one below.');
     });
 });

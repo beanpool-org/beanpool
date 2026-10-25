@@ -712,7 +712,18 @@ export default function MarketScreen() {
         }, [filter, groupFilter, identity?.publicKey, userGroupsKey, escrowMode])
     );
 
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string }>();
+    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string, q?: string, new?: string }>();
+
+    // The Start something sheet opens the Market on its Poll or Event form (DESIGN-commons-ux §3.2).
+    useEffect(() => {
+        if (params.new === 'poll') {
+            setShowNewPollModal(true);
+            router.setParams({ new: '' });
+        } else if (params.new === 'event') {
+            setShowNewEventModal(true);
+            router.setParams({ new: '' });
+        }
+    }, [params.new]);
 
     // A saved search's "See more" on Home opens the Market with its words in the search (CARD-FRAME §4).
     useEffect(() => {

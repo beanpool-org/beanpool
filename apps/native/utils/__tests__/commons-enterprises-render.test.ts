@@ -269,8 +269,8 @@ describe("the Commons tab's enterprises (#2200)", () => {
         expect(node.getTreasuries).toHaveBeenCalledTimes(1);
         await click(byLabel('Groups Section'), 'Groups');
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
-        expect(host.textContent).toContain('No enterprises to join yet');
-        expect(host.textContent).toContain('+ Start an enterprise');
+        expect(host.textContent).toContain('No enterprises yet');
+        expect(host.textContent).toContain('Start an enterprise');
         await openProposeForm();
         await click(button('Commons Pool', 'en', form()!), 'Commons Pool');
         await click(button("Pay off a project's or enterprise's debt", 'en', form()!), 'Pay off a debt');

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, ErrorBoundary } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export { ErrorBoundary };
@@ -43,12 +43,24 @@ export default function ProposeProjectModal() {
         typeBtnDesc: { fontSize: 11, color: colors.text.secondary, lineHeight: 15 },
         footer: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
         submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.fill, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+        submitBtnDisabled: { opacity: 0.5 },
         submitBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 },
         toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber500, borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
         toastText: { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800, fontWeight: '700', fontSize: 13 },
     }));
 
-    const [lifecycle, setLifecycle] = useState<'bounded' | 'ongoing'>('bounded');
+    const { kind } = useLocalSearchParams<{ kind?: string }>();
+    const [lifecycle, setLifecycle] = useState<'bounded' | 'ongoing' | null>(() => {
+        if (kind === 'ongoing' || kind === 'bounded') return kind;
+        return null;
+    });
+
+    useEffect(() => {
+        if (kind === 'ongoing' || kind === 'bounded') {
+            setLifecycle(kind);
+        }
+    }, [kind]);
+
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [goalAmount, setGoalAmount] = useState('');
@@ -80,6 +92,7 @@ export default function ProposeProjectModal() {
         await KeyboardController.dismiss();
 
         const errors = new Set<string>();
+        if (!lifecycle) errors.add('lifecycle');
         if (!title.trim() || title.trim().length < 2) errors.add('title');
         if (!description.trim()) errors.add('description');
         // The goal in the language's decimal mark (core parseAmount): fr "12,5" is read, not refused; "1.000", which could be
@@ -91,6 +104,11 @@ export default function ProposeProjectModal() {
         }
         setValidationErrors(errors);
         if (errors.size > 0) {
+            if (errors.has('lifecycle')) {
+                setValidationToast(t('Choose a project or an enterprise first'));
+                setTimeout(() => setValidationToast(''), 3000);
+                return;
+            }
             const goalWhy = lifecycle === 'bounded' && !goal.ok && isAmbiguousAmount(goal.refusal) ? amountRefusalWords(goal.refusal) : null;
             setValidationToast(goalWhy ?? t('⚠️ Please complete all required fields'));
             setTimeout(() => setValidationToast(''), 3000);
@@ -109,17 +127,17 @@ export default function ProposeProjectModal() {
                 name: title.trim(),
                 purpose: description.trim(),
                 description: description.trim(),
-                lifecycle,
+                lifecycle: lifecycle!,
                 goalAmount: lifecycle === 'bounded' ? (Math.trunc(goalValue) || 0) : null,
                 deadlineAt: parsedDeadline,
                 photos,
                 avatar: photos.length > 0 ? photos[0] : undefined,
             });
             Alert.alert(
-                t('Initiative Started 🌱'),
+                lifecycle === 'bounded' ? t('Project started 🌱') : t('Enterprise started 🏛️'),
                 lifecycle === 'bounded'
-                    ? t('Your project has been created and is now open for community backing.')
-                    : t('Your community enterprise has been established in the Commons.'),
+                    ? t('Your project is open for backing.')
+                    : t('Your enterprise is in the Commons.'),
                 [{ text: t('OK'), onPress: () => router.back() }]
             );
         } catch (e: any) {
@@ -138,7 +156,9 @@ export default function ProposeProjectModal() {
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle}>{inCapitalsOf(t('Start an Enterprise / Project'))}</Text>
+                <Text style={styles.headerTitle}>
+                    {inCapitalsOf(lifecycle === 'bounded' ? t('Start a project') : lifecycle === 'ongoing' ? t('Start an enterprise') : t('Start a project or an enterprise'))}
+                </Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -160,14 +180,21 @@ export default function ProposeProjectModal() {
 
                     {/* Initiative Type Selector */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>{t('INITIATIVE TYPE')}</Text>
+                        <Text style={styles.label}>{t('WHAT IS IT?')}</Text>
                         <View style={styles.typeSelectorRow}>
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Project: a leader, a goal, an end date')}
                                 accessibilityState={{ selected: lifecycle === 'bounded' }}
                                 style={[styles.typeBtn, lifecycle === 'bounded' && styles.typeBtnActive]}
-                                onPress={() => setLifecycle('bounded')}
+                                onPress={() => {
+                                    setLifecycle('bounded');
+                                    if (validationErrors.has('lifecycle')) {
+                                        const n = new Set(validationErrors);
+                                        n.delete('lifecycle');
+                                        setValidationErrors(n);
+                                    }
+                                }}
                             >
                                 <Text style={styles.typeBtnTitle}>{t('🌱 Project')}</Text>
                                 <Text style={styles.typeBtnDesc}>{t('A leader, a goal, an end date')}</Text>
@@ -177,7 +204,14 @@ export default function ProposeProjectModal() {
                                 accessibilityLabel={t('Enterprise: keepers, it keeps going')}
                                 accessibilityState={{ selected: lifecycle === 'ongoing' }}
                                 style={[styles.typeBtn, lifecycle === 'ongoing' && styles.typeBtnActive]}
-                                onPress={() => setLifecycle('ongoing')}
+                                onPress={() => {
+                                    setLifecycle('ongoing');
+                                    if (validationErrors.has('lifecycle')) {
+                                        const n = new Set(validationErrors);
+                                        n.delete('lifecycle');
+                                        setValidationErrors(n);
+                                    }
+                                }}
                             >
                                 <Text style={styles.typeBtnTitle}>{t('🏛️ Enterprise')}</Text>
                                 <Text style={styles.typeBtnDesc}>{t('Keepers; it keeps going')}</Text>
@@ -333,18 +367,28 @@ export default function ProposeProjectModal() {
                 {!keyboardVisible && (
                     <View style={styles.footer}>
                         <Pressable
-                            style={styles.submitBtn}
+                            style={[styles.submitBtn, (!lifecycle || submitting) && styles.submitBtnDisabled]}
                             onPress={handleSubmit}
-                            disabled={submitting}
+                            disabled={!lifecycle || submitting}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? t('Starting initiative...') : t('Start initiative')}
+                            accessibilityLabel={
+                                submitting
+                                    ? (lifecycle === 'bounded' ? t('Starting the project...') : t('Starting the enterprise...'))
+                                    : !lifecycle
+                                        ? t('Choose a project or an enterprise first')
+                                        : (lifecycle === 'bounded' ? t('Start the project 🌱') : t('Start the enterprise 🏛️'))
+                            }
                             accessibilityHint={t('Creates enterprise or project and opens it for community backing')}
-                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                            accessibilityState={{ disabled: !lifecycle || submitting, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.submitBtnText}>{t('START INITIATIVE 🌱')}</Text>
+                                <Text style={styles.submitBtnText}>
+                                    {!lifecycle
+                                        ? t('Choose a project or an enterprise first')
+                                        : (lifecycle === 'bounded' ? t('Start the project 🌱') : t('Start the enterprise 🏛️'))}
+                                </Text>
                             )}
                         </Pressable>
                     </View>

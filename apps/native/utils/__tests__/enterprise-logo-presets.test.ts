@@ -81,6 +81,7 @@ vi.mock('react-native', () => {
 
 vi.mock('expo-router', () => ({
     router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() },
+    useLocalSearchParams: () => ({ kind: 'bounded' }),
     ErrorBoundary: () => null,
 }));
 vi.mock('react-native-keyboard-controller', () => ({

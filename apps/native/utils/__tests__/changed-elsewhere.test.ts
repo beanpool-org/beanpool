@@ -25,6 +25,13 @@ describe('changedElsewhere', () => {
         expect(changedElsewhere(refusal('Escrow release failed'), 'transaction_gone')).toBe(false);
     });
 
+    it('a deal already under way on the listing: by its code only, since no older node refuses a second deal', () => {
+        expect(changedElsewhere(refusal('Vous avez déjà un échange en cours ici.', 'deal_open'), 'deal_open')).toBe(true);
+        expect(changedElsewhere(refusal('Post not found or not active', 'post_gone'), 'deal_open')).toBe(false);
+        expect(changedElsewhere(refusal('You already have a deal under way on this. Finish or cancel it first.'), 'deal_open')).toBe(false);
+        expect(changedElsewhere(refusal('Vous avez déjà un échange en cours ici.', 'deal_open'), 'post_gone')).toBe(false);
+    });
+
     it('anything that is not an error is no move', () => {
         expect(changedElsewhere(undefined, 'post_gone')).toBe(false);
         expect(changedElsewhere('not found', 'post_gone')).toBe(false);

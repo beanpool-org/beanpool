@@ -53,7 +53,7 @@ import {
     getNodeInfo, getRemotePosts, sendRemoteTransfer,
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
-    requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
+    requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -1283,9 +1283,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // definition of the fee, so it is imported.
         const commissionNeeded = Math.round(selectedPost.credits * (1 + TRANSACTION_FEE_RATE) * 100) / 100;
 
-        const activeTx = selectedTxId 
-            ? myTransactions.find(t => t.id === selectedTxId)
-            : myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
+        // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
+        // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
+        const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
+            && (t.status === 'pending' || t.status === 'requested')) : undefined;   // a finished pin gives way to the listing's live deal
+        const activeTx = pinnedTx
+            ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             
         // --- Escrow Roles ---
         const isAcceptedByMe = activeTx 
@@ -2005,7 +2008,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                                 setShowAcceptConfirm(false);
                                             } catch (err) {
-                                                alert(explainTradeError(err));
+                                                // The member's deal on this listing is under way already (made in another tab or on their
+                                                // phone): said, their deals refreshed, and the listing opened at the deal the node named, as
+                                                // My Deals' View deal opens one.
+                                                const open = openDealIn(err);
+                                                if (open) {
+                                                    alert(t('You already have a deal under way on this. Finish or cancel it first.'));
+                                                    setShowAcceptConfirm(false);
+                                                    if (open.transactionId) setSelectedTxId(open.transactionId);
+                                                    refresh();
+                                                    onRefreshTransactions?.();
+                                                } else {
+                                                    alert(explainTradeError(err));
+                                                }
                                             } finally {
                                                 setAccepting(false);
                                             }

@@ -316,7 +316,8 @@ function measure(size: string): Row[] {
  * (158/158 green, the 100k busy town 11 → 17 ms; the deciding review of #1739). The guard against that join is
  * test-sync-nearby's plan check, which is load-proof: every statement of a set reads an index, never a table of people.
  */
-const SET_LEAN_TIMES = isBusy ? 12 : 6, SET_FULL_TIMES = isBusy ? 1.2 : 0.6;
+// Maintain SET_FULL_TIMES strictly below parity (< 1.0) so getNearbySet is always required to beat fullNear500:
+const SET_LEAN_TIMES = isBusy ? 12 : 6, SET_FULL_TIMES = isBusy ? 0.75 : 0.6;
 /** The design's lean set pass (geosync-measure/measure.mts setIds): the nearest ids within the radius, nothing else. */
 function leanSet(at: { lat: number; lng: number }, radiusKm: number, max: number): unknown[] {
     const box = boundingBox(at.lat, at.lng, radiusKm);

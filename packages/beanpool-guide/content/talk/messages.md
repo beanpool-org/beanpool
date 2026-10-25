@@ -56,7 +56,7 @@ On the phone, tap a message. Small round buttons appear beside it:
 
 The same buttons are in a group's chat. See "Groups".
 
-In the web app, **Reply**, **React** and **Edit** are small words on each message, and in a one-to-one chat there is no **Delete** (a group's chat has it): delete that message from the phone app.
+Both apps have **Reply**, **React**, **Edit** and **Delete** (in the web app they are small words on each message).
 
 Deleting takes the words off your community's server too, so a new phone signing in later never sees them.
 

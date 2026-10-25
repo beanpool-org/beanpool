@@ -421,13 +421,23 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
 
     it('a deal held in trust: the one who pays, releasing the credits by the hour', async () => {
         await open(HELD, 'xx', { first: (sql) => (sql.includes('marketplace_transactions') ? HELD_TX : null) }, 'tx-held');
-        expect(host.textContent).toContain(pseudoLocalise('✅ Action Required: Release Credits'));
+        expect(host.textContent).toContain(pseudoLocalise('✅ You took this up on {date} · {n} Beans held in trust').split('{')[0]);
+        expect(host.textContent).toContain(pseudoLocalise("Release the Beans when it's done."));
+        expect(host.textContent).toContain(pseudoLocalise('All your deals ›'));
         expect(bypassing(), 'held').toEqual([]);
         await press('✅ Release Credits');
         expect(host.textContent).toContain(pseudoLocalise('CONFIRM ACTUAL HOURS WORKED'));
         expect(bypassing(), 'release').toEqual([]);
         await press('❌ Cancel Trust Hold');
         expect(bypassing(), 'the cancel question').toEqual([]);
+    });
+
+    it('a deal held in trust on a recurring Offer shows the recurring note', async () => {
+        const RECURRING_HELD = { ...OFFER, id: 'p-rec-held', status: 'active', repeatable: 1, pending_transaction_id: 'tx-rec' };
+        const REC_TX = { id: 'tx-rec', post_id: 'p-rec-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 12, hours: null, created_at: iso(now - 2 * 3600_000) };
+        await open(RECURRING_HELD, 'xx', { first: (sql) => (sql.includes('marketplace_transactions') ? REC_TX : null) }, 'tx-rec');
+        expect(host.textContent).toContain(pseudoLocalise('You can take it up again once this one is done.'));
+        expect(bypassing(), 'recurring held').toEqual([]);
     });
 
     it('a deal held in trust: the one paid', async () => {

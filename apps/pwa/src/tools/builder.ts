@@ -167,6 +167,8 @@ export interface ComposerDraft {
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | null;
     repeatable: boolean;
     cashAlsoNeeded: boolean;
+    /** Whether the tool's draft asked for "Put this in your shop". */
+    shop?: boolean;
     /** The tool's photos for an Offer, as the composer keeps them (JPEG data URLs at 800 px); absent when it has none. */
     photos?: string[];
 }
@@ -196,6 +198,7 @@ export function composerDraft(type: 'offer' | 'need', draft: ToolOfferDraft | To
         priceType,
         repeatable: offer && d.repeatable === true,
         cashAlsoNeeded: offer && d.cashAlsoNeeded === true,
+        ...(offer && d.shop !== undefined ? { shop: d.shop } : {}),
     };
 }
 

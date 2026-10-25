@@ -845,3 +845,199 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
     });
 });
 
+describe('MarketplacePage: shop parity for editing offers', () => {
+    const authorIdentity: BeanPoolIdentity = {
+        publicKey: 'author-pubkey',
+        privateKey: 'mock-private-key-hex',
+        callsign: 'Author',
+        createdAt: '2026-09-17T00:00:00.000Z',
+    };
+
+    const publicPost = {
+        id: 'post-public',
+        title: 'Public Offer',
+        description: 'Open to all',
+        type: 'offer',
+        category: 'goods',
+        credits: 10,
+        status: 'active',
+        active: true,
+        authorPublicKey: 'author-pubkey',
+        authorCallsign: 'Author',
+        audienceScope: 'public',
+        createdAt: '2026-09-15T00:00:00Z',
+    };
+
+    const groupPost = {
+        id: 'post-group',
+        title: 'Group Offer',
+        description: 'For group only',
+        type: 'offer',
+        category: 'goods',
+        credits: 10,
+        status: 'active',
+        active: true,
+        authorPublicKey: 'author-pubkey',
+        authorCallsign: 'Author',
+        audienceScope: 'group',
+        targetGroupId: 'group-1',
+        createdAt: '2026-09-15T00:00:00Z',
+    };
+
+    const directPost = {
+        id: 'post-direct',
+        title: 'One-Person Offer',
+        description: 'For one person',
+        type: 'offer',
+        category: 'goods',
+        credits: 10,
+        status: 'active',
+        active: true,
+        authorPublicKey: 'author-pubkey',
+        authorCallsign: 'Author',
+        audienceScope: 'direct',
+        targetPubkey: 'other-pubkey',
+        createdAt: '2026-09-15T00:00:00Z',
+    };
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([publicPost, groupPost, directPost] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                return { ok: true, status: 200, json: async () => ({ shop: null }) };
+            }
+            if (path.startsWith('/api/marketplace/posts')) {
+                return { ok: true, status: 200, json: async () => [{ id: 'post-public', type: 'offer', status: 'active', audienceScope: 'public', shopId: null }] };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+    });
+
+    it('hides "Put this in your shop" row on group and one-person offers', async () => {
+        // Group post
+        const { unmount } = render(<MarketplacePage identity={authorIdentity} openPostId="post-group" />);
+        const editBtn = await screen.findByRole('button', { name: /Edit Post/i });
+        fireEvent.click(editBtn);
+
+        // Wait to make sure async shop check would have resolved
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('edit-post-shop')).not.toBeInTheDocument();
+        unmount();
+
+        // Direct/one-person post
+        render(<MarketplacePage identity={authorIdentity} openPostId="post-direct" />);
+        const editBtn2 = await screen.findByRole('button', { name: /Edit Post/i });
+        fireEvent.click(editBtn2);
+
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('edit-post-shop')).not.toBeInTheDocument();
+    });
+
+    // Deciding review on 32d23da1, finding B (director's call, as the phone): a refused Save sends NO close — closing "the shop"
+    // could delete one the member opened elsewhere meanwhile; an empty shop left open is visible and the member can close it.
+    it('a refused Save never closes a shop', async () => {
+        let shopOpened = false;
+        let shopClosed = false;
+
+        vi.stubGlobal('fetch', async (url: string, init?: any) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                if (init?.method === 'PUT') {
+                    shopOpened = true;
+                    return {
+                        ok: true,
+                        status: 200,
+                        json: async () => ({
+                            shop: {
+                                id: 'new-shop-id',
+                                name: "Author's Shop",
+                                ownerName: 'Author',
+                                ownerPublicKey: 'author-pubkey',
+                                category: 'goods',
+                                counts: { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 },
+                                paused: false,
+                                backOn: null,
+                                photoUrl: null,
+                            },
+                        }),
+                    };
+                }
+                return { ok: true, status: 200, json: async () => ({ shop: null }) };
+            }
+            if (path === '/api/shops/mine/close') {
+                shopClosed = true;
+                return { ok: true, status: 200, json: async () => ({ success: true, cleared: 0, ended: 0, resumed: 0 }) };
+            }
+            if (path.startsWith('/api/marketplace/posts')) {
+                return { ok: true, status: 200, json: async () => [{ id: 'post-public', type: 'offer', status: 'active', audienceScope: 'public', shopId: null }] };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        // Simulate save refusal by the node
+        vi.spyOn(api, 'updateMarketplacePost').mockRejectedValue(new Error('shop_public_only'));
+
+        render(<MarketplacePage identity={authorIdentity} openPostId="post-public" />);
+        const editBtn = await screen.findByRole('button', { name: /Edit Post/i });
+        fireEvent.click(editBtn);
+
+        // Put this in your shop should be visible for public offer
+        const toggle = await screen.findByTestId('edit-post-shop');
+        expect(toggle).toBeInTheDocument();
+
+        // Tick "Put this in your shop"
+        fireEvent.click(toggle);
+
+        // Save
+        const saveBtn = screen.getByRole('button', { name: /Save/i });
+        fireEvent.click(saveBtn);
+
+        // Error message appears
+        expect(await screen.findByText('shop_public_only')).toBeInTheDocument();
+
+        expect(shopOpened).toBe(true);   // the Save did open one before the node refused
+        expect(shopClosed).toBe(false);
+    });
+
+    it('keeps shop toggle hidden when listing shop id cannot be read', async () => {
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        shop: {
+                            id: 'shop-1',
+                            name: "Author's Shop",
+                            ownerName: 'Author',
+                            ownerPublicKey: 'author-pubkey',
+                            category: 'goods',
+                            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+                            paused: false,
+                            backOn: null,
+                            photoUrl: null,
+                        },
+                    }),
+                };
+            }
+            if (path.startsWith('/api/marketplace/posts')) {
+                return { ok: false, status: 500, json: async () => ({ error: 'timeout' }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        render(<MarketplacePage identity={authorIdentity} openPostId="post-public" />);
+        const editBtn = await screen.findByRole('button', { name: /Edit Post/i });
+        fireEvent.click(editBtn);
+
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('edit-post-shop')).not.toBeInTheDocument();
+    });
+});

@@ -293,7 +293,8 @@ describe('the host', () => {
             lendable: true, shop: true, availableFrom: '2026-11-03', photos: ['ref1'],
         })).toEqual({
             type: 'offer', title: 'x'.repeat(COMPOSER_TITLE_CHARS), description: 'Three metres', category: 'tools', credits: 5,
-            priceType: 'daily', repeatable: true, cashAlsoNeeded: false,
+            // "Put this in your shop" is a field the composer takes (web shops, #2484); lendable, availableFrom, photos stay dropped.
+            priceType: 'daily', repeatable: true, cashAlsoNeeded: false, shop: true,
         });
         expect(composerDraft('offer', { title: 'Jam', category: 'not-a-category', credits: -2, priceType: 'yearly' }))
             .toMatchObject({ category: null, credits: null, priceType: null });

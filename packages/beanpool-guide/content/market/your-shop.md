@@ -62,4 +62,6 @@ A shop works the same on the global community. Someone who has not joined sees i
 
 ## In the web app
 
-The web app does not show shops yet.
+Both the phone and the web app show shops the same way: you can open your shop, change its name, category, words and banner photo, put Offers in or take them out, visit other members' shops, and close it. Listing from the Tool shed opens the composer with **Put this in your shop** ticked by default if you have a shop.
+
+Your private tool lists stay in phone device storage on the phone, and in browser storage in the web app.

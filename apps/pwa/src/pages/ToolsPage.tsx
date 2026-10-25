@@ -46,6 +46,8 @@ export interface ToolsPageProps {
     onGuide: (slug: string) => void;
     /** A tool's Home card, put on Home (its one offer, from the empty state). */
     onAddHomeCard: (type: string) => void;
+    /** Opens Your shop (/shop/mine). */
+    onShop?: () => void;
     tools?: readonly ToolManifest[];
     apps?: ToolLoaders;
     now?: () => number;
@@ -98,7 +100,7 @@ function PageBar({ onBack, title, icon, line, end }: { onBack: () => void; title
 }
 
 /** The Tools screen: every tool on each shelf for a member on this node, and each one's state line. */
-function ToolsList({ identity, onOpen, onClose, tools = TOOLS, apps = TOOL_APPS, now = Date.now }: ToolsPageProps) {
+function ToolsList({ identity, onOpen, onClose, onShop, tools = TOOLS, apps = TOOL_APPS, now = Date.now }: ToolsPageProps) {
     const info = useCommunityInfo();
     const facts = useMemo(() => ({ profile: info?.profile ?? null, features: (info?.features ?? {}) as Record<string, unknown> }), [info]);
     const shelves = TOOL_SHELVES
@@ -112,6 +114,19 @@ function ToolsList({ identity, onOpen, onClose, tools = TOOLS, apps = TOOL_APPS,
                 <p className="m-0 mb-4 text-sm text-nature-700 dark:text-nature-200 break-words">
                     {t('Things you can do on your own, that make your community stronger.')}
                 </p>
+                {onShop && (
+                    <div className="mb-4">
+                        <ToolSection testId="tools-shop-card">
+                            <ToolRow
+                                icon="🏪"
+                                title={t('Your shop')}
+                                state={t('Your Offers under one name')}
+                                onClick={onShop}
+                                testId="tools-shop"
+                            />
+                        </ToolSection>
+                    </div>
+                )}
                 {shelves.length === 0 && (
                     <p data-testid="tools-none" className="m-0 text-sm text-nature-600 dark:text-nature-300 break-words">
                         {t('No tools in this version of the app yet.')}

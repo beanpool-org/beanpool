@@ -1180,6 +1180,8 @@ export interface MarketplacePost {
     /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
     distanceKm?: number | null;
     photos?: string[];
+    /** The shop this listing belongs to, or null/undefined. */
+    shopId?: string | null;
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
@@ -1342,6 +1344,8 @@ export async function createMarketplacePost(post: {
     eventTz?: string;
     eventOnline?: boolean;
     eventLink?: string;
+    /** A shop only: author's own shop id to put the offer into. */
+    shopId?: string;
     /** How it repeats (the pattern only; the node adds the clock and length) and its last date; null = a one-off. */
     eventRepeat?: RepeatPattern | null;
     eventRepeatUntil?: string | null;
@@ -1669,6 +1673,7 @@ export async function updateMarketplacePost(
         lng?: number;
         repeatable?: boolean;
         photos?: string[];
+        shopId?: string | null;
         // Events (docs/events-on-the-map.md §2.2). A cleared end is '' — the node sets start + 2 hours.
         eventStartAt?: string;
         eventEndAt?: string;

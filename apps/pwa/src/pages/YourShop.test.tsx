@@ -11,13 +11,12 @@
  * 7. close with "End its Offers too"
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import * as pictureCrop from '../lib/picture-crop';
 import { YourShopPage } from './YourShopPage';
 import { ShopDetailPage } from './ShopDetailPage';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
-import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 
 const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 const secret = ed25519.utils.randomSecretKey();
@@ -242,6 +241,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         expect(daveTitles.length).toBeGreaterThan(0);
         expect(screen.getByRole('button', { name: /Message Dave/i })).toBeInTheDocument();
         expect(screen.queryByTestId('shop-page-change')).not.toBeInTheDocument();
+        expect(screen.getByTestId('shop-page-owner')).toHaveClass('min-h-[48px]');
 
         // Owner view: has Change your shop, no Message button
         const daveMe = { publicKey: DAVE, privateKey: '0'.repeat(64), callsign: 'Dave' } as any;

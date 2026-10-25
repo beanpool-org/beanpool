@@ -178,7 +178,7 @@ export function ShopDetailPage({
                                 onClick={() => onOpenProfile?.(shop.ownerPublicKey)}
                                 aria-label={t("View {name}'s profile", { name: shop.ownerName })}
                                 data-testid="shop-page-owner"
-                                className="bg-transparent border-0 p-0 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand rounded-lg"
+                                className="min-h-[48px] inline-flex items-center bg-transparent border-0 p-0 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand rounded-lg"
                             >
                                 <PostAuthorTrust
                                     publicKey={shop.ownerPublicKey}

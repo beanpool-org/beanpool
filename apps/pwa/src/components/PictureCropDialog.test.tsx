@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import axe from 'axe-core';
 import { EnterpriseFace } from './EnterpriseManage';
 import { ProfileSetup } from './ProfileSetup';
 import { ShopfrontHeader } from './Shopfront';
@@ -182,6 +183,30 @@ describe("an enterprise's logo and banner (Manage)", () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(lastDraw().from).toEqual([512, 120, 960, 960]);
+    });
+
+    it('is a labelled modal dialog axe finds nothing wrong with; focus starts on the picture, stays in, and goes back on close', async () => {
+        renderFace();
+        const input = screen.getByTestId('manage-face-banner-input');
+        input.focus();
+        fireEvent.change(input, { target: { files: [photo()] } });
+        const dialog = await cropDialog();
+        expect(dialog).toHaveAccessibleDescription(/arrow keys move it/);
+        const stage = within(dialog).getByTestId('picture-crop-stage');
+        expect(stage).toHaveAccessibleName('The part of the picture that shows');
+        expect(document.activeElement).toBe(stage);
+        const result = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } });
+        expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+        // Tab from the last control comes round to the first; Shift+Tab from the first to the last.
+        const done = within(dialog).getByRole('button', { name: 'Done' });
+        done.focus();
+        fireEvent.keyDown(done, { key: 'Tab' });
+        expect(document.activeElement).toBe(stage);
+        fireEvent.keyDown(stage, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(done);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(document.activeElement).toBe(input);
     });
 
     it('Cancel keeps nothing: no picture drawn, nothing to save', async () => {

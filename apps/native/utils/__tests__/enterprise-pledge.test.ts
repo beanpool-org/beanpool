@@ -49,6 +49,9 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
     it('says a project whose deadline has passed is no longer taking pledges', () => {
         const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
         expect(pledgeClosedLine('active', 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
+
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        expect(pledgeClosedLine('active', 'bounded', oneHourAgo)).toBe("This project's deadline has passed: it takes no more pledges.");
     });
 });
 

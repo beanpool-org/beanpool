@@ -114,10 +114,10 @@ async function main(): Promise<void> {
     const auditFirst = runLedgerAudit();
     assert(auditFirst.ok && Math.abs(auditFirst.drift) < 0.0001, 'ledger audit holds after valid pledge');
 
-    // ── 3. Expire the deadline ─────────────────────────────────────────────────────────────
-    const twoDaysAgo = new Date(Date.now() - 2 * DAY).toISOString();
-    db.prepare('UPDATE members SET deadline_at = ? WHERE public_key = ?').run(twoDaysAgo, projectId);
-    db.prepare('UPDATE projects SET deadline_at = ? WHERE id = ?').run(twoDaysAgo, projectId);
+    // ── 3. Expire the deadline (within last 24h, verifying no grace window) ────────────────
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    db.prepare('UPDATE members SET deadline_at = ? WHERE public_key = ?').run(oneHourAgo, projectId);
+    db.prepare('UPDATE projects SET deadline_at = ? WHERE id = ?').run(oneHourAgo, projectId);
 
     // Snapshot before late pledge attempt
     const backerBalBeforeLate = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(backer.pubKeyHex) as any).balance;
@@ -151,6 +151,16 @@ async function main(): Promise<void> {
         `crowdfund refusal code is ${REFUSAL_CODE} (got ${pledgeLateCrowdfund.body?.code})`);
     assert(pledgeLateCrowdfund.body?.error === REFUSAL_TEXT,
         `crowdfund refusal text matches (got "${pledgeLateCrowdfund.body?.error}")`);
+
+    // ── 5b. Deadline only on members table (projects.deadline_at is null) ───────────────────
+    db.prepare('UPDATE projects SET deadline_at = NULL WHERE id = ?').run(projectId);
+    const pledgeMemberOnly = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
+        fromPubkey: backer.pubKeyHex,
+        amount: 10,
+        memo: 'Pledge when deadline only on members table',
+    }, backer);
+    assert(pledgeMemberOnly.status === 409 && pledgeMemberOnly.body?.code === REFUSAL_CODE,
+        `crowdfund pledge refused when projects.deadline_at is null and members.deadline_at passed (got ${pledgeMemberOnly.status})`);
 
     // ── 6. Balances and project total unchanged (LedgerAudit check) ─────────────────────────
     const backerBalAfterLate = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(backer.pubKeyHex) as any).balance;

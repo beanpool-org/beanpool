@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pledgeClosedLine } from './enterprise-pledge';
+import { pledgeClosedLine, isPastDeadline } from './enterprise-pledge';
 
 describe('pledgeClosedLine: the node takes a pledge only while an enterprise is active', () => {
     it('is null for an active enterprise, or one whose status is not known', () => {
@@ -31,5 +31,9 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
         const past = new Date(Date.now() - 2 * 86400000).toISOString();
         expect(pledgeClosedLine('active', 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
         expect(pledgeClosedLine(undefined, 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
+
+        const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString();
+        expect(isPastDeadline(oneHourAgo)).toBe(true);
+        expect(pledgeClosedLine('active', 'bounded', oneHourAgo)).toBe("This project's deadline has passed: it takes no more pledges.");
     });
 });

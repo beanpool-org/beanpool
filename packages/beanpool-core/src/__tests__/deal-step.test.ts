@@ -241,6 +241,81 @@ describe('dealsNeedingMe and openDeals', () => {
     });
 });
 
+describe('dealStep for uninvolved third party', () => {
+    const BUYER = 'b'.repeat(64);
+    const SELLER = 's'.repeat(64);
+    const OBSERVER = 'o'.repeat(64);
+    const NOW = 1_700_000_000_000;
+
+    it('third party viewing requested offer without author pubkey gets needsMe false and pressing false', () => {
+        const tx: DealRow = {
+            id: 'tx-req-offer',
+            status: 'requested',
+            buyerPublicKey: BUYER,
+            sellerPublicKey: SELLER,
+            postAuthorPublicKey: null,
+            postType: 'offer',
+            createdAt: new Date(NOW - 1000).toISOString(),
+        };
+        const step = dealStep(tx, OBSERVER, NOW);
+        expect(step.needsMe).toBe(false);
+        expect(step.pressing).toBe(false);
+        expect(step.dueSince).toBeNull();
+    });
+
+    it('third party viewing requested need without author pubkey gets needsMe false and pressing false', () => {
+        const tx: DealRow = {
+            id: 'tx-req-need',
+            status: 'requested',
+            buyerPublicKey: BUYER,
+            sellerPublicKey: SELLER,
+            postAuthorPublicKey: null,
+            postType: 'need',
+            createdAt: new Date(NOW - 1000).toISOString(),
+        };
+        const step = dealStep(tx, OBSERVER, NOW);
+        expect(step.needsMe).toBe(false);
+        expect(step.pressing).toBe(false);
+        expect(step.dueSince).toBeNull();
+    });
+
+    it('third party viewing pending deal (>7 days old) gets needsMe false and pressing false', () => {
+        const tx: DealRow = {
+            id: 'tx-old-pending',
+            status: 'pending',
+            buyerPublicKey: BUYER,
+            sellerPublicKey: SELLER,
+            postAuthorPublicKey: SELLER,
+            postType: 'offer',
+            createdAt: new Date(NOW - 10 * 86_400_000).toISOString(),
+        };
+        const step = dealStep(tx, OBSERVER, NOW);
+        expect(step.needsMe).toBe(false);
+        expect(step.pressing).toBe(false);
+        expect(step.dueSince).toBeNull();
+    });
+
+    it('dealsNeedingMe returns empty list for third party', () => {
+        const list: DealRow[] = [
+            {
+                id: 'tx-1',
+                status: 'requested',
+                buyerPublicKey: BUYER,
+                sellerPublicKey: SELLER,
+                postType: 'offer',
+            },
+            {
+                id: 'tx-2',
+                status: 'pending',
+                buyerPublicKey: BUYER,
+                sellerPublicKey: SELLER,
+                postType: 'offer',
+            },
+        ];
+        expect(dealsNeedingMe(list, OBSERVER, NOW)).toEqual([]);
+    });
+});
+
 describe('dealStateWords', () => {
     it('formats state words for all states', () => {
         const makeStep = (state: DealState, role: DealRole = 'payer'): DealStep => ({

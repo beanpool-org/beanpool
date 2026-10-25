@@ -52,14 +52,16 @@ const SEVEN_DAYS_MS = 7 * 86_400_000;
  */
 export function dealStep(tx: DealRow, me: string, now: number = Date.now()): DealStep {
     const isPayer = tx.buyerPublicKey === me;
+    const isPayee = tx.sellerPublicKey === me;
+    const isParty = isPayer || isPayee;
     const role: DealRole = isPayer ? 'payer' : 'payee';
 
     // Who answers a request: the listing's author.
     // If postAuthorPublicKey is known, compare directly with me.
     // Otherwise fallback based on listing kind: Need's author is buyer, Offer's author is seller.
-    const isAuthor = tx.postAuthorPublicKey != null
+    const isAuthor = isParty && (tx.postAuthorPublicKey != null
         ? tx.postAuthorPublicKey === me
-        : (tx.postType === 'need' ? isPayer : !isPayer);
+        : (tx.postType === 'need' ? isPayer : isPayee));
 
     let state: DealState;
 
@@ -78,14 +80,16 @@ export function dealStep(tx: DealRow, me: string, now: number = Date.now()): Dea
         state = 'cancelled';
     }
 
-    const needsMe = state === 'to-answer' || state === 'to-release';
+    const needsMe = isParty && (state === 'to-answer' || state === 'to-release');
 
     let pressing = false;
-    if (state === 'to-answer') {
-        pressing = true;
-    } else if (state === 'to-release') {
-        const createdMs = tx.createdAt ? Date.parse(tx.createdAt) : NaN;
-        pressing = !Number.isNaN(createdMs) && (now - createdMs >= SEVEN_DAYS_MS);
+    if (needsMe) {
+        if (state === 'to-answer') {
+            pressing = true;
+        } else if (state === 'to-release') {
+            const createdMs = tx.createdAt ? Date.parse(tx.createdAt) : NaN;
+            pressing = !Number.isNaN(createdMs) && (now - createdMs >= SEVEN_DAYS_MS);
+        }
     }
 
     const dueSince = needsMe ? (tx.createdAt ?? null) : null;

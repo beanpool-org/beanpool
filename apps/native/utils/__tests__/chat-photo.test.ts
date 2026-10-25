@@ -28,3 +28,14 @@ describe('a chat photo: 800 px on its longest side, never enlarged', () => {
         await expect(chatPhotoDataUri({ uri: 'file:///in.jpg', width: 10, height: 10 })).rejects.toThrow('Could not process image.');
     });
 });
+
+// Marty, 25 Oct ("Yes, all four", design question 2): a direct message's photo is 800 px too, through this one helper.
+describe('the direct message screen sends its photo through chatPhotoDataUri', () => {
+    it('app/chat/[id].tsx has no 1000 px resize of its own', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve } = await import('node:path');
+        const screen = readFileSync(resolve(__dirname, '../../app/chat/[id].tsx'), 'utf8');
+        expect(screen).not.toMatch(/width:\s*1000/);
+        expect(screen).toMatch(/chatPhotoDataUri\(/);
+    });
+});

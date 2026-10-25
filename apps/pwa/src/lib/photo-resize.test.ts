@@ -98,3 +98,15 @@ describe('resizePhotoFile', () => {
         expect(encoded).toHaveLength(0);
     });
 });
+
+// Marty, 25 Oct ("Yes, all four", design question 2): a direct message's photo is 800 px too, through this one helper.
+describe('every chat photo on the web goes through resizePhotoFile', () => {
+    it('MessagesPage sends a direct message photo through it, with no wider resize of its own', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { resolve } = await import('node:path');
+        const page = readFileSync(resolve(__dirname, '../pages/MessagesPage.tsx'), 'utf8');
+        expect(page).not.toMatch(/resizeImageToDataUri/);
+        expect(page).not.toMatch(/\b1000\s*,\s*0\.7\b/);
+        expect(page.match(/await resizePhotoFile\(file\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    });
+});

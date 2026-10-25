@@ -1126,7 +1126,6 @@
   "REQUESTED\u0004deal status": "अनुरोधित",
   "REJECTED\u0004deal status": "अस्वीकृत",
   "PAUSED\u0004listing status": "रोक दिया गया",
-  "Canvas not supported": "कैनवस समर्थित नहीं है",
   "Could not load image": "छवि लोड नहीं हो सकी",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "one": "{n} फली ट्रस्ट में रखी गई।",

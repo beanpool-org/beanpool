@@ -482,6 +482,15 @@ describe('"Use the new address": the move', () => {
         expect(await addressFollowOffer(w.deps)).toBeNull();
     });
 
+    it('a profile change waiting to reach the community goes with it to the new address (pending-profile-sync.ts)', async () => {
+        const waiting = JSON.stringify({ publicKey: 'ab'.repeat(32), callsign: 'Renamed offline', avatar: 'bundled://koala' });
+        store.set(`beanpool_pending_profile:${IP}`, waiting);
+        const w = world({ answers: answers() });
+        expect(await acceptAddressFollow((await addressFollowOffer(w.deps))!, w.deps)).toBe('moved');
+        expect(store.get(`beanpool_pending_profile:${NAME}`)).toBe(waiting);
+        expect(store.has(`beanpool_pending_profile:${IP}`)).toBe(false);
+    });
+
     it('a guest visit stays a guest visit at the new address', async () => {
         const w = world({ answers: answers(), guest: [IP] });
         expect(await acceptAddressFollow((await addressFollowOffer(w.deps))!, w.deps)).toBe('moved');

@@ -10,7 +10,7 @@ export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
@@ -711,22 +711,18 @@ function ChatScreen({ id }: { id: string }) {
         // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
         // the image-picker Activity are separate windows — hide the keyboard first.
         await KeyboardController.dismiss();
-        const sendUri = async (uri: string) => {
+        const sendUri = async (asset: ImagePicker.ImagePickerAsset) => {
             sendingRef.current = true;
             try {
-                const manip = await withTimeout(ImageManipulator.manipulateAsync(
-                    uri,
-                    [{ resize: { width: 1000 } }],
-                    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                ), 30_000, t('Processing the image is taking too long — please try again.'));
-                if (!manip.base64) throw new Error(t('Could not process image.'));
+                // Within 800 px on its longest side, as every chat photo (utils/chat-photo.ts; Marty, 25 Oct).
+                const dataUri = await withTimeout(chatPhotoDataUri(asset), 30_000, t('Processing the image is taking too long — please try again.'));
                 let metadata: string | undefined = undefined;
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
                 // Image sends still await the server round-trip (not optimistic) —
                 // the timeout keeps a dead network from latching sendingRef forever.
-                await withTimeout(sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata), 60_000, t('Sending the image is taking too long — please try again.'));
+                await withTimeout(sendImageMessage(id as string, dataUri, '', metadata), 60_000, t('Sending the image is taking too long — please try again.'));
                 setReplyToMessage(null);
                 setLockNotice(null);
                 hapticSuccess();
@@ -745,11 +741,11 @@ function ChatScreen({ id }: { id: string }) {
                 const perm = await ImagePicker.requestCameraPermissionsAsync();
                 if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); return; }
                 const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
-                if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0].uri);
+                if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
             }},
             { text: t('Gallery'), onPress: async () => {
                 const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-                if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0].uri);
+                if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
             }},
             { text: t('Cancel'), style: 'cancel' },
         ]);
@@ -1532,7 +1528,7 @@ function ChatScreen({ id }: { id: string }) {
                 />
             )}
 
-            {/* Full-screen image viewer — opened from a tapped chat image (full 1000px, from the
+            {/* Full-screen image viewer — opened from a tapped chat image (the 800 px photo, from the
                 local cache so it's instant/offline after first view).
                 The Modal is its own full-screen window, outside this screen's SafeAreaView, so the close
                 button takes the status-bar inset itself: a fixed 50 is less than the 59pt inset on Dynamic Island iPhones. */}

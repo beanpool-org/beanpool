@@ -524,15 +524,18 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // This is the recovery path behind the "saved locally, will publish when you
                 // reconnect" promise, so failures are logged loudly (not silently swallowed)
                 // and we confirm the node actually stored the avatar before clearing the flag.
-                const pendingSync = await AsyncStorage.getItem('pending_profile_sync');
-                if (pendingSync === 'true') {
+                // Only the change waiting for THIS cycle's community (utils/pending-profile-sync.ts): one made in
+                // another waits for that one, and is never sent here.
+                const { pendingProfileChange } = await import('../utils/pending-profile-sync');
+                if (await pendingProfileChange(anchorUrl, pubKey)) {
                     try {
                         // Delegate to the single canonical-aware publisher: it verifies
                         // the node actually stored the avatar before clearing the flag,
                         // and falls back to the canonical picture when THIS node's local
                         // row has none yet (e.g. a freshly-joined second community).
+                        // Pinned to this cycle's community: if the phone switched meanwhile, nothing goes.
                         const { pushProfileToServer } = await import('../utils/db');
-                        const ok = await pushProfileToServer();
+                        const ok = await pushProfileToServer({ community: anchorUrl });
                         console.log(ok
                             ? '[Pillar Sync] Successfully healed pending profile sync'
                             : '[Pillar Sync] Profile heal deferred — will retry next sync');

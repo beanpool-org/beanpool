@@ -172,7 +172,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const showEnterpriseChips = enterprisesOn(communityInfo?.features) && !enterprisesPreview;
     const groupCategoryFilter: GroupKind = !showEnterpriseChips && (pickedGroupCategory === 'projects' || pickedGroupCategory === 'enterprises') ? 'all' : pickedGroupCategory;
     const filter: 'all' | 'ongoing' | 'bounded' = groupCategoryFilter === 'projects' ? 'bounded' : groupCategoryFilter === 'enterprises' ? 'ongoing' : 'all';
-    const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
+    const showEnterprises = showEnterpriseChips && (groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises');
     const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat';
 
     // "＋ Start something": where focus goes back when the sheet, or a sheet it opened, closes.

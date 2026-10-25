@@ -103,6 +103,25 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(screen.queryByRole('button', { name: '🏛️ Enterprises' })).toBeNull();
     });
 
+    it('does not render enterprise empty state or proposals when enterprises are disabled on the node', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({
+            memberCount: 3,
+            postCount: 0,
+            transactionCount: 0,
+            commonsBalance: 0,
+            profile: 'local',
+            features: { beans: true, enterprises: false, decisions: false } as any,
+        });
+
+        render(<ProjectsPage identity={me} />);
+        await screen.findByTestId('group-filter-chips');
+        await waitFor(() => {
+            expect(screen.queryByText('No enterprises found')).toBeNull();
+            expect(screen.queryByText('Loading enterprises…')).toBeNull();
+            expect(screen.queryByText('+ Propose a Project')).toBeNull();
+        });
+    });
+
     it('a treasury whose keepers include the viewer is drawn under Yours first with its role word and a Manage link; lead first', async () => {
         const keptEnterprise: Treasury = {
             publicKey: 'treasury-eggs',

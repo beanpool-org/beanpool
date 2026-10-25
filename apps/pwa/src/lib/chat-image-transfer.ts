@@ -15,8 +15,8 @@
 /**
  * The biggest source file a paste or a drop will take on.
  *
- * Everything is re-encoded to a smaller JPEG before it is sent (1000px wide in a
- * DM, 800px on its longest side in a group chat), so this is
+ * Everything is re-encoded to a smaller JPEG before it is sent (800px on its longest side, in a
+ * DM or a group chat), so this is
  * not about what the node will accept — it is the point past which decoding the
  * original in a canvas stops being something a modest phone or an old laptop can
  * do. A pasted screenshot is never near it; a dropped camera RAW can be.

@@ -1127,7 +1127,6 @@
   "REQUESTED\u0004deal status": "DEMANDÉ",
   "REJECTED\u0004deal status": "REFUSÉ",
   "PAUSED\u0004listing status": "SUSPENDU",
-  "Canvas not supported": "Canvas non pris en charge",
   "Could not load image": "Impossible de charger l'image",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "one": "{n} haricot retenu en fiducie.",

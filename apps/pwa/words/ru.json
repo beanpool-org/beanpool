@@ -1170,7 +1170,6 @@
   "REQUESTED\u0004deal status": "ЗАПРОШЕНО",
   "REJECTED\u0004deal status": "ОТКЛОНЕНО",
   "PAUSED\u0004listing status": "НА ПАУЗЕ",
-  "Canvas not supported": "Canvas не поддерживается",
   "Could not load image": "Не удалось загрузить изображение",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "one": "{n} боб удерживается на доверительном счёте.",

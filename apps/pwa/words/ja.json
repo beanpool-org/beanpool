@@ -1104,7 +1104,6 @@
   "REQUESTED\u0004deal status": "リクエスト済み",
   "REJECTED\u0004deal status": "拒否",
   "PAUSED\u0004listing status": "一時停止中",
-  "Canvas not supported": "Canvasがサポートされていません",
   "Could not load image": "画像を読み込めませんでした",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "other": "{n}豆が預かり中です。"

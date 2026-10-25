@@ -39,11 +39,11 @@ export function yoursRows(
         }
     }
 
-    // Also include any kept enterprise from treasuries list if not already present from yourChats
-    if (myPubkey) {
+    // Also include any kept enterprise from treasuries list if yourChats has not loaded
+    if (!yourChats && myPubkey) {
         for (const ent of treasuries) {
             if (seenKept.has(ent.publicKey)) continue;
-            const myKeeper = ent.keepers?.find(k => (k.publicKey || k.pubkey) === myPubkey);
+            const myKeeper = ent.keepers?.find(k => (k.publicKey || k.pubkey) === myPubkey && !k.suspended);
             if (myKeeper) {
                 seenKept.add(ent.publicKey);
                 const isProject = ent.lifecycle === 'bounded' || (ent.goalAmount != null && ent.goalAmount > 0);
@@ -67,8 +67,8 @@ export function yoursRows(
         }
     }
 
-    // Also include active group memberships from groups list if not already present from yourChats
-    if (myPubkey && allGroups) {
+    // Also include active group memberships from groups list if yourChats has not loaded
+    if (!yourChats && myPubkey && allGroups) {
         for (const g of allGroups) {
             if (seenGroups.has(g.id)) continue;
             if (g.viewerStatus === 'active' || (!g.viewerStatus && !!g.viewerRole)) {

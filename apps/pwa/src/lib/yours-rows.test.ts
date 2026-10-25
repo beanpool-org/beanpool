@@ -158,4 +158,56 @@ describe('yoursRows', () => {
         expect(result.kept.map(k => k.chat.id)).toEqual(['ent-2']);
         expect(result.groups.map(g => g.id)).toEqual(['grp-active']);
     });
+
+    it('does not resurrect suspended keeperships during fallback', () => {
+        const treasuries: Treasury[] = [
+            {
+                publicKey: 'ent-suspended',
+                name: 'Suspended Enterprise',
+                balance: 10,
+                creditLine: 0,
+                liveOffers: 0,
+                lifecycle: 'ongoing',
+                status: 'active',
+                keepers: [{ publicKey: 'my-key', role: 'lead', callsign: 'lead', suspended: true }],
+            },
+        ];
+
+        const result = yoursRows(null, treasuries, 'my-key');
+        expect(result.kept).toHaveLength(0);
+    });
+
+    it('does not run treasuries or groups fallback when yourChats is provided (even if empty)', () => {
+        const treasuries: Treasury[] = [
+            {
+                publicKey: 'ent-active',
+                name: 'Active Enterprise',
+                balance: 10,
+                creditLine: 0,
+                liveOffers: 0,
+                lifecycle: 'ongoing',
+                status: 'active',
+                keepers: [{ publicKey: 'my-key', role: 'lead', callsign: 'lead', suspended: false }],
+            },
+        ];
+
+        const allGroups: Group[] = [
+            {
+                id: 'grp-active',
+                slug: 'active',
+                name: 'Active Group',
+                category: 'social',
+                joinPolicy: 'open',
+                memberCount: 2,
+                viewerStatus: 'active',
+                viewerRole: 'member',
+                createdAt: '',
+                createdBy: '',
+            },
+        ];
+
+        const result = yoursRows([], treasuries, 'my-key', allGroups);
+        expect(result.kept).toHaveLength(0);
+        expect(result.groups).toHaveLength(0);
+    });
 });

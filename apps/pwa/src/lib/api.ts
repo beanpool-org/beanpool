@@ -2210,7 +2210,7 @@ export interface Treasury {
     lng?: number | null;
     locationAuthSigner?: string | null;
     locationUpdatedAt?: string | null;
-    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null }>;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null; suspended?: boolean }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *

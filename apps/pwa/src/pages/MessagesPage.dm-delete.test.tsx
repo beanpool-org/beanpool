@@ -192,13 +192,13 @@ describe('Web one-to-one chats: Delete own line', () => {
         const ENT_ID = 'ent-0001-4222-8333-444455556666';
         thread.conversation = {
             id: ENT_ID,
-            type: 'enterprise_thread',
+            type: 'enterprise_thread' as any,
             name: 'Local Bakery',
             participants: [ana.publicKey],
             createdBy: ana.publicKey,
             unreadCount: 0,
             createdAt: '2026-09-01T00:00:00Z',
-        } as Conversation;
+        } as unknown as Conversation;
         thread.messages = [
             {
                 id: uuid(),

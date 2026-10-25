@@ -219,13 +219,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         try {
             setLoading(true);
             setError(null);
-            let treasuriesFailed = false;
             // Enterprises and Decisions in preview (the global node) are Example Valley's: their lists, the reader's voice
             // credits and the pool the Decide tab spends are not asked (lib/features readsOwn). Elsewhere, as before.
             const [readsTreasuries, readsDecisions] = await Promise.all([readsOwn('enterprises'), readsOwn('decisions')]);
             const [tresData, decData, commonsData, membersData] = await Promise.all([
                 readsTreasuries && getTreasuries ? getTreasuries().catch((e) => {
-                    treasuriesFailed = true;
                     console.warn('[ProjectsPage] Failed to fetch treasuries:', e);
                     return { treasuries: [] };
                 }) : { treasuries: [] },
@@ -236,9 +234,6 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 // Read only once the node has said it reads whole (the effect below reads them when it says so).
                 membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
-            if (treasuriesFailed) {
-                setYourChatsError(t('Could not load your groups.'));
-            }
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
             setMyPoolVoting(decData.myPoolVoting ?? null);
@@ -412,7 +407,6 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setGroups(Array.isArray(list) ? list : []);
         } catch (e: any) {
             console.warn('[ProjectsPage] Failed to fetch groups:', e);
-            setYourChatsError(t('Could not load your groups.'));
         } finally {
             setLoadingGroups(false);
         }
@@ -455,8 +449,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     const { kept: yourKeptRows, groups: yourGroupRows } = useMemo(() => {
         if (!identity?.publicKey || isMember === false || isMember === null) return { kept: [], groups: [] };
-        return yoursRows(yourChats, treasuries, identity.publicKey, groups);
-    }, [yourChats, treasuries, identity?.publicKey, groups, isMember]);
+        const rows = yoursRows(yourChats, treasuries, identity.publicKey, groups);
+        // Enterprises (or Beans) off: no kept enterprises or projects, as on the phone (projects.tsx yourGroups).
+        return enterprisesOn(communityInfo?.features) ? rows : { kept: [], groups: rows.groups };
+    }, [yourChats, treasuries, identity?.publicKey, groups, isMember, communityInfo?.features]);
 
     const yourKeptPubkeys = useMemo(() => new Set(yourKeptRows.map(k => k.chat.id)), [yourKeptRows]);
     const yourGroupIds = useMemo(() => new Set(yourGroupRows.map(g => g.id)), [yourGroupRows]);
@@ -631,7 +627,22 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     <h2 className="text-xs font-black uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-3">
                         {t('Yours')}
                     </h2>
-                    {yourKeptRows.length > 0 || yourGroupRows.length > 0 ? (
+                    {yourChatsError ? (
+                        <div className="py-6 text-center text-sm text-nature-600 dark:text-nature-400 space-y-2">
+                            <p role="alert">{yourChatsError}</p>
+                            <button
+                                type="button"
+                                onClick={handleRetryYours}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px]"
+                            >
+                                {t('Retry')}
+                            </button>
+                        </div>
+                    ) : loadingYourChats || yourChats === null ? (
+                        <div className="py-8 text-center text-sm text-nature-600 dark:text-nature-400" role="status">
+                            {t('Loading groups...')}
+                        </div>
+                    ) : yourKeptRows.length > 0 || yourGroupRows.length > 0 ? (
                         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
                             {yourKeptRows.map(item => {
                                 const e = item.chat;
@@ -761,7 +772,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         key={g.id}
                                         role="button"
                                         tabIndex={0}
-                                        aria-label={t('View details for group {name}', { name: g.name })}
+                                        aria-label={[g.name, role ? named(ROLE_WORDS, role, role) : null, t('Open chat →')].filter(Boolean).join(', ')}
                                         onClick={() => {
                                             if (onNavigate) onNavigate('messages', g.id);
                                             else setSelectedGroupForDetail(fullGroup || {
@@ -842,21 +853,6 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     </div>
                                 );
                             })}
-                        </div>
-                    ) : loadingYourChats || (loading && !treasuries.length) ? (
-                        <div className="py-8 text-center text-sm text-nature-600 dark:text-nature-400" role="status">
-                            {t('Loading groups...')}
-                        </div>
-                    ) : yourChatsError ? (
-                        <div className="py-6 text-center text-sm text-nature-600 dark:text-nature-400 space-y-2">
-                            <p role="alert">{yourChatsError}</p>
-                            <button
-                                type="button"
-                                onClick={handleRetryYours}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px]"
-                            >
-                                {t('Retry')}
-                            </button>
                         </div>
                     ) : (
                         <p className="text-sm text-nature-600 dark:text-nature-400">

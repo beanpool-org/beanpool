@@ -477,6 +477,65 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         });
     });
 
+    // Deciding review on 0f5ea53e, finding 1: with enterprises off, Yours keeps no enterprise or project (the phone's projects.tsx:71-73).
+    it('with enterprises off, Yours shows the member\'s groups but no kept enterprise or project', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 100, profile: 'local',
+            features: { beans: false, enterprises: false, decisions: true } as any,
+        });
+        vi.mocked(getYourGroups).mockResolvedValue({
+            items: [
+                { kind: 'enterprise', id: 'treasury-eggs', conversationId: 'treasury-eggs', name: 'Community Eggs', role: 'lead',
+                  lifecycle: 'ongoing', badge: '🏛️', avatarUrl: null, readOnly: false, unreadCount: 0, lastActivityAt: '2026-01-01T00:00:00Z' },
+                { kind: 'group', id: 'group-garden', conversationId: 'group-garden', name: 'Garden Crew', role: 'convenor', badge: null,
+                  avatarUrl: null, category: 'working_group', joinPolicy: 'open', readOnly: false, unreadCount: 0, lastActivityAt: '2026-01-01T00:00:00Z' },
+            ] as YourChat[],
+        });
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(await within(yoursBlock).findByText('Garden Crew')).toBeInTheDocument();
+        expect(within(yoursBlock).queryByText('Community Eggs')).toBeNull();
+        expect(within(yoursBlock).queryByRole('button', { name: /Manage/ })).toBeNull();
+    });
+
+    // Finding 2: Yours's state is the your-groups read's alone.
+    it('your-groups failing while /api/groups works: Yours says it could not load, and draws no fallback rows', async () => {
+        const myGroup: Group = {
+            id: 'group-garden', slug: 'garden', createdBy: 'pk-someone', name: 'Garden Crew', category: 'working_group',
+            joinPolicy: 'open', memberCount: 5, viewerRole: 'convenor', viewerStatus: 'active', description: 'Gardening team',
+            createdAt: '2026-01-01T00:00:00Z',
+        };
+        vi.mocked(getGroups).mockResolvedValue([myGroup]);
+        vi.mocked(getYourGroups).mockRejectedValue(new Error('Network error'));
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(await within(yoursBlock).findByText('Could not load your groups.')).toBeInTheDocument();
+        expect(within(yoursBlock).queryByText('Garden Crew')).toBeNull();
+    });
+
+    it('your-groups empty while /api/groups fails: Yours says "Nothing of yours yet", not "Could not load your groups."', async () => {
+        vi.mocked(getGroups).mockRejectedValue(new Error('Network error'));
+        vi.mocked(getYourGroups).mockResolvedValue({ items: [] });
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(await within(yoursBlock).findByText(/Nothing of yours yet/)).toBeInTheDocument();
+        expect(within(yoursBlock).queryByText('Could not load your groups.')).toBeNull();
+    });
+
+    // Finding 3: the Yours group card opens the chat, so its spoken name says the name, the role and that.
+    it('a Yours group card is named by the group, its role and "Open chat"', async () => {
+        vi.mocked(getYourGroups).mockResolvedValue({
+            items: [
+                { kind: 'group', id: 'group-garden', conversationId: 'group-garden', name: 'Garden Crew', role: 'convenor', badge: null,
+                  avatarUrl: null, category: 'working_group', joinPolicy: 'open', readOnly: false, unreadCount: 0, lastActivityAt: '2026-01-01T00:00:00Z' },
+            ] as YourChat[],
+        });
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        const card = await within(yoursBlock).findByRole('button', { name: /^Garden Crew, .+, Open chat →$/ });
+        expect(card.getAttribute('aria-label')).not.toMatch(/View details/);
+    });
+
     it('shows "Nothing of yours yet…" only after a successful empty read', async () => {
         vi.mocked(getYourGroups).mockResolvedValue({ items: [] });
         vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] });

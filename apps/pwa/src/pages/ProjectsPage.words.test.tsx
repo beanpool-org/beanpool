@@ -71,7 +71,9 @@ describe('the Commons page in the pseudo-locale', () => {
             .toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups'].map((w) => xx(w)));
         expect(screen.getByText(xx('{n} members').replace('{n}', '3'))).toBeInTheDocument();
         expect(screen.getByText(xx('Pending'))).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: xx('View details for group {name}').replace('{name}', 'Seed Savers') })).toBeInTheDocument();
+        // Yours cards open the chat (named by the group, its role and "Open chat"); Find cards open the group's details.
+        expect(screen.getByRole('button', { name: xx('View details for group {name}').replace('{name}', 'Choir') })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: new RegExp(`^Seed Savers, .+, ${xx('Open chat →').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) })).toBeInTheDocument();
         expect(bracketed()).toBeGreaterThan(30);
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
     });
@@ -82,6 +84,9 @@ describe('the Commons page in the pseudo-locale', () => {
         await showIn('xx');
         render(<ProjectsPage identity={ME} />);
         expect(await screen.findByText(xx('Nothing of yours yet. Start something with +, or find one below.'))).toBeInTheDocument();
+        expect(await screen.findByText(xx('No groups found'))).toBeInTheDocument();
+        expect(await screen.findByText(xx('No enterprises found'))).toBeInTheDocument();
+        expect(screen.getByText(xx('Start a working group, guild, or team to coordinate discussions.'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
     });
 
@@ -151,8 +156,12 @@ describe('the Commons page in English', () => {
         expect(bracketed()).toBe(0);
         expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Commons');
         await waitFor(() => expect(screen.getByText('250.00 🫘')).toBeInTheDocument());
-        const cards = screen.getAllByRole('button', { name: /^View details for group / });
-        expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['View details for group Seed Savers', 'View details for group Night Owls', 'View details for group Choir']);
+        // Yours (Seed Savers, Night Owls) open the chat and say the role; Find (Choir) opens the details.
+        const cards = [
+            screen.getByRole('button', { name: 'Seed Savers, convenor, Open chat →' }),
+            screen.getByRole('button', { name: 'Night Owls, observer, Open chat →' }),
+            screen.getByRole('button', { name: 'View details for group Choir' }),
+        ];
         expect(within(cards[0]).getByText(/🏷️/).textContent).toBe('🏷️ working group');
         expect(within(cards[0]).getByText('3 members')).toBeInTheDocument();
         expect(within(cards[0]).getByText('convenor')).toBeInTheDocument();

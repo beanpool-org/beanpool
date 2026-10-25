@@ -56,8 +56,8 @@ describe('The enterprise screen: a sentence, not a pledge box, when pledges are 
     const screen = () => source('treasury-detail.tsx');
     const funding = () => slice(screen(), 'const isFunded = current >= goal', '})()}');
 
-    it('asks the rule with the enterprise\'s status', () => {
-        expect(funding()).toContain('const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle);');
+    it('asks the rule with the enterprise\'s status and deadline', () => {
+        expect(funding()).toContain('const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle, detail?.deadlineAt);');
     });
 
     it('shows the sentence when pledges are closed, and the box with its PLEDGE BEANS button only when they are open', () => {

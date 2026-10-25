@@ -2375,11 +2375,6 @@
   "Decide": "Keputusan",
   "Groups Section": "Bagian Grup",
   "Groups": "Grup",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} Grup adalah tempat untuk beberapa orang, bukan semua orang. Proyek dan usaha menyimpan kacang; grup obrolan tidak menyimpannya. Berada di dalam grup tidak mengubah kepercayaan atau suaramu.",
-  "👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.": "👥 {label} Grup adalah tempat untuk beberapa orang, bukan semua orang. Berada di dalam grup tidak mengubah kepercayaan atau suaramu.",
-  "Groups:": "Grup:",
-  "Your groups": "Grupmu",
-  "You're not in any groups yet. Join one below, or start one with +.": "Kamu belum bergabung di grup mana pun. Bergabunglah di bawah, atau buat grup baru dengan +.",
   "Groups you could join": "Grup yang bisa kamu ikuti",
   "{n} live offer|{n} live offers": {
     "other": "{n} penawaran aktif"
@@ -3049,11 +3044,7 @@
   "Stargate\u0004avatar": "Stargate",
   "Cyber Eye\u0004avatar": "Mata Siber",
   "Commons": "Sarana Bersama",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.": "Keputusan komunitas, Sarana Bersama, dan grupmu: proyek, usaha, dan banyak lagi. Usulkan tindakan mengikat dan berikan suara untuk hal yang penting.",
-  "Community decisions and groups. Propose binding actions and vote on what matters.": "Keputusan komunitas dan grup. Usulkan tindakan mengikat dan berikan suara untuk hal yang penting.",
-  "Projects, enterprises, and groups to join or start.": "Proyek, usaha, dan grup untuk diikuti atau dimulai.",
   "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.": "Sarana Bersama komunitas lokal, dari sebuah contoh: pool bersama, usaha, dan keputusan yang mengikat. Di bawahnya, grup untuk diikuti di sini, atau mulai milikmu sendiri dengan +.",
-  "Find a group to join, or start your own with +.": "Temukan grup untuk diikuti, atau mulai milikmu sendiri dengan +.",
   "🌱 Projects": "🌱 Proyek",
   "🏛️ Enterprises": "🏛️ Usaha",
   "👥 Chat groups": "👥 Grup obrolan",

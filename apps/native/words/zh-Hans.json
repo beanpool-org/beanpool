@@ -2373,11 +2373,6 @@
   "Decide": "决策",
   "Groups Section": "群组板块",
   "Groups": "群组",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} 群组是属于部分人而非所有人的空间。项目和企业可以持有豆子，聊天群组则不持有。加入群组不会改变你的信任等级或投票权。",
-  "👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.": "👥 {label} 群组是属于部分人而非所有人的空间。加入群组不会改变你的信任等级或投票权。",
-  "Groups:": "群组：",
-  "Your groups": "你的群组",
-  "You're not in any groups yet. Join one below, or start one with +.": "你尚未加入任何群组。从下方选择加入，或点击 + 创建一个。",
   "Groups you could join": "你可以加入的群组",
   "{n} live offer|{n} live offers": {
     "other": "{n} 个进行中的提供"
@@ -3047,11 +3042,7 @@
   "Stargate\u0004avatar": "星际之门",
   "Cyber Eye\u0004avatar": "赛博之眼",
   "Commons": "公共资金池",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.": "社区决策、公共资金池以及你的群组：项目、企业等。发起具有约束力的行动，就关键事务投票。",
-  "Community decisions and groups. Propose binding actions and vote on what matters.": "社区决策与群组。发起具有约束力的行动，就关键事务投票。",
-  "Projects, enterprises, and groups to join or start.": "可加入或发起的项目、企业和群组。",
   "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.": "本地社区的公共资金池示例：共享资金池、企业和具约束力的决策。其下方是可加入或点击 + 自行创建的群组。",
-  "Find a group to join, or start your own with +.": "寻找要加入的群组，或点击 + 自行创建。",
   "🌱 Projects": "🌱 项目",
   "🏛️ Enterprises": "🏛️ 企业",
   "👥 Chat groups": "👥 聊天群组",

@@ -2373,11 +2373,6 @@
   "Decide": "決策",
   "Groups Section": "群組板塊",
   "Groups": "群組",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} 群組是部分成員而非全員交流的地方。專案和事業可以持有豆子；聊天群組則無。加入群組不會改變你的信任等級或投票權。",
-  "👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.": "👥 {label} 群組是部分成員而非全員交流的地方。加入群組不會改變你的信任等級或投票權。",
-  "Groups:": "群組：",
-  "Your groups": "你的群組",
-  "You're not in any groups yet. Join one below, or start one with +.": "你尚未加入任何群組。從下方加入一個，或點擊 + 建立。",
   "Groups you could join": "你可以加入的群組",
   "{n} live offer|{n} live offers": {
     "other": "{n} 則有效提供"
@@ -3047,11 +3042,7 @@
   "Stargate\u0004avatar": "星際之門",
   "Cyber Eye\u0004avatar": "賽博之眼",
   "Commons": "公共板塊",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.": "社群決策、公共資金池以及你的群組：專案、事業等。發起具約束力的行動，就關鍵事務投票。",
-  "Community decisions and groups. Propose binding actions and vote on what matters.": "社群決策與群組。發起具約束力的行動，就關鍵事務投票。",
-  "Projects, enterprises, and groups to join or start.": "可加入或發起的專案、事業和群組。",
   "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.": "在地社群的公共板塊範例：共享資金池、事業和具約束力的決策。其下方是可加入或點擊 + 自行建立的群組。",
-  "Find a group to join, or start your own with +.": "尋找要加入的群組，或點擊 + 自行建立。",
   "🌱 Projects": "🌱 專案",
   "🏛️ Enterprises": "🏛️ 事業",
   "👥 Chat groups": "👥 聊天群組",

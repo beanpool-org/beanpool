@@ -274,9 +274,13 @@ export function chatLifecycleFromRows(items: ReadonlyArray<Pick<YourChat, 'id' |
 
 /**
  * The member's part in an enterprise-kind row, in its kind's words: Leader / Collaborator on a project, Lead keeper /
- * Keeper on an enterprise (the same words as core keeperWords). Null for a group or an event, whose rows say no role.
+ * Keeper on an enterprise (the same words as core keeperWords). For a group row: Convenor when the member is a convenor;
+ * null for members and observers. Null for an event.
  */
 export function rowRoleWord(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle'>): string | null {
+    if (item.kind === 'group') {
+        return item.role === 'convenor' ? t('Convenor', undefined, 'group role') : null;
+    }
     if (item.kind !== 'enterprise') return null;
     if (item.lifecycle === 'bounded') return item.role === 'lead' ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role');
     return item.role === 'lead' ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role');

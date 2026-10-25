@@ -141,12 +141,14 @@ describe('a project is a project, an enterprise an enterprise (group decisions Â
         expect(chatEmoji('event', null, 'bounded')).toBe('ðŸ“…');
     });
 
-    it('the row role words: Leader / Collaborator on a project, Lead keeper / Keeper on an enterprise, none on a group', () => {
+    it('the row role words: Leader / Collaborator on a project, Lead keeper / Keeper on an enterprise, Convenor on a group', () => {
         expect(rowRoleWord({ kind: 'enterprise', role: 'lead', lifecycle: 'bounded' })).toBe('Leader');
         expect(rowRoleWord({ kind: 'enterprise', role: 'keeper', lifecycle: 'bounded' })).toBe('Collaborator');
         expect(rowRoleWord({ kind: 'enterprise', role: 'lead', lifecycle: 'ongoing' })).toBe('Lead keeper');
         expect(rowRoleWord({ kind: 'enterprise', role: 'keeper' })).toBe('Keeper');
-        expect(rowRoleWord({ kind: 'group', role: 'convenor' })).toBeNull();
+        expect(rowRoleWord({ kind: 'group', role: 'convenor' })).toBe('Convenor');
+        expect(rowRoleWord({ kind: 'group', role: 'member' })).toBeNull();
+        expect(rowRoleWord({ kind: 'group', role: 'observer' })).toBeNull();
         expect(rowRoleWord({ kind: 'event', role: 'host' })).toBeNull();
     });
 

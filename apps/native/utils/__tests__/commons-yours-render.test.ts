@@ -354,7 +354,7 @@ describe('Commons S3 — Yours first, Find named, explainer gone (phone)', () =>
         await click(byLabel('Groups Section'), 'Groups');
 
         // The enterprise name element in the row has numberOfLines={2} (data-lines="2")
-        const nameEl = host.querySelector('[data-lines="2"]');
+        const nameEl = Array.from(host.querySelectorAll('[data-lines="2"]')).find(el => (el.textContent ?? '').includes('Community Eggs'));
         expect(nameEl).toBeTruthy();
         expect(nameEl?.textContent).toContain('Community Eggs');
 

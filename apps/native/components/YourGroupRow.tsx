@@ -10,7 +10,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { chatEmoji, ownerKindName, previewLine, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { chatEmoji, ownerKindName, previewLine, rowRoleWord, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
 import { t, tn } from '@beanpool/core';
 
 /** The whole spoken label: the row's name phrase, then its unread count and muting, then the last line, as sentences. */
@@ -73,7 +73,9 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
     const muted = isMuted(item.mute);
     // A project is a project (🎯) and an enterprise an enterprise (🥖), §3.1. The member's part (Leader, Collaborator,
     // Lead keeper, Keeper) is in the spoken label only: drawn beside the kind it would leave the preview a few dp at 320dp.
+    // For a group: the convenor word shows for convenors (§3.1, S3).
     const kindWord = item.kind === 'group' ? null : ownerKindName(item.kind, item.lifecycle);
+    const roleWord = rowRoleWord(item);
     const preview = previewLine(item, myPubkey);
     const time = rowTime(item.lastMessage?.timestamp ?? null);
 
@@ -90,6 +92,11 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
             <View style={styles.body}>
                 <View style={styles.top}>
                     <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>{item.name}</Text>
+                    {roleWord && item.kind === 'group' && (
+                        <View style={styles.kindPill}>
+                            <Text style={styles.kindPillText} maxFontSizeMultiplier={1.2} numberOfLines={1}>{roleWord}</Text>
+                        </View>
+                    )}
                     {muted && <MaterialCommunityIcons name="bell-off-outline" size={14} color={colors.text.muted} />}
                     {!!time && <Text style={[styles.time, unread > 0 && styles.timeUnread]} numberOfLines={1}>{time}</Text>}
                 </View>

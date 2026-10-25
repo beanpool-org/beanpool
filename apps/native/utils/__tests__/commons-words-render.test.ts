@@ -572,8 +572,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         await renderIn('en');
         expect(bracketed()).toBe(0);
         await toGroups('en');
-        for (const english of ['Commons', 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.',
-            'COMMONS POOL', 'VOICE CREDITS', 'For money votes · from completed trades · N votes cost N×N', 'Decide', 'Groups', 'YOUR GROUPS', 'GROUPS YOU COULD JOIN',
+        for (const english of ['Commons', 'What this community runs together: its pool, decisions, enterprises and groups.',
+            'COMMONS POOL', 'VOICE CREDITS', 'For money votes · from completed trades · N votes cost N×N', 'Decide', 'Groups', 'YOURS', 'GROUPS, PROJECTS AND ENTERPRISES HERE',
             '🏷️ working group · 4 members · request to join', 'Join policy: request to join', 'View Details →', 'INVITED', 'OBSERVER', '1 keeper',
             'Paused for season · 2 keepers', '10 days left', 'Expired', 'Goal: 300 🫘', 'No description provided.']) {
             expect(host.textContent, english).toContain(english);

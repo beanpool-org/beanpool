@@ -8,18 +8,20 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
-import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, enterprisesOn, yoursRows, findHeading, yoursEmpty, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
-import { chatEmoji, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
+import { chatEmoji, chatHref, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { EnterpriseCard, commonsCardStyles } from '../../components/EnterpriseCard';
+import { YoursEnterpriseRow } from '../../components/YoursEnterpriseRow';
+import { YourGroupRow } from '../../components/YourGroupRow';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sample-screens';
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
@@ -62,11 +64,11 @@ export default function ProjectsScreen() {
     // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
     const reader = useReaderFeatures();
     const showsBeans = beansOn(reader.effective);
-    // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
-    // "Groups you could join" (decision 7).
+    // Commons → Groups = "Yours" (enterprises/projects you keep first, then groups you are in) +
+    // Find list named by kind chip (decision 7, S3).
     const yourGroupsLive = useYourGroups(identity?.publicKey);
     const yourGroups = useMemo(() => {
-        const all = yourGroupsLive.items || [];
+        const all = (yourGroupsLive.items || []).filter(g => g.kind !== 'event');
         if (!enterprisesOn(reader.effective)) {
             return all.filter(g => g.kind !== 'enterprise');
         }
@@ -75,6 +77,10 @@ export default function ProjectsScreen() {
     const yourGroupsState = yourGroupsPaneState(
         yourGroupsLive.items === null ? null : yourGroups,
         yourGroupsLive.error
+    );
+    const { kept: keptEnterprises, groups: myGroups } = useMemo(
+        () => yoursRows(yourGroups, enterprises),
+        [yourGroups, enterprises],
     );
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5): drawn only where this build has a tool this community can
@@ -105,6 +111,8 @@ export default function ProjectsScreen() {
     const [pickedSection, setActiveSection] = useState<CommonsSection | null>(null);
     // The kind chip over the one Groups list: projects, enterprises, chat groups, or all of them.
     const [groupKind, setGroupKind] = useState<GroupKind>('all');
+    const findHeadingLine = { text: findHeading(groupKind, reader.effective) };
+    const emptyYoursLine = { text: yoursEmpty(reader.effective) };
     // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
     // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
     const activeSection = commonsSectionFor(
@@ -620,32 +628,38 @@ export default function ProjectsScreen() {
                             />
                         ) : (
                             <View style={{ gap: 12 }}>
-                                <View style={{ backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default }}>
-                                    <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
-                                        <Sentence
-                                            text={kindChips.length > 0
-                                                ? t('👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.')
-                                                : t('👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.')}
-                                            parts={{ label: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{t('Groups:')}</Text> }}
-                                        />
-                                    </Text>
-                                </View>
-
-                                <Text style={styles.groupsHeading}>{inCapitalsOf(t('Your groups'))}</Text>
+                                <Text style={styles.groupsHeading}>{inCapitalsOf(t('Yours'))}</Text>
                                 {yourGroupsState === 'loading' && <YourGroupsLoading flush />}
                                 {yourGroupsState === 'error' && (
                                     <YourGroupsError message={yourGroupsLive.error || t('Could not load your groups.')} onRetry={yourGroupsLive.refresh} />
                                 )}
                                 {yourGroupsState === 'list' && (
-                                    <View style={{ marginHorizontal: 0 }}>
-                                        <YourGroupsRows items={yourGroups} myPubkey={identity?.publicKey} flush />
+                                    <View style={{ marginHorizontal: 0, gap: 4 }}>
+                                        {keptEnterprises.map(item => (
+                                            <YoursEnterpriseRow
+                                                key={`kept:${item.chat.id}`}
+                                                item={item}
+                                                flush
+                                            />
+                                        ))}
+                                        {myGroups.map(item => (
+                                            <YourGroupRow
+                                                key={`group:${item.id}`}
+                                                item={item}
+                                                myPubkey={identity?.publicKey}
+                                                flush
+                                                onPress={(it) => {
+                                                    router.push(chatHref(it) as any);
+                                                }}
+                                            />
+                                        ))}
                                     </View>
                                 )}
                                 {yourGroupsState === 'empty' && (
-                                    <Text style={styles.groupsNone}>{t("You're not in any groups yet. Join one below, or start one with +.")}</Text>
+                                    <Text style={styles.groupsNone}>{t(emptyYoursLine.text)}</Text>
                                 )}
 
-                                <Text style={styles.groupsHeading}>{inCapitalsOf(t('Groups you could join'))}</Text>
+                                <Text style={styles.groupsHeading}>{inCapitalsOf(t(findHeadingLine.text))}</Text>
                                 {/* The kind chips (pick 7): one list of projects, enterprises and chat groups. None where the
                                     node has no projects or enterprises: there every group is a chat group. */}
                                 {kindChips.length > 0 && (

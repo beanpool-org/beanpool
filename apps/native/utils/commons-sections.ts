@@ -15,8 +15,8 @@
 
 import { word, type WordKey } from '@beanpool/core';
 import { decisionsOn, hiddenTabsFor, type NodeFeatures } from './node-profile';
-import { groupsYouCouldJoin } from './your-groups';
-import type { GroupItem } from './db';
+import { groupsYouCouldJoin, type YourChat } from './your-groups';
+import type { GroupItem, TreasurySummary } from './db';
 
 export type CommonsSection = 'decide' | 'groups';
 
@@ -58,16 +58,31 @@ export function commonsHeading(features: NodeFeatures | null | undefined): { tit
     const enterprises = enterprisesOn(features);
     const commons = word('Commons');
     if (decide && enterprises) {
-        return { title: commons, description: word('Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.') };
+        return { title: commons, description: word('What this community runs together: its pool, decisions, enterprises and groups.') };
     }
-    if (decide) return { title: commons, description: word('Community decisions and groups. Propose binding actions and vote on what matters.') };
-    if (enterprises) return { title: commons, description: word('Projects, enterprises, and groups to join or start.') };
+    if (decide) return { title: commons, description: word('What this community runs together: its decisions and groups.') };
+    if (enterprises) return { title: commons, description: word('What this community runs together: its pool, enterprises and groups.') };
     // A node that shows its switched-off features (the worldwide community's showcase) keeps the Commons heading over
     // Example Valley's pool, enterprise and Decision, drawn first, and the real groups under them (design §1 row 6).
     if (features?.showcase === true) {
         return { title: commons, description: word("A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.") };
     }
-    return { title: word('Groups'), description: word('Find a group to join, or start your own with +.') };
+    return { title: word('Groups'), description: word('Groups to join here, or start your own with +.') };
+}
+
+/** The heading over the Find list for a chip: names the kinds shown, or groups only where enterprises are off. */
+export function findHeading(kind: GroupKind, features: NodeFeatures | null | undefined): WordKey {
+    if (!enterprisesOn(features) || kind === 'chat') return word('Groups you could join');
+    if (kind === 'projects') return word('Projects to back');
+    if (kind === 'enterprises') return word('Enterprises here');
+    return word('Groups, projects and enterprises here');
+}
+
+/** The line shown when Yours has no rows yet: word() key, shown through t(). */
+export function yoursEmpty(features: NodeFeatures | null | undefined): WordKey {
+    return enterprisesOn(features)
+        ? word('Nothing of yours yet. Start something with +, or find one below.')
+        : word('No groups of yours yet. Start one with +, or join one below.');
 }
 
 /** The kind chips over the Groups list. */
@@ -146,3 +161,43 @@ export function findGroupsInTalk(features: NodeFeatures | null | undefined): boo
 
 /** Where "Find groups" and "Find a group to join" go: the Commons screen, on Groups (the route opens with the tab hidden). */
 export const FIND_GROUPS_HREF = { pathname: '/(tabs)/projects', params: { section: 'groups' } } as const;
+
+export interface KeptEnterpriseRow<T extends { publicKey: string } = TreasurySummary> {
+    chat: YourChat;
+    summary?: T;
+}
+
+/**
+ * Splits "Yours" into kept enterprises/projects (lead first, then by name) and chat groups.
+ * Events are omitted completely (§6.1 Q3: they stay in Talk → Groups, Home and the Market).
+ * Each kept enterprise is joined to its TreasurySummary by publicKey.
+ */
+export function yoursRows<T extends { publicKey: string } = TreasurySummary>(
+    yourGroups: ReadonlyArray<YourChat>,
+    enterprises: ReadonlyArray<T>,
+): { kept: KeptEnterpriseRow<T>[]; groups: YourChat[] } {
+    const summaryMap = new Map<string, T>();
+    for (const ent of enterprises) {
+        summaryMap.set(ent.publicKey, ent);
+    }
+    const kept: KeptEnterpriseRow<T>[] = [];
+    const groups: YourChat[] = [];
+
+    for (const chat of yourGroups) {
+        if (chat.kind === 'event') continue;
+        if (chat.kind === 'enterprise') {
+            kept.push({ chat, summary: summaryMap.get(chat.id) });
+        } else if (chat.kind === 'group') {
+            groups.push(chat);
+        }
+    }
+
+    kept.sort((a, b) => {
+        const aLead = a.chat.role === 'lead';
+        const bLead = b.chat.role === 'lead';
+        if (aLead !== bLead) return aLead ? -1 : 1;
+        return a.chat.name.localeCompare(b.chat.name);
+    });
+
+    return { kept, groups };
+}

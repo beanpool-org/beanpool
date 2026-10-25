@@ -42,6 +42,12 @@ function makeMember(callsign: string) {
     return { pubKeyHex, privateKey };
 }
 
+function makeStranger() {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    return { pubKeyHex, privateKey };
+}
+
 async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex: string; privateKey: crypto.KeyObject }, body?: any) {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
@@ -75,6 +81,51 @@ async function main() {
     const project = createProject(proposer.pubKeyHex, 'Library Renovation', 'Funding books and seats', 500);
     assert(project !== null, 'Project created successfully');
     const projectId = project!.id;
+
+    // 0a. Non-member is refused access to /api/treasuries and /api/enterprises (401 unauthenticated, 403 signed non-member)
+    const unauthTreasuriesRes = await fetch(`${BASE}/api/treasuries`);
+    assert(unauthTreasuriesRes.status === 401, `Unauthenticated request refused from /api/treasuries (got ${unauthTreasuriesRes.status})`);
+    const unauthEnterprisesRes = await fetch(`${BASE}/api/enterprises`);
+    assert(unauthEnterprisesRes.status === 401, `Unauthenticated request refused from /api/enterprises (got ${unauthEnterprisesRes.status})`);
+
+    const stranger = makeStranger();
+    const strangerTreasuriesRes = await signedFetch('GET', '/api/treasuries', stranger);
+    assert(strangerTreasuriesRes.status === 403, `Non-member stranger refused from /api/treasuries (got ${strangerTreasuriesRes.status})`);
+    const strangerEnterprisesRes = await signedFetch('GET', '/api/enterprises', stranger);
+    assert(strangerEnterprisesRes.status === 403, `Non-member stranger refused from /api/enterprises (got ${strangerEnterprisesRes.status})`);
+
+    // 0b. Another member sees live project in /api/treasuries and /api/enterprises by default
+    const memberTreasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
+    const projectInTreasuries = memberTreasuriesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
+    assert(!!projectInTreasuries, 'Another member sees live project in /api/treasuries');
+    assert(projectInTreasuries?.lifecycle === 'bounded', 'Project has lifecycle bounded in /api/treasuries');
+    assert(projectInTreasuries?.goalAmount === 500, 'Project has goalAmount 500 in /api/treasuries');
+
+    const memberEnterprisesRes = (await signedFetch('GET', '/api/enterprises', attacker)).body;
+    const projectInEnterprises = memberEnterprisesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
+    assert(!!projectInEnterprises, 'Another member sees live project in /api/enterprises');
+
+    // 0c. Suspended project shows only to its keepers, not other members
+    const suspProj = createProject(proposer.pubKeyHex, 'Suspended Project', 'Temporarily suspended', 200);
+    assert(suspProj !== null, 'Suspended project created');
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspProj!.id);
+
+    const attackerSuspCheck = (await signedFetch('GET', '/api/treasuries', attacker)).body;
+    assert(!attackerSuspCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Other member does not see suspended project in /api/treasuries');
+    const attackerSuspCheckEnt = (await signedFetch('GET', '/api/enterprises', attacker)).body;
+    assert(!attackerSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Other member does not see suspended project in /api/enterprises');
+
+    const keeperSuspCheck = (await signedFetch('GET', '/api/treasuries', proposer)).body;
+    assert(keeperSuspCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/treasuries');
+    const keeperSuspCheckEnt = (await signedFetch('GET', '/api/enterprises', proposer)).body;
+    assert(keeperSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/enterprises');
+
+    // 0d. Pruned project stays absent for everyone
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(suspProj!.id);
+    const attackerPrunedCheck = (await signedFetch('GET', '/api/treasuries', attacker)).body;
+    assert(!attackerPrunedCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Other member does not see pruned project in /api/treasuries');
+    const keeperPrunedCheck = (await signedFetch('GET', '/api/treasuries', proposer)).body;
+    assert(!keeperPrunedCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper does not see pruned project in /api/treasuries');
 
     // 1. Test POST /api/commons/projects/update: Rejects non-owner update
     const nonOwnerUpdateRes = await signedFetch('POST', '/api/commons/projects/update', attacker, {
@@ -148,9 +199,13 @@ async function main() {
     const cfGetRes = await signedFetch('GET', `/api/crowdfund/projects/${projectId}`, attacker);
     assert(cfGetRes.status === 404, `GET /api/crowdfund/projects/:id returns 404 after deletion (got ${cfGetRes.status})`);
 
-    // Verify /api/treasuries excludes deleted and bounded enterprises by default
+    // Verify /api/treasuries and /api/enterprises exclude deleted project for everyone
     const treasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
     assert(!treasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/treasuries');
+    const enterprisesRes = (await signedFetch('GET', '/api/enterprises', attacker)).body;
+    assert(!enterprisesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/enterprises');
+    const keeperTreasuriesRes = (await signedFetch('GET', '/api/treasuries', proposer)).body;
+    assert(!keeperTreasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Keeper does not see deleted project in /api/treasuries');
 
     // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 404
     const repeatDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', proposer, {

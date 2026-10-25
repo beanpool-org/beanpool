@@ -62,7 +62,7 @@ Deleting takes the words off your community's server too, so a new phone signing
 
 ## Muting a chat
 
-Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap the same button and **Unmute** to undo it. The web app cannot mute a chat yet. See "Muting a chat".
+Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap the same button and **Unmute** to undo it. Group chats can be muted in both apps; one-to-one chats on the phone only for now. See "Muting a chat".
 
 ## What is private
 

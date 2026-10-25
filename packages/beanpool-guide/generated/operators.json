@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 150,
-  "hash": "616fe2b6543c067886d3727a67dd1051770ea8d387fb5ee6131afe94cfb84052",
+  "version": 151,
+  "hash": "d5489c3d685db364482eb74f5e85ddf9354b3507790b3c20d55becab89faec3a",
   "sections": [
     {
       "id": "setup",
@@ -1302,7 +1302,7 @@
         {
           "type": "ul",
           "items": [
-            "read every report, filtered by open, handled or dismissed, with what the post says and who reported it;",
+            "read every report, filtered by open, handled or dismissed, with what the post says and who reported it, or the group chat message it names, opened with the key that came with it;",
             "take down the reported post while its report is still open, with a reason the author reads;",
             "take a reported Pulse item off the Pulse, again while its report is still open;",
             "dismiss a report, or mark it handled;",
@@ -2110,7 +2110,7 @@
     {
       "slug": "reports-and-takedowns",
       "title": "Reports and takedowns",
-      "summary": "How members report posts, people and Pulse items, where the reports land, what moderators can do with them, and what each action really does.",
+      "summary": "How members report posts, people, Pulse items and group chat messages, where the reports land, what moderators can do with them, and what each action really does.",
       "section": "safety",
       "related": [
         "pulse-and-announcements",
@@ -2125,14 +2125,15 @@
         },
         {
           "type": "p",
-          "text": "In the app, members report a post, an event, a Pulse item, a project or an enterprise (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report."
+          "text": "In the app, members report a post, an event, a Pulse item, a project, an enterprise, a message in a group's chat (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report."
         },
         {
           "type": "ul",
           "items": [
             "A member can file at most **10 reports an hour**.",
             "Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.",
-            "Nobody can report themselves."
+            "Nobody can report themselves, or their own message.",
+            "A message in a group's chat can be reported once by each member, and only by a member who can read it: someone who joined after it was written can't. Once their report is dismissed or handled, reporting the message again does nothing new, unless they choose **Child safety**: that comes in as a new report, and you are told as for any child-safety report. The report you closed stays as you left it."
           ]
         },
         {
@@ -2156,7 +2157,8 @@
           "items": [
             "In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.",
             "A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.",
-            "Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused."
+            "Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.",
+            "A report of a group chat message shows the message itself (see \"A message from a group's chat\" below). It is about the message's author."
           ]
         },
         {
@@ -2189,12 +2191,12 @@
           "type": "ul",
           "items": [
             "**Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.",
-            "Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.",
+            "Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, a member, or a message from a group's chat (below); then the reporter's words, who reported it and when.",
             "A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind; once handled it stays marked, and under **All** it takes its place by date. That covers a member who picked **Child safety**, and one whose words say it (from an older app). The owners' alert asks you to look at these first.",
             "**Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.",
             "**Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.",
             "**Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.",
-            "**Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.",
+            "**Mark handled** (for a report about a member, a group chat message, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.",
             "**Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See \"On the global community: accounts that joined together\" below."
           ]
         },
@@ -2204,7 +2206,25 @@
         },
         {
           "type": "h2",
-          "text": "Taking a post down"
+          "text": "A message from a group's chat"
+        },
+        {
+          "type": "p",
+          "text": "A group's chat is end-to-end encrypted: your server stores it but cannot read it, and neither can you. So a member who reports a message there sends that one message's own key with the report. Your server keeps the key with the report and opens nothing when the report comes in; a standby copies both. When a report is shown in **Reports** or **Triage & Moderation**, Settings asks the server to open that one message with that key, and shows:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Verified**, the message's words, its photo if it has one, and whose key signed it: the message is exactly what its author sent.",
+            "**Could not be verified**, with no words: the key does not open the message, or the message is not signed by the member it names. A reporter can't make up a message, or change one, and have it read as someone else's. Judge the report on the reporter's words alone.",
+            "**Photo could not be verified**: the words check out, but the photo stored with them is not the one their author sent.",
+            "**Image unavailable**: the words check out, but this server holds no copy of the photo. Photos in chats are not copied to a standby, so a server that took over from another has none of them.",
+            "That its author deleted it, or a convenor removed it, after it was reported: then there is nothing left to open."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The key opens that message and nothing else: no other message in the chat, and no other photo. Nobody in the group is told who reported it. Settings has no button to take a group chat message down: a convenor removes it in the chat, and the owners and admins can suspend its author."
         },
         {
           "type": "p",
@@ -4915,7 +4935,7 @@
             "Messages an older app sent before this update still open, and every one is marked as sent from an older version of the app, since nothing in them proves who wrote them, and so is a reply's quote of one. Those sent without the lock stay readable as they were stored.",
             "What the server can still do to a direct message: hold it back, deliver it late, or make it read \"This message was deleted\"; show an edit's earlier words; add or take away an emoji reaction in either member's name (reactions aren't locked); and add its own notices to the chat, which show as notices (in the chat, in a reply's quote and in the chat list), never as a member's words.",
             "A direct message can't be turned into a group's, an event's or an enterprise's chat: an app that has seen it as a direct message, or holds an encrypted line of it, keeps it one whatever type the server gives it, and ignores the change. An app that has never seen it, and is given none of its encrypted lines, can't tell it from a group's chat. In the web app that includes a browser signed out since, a private window, or one whose site data was cleared; the phone app keeps its list.",
-            "**Group chats**, and the photos in them, are encrypted in members' apps, on the phone and in the web app. The server stores them but cannot read them, and neither can you. Each line is locked with a key only the group's members hold, and the key changes when people join, leave or are removed. A member who joins later is not given the lines or photos from before they joined, and a removed member gets none from after. The server refuses a group chat line that is not locked. It still sees who wrote each line, when, and who was mentioned, which lines are photos and how large each sealed photo is, and it can hold a line back or remove one when a convenor asks. The server decides who is in a group, so it could add a member of its own; the group's members see a join line when anyone joins. Both apps do group chats; the web app keeps a chat's keys in memory only, so a browser opens them again each time.",
+            "**Group chats**, and the photos in them, are encrypted in members' apps, on the phone and in the web app. The server stores them but cannot read them, and neither can you. Each line is locked with a key only the group's members hold, and the key changes when people join, leave or are removed. A member who joins later is not given the lines or photos from before they joined, and a removed member gets none from after. The server refuses a group chat line that is not locked. It still sees who wrote each line, when, and who was mentioned, which lines are photos and how large each sealed photo is, and it can hold a line back or remove one when a convenor asks. The server decides who is in a group, so it could add a member of its own; the group's members see a join line when anyone joins. Both apps do group chats; the web app keeps a chat's keys in memory only, so a browser opens them again each time. A member who reports one message sends that message's own key with the report: your server keeps it with the report, a standby copies it, and Settings opens that one message, and its photo, for your moderators (see Reports and takedowns). It opens nothing else in the chat.",
             "All of this rests on the apps having each member's real key, which they get from this server. In the web app it also rests on the app itself, which this server sends to members' browsers; the phone app comes from the app store."
           ]
         },

@@ -335,9 +335,9 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
                 />
             );
 
-            // Badge for In Progress is 4 (2 pending posts + 2 pending txs)
+            // Badge for In Progress equals cards listed (2 pending txs; never listing + deal)
             const inProgressTab = screen.getByRole('button', { name: /In Progress/ });
-            expect(inProgressTab).toHaveTextContent('4');
+            expect(inProgressTab).toHaveTextContent('2');
 
             // In Progress shows exactly the 2 pending transactions: Bike tune-up and Weed the veggie patch
             expect(screen.getByText('Bike tune-up')).toBeInTheDocument();
@@ -422,6 +422,92 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             fireEvent(pending, ev);
             expect(ev.defaultPrevented).toBe(true);
             expect(onNavigateToPost).toHaveBeenCalledWith('post-2', 'tx-1');
+        });
+
+        it('In Progress count equals the cards it lists, for both recurring and one-off posts', () => {
+            const ana = { publicKey: 'pubkey-ana' };
+            const kofi = { publicKey: 'pubkey-kofi' };
+
+            const recurringOffer = {
+                id: 'p-rec',
+                type: 'offer' as const,
+                title: 'Mentorship',
+                authorPublicKey: kofi.publicKey,
+                authorCallsign: 'Kofi',
+                status: 'active' as const,
+                credits: 45,
+                photos: [],
+                createdAt: '2026-10-10T00:00:00Z',
+                category: 'services',
+                description: '',
+                priceType: 'fixed' as const,
+                active: true,
+                repeatable: true,
+            };
+
+            const oneOffOffer = {
+                id: 'p-oneoff',
+                type: 'offer' as const,
+                title: 'Handmade Mug',
+                authorPublicKey: kofi.publicKey,
+                authorCallsign: 'Kofi',
+                status: 'pending' as const,
+                acceptedBy: ana.publicKey,
+                credits: 15,
+                photos: [],
+                createdAt: '2026-10-10T00:00:00Z',
+                category: 'goods',
+                description: '',
+                priceType: 'fixed' as const,
+                active: true,
+                repeatable: false,
+            };
+
+            const pendingTransactions: MarketplaceTransaction[] = [
+                {
+                    id: 'tx-rec',
+                    postId: 'p-rec',
+                    postTitle: 'Mentorship',
+                    buyerPublicKey: ana.publicKey,
+                    buyerCallsign: 'Ana',
+                    sellerPublicKey: kofi.publicKey,
+                    sellerCallsign: 'Kofi',
+                    credits: 45,
+                    status: 'pending',
+                    createdAt: '2026-10-15T00:00:00Z',
+                },
+                {
+                    id: 'tx-oneoff',
+                    postId: 'p-oneoff',
+                    postTitle: 'Handmade Mug',
+                    buyerPublicKey: ana.publicKey,
+                    buyerCallsign: 'Ana',
+                    sellerPublicKey: kofi.publicKey,
+                    sellerCallsign: 'Kofi',
+                    credits: 15,
+                    status: 'pending',
+                    createdAt: '2026-10-16T00:00:00Z',
+                },
+            ];
+
+            render(
+                <MyDealsModal
+                    visible={true}
+                    identity={ana}
+                    preview={false}
+                    onClose={vi.fn()}
+                    posts={[recurringOffer, oneOffOffer]}
+                    transactions={pendingTransactions}
+                />
+            );
+
+            // Tab badge must equal exactly the 2 cards listed
+            const inProgressTab = screen.getByRole('button', { name: /In Progress/ });
+            expect(inProgressTab).toHaveTextContent('2');
+
+            // 2 deal cards rendered
+            expect(screen.getByTestId('deal-card-tx-rec')).toBeInTheDocument();
+            expect(screen.getByTestId('deal-card-tx-oneoff')).toBeInTheDocument();
         });
 
         it('preview: a card tap leaves focus in its sheet, and closing the sheet gives focus back to the card', async () => {

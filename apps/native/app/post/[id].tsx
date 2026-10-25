@@ -22,6 +22,7 @@ import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
+import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
@@ -38,7 +39,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -47,6 +48,7 @@ import { readListingShopId, readMyShop } from '../../utils/shop';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
 import { changedElsewhere } from '../../utils/changed-elsewhere';
+import { requestSync } from '../../services/pillar-sync';
 import { signedRequestWords } from '../../components/signed-request-lines';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
@@ -523,6 +525,7 @@ export default function PostDetailModal() {
     const [submittingReport, setSubmittingReport] = useState(false);
     const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
+    const [showDealsSheet, setShowDealsSheet] = useState(false);
 
     // Request Rejection Modal State
     const [rejectModalTxId, setRejectModalTxId] = useState<string | null>(null);
@@ -605,8 +608,8 @@ export default function PostDetailModal() {
                             FROM marketplace_transactions t 
                             LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
                             LEFT JOIN members s ON t.seller_pubkey = s.public_key 
-                            WHERE t.id = ?
-                        `, [singleTxId]).then(updateActiveTx);
+                            WHERE t.id = ? AND t.post_id = ?
+                        `, [singleTxId, singleId]).then(updateActiveTx);   // a deal shows only on ITS listing (a hand-made link pairs any)
                     } else if (activeIdentity) {
                         const currentPost = await getPost(singleId);
                         let isKeeper = false;
@@ -1227,12 +1230,24 @@ export default function PostDetailModal() {
                     <View style={styles.ownPostActions}>
                         {isPayer ? (
                             <>
-                                <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                                    {t('✅ Action Required: Release Credits')}
+                                {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
+                                    deal's own date, never the post's while the deals are still loading. */}
+                                {!isOwnPost && !!(activeTx?.created_at || activeTx?.createdAt) && (
+                                    <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                                        {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                            date: formatDate(new Date(activeTx.created_at || activeTx.createdAt), 'day-month'),
+                                            n: formatNumber(activeTx.credits ?? post.credits),
+                                        })}
+                                    </Text>
+                                )}
+                                <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: post.type === 'offer' && !!post.repeatable ? 4 : 12, paddingHorizontal: 16 }}>
+                                    {t("Release the Beans when it's done.")}
                                 </Text>
-                                <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: 12, paddingHorizontal: 16 }}>
-                                    {t('You are the Payer. Once {name} has fulfilled the terms, release the funds to complete the transaction.', { name: targetPeerCallsign })}
-                                </Text>
+                                {post.type === 'offer' && !!post.repeatable && (
+                                    <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: 12, paddingHorizontal: 16 }}>
+                                        {t('You can take it up again once this one is done.')}
+                                    </Text>
+                                )}
                                 
                                 {showCompleteConfirm ? (
                                     <View style={styles.confirmBox}>
@@ -1356,7 +1371,6 @@ export default function PostDetailModal() {
                                         } catch(e:any) { 
                                             if (changedElsewhere(e, 'transaction_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
-                                                const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
                                                 if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                             } else {
@@ -1367,6 +1381,19 @@ export default function PostDetailModal() {
                                 ]);
                             }}>
                                 <Text style={styles.cancelTxBtnText}>{t('❌ Cancel Trust Hold')}</Text>
+                            </Pressable>
+
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('All your deals')}
+                                onPress={() => {
+                                    setShowDealsSheet(true);
+                                }}
+                                style={{ alignItems: 'center', marginTop: 8, paddingVertical: 4 }}
+                            >
+                                <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
+                                    {t('All your deals ›')}
+                                </Text>
                             </Pressable>
                         </View>
                     </View>
@@ -1646,7 +1673,12 @@ export default function PostDetailModal() {
                                         } catch (e: any) {
                                             if (changedElsewhere(e, 'post_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This post was already accepted or modified elsewhere. Refreshing your screen...'));
-                                                const { requestSync } = require('../../services/pillar-sync');
+                                                requestSync().catch(console.error);
+                                                setShowAcceptConfirm(false);
+                                            } else if (changedElsewhere(e, 'deal_open')) {
+                                                // The member's deal on this listing is under way already (made on another device, or before
+                                                // this screen knew): said, and the listing refreshed, which then shows that deal where Accept was.
+                                                Alert.alert(t('Already under way'), t('You already have a deal under way on this. Finish or cancel it first.'));
                                                 requestSync().catch(console.error);
                                                 setShowAcceptConfirm(false);
                                             } else {
@@ -2023,6 +2055,14 @@ export default function PostDetailModal() {
                         setPromptReviewForTx(null);
                         if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                     }}
+                />
+            )}
+            {showDealsSheet && (
+                <MyDealsSheet
+                    visible={showDealsSheet}
+                    identity={identity}
+                    onClose={() => setShowDealsSheet(false)}
+                    initialTab="pending"
                 />
             )}
             

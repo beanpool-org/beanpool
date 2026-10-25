@@ -243,6 +243,7 @@ export function App() {
     const [openYourShop, setOpenYourShop] = useState(false);
     const [openShopId, setOpenShopId] = useState<string | null>(null);
     const [shopFromYourShop, setShopFromYourShop] = useState(false);
+    const [openTreasuryTab, setOpenTreasuryTab] = useState<'page' | 'manage'>('page');
     // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
     // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
@@ -269,6 +270,7 @@ export function App() {
     const closePagesOver = () => {
         setOpenProfilePubkey(null);
         setOpenTreasuryPubkey(null);
+        setOpenTreasuryTab('page');
         setOpenTool(null);
         setOpenYourShop(false);
         setOpenShopId(null);
@@ -1165,7 +1167,10 @@ export function App() {
                             {activeTab === 'projects' && (
                                 <ProjectsPage
                                     identity={identity}
-                                    onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                    onOpenTreasury={(pubkey, tab) => {
+                                        setOpenTreasuryTab(tab ?? 'page');
+                                        setOpenTreasuryPubkey(pubkey);
+                                    }}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     isMember={isGuest === null ? null : !isGuest}
                                 />
@@ -1207,10 +1212,14 @@ export function App() {
                             identity={identity}
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
+                            initialTab={openTreasuryTab}
                             enterprisesPreview={enterprisesMode === 'preview'}
                             onNearYou={() => { closePagesOver(); setActiveTab('home'); }}
                             onGuide={(slug) => { closePagesOver(); navigateToTab('guide', slug); }}
-                            onBack={() => setOpenTreasuryPubkey(null)}
+                            onBack={() => {
+                                setOpenTreasuryPubkey(null);
+                                setOpenTreasuryTab('page');
+                            }}
                             onNavigatePost={(postId) => {
                                 closePagesOver();
                                 navigateToTab('marketplace', postId);

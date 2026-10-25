@@ -271,6 +271,7 @@ export const SUITES = [
     'test-standby-refusal-keeps-copy',
     'test-tombstone-retention',
     'test-sync-copy-pages',
+    'test-open-copies',
     'test-standby-paged-copies',
     'test-standby-swap-at-boot',
     'test-standby-paged-copies-pacing',

@@ -94,15 +94,15 @@ export function EnterpriseFace({
     const banner = form.banner === null ? null : form.banner ?? resolveAvatarUrl(heldBanner);
 
     // Each picture is the part of its photo the keeper chooses in the crop dialog: the logo square, the banner 3:1, as its
-    // page draws them. Cancel there changes nothing.
-    const cropper = usePictureCrop();
+    // page draws them. Cancel there changes nothing. One crop each, so a ready-made logo never drops a banner photo being read.
+    const croppers = { avatar: usePictureCrop(), banner: usePictureCrop() };
     const pick = async (file: File | undefined, which: 'avatar' | 'banner') => {
         if (!file) return;
         const n = ++pickSeq.current[which];
         setPickingWhich((p) => ({ ...p, [which]: true }));
         setError(null);
         try {
-            const picture = await cropper.crop(file, which === 'avatar' ? AVATAR_PICTURE : BANNER_PICTURE);
+            const picture = await croppers[which].crop(file, which === 'avatar' ? AVATAR_PICTURE : BANNER_PICTURE);
             if (n !== pickSeq.current[which] || !picture) return;
             set(which === 'avatar' ? { avatar: picture } : { banner: picture });
         } catch {
@@ -113,7 +113,7 @@ export function EnterpriseFace({
     };
     const pickPreset = (uri: string) => {
         pickSeq.current.avatar++;
-        cropper.cancel();
+        croppers.avatar.cancel();
         setPickingWhich((p) => ({ ...p, avatar: false }));
         set({ avatar: uri });
     };
@@ -280,7 +280,8 @@ export function EnterpriseFace({
             <button type="submit" data-testid="manage-face-save" disabled={!dirty || saving || picking} className={primary}>
                 {saving ? t('Saving…') : t('Save')}
             </button>
-            {cropper.dialog}
+            {croppers.avatar.dialog}
+            {croppers.banner.dialog}
         </form>
     );
 }

@@ -209,7 +209,7 @@ describe("an enterprise's logo and banner (Manage)", () => {
         renderFace();
         fireEvent.change(screen.getByTestId('manage-face-banner-input'), { target: { files: [photo()] } });
         fireEvent.click(screen.getByRole('button', { name: 'Select Leaf avatar' }));
-        let dialog = await cropDialog();
+        const dialog = await cropDialog();
         expect(dialog).toHaveAttribute('data-aspect', '3');
         fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

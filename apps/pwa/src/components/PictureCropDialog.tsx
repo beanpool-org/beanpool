@@ -148,8 +148,17 @@ export function PictureCropDialog({ picture, shape, onCancel, onDone, onFailed }
         }
     };
 
-    const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        const onSlider = (e.target as HTMLElement).getAttribute?.('type') === 'range';
+    // The keys are the dialog's wherever focus is while it is open (a click on its heading, or Safari after a button, leaves focus on
+    // <body>): one listener on the window, before anything else hears them, so a page's own Escape under it never does.
+    const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
+    onKey.current = (e: KeyboardEvent) => {
+        const mine = dialog.current;
+        if (!mine) return;
+        // Only the topmost crop dialog answers.
+        const open = document.querySelectorAll('[data-testid="picture-crop"]');
+        if (open[open.length - 1] !== mine) return;
+        const inside = e.target instanceof Node && mine.contains(e.target);
+        const onSlider = inside && (e.target as HTMLElement).getAttribute?.('type') === 'range';
         const steps: Record<string, () => void> = {
             '+': () => zoom(PICTURE_CROP_ZOOM_STEP), '=': () => zoom(PICTURE_CROP_ZOOM_STEP),
             '-': () => zoom(1 / PICTURE_CROP_ZOOM_STEP), '_': () => zoom(1 / PICTURE_CROP_ZOOM_STEP), '−': () => zoom(1 / PICTURE_CROP_ZOOM_STEP),
@@ -167,14 +176,21 @@ export function PictureCropDialog({ picture, shape, onCancel, onDone, onFailed }
             step();
             return;
         }
-        if (e.key !== 'Tab' || !dialog.current) return;
-        const items = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+        if (e.key !== 'Tab') return;
+        const items = Array.from(mine.querySelectorAll<HTMLElement>(FOCUSABLE));
         if (!items.length) return;
         const first = items[0];
         const last = items[items.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        const at = document.activeElement;
+        if (!at || !mine.contains(at)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+        else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
     };
+    useEffect(() => {
+        const listen = (e: KeyboardEvent) => onKey.current(e);
+        window.addEventListener('keydown', listen, true);
+        return () => window.removeEventListener('keydown', listen, true);
+    }, []);
 
     return <>{createPortal(
         // Above everything while it is open (Home's dialogs, 1100; the install banner, 1000): it is modal.
@@ -188,8 +204,8 @@ export function PictureCropDialog({ picture, shape, onCancel, onDone, onFailed }
                 data-testid="picture-crop"
                 data-aspect={String(shape.aspect)}
                 data-round={String(shape.round)}
-                onKeyDown={onKeyDown}
-                className="w-full sm:max-w-lg max-h-full overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0 flex flex-col gap-3"
+                tabIndex={-1}
+                className="w-full sm:max-w-lg max-h-full overflow-y-auto outline-none bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0 flex flex-col gap-3"
             >
                 <h2 id={titleId} className="m-0 text-lg font-extrabold text-nature-950 dark:text-white break-words">{t('Choose the part that shows')}</h2>
                 <p id={hintId} className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">

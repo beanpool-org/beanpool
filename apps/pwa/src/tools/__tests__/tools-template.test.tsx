@@ -341,7 +341,7 @@ describe('the host: only what the manifest declared', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'offer' }));
         const draft: ComposerDraft = {
             type: 'offer', title: 'Ladder to lend', description: 'Three metres', category: 'tools', credits: 5, priceType: 'daily',
-            repeatable: false, cashAlsoNeeded: false,
+            repeatable: false, cashAlsoNeeded: false, shop: true,
         };
         expect(props.onComposer).toHaveBeenCalledTimes(1);
         expect(props.onComposer).toHaveBeenCalledWith(draft);

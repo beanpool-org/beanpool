@@ -1322,6 +1322,8 @@ export async function createMarketplacePost(post: {
     eventTz?: string;
     eventOnline?: boolean;
     eventLink?: string;
+    /** A shop only: author's own shop id to put the offer into. */
+    shopId?: string;
     /** How it repeats (the pattern only; the node adds the clock and length) and its last date; null = a one-off. */
     eventRepeat?: RepeatPattern | null;
     eventRepeatUntil?: string | null;

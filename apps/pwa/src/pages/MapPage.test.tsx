@@ -2440,4 +2440,178 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         await act(async () => { await new Promise(r => setTimeout(r, 30)); });
         expect(view!.queryByTestId('map-new-post-panel')).toBeNull();
     });
+
+    it('the composer opened from a tool gets "Put this in your shop" tick, ticked by default when the member has a shop, and submits with shopId', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'p-new' } as any });
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        shop: {
+                            id: 'shop-alice',
+                            name: "Alice's Workshop",
+                            ownerName: 'Alice',
+                            ownerPublicKey: mockIdentity.publicKey,
+                            category: 'tools',
+                            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+                            paused: false,
+                            backOn: null,
+                            photoUrl: null,
+                        },
+                    }),
+                };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, shop: true, photos: ['data:image/jpeg;base64,xyz'] }} />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+
+        // Check for ShopToggle button
+        const shopToggle = await within(panel).findByTestId('composer-shop-toggle');
+        expect(shopToggle).toBeInTheDocument();
+        expect(shopToggle).toHaveAttribute('aria-checked', 'true');
+
+        // Set location for offer
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+
+        // Submit the post
+        const submitBtn = within(panel).getByRole('button', { name: 'Post Offer' });
+        await act(async () => {
+            fireEvent.click(submitBtn);
+        });
+
+        expect(create).toHaveBeenCalledTimes(1);
+        expect(create.mock.calls[0][0]).toMatchObject({
+            type: 'offer',
+            title: 'Ladder to lend',
+            shopId: 'shop-alice',
+        });
+    });
+
+    it('the composer opened from a tool with shop: false is unticked by default and submits without shopId', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'p-new' } as any });
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        shop: {
+                            id: 'shop-alice',
+                            name: "Alice's Workshop",
+                            ownerName: 'Alice',
+                            ownerPublicKey: mockIdentity.publicKey,
+                            category: 'tools',
+                            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+                            paused: false,
+                            backOn: null,
+                            photoUrl: null,
+                        },
+                    }),
+                };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, shop: false, photos: ['data:image/jpeg;base64,xyz'] }} />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+
+        const shopToggle = await within(panel).findByTestId('composer-shop-toggle');
+        expect(shopToggle).toBeInTheDocument();
+        expect(shopToggle).toHaveAttribute('aria-checked', 'false');
+
+        // Set location for offer
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+
+        // Submit the post
+        const submitBtn = within(panel).getByRole('button', { name: 'Post Offer' });
+        await act(async () => {
+            fireEvent.click(submitBtn);
+        });
+
+        expect(create).toHaveBeenCalledTimes(1);
+        expect(create.mock.calls[0][0].shopId).toBeUndefined();
+    });
+
+    it('the composer opened from a tool when member has no shop opens a new shop on submit', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'p-new' } as any });
+        vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine' && (!init?.method || init.method === 'GET')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ shop: null }),
+                };
+            }
+            if (path === '/api/shops/mine' && init?.method === 'PUT') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        shop: {
+                            id: 'shop-created',
+                            name: null,
+                            ownerName: 'Alice',
+                            ownerPublicKey: mockIdentity.publicKey,
+                            category: null,
+                            counts: { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 },
+                            paused: false,
+                            backOn: null,
+                            photoUrl: null,
+                        },
+                        paused: 0,
+                        resumed: 0,
+                    }),
+                };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, shop: true, photos: ['data:image/jpeg;base64,xyz'] }} />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+
+        const shopToggle = await within(panel).findByTestId('composer-shop-toggle');
+        expect(shopToggle).toBeInTheDocument();
+        expect(shopToggle).toHaveAttribute('aria-checked', 'true');
+        expect(within(panel).getByTestId('composer-shop-toggle-opens')).toHaveTextContent('Your shop opens with it.');
+
+        // Set location for offer
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+
+        // Submit the post
+        const submitBtn = within(panel).getByRole('button', { name: 'Post Offer' });
+        await act(async () => {
+            fireEvent.click(submitBtn);
+        });
+
+        expect(create).toHaveBeenCalledTimes(1);
+        expect(create.mock.calls[0][0]).toMatchObject({
+            type: 'offer',
+            shopId: 'shop-created',
+        });
+    });
 });

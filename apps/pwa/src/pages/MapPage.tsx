@@ -32,6 +32,8 @@ import {
 } from '../lib/event-zone';
 import { formatNumber, offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, tn, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
+import { ShopToggle } from '../components/shop/ShopToggle';
+import { changeMyShop, closeMyShop, readMyShop, shopTakesOffers, shopToggleState, type ShopToggleState } from '../lib/shop';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -310,6 +312,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
     const [reachablePeerList, setReachablePeerList] = useState<ReachablePeer[]>([]);
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
+    const [composerShop, setComposerShop] = useState<ShopToggleState>({ kind: 'hidden' });
+    const [composerInShop, setComposerInShop] = useState(false);
     const [posting, setPosting] = useState(false);
     // The node refused the post for a new account's limit or a moderation pause (G3): its own words, shown in the
     // form above the button, and the limits card for a limit. Cleared when the form closes.
@@ -534,6 +538,22 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             pinDropMarkerRef.current = null;
         }
         setValidationErrors(new Set());
+        if (openDraft.type === 'offer') {
+            void (async () => {
+                try {
+                    const mine = await readMyShop({ timeoutMs: 5000 });
+                    const st = shopToggleState(mine);
+                    setComposerShop(st);
+                    setComposerInShop(shopTakesOffers(st) && openDraft.shop !== false);
+                } catch {
+                    setComposerShop({ kind: 'hidden' });
+                    setComposerInShop(false);
+                }
+            })();
+        } else {
+            setComposerShop({ kind: 'hidden' });
+            setComposerInShop(false);
+        }
         tryOpenComposer();
     }, [openDraft, onDraftOpened, tryOpenComposer]);
 
@@ -1237,6 +1257,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         }
 
         setPosting(true);
+        let willOpenShop = false;
+        let shopId: string | undefined = undefined;
+        if (newPostType === 'offer' && composerInShop && audienceScope === 'public') {
+            if (composerShop.kind === 'open') {
+                shopId = composerShop.shopId;
+            } else if (composerShop.kind === 'none') {
+                try {
+                    const opened = await changeMyShop({}, { timeoutMs: 5000 });
+                    shopId = opened.shop.id;
+                    willOpenShop = true;
+                } catch (err: any) {
+                    showPostError(err, t("Couldn't open your shop. Try again."));
+                    setPosting(false);
+                    return;
+                }
+            }
+        }
         try {
             await createMarketplacePost({
                 type: newPostType,
@@ -1248,6 +1285,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 authorPublicKey: identity?.publicKey || '',
                 repeatable: newPostRepeatable,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
+                ...(shopId ? { shopId } : {}),
                 reach: audienceScope === 'group' ? 'local' : newPostReach,
                 ...(audienceScope !== 'group' && newPostReach === 'peers' ? { reachPeers: newPostReachPeers } : {}),
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
@@ -1269,6 +1307,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setPostLat(null);
             setPostLng(null);
             setPinDropMode(false);
+            setComposerShop({ kind: 'hidden' });
+            setComposerInShop(false);
             if (pinDropMarkerRef.current) {
                 pinDropMarkerRef.current.remove();
                 pinDropMarkerRef.current = null;
@@ -1277,6 +1317,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
+            if (willOpenShop) {
+                try {
+                    await closeMyShop(false);
+                } catch {
+                    // best effort rollback
+                }
+            }
             showPostError(e, t('Failed to create post. Are you offline?'));
         }
         setPosting(false);
@@ -2276,6 +2323,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         setPinDropMode(false);
                         setPostLat(null);
                         setPostLng(null);
+                        setComposerShop({ kind: 'hidden' });
+                        setComposerInShop(false);
                         setEventIsCopy(false);
                         if (eventEdit) {
                             // Leaving an edit drops what was typed: the next New Post starts empty, not as this event.
@@ -2985,6 +3034,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                     }}
                                 />
                             </p>
+                        )}
+
+                        {newPostType === 'offer' && audienceScope === 'public' && composerShop.kind !== 'hidden' && (
+                            <div className="py-2 px-1">
+                                <ShopToggle
+                                    state={composerShop}
+                                    on={composerInShop}
+                                    onChange={setComposerInShop}
+                                    testId="composer-shop-toggle"
+                                />
+                            </div>
                         )}
 
                         {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has

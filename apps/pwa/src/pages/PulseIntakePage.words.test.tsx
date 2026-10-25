@@ -4,7 +4,7 @@
  * theirs; a platform's brand reads as written. What is SENT is unchanged.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PulseIntakePage } from './PulseIntakePage';
 import { getMemberChannels, previewPulsePost, submitPulsePost } from '../lib/api';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';

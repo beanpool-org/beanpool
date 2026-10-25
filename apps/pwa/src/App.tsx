@@ -262,7 +262,7 @@ export function App() {
     }, []);
     // A member's profile, an enterprise's page, their shop or a tool: each drawn over the tabs, and over Settings (z-[110] to its 100).
     // On md+ the sidebar stays beside it, so its tabs and its cog can be tapped with one open.
-    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool || openYourShop || !!openShopId;
+    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool || (openYourShop && !!identity) || !!openShopId;
     const isBottomNavVisible = !pageOver;
     // A tab, from the sidebar or the bottom nav, is shown with nothing over it.
     const closePagesOver = () => {
@@ -498,10 +498,14 @@ export function App() {
     useEffect(() => { setLinkedShop(takeShopParam()); }, []);
     useEffect(() => {
         if (!linkedShop) return;
-        if (linkedShop === 'mine') setOpenYourShop(true);
-        else setOpenShopId(linkedShop);
+        if (linkedShop === 'mine') {
+            if (!identity) return;
+            setOpenYourShop(true);
+        } else {
+            setOpenShopId(linkedShop);
+        }
         setLinkedShop(null);
-    }, [linkedShop]);
+    }, [linkedShop, identity]);
     // On the global lobby a visitor reads the shared listing first; the lobby keeps it in this tab (a join by sign-in
     // leaves the page), and it opens here once, when they have joined. Before the address's own, so that one wins.
     useEffect(() => {
@@ -1284,6 +1288,7 @@ export function App() {
                         <ShopDetailPage
                             id={openShopId}
                             identity={identity}
+                            showsBeans={beansMode === 'live'}
                             onBack={() => setOpenShopId(null)}
                             onOpenYourShop={() => {
                                 setOpenShopId(null);

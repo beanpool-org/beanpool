@@ -33,7 +33,7 @@ import {
 import { formatNumber, offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, tn, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { ShopToggle } from '../components/shop/ShopToggle';
-import { changeMyShop, closeMyShop, readMyShop, shopTakesOffers, shopToggleState, type ShopToggleState } from '../lib/shop';
+import { changeMyShop, readMyShop, shopTakesOffers, shopToggleState, type ShopToggleState } from '../lib/shop';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -539,6 +539,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             pinDropMarkerRef.current = null;
         }
         setValidationErrors(new Set());
+        // A newer draft drops the older draft's shop read; App clearing openDraft (onDraftOpened) must not, or the shop
+        // read never lands and "Put this in your shop" never shows (deciding review on 32d23da1).
+        cancelDraftShopRef.current?.();
         let active = true;
         cancelDraftShopRef.current = () => { active = false; };
         if (openDraft.type === 'offer') {
@@ -561,10 +564,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setComposerInShop(false);
         }
         tryOpenComposer();
-        return () => {
-            active = false;
-            cancelDraftShopRef.current = null;
-        };
     }, [openDraft, onDraftOpened, tryOpenComposer]);
 
     // Initialize map
@@ -1267,7 +1266,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         }
 
         setPosting(true);
-        let willOpenShop = false;
         let shopId: string | undefined = undefined;
         if (newPostType === 'offer' && composerInShop && audienceScope === 'public') {
             if (composerShop.kind === 'open') {
@@ -1276,7 +1274,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 try {
                     const opened = await changeMyShop({}, { timeoutMs: 5000 });
                     shopId = opened.shop.id;
-                    willOpenShop = true;
                 } catch (err: any) {
                     showPostError(err, t("Couldn't open your shop. Try again."));
                     setPosting(false);
@@ -1328,13 +1325,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
-            if (willOpenShop) {
-                try {
-                    await closeMyShop(false);
-                } catch {
-                    // best effort rollback
-                }
-            }
+            // No rollback, as on the phone: closing "the shop" here could delete one the member opened elsewhere meanwhile.
             showPostError(e, t('Failed to create post. Are you offline?'));
         }
         setPosting(false);

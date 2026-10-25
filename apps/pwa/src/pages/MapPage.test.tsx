@@ -2441,6 +2441,57 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         expect(view!.queryByTestId('map-new-post-panel')).toBeNull();
     });
 
+    // Deciding review on 32d23da1, finding A: App clears openDraft in onDraftOpened; the shop read (slower than that) still lands.
+    it('rendered as App renders it (the draft cleared once opened), the slow shop read still shows "Put this in your shop"', async () => {
+        const SHOP = { id: 'shop-alice', name: "Alice's Workshop", ownerName: 'Alice', ownerPublicKey: mockIdentity.publicKey, category: 'tools',
+            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 }, paused: false, backOn: null, photoUrl: null };
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                await new Promise(r => setTimeout(r, 40));
+                return { ok: true, status: 200, json: async () => ({ shop: SHOP }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+        function AsApp() {
+            const [d, setD] = React.useState<any>({ ...draft, shop: true });
+            return <MapPage identity={mockIdentity} openDraft={d} onDraftOpened={() => setD(null)} />;
+        }
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<AsApp />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const shopToggle = await within(panel).findByTestId('composer-shop-toggle', {}, { timeout: 3000 });
+        expect(shopToggle).toHaveAttribute('aria-checked', 'true');
+    });
+
+    // Finding B: a refused post never closes "the shop" (it could be one the member opened elsewhere): no rollback, as the phone.
+    it('a refused post with a shop it just opened sends no close', async () => {
+        vi.spyOn(api, 'createMarketplacePost').mockRejectedValue(new Error('refused'));
+        const calls: string[] = [];
+        const SHOP = { id: 'shop-new', name: 'Alice', ownerName: 'Alice', ownerPublicKey: mockIdentity.publicKey, category: 'tools',
+            counts: { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 }, paused: false, backOn: null, photoUrl: null };
+        vi.stubGlobal('fetch', async (url: string, init?: { method?: string }) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            calls.push(`${init?.method || 'GET'} ${path}`);
+            if (path === '/api/shops/mine' && (init?.method || 'GET') === 'GET') return { ok: true, status: 200, json: async () => ({ shop: null }) };
+            if (path === '/api/shops/mine') return { ok: true, status: 200, json: async () => ({ shop: SHOP, paused: 0, resumed: 0 }) };
+            return { ok: true, status: 200, json: async () => ({ cleared: 0, ended: 0, resumed: 0 }) };
+        });
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, shop: true, photos: ['data:image/jpeg;base64,xyz'] }} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        const toggle = await within(panel).findByTestId('composer-shop-toggle', {}, { timeout: 3000 });
+        if (toggle.getAttribute('aria-checked') !== 'true') await act(async () => { fireEvent.click(toggle); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Offer' })); });
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(calls.some(c => c.startsWith('PUT /api/shops/mine'))).toBe(true);
+        expect(calls.filter(c => c.includes('/api/shops/mine/close'))).toEqual([]);
+    });
+
     it('the composer opened from a tool gets "Put this in your shop" tick, ticked by default when the member has a shop, and submits with shopId', async () => {
         const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'p-new' } as any });
         vi.stubGlobal('fetch', async (url: string) => {

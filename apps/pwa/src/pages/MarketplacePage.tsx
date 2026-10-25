@@ -73,7 +73,7 @@ import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
-import { closeMyShop, readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
+import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -2636,33 +2636,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setSaving(true);
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
-                                                const willOpenShop = editShop.kind === 'none' && editType === 'offer' && editInShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
-                                                try {
-                                                    const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
-                                                        type: editType,
-                                                        category: editCategory,
-                                                        title: editTitle.trim(),
-                                                        description: editDescription.trim(),
-                                                        credits: price.ok ? price.value : 0,
-                                                        priceType: editPriceType,
-                                                        repeatable: editRepeatable,
-                                                        photos: editPhotos,
-                                                        ...(shopId !== undefined ? { shopId } : {}),
-                                                    });
-                                                    setSelectedPost(result.post);
-                                                    setEditMode(false);
-                                                    refresh();
-                                                } catch (saveErr: any) {
-                                                    if (willOpenShop && shopId) {
-                                                        try {
-                                                            await closeMyShop(false);
-                                                        } catch {
-                                                            /* best-effort rollback */
-                                                        }
-                                                    }
-                                                    throw saveErr;
-                                                }
+                                                const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
+                                                    type: editType,
+                                                    category: editCategory,
+                                                    title: editTitle.trim(),
+                                                    description: editDescription.trim(),
+                                                    credits: price.ok ? price.value : 0,
+                                                    priceType: editPriceType,
+                                                    repeatable: editRepeatable,
+                                                    photos: editPhotos,
+                                                    ...(shopId !== undefined ? { shopId } : {}),
+                                                });
+                                                setSelectedPost(result.post);
+                                                setEditMode(false);
+                                                refresh();
                                             } catch (e: any) {
                                                 setError(e.message || t('Failed to save'));
                                             } finally {

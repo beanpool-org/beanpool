@@ -727,7 +727,9 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         expect(screen.queryByTestId('edit-post-shop')).not.toBeInTheDocument();
     });
 
-    it('never opens a shop on a refused Save', async () => {
+    // Deciding review on 32d23da1, finding B (director's call, as the phone): a refused Save sends NO close — closing "the shop"
+    // could delete one the member opened elsewhere meanwhile; an empty shop left open is visible and the member can close it.
+    it('a refused Save never closes a shop', async () => {
         let shopOpened = false;
         let shopClosed = false;
 
@@ -787,10 +789,8 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         // Error message appears
         expect(await screen.findByText('shop_public_only')).toBeInTheDocument();
 
-        // Shop should have been closed/cleaned up if opened, never left open on refused save
-        if (shopOpened) {
-            expect(shopClosed).toBe(true);
-        }
+        expect(shopOpened).toBe(true);   // the Save did open one before the node refused
+        expect(shopClosed).toBe(false);
     });
 
     it('keeps shop toggle hidden when listing shop id cannot be read', async () => {

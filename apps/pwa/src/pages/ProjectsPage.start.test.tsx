@@ -233,4 +233,48 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryByRole('dialog', { name: /Start something/i })).toBeNull();
     });
+
+    it('dialog accessibility: Tab loops inside, Shift+Tab loops backwards', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        const opener = screen.getByRole('button', { name: /Start something/i });
+        opener.focus();
+        fireEvent.click(opener);
+
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        expect(dialog).toBeInTheDocument();
+
+        const closeBtn = within(dialog).getByRole('button', { name: /Close/i });
+        const eventBtn = within(dialog).getByRole('button', { name: /^Event/i });
+
+        // Shift+Tab on first button (Close) wraps to last button (Event)
+        closeBtn.focus();
+        expect(document.activeElement).toBe(closeBtn);
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(eventBtn);
+
+        // Tab on last button (Event) wraps to first button (Close)
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+        expect(document.activeElement).toBe(closeBtn);
+    });
+
+    it('dialog focus: picking an option does not steal focus back to opener', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        const opener = screen.getByRole('button', { name: /Start something/i });
+        opener.focus();
+        fireEvent.click(opener);
+
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        const chatBtn = within(dialog).getByRole('button', { name: /^Chat group/i });
+
+        const focusSpy = vi.spyOn(opener, 'focus');
+
+        fireEvent.click(chatBtn);
+
+        expect(screen.getByRole('dialog', { name: /Create a Group/i })).toBeInTheDocument();
+        expect(focusSpy).not.toHaveBeenCalled();
+    });
 });

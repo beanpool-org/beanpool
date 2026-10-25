@@ -29,29 +29,57 @@ export function StartSomethingDialog({
     closeRef.current = onClose;
     const openerRef = useRef<Element | null>(null);
     const dialogRef = useRef<HTMLDivElement | null>(null);
+    const pickedRef = useRef(false);
 
     useEffect(() => {
         if (!isOpen) return;
         openerRef.current = document.activeElement;
 
         // Focus dialog heading on open
-        setTimeout(() => {
+        const timer = setTimeout(() => {
             dialogRef.current?.querySelector<HTMLElement>('#start-something-title')?.focus();
         }, 0);
 
-        // Window capture-phase keydown listener for Escape
+        // Window capture-phase keydown listener for Escape and Tab focus trap
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 e.stopPropagation();
                 e.preventDefault();
                 closeRef.current();
+                return;
+            }
+            if (e.key === 'Tab') {
+                const box = dialogRef.current;
+                if (!box) return;
+                const items = Array.from(box.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                ));
+                if (!items.length) return;
+                const first = items[0];
+                const last = items[items.length - 1];
+                const active = document.activeElement;
+                if (!box.contains(active)) {
+                    e.preventDefault();
+                    (e.shiftKey ? last : first).focus();
+                } else if (e.shiftKey && active === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && active === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown, true);
         return () => {
+            clearTimeout(timer);
             window.removeEventListener('keydown', handleKeyDown, true);
+            if (pickedRef.current) {
+                pickedRef.current = false;
+                return;
+            }
             const opener = openerRef.current as HTMLElement | null;
-            if (opener && opener.isConnected) {
+            if (opener && opener.isConnected && (!document.activeElement || document.activeElement === document.body)) {
                 opener.focus?.();
             }
         };
@@ -62,6 +90,11 @@ export function StartSomethingDialog({
     const rows = startRows(features, { canPropose, decisionsPreview, enterprisesPreview });
     const commonsRows = rows.filter((r) => r.section === 'commons');
     const marketRows = rows.filter((r) => r.section === 'market');
+
+    const handlePick = (key: StartRowKey) => {
+        pickedRef.current = true;
+        onPick(key);
+    };
 
     return (
         <div
@@ -102,7 +135,7 @@ export function StartSomethingDialog({
                         <button
                             key={row.key}
                             type="button"
-                            onClick={() => onPick(row.key)}
+                            onClick={() => handlePick(row.key)}
                             className="w-full flex items-start gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 hover:bg-nature-50 dark:hover:bg-nature-900 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[56px]"
                         >
                             <span
@@ -137,7 +170,7 @@ export function StartSomethingDialog({
                                 <button
                                     key={row.key}
                                     type="button"
-                                    onClick={() => onPick(row.key)}
+                                    onClick={() => handlePick(row.key)}
                                     className="w-full flex items-start gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 hover:bg-nature-50 dark:hover:bg-nature-900 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[56px]"
                                 >
                                     <span

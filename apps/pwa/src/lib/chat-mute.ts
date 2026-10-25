@@ -15,7 +15,7 @@ export function muteMenuLabel(mute: YourChatMute | null | undefined, now: Date =
     return isMuted(mute, now) ? t('Unmute') : t('Mute notifications');
 }
 
-export function chatMuteFromAnswer(answer: { mute?: YourChatMute | null } | null | undefined, current: YourChatMute | null): YourChatMute | null {
+export function chatMuteFromAnswer(answer: { mute?: YourChatMute | null } | null | undefined, current: YourChatMute | null = null): YourChatMute | null {
     return answer && 'mute' in answer ? (answer.mute ?? null) : current;
 }
 

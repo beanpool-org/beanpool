@@ -29,6 +29,7 @@ Watchman's domain is `apps/server/` ONLY. Watchman runs the existing test suite,
 *(Add entries here for tests that require specific env vars, external services, or are known to be environment-sensitive)*
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-26 #2494: Resolved — do NOT re-file: test-door-signal 590 s bound (#2494).
 ### 2026-08-25 — `test-federation-api` is NOT failing. Do not "fix" it again.
 Filed three times (#368, #381, #404), all closed. The suite passes **9/9 on `main`** — verified
 by running it. It only fails under `ENFORCE_READ_AUTH=true`, and `scripts/test-all.sh` does not

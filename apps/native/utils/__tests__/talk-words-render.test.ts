@@ -535,7 +535,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         expect(byLabel('Groups, 1 unread')).not.toBeNull();
         expect(byLabel('Bakery, enterprise, lead keeper, 3 unread, muted. Kofi: bread at six')).not.toBeNull();
         expect(byLabel('Hall roof, project, collaborator, 1 unread. You: tiles ordered')).not.toBeNull();
-        expect(byLabel('Garden club, group. New group · invite people to get started')).not.toBeNull();
+        expect(byLabel('Garden club, group, convenor. New group · invite people to get started')).not.toBeNull();
     });
 });
 

@@ -4129,5 +4129,10 @@
     "few": "{n} أعضاء · مكتومة",
     "many": "{n} عضوًا · مكتومة",
     "other": "{n} عضو · مكتومة"
-  }
+  },
+  "View photo full screen": "عرض الصورة بملء الشاشة",
+  "Photo message": "رسالة صورة",
+  "Full-size photo": "صورة بالحجم الكامل",
+  "Dismiss full-size photo": "إغلاق الصورة بالحجم الكامل",
+  "Close photo": "إغلاق الصورة"
 }

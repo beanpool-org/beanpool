@@ -3629,5 +3629,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} μέλος · σε σίγαση",
     "other": "{n} μέλη · σε σίγαση"
-  }
+  },
+  "View photo full screen": "Προβολή φωτογραφίας σε πλήρη οθόνη",
+  "Photo message": "Μήνυμα φωτογραφίας",
+  "Full-size photo": "Φωτογραφία πλήρους μεγέθους",
+  "Dismiss full-size photo": "Κλείσιμο φωτογραφίας πλήρους μεγέθους",
+  "Close photo": "Κλείσιμο φωτογραφίας"
 }

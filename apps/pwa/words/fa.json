@@ -3629,5 +3629,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} عضو · بی‌صدا",
     "other": "{n} عضو · بی‌صدا"
-  }
+  },
+  "View photo full screen": "مشاهده تمام‌صفحه تصویر",
+  "Photo message": "پیام تصویری",
+  "Full-size photo": "عکس با اندازه کامل",
+  "Dismiss full-size photo": "بستن عکس اندازه کامل",
+  "Close photo": "بستن عکس"
 }

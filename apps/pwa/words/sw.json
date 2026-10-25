@@ -3629,5 +3629,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "mwanachama {n} · limezimwa sauti",
     "other": "wanachama {n} · limezimwa sauti"
-  }
+  },
+  "View photo full screen": "Tazama picha kwenye skrini nzima",
+  "Photo message": "Ujumbe wa picha",
+  "Full-size photo": "Picha ya ukubwa kamili",
+  "Dismiss full-size photo": "Funga picha ya ukubwa kamili",
+  "Close photo": "Funga picha"
 }

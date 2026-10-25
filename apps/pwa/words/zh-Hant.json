@@ -3504,5 +3504,10 @@
   "Close menu": "關閉選單",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} 位成員 · 已設為靜音"
-  }
+  },
+  "View photo full screen": "全螢幕檢視相片",
+  "Photo message": "相片訊息",
+  "Full-size photo": "全尺寸相片",
+  "Dismiss full-size photo": "關閉全尺寸相片",
+  "Close photo": "關閉相片"
 }

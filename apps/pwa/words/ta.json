@@ -3629,5 +3629,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} உறுப்பினர் · ஒலியடக்கம்",
     "other": "{n} உறுப்பினர்கள் · ஒலியடக்கம்"
-  }
+  },
+  "View photo full screen": "புகைப்படத்தை முழுத் திரையில் காண்க",
+  "Photo message": "புகைப்படச் செய்தி",
+  "Full-size photo": "முழு அளவிலான புகைப்படம்",
+  "Dismiss full-size photo": "முழு அளவிலான புகைப்படத்தை மறை",
+  "Close photo": "புகைப்படத்தை மூடு"
 }

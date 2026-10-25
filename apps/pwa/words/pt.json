@@ -3630,5 +3630,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} membro · silenciado",
     "other": "{n} membros · silenciado"
-  }
+  },
+  "View photo full screen": "Ver foto em tela cheia",
+  "Photo message": "Mensagem com foto",
+  "Full-size photo": "Foto em tela cheia",
+  "Dismiss full-size photo": "Fechar foto em tela cheia",
+  "Close photo": "Fechar foto"
 }

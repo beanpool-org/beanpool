@@ -3629,5 +3629,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} Mitglied · stummgeschaltet",
     "other": "{n} Mitglieder · stummgeschaltet"
-  }
+  },
+  "View photo full screen": "Foto im Vollbild anzeigen",
+  "Photo message": "Fotonachricht",
+  "Full-size photo": "Vollbildfoto",
+  "Dismiss full-size photo": "Vollbildfoto schließen",
+  "Close photo": "Foto schließen"
 }

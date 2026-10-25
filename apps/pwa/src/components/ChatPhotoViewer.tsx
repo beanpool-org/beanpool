@@ -44,6 +44,10 @@ export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNo
         if (!mine) return;
         const open = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
         if (open[open.length - 1] !== mine) return;
+        // A node alert (SystemAlerts) is drawn ABOVE the viewer but sits before its portal in the DOM: step aside whenever focus
+        // is inside another modal, so its own keys work (deciding review on bc7fba47).
+        const host = document.activeElement?.closest('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
+        if (host && host !== mine) return;
 
         if (e.key === 'Escape') {
             e.preventDefault();
@@ -128,7 +132,7 @@ export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNo
                 type="button"
                 aria-label={t('Close photo')}
                 onClick={onClose}
-                className="absolute top-3 right-3 sm:top-6 sm:right-6 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full border-0 flex items-center justify-center cursor-pointer text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white transition-opacity"
+                className="absolute min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full border-0 flex items-center justify-center cursor-pointer text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white transition-opacity"
                 style={{
                     backgroundColor: 'var(--image-viewer-close-bg)',
                     top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)',

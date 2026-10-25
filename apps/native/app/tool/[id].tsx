@@ -61,7 +61,11 @@ function tellOpenScreens(key: string, from: Hear | null, next: Partial<SharedSta
 /** The route's params as the tool sees them: every one but the route's own `id` and `screen`. */
 function toolParams(all: Record<string, string | string[] | undefined>): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(all)) if (k !== 'id' && k !== 'screen' && typeof v === 'string') out[k] = v;
+    for (const [k, v] of Object.entries(all)) {
+        if (k === 'id' || k === 'screen') continue;
+        const val = Array.isArray(v) ? v[0] : v;
+        if (typeof val === 'string') out[k] = val;
+    }
     return out;
 }
 

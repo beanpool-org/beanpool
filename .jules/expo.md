@@ -175,3 +175,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `project-detail.tsx` missing an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `project-detail.tsx` so unhandled screen errors on the `/project-detail` route are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-18 - [Safely handle array params in toolParams]
+**Issue:** `toolParams` in `apps/native/app/tool/[id].tsx` ignored parameter values that were array types (`string[]`), dropping valid query params when repeated or passed as array types.
+**Learning:** Expo Router search params can return string arrays for duplicate query parameter keys. Unwrapping `Array.isArray(v) ? v[0] : v` ensures string query params are extracted safely.
+**Pattern:** Check `useLocalSearchParams` parameter unwrapping functions to ensure array param values are safely converted to scalar strings.

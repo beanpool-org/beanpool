@@ -216,4 +216,48 @@ describe('TreasuryDetailPage: a real key', () => {
         fireEvent.click(screen.getByRole('button', { name: /Kofi/ }));
         expect(onOpenProfile).toHaveBeenCalledWith('kofi-key');
     });
+
+    it('resets tab to "page" when navigating to another enterprise while initialTab is "manage"', async () => {
+        vi.spyOn(api, 'getTreasury').mockImplementation(async (key) => ({
+            publicKey: key,
+            name: key === 'local-ent-1' ? 'First Bakery' : 'Second Bakery',
+            purpose: 'Baking',
+            balance: 50,
+            creditLine: 100,
+            liveOffers: 0,
+            lifecycle: 'ongoing',
+            status: 'active',
+            keepers: [{ publicKey: mockIdentity.publicKey, callsign: 'Charlie', role: 'lead' }],
+            posts: [],
+        } as any));
+        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({ entries: [], summary: null } as any);
+        vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: null, messages: [], readOnly: false } as any);
+
+        const { rerender } = render(
+            <TreasuryDetailPage
+                identity={mockIdentity}
+                isMember={true}
+                pubkey="local-ent-1"
+                initialTab="manage"
+                onBack={vi.fn()}
+            />
+        );
+
+        // First enterprise opens on manage tab because initialTab was 'manage'
+        await waitFor(() => expect(screen.getByRole('tab', { name: 'Manage' })).toHaveAttribute('aria-selected', 'true'));
+
+        // Navigating to second enterprise (changing pubkey, while initialTab prop remains 'manage')
+        rerender(
+            <TreasuryDetailPage
+                identity={mockIdentity}
+                isMember={true}
+                pubkey="local-ent-2"
+                initialTab="manage"
+                onBack={vi.fn()}
+            />
+        );
+
+        // Second enterprise resets to 'page' tab
+        await waitFor(() => expect(screen.getByRole('tab', { name: 'Page' })).toHaveAttribute('aria-selected', 'true'));
+    });
 });

@@ -143,10 +143,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     useEffect(() => {
         if (prevPubkey.current !== pubkey) {
             prevPubkey.current = pubkey;
-            setTab(initialTab ?? 'page');
+            setTab('page');
             setOwnListings(undefined);
         }
-    }, [pubkey, initialTab]);
+    }, [pubkey]);
     // Manage's Featured card shows these same listings, so an Offer posted, paused or resumed in Manage shows there as on the
     // page. The newest read stands (an older one that lands late is dropped), and one that fails keeps what was read before.
     // An Offer put on or off the shelf while a read is out keeps its new place over what that read says of it.

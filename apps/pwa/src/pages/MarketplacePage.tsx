@@ -489,6 +489,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
+    const selectedPostRef = useRef<MarketplacePost | null>(null);
+    selectedPostRef.current = selectedPost;
     const [inactiveEnterprises, setInactiveEnterprises] = useState<Map<string, { paused: boolean; status: string; name: string }>>(new Map());
     const [selectedPostEnterprise, setSelectedPostEnterprise] = useState<{ paused: boolean; status: string; name: string } | null>(null);
     const [lightboxState, setLightboxState] = useState<{
@@ -2400,17 +2402,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditShop({ kind: 'hidden' });
                                         setEditInShop(false);
                                         if (selectedPost.type === 'offer') {
+                                            const targetPostId = selectedPost.id;
                                             void (async () => {
                                                 try {
                                                     const [mine, inShopId] = await Promise.all([
                                                         readMyShop({ timeoutMs: 5000 }),
-                                                        readListingShopId(selectedPost.id),
+                                                        readListingShopId(targetPostId),
                                                     ]);
+                                                    if (selectedPostRef.current?.id !== targetPostId) return;
                                                     const inShop = mine.state === 'open' && inShopId === mine.shop.id;
                                                     setEditShop(shopToggleState(mine, { inShop }));
                                                     setEditInShop(inShop);
                                                 } catch {
-                                                    setEditShop({ kind: 'hidden' });
+                                                    if (selectedPostRef.current?.id === targetPostId) {
+                                                        setEditShop({ kind: 'hidden' });
+                                                    }
                                                 }
                                             })();
                                         }

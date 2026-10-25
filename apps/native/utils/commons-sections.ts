@@ -196,7 +196,7 @@ export function yoursRows<T extends { publicKey: string } = TreasurySummary>(
         const aLead = a.chat.role === 'lead';
         const bLead = b.chat.role === 'lead';
         if (aLead !== bLead) return aLead ? -1 : 1;
-        return a.chat.name.localeCompare(b.chat.name);
+        return (a.chat.name ?? '').localeCompare(b.chat.name ?? '');
     });
 
     return { kept, groups };

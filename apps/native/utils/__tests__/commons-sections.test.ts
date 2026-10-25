@@ -387,6 +387,22 @@ describe('yoursRows: kept enterprises and projects first (lead first, then by na
         expect(res.kept[0].chat.id).toBe('ent-orphan');
         expect(res.kept[0].summary).toBeUndefined();
     });
+
+    it('sorts safely when chat name is missing or undefined', () => {
+        const keptNoName = {
+            id: 'ent-noname',
+            kind: 'enterprise' as const,
+            role: 'lead',
+        };
+        const keptNamed = {
+            id: 'ent-named',
+            kind: 'enterprise' as const,
+            name: 'Named Enterprise',
+            role: 'lead',
+        };
+        const res = yoursRows([keptNoName, keptNamed] as any, []);
+        expect(res.kept).toHaveLength(2);
+    });
 });
 
 describe('findHeading: names the kinds shown per chip, or groups only where enterprises are off', () => {

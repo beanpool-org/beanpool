@@ -47,7 +47,7 @@ const alerts = vi.hoisted(() => ({ said: [] as string[] }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', radiogroup: 'radiogroup' };
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, value, onChangeText, disabled, numberOfLines } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, value, onChangeText, disabled, numberOfLines, style } = props;
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
@@ -56,6 +56,10 @@ vi.mock('react-native', () => {
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
         if (numberOfLines !== undefined) attrs['data-lines'] = numberOfLines;
+        if (style) {
+            const flat = Array.isArray(style) ? Object.assign({}, ...style.flat().filter(Boolean)) : style;
+            attrs['data-style'] = JSON.stringify(flat);
+        }
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
@@ -348,18 +352,47 @@ describe('Commons S3 — Yours first, Find named, explainer gone (phone)', () =>
         expect(host.textContent).toContain('No groups of yours yet. Start one with +, or join one below.');
     });
 
-    it('320 dp × 1.3 measurement: enterprise name allows 2 lines wrapping, and Manage pill keeps 44 dp', async () => {
+    it('320 dp × 1.3 measurement: line 2 and name not truncated, Manage pill below line 2 and ≥ 44 dp, spoken label contains status and line 2', async () => {
+        node.treasuries = [{
+            ...EGGS_SUMMARY,
+            status: 'paused',
+            paused: true,
+        }];
         await renderScreen();
         await click(byLabel('Groups Section'), 'Groups');
 
-        // The enterprise name element in the row has numberOfLines={2} (data-lines="2")
-        const nameEl = Array.from(host.querySelectorAll('[data-lines="2"]')).find(el => (el.textContent ?? '').includes('Community Eggs'));
+        // The enterprise name element allows 2 lines wrapping (data-lines="2")
+        const nameEl = Array.from(host.querySelectorAll('span')).find(el => (el.textContent ?? '').trim() === 'Community Eggs');
         expect(nameEl).toBeTruthy();
-        expect(nameEl?.textContent).toContain('Community Eggs');
+        expect(nameEl?.getAttribute('data-lines')).toBe('2');
 
-        // The Manage pill keeps at least 44 dp touch target
+        // Line 2 is not clamped to 1 line (no numberOfLines={1} clamp that cuts it off)
+        const line2El = Array.from(host.querySelectorAll('span')).find(el => (el.textContent ?? '').includes('Balance 40 🫘 · 3 live offers'));
+        expect(line2El).toBeTruthy();
+        expect(line2El?.getAttribute('data-lines')).not.toBe('1');
+
+        // The Manage pill keeps at least 44 dp touch target and is positioned below line 2
         const manageBtn = Array.from(host.querySelectorAll('button')).find(b => (b.textContent ?? '').includes('Manage'));
         expect(manageBtn).toBeTruthy();
+        const manageStyle = JSON.parse(manageBtn!.getAttribute('data-style') || '{}');
+        expect(manageStyle.minHeight).toBeGreaterThanOrEqual(44);
+        expect(manageStyle.minWidth).toBeGreaterThanOrEqual(44);
+        expect(manageStyle.alignSelf).toBe('flex-end');
+        expect(line2El!.compareDocumentPosition(manageBtn!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        // The enterprise row's accessibilityLabel contains the name, role, status and line 2
+        const enterpriseRow = Array.from(host.querySelectorAll('button')).find(b => (b.textContent ?? '').includes('Community Eggs') && !(b.textContent ?? '').includes('Manage'));
+        expect(enterpriseRow).toBeTruthy();
+        const a11y = enterpriseRow?.getAttribute('aria-label') ?? '';
+        expect(a11y).toContain('Community Eggs');
+        expect(a11y).toContain('lead keeper');
+        expect(a11y).toContain('paused');
+        expect(a11y).toContain('Balance 40 🫘 · 3 live offers');
+
+        // Group row spoken name contains "convenor" for a convenor
+        const groupRow = Array.from(host.querySelectorAll('button')).find(b => (b.textContent ?? '').includes('Garden Crew'));
+        expect(groupRow).toBeTruthy();
+        expect(groupRow?.getAttribute('aria-label')).toContain('convenor');
     });
 
     it('omits balance line until treasury summary is loaded', async () => {

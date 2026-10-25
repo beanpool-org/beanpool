@@ -4,7 +4,7 @@ import {
     ownerHeader, previewLine, rowTime, unreadLabel, isMuted, groupsYouCouldJoin, inviteLandingAction, chatHref,
     threadMessageText, chatEmoji, groupsUnreadTotal, rowBadge, yourGroupsPaneState, markChatRead, showInvitePrompt,
     inviteLandingPhase, inviteLandingFacts, inviteLandingHref, inviteLandingPreviewFromParams,
-    ownerKindWord, chatLifecycleFromRows, rowRoleWord,
+    ownerKindWord, chatLifecycleFromRows, rowRoleWord, rowSpokenName,
 } from '../your-groups';
 
 const g = (over: any) => ({
@@ -292,5 +292,12 @@ describe('enterprise chat notice (PR #963 review round 1, B1)', () => {
     it('says every member of the community can read it — never that it is the keepers\' own', () => {
         expect(ENTERPRISE_CHAT_NOTICE).toBe("Any member of this community can read this, and so can the node's operator.");
         expect(ENTERPRISE_CHAT_NOTICE).not.toMatch(/keeper/i);
+    });
+});
+
+describe('rowSpokenName spoken row label (S3)', () => {
+    it('the group row spoken name contains "convenor" for a convenor', () => {
+        expect(rowSpokenName({ kind: 'group', role: 'convenor', name: 'Garden Crew' })).toBe('Garden Crew, group, convenor');
+        expect(rowSpokenName({ kind: 'group', role: 'member', name: 'Garden Crew' })).toBe('Garden Crew, group');
     });
 });

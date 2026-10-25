@@ -7,12 +7,10 @@ import {
     Pressable,
     ScrollView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { t } from '@beanpool/core';
 import type { StartRow, StartRowKey } from '../utils/start-something';
-import { hapticTick } from '../utils/haptics';
 
 interface StartSomethingSheetProps {
     visible: boolean;
@@ -23,7 +21,6 @@ interface StartSomethingSheetProps {
 
 export function StartSomethingSheet({ visible, onClose, rows, onPick }: StartSomethingSheetProps) {
     const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         backdrop: {
@@ -131,7 +128,6 @@ export function StartSomethingSheet({ visible, onClose, rows, onPick }: StartSom
                 accessibilityRole="button"
                 accessibilityLabel={accessibilityLabel}
                 onPress={() => {
-                    hapticTick();
                     onPick(row.key);
                 }}
             >
@@ -160,7 +156,7 @@ export function StartSomethingSheet({ visible, onClose, rows, onPick }: StartSom
             onRequestClose={onClose}
         >
             <View style={styles.backdrop}>
-                <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+                <View style={[styles.sheet, { paddingBottom: 24 }]}>
                     <View style={styles.header}>
                         <Text style={styles.title} accessibilityRole="header">{t('Start something')}</Text>
                         <Pressable

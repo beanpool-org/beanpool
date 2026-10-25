@@ -338,11 +338,11 @@ export default function ProjectsScreen() {
     const handlePickStartRow = async (key: StartRowKey) => {
         setShowStartSomething(false);
         const target = startTarget(key);
-        if (target.modal === 'chat') {
+        if ('modal' in target && target.modal === 'chat') {
             createGroup.open();
             return;
         }
-        if (target.modal === 'decision') {
+        if ('modal' in target && target.modal === 'decision') {
             if (decisionsPreview) {
                 setShowDecisionsSheet(true);
                 return;
@@ -359,7 +359,7 @@ export default function ProjectsScreen() {
             setShowProposeDecision(true);
             return;
         }
-        if (target.pathname === '/propose-project') {
+        if ('pathname' in target && target.pathname === '/propose-project') {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             if (!anchorUrl) {
                 Alert.alert(t('Not Connected'), t('Connect to a community first.'), [
@@ -371,7 +371,7 @@ export default function ProjectsScreen() {
             router.push(target as any);
             return;
         }
-        if (target.pathname === '/(tabs)/market') {
+        if ('pathname' in target && target.pathname === '/(tabs)/market') {
             router.push(target as any);
             return;
         }

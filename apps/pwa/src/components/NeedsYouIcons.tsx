@@ -158,8 +158,8 @@ export function NeedsYouIcons({
         const el = containerRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
 
+        const header = el.closest('header');
         const checkHeaderWidth = () => {
-            const header = el.closest('header');
             const total = header?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0);
             if (total > 0 && total <= 360) {
                 // At 320 px × 130%: allow 1 slot (38 px) so title and logo are never pushed or wrapped
@@ -177,19 +177,28 @@ export function NeedsYouIcons({
 
         const observer = new ResizeObserver((entriesList) => {
             for (const entry of entriesList) {
-                if (entry.target === el) {
+                if (entry.target === header) {
+                    checkHeaderWidth();
+                } else if (entry.target === el) {
                     setContainerWidth(entry.contentRect.width);
                 }
             }
         });
 
         observer.observe(el);
+        if (header) observer.observe(header);
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', checkHeaderWidth);
+        }
         if (el.getBoundingClientRect().width > 0) {
             setContainerWidth(el.getBoundingClientRect().width);
         }
 
         return () => {
             observer.disconnect();
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', checkHeaderWidth);
+            }
         };
     }, [entries.length]);
 

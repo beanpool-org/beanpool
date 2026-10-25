@@ -289,4 +289,85 @@ describe('HeaderControls needs-you alert icons', () => {
             globalThis.ResizeObserver = originalRO;
         }
     });
+
+    it('responds dynamically to header and window resize events', async () => {
+        const dealItem: NeedsItem = {
+            kind: 'deal',
+            count: 1,
+            accent: true,
+            label: 'A deal is waiting for you',
+            target: { to: 'deal', postId: 'post-1' },
+        };
+        const voteItem: NeedsItem = {
+            kind: 'vote',
+            count: 1,
+            accent: true,
+            label: 'Vote closes tomorrow',
+            target: { to: 'decide' },
+        };
+
+        vi.spyOn(api, 'getHome').mockResolvedValue({
+            notModified: false,
+            etag: 'W/"home-resize"',
+            answer: makeHomeAnswer([dealItem, voteItem]) as any,
+        });
+
+        let roCallback: ResizeObserverCallback | null = null;
+        const observedElements: Element[] = [];
+        const originalRO = globalThis.ResizeObserver;
+        globalThis.ResizeObserver = class {
+            constructor(cb: ResizeObserverCallback) { roCallback = cb; }
+            observe(target: Element) { observedElements.push(target); }
+            unobserve() {}
+            disconnect() {}
+        } as any;
+
+        try {
+            const header = document.createElement('header');
+            document.body.appendChild(header);
+
+            let headerWidth = 800;
+            header.getBoundingClientRect = () => ({
+                width: headerWidth,
+                height: 50,
+                top: 0,
+                left: 0,
+                bottom: 50,
+                right: headerWidth,
+                x: 0,
+                y: 0,
+                toJSON: () => {},
+            });
+
+            render(
+                <HeaderControls
+                    showSettings={false}
+                    setShowSettings={() => {}}
+                    identityPubkey={ME.publicKey}
+                    onOpenProfile={() => {}}
+                />,
+                { container: header }
+            );
+
+            const iconsContainer = await screen.findByTestId('header-needs-icons');
+            expect(iconsContainer).toBeInTheDocument();
+            // Initially wide (800px) -> maxSlotWidth is undefined
+            expect(iconsContainer.style.maxWidth).toBe('');
+
+            // Resize header down to 320px
+            headerWidth = 320;
+            // Trigger ResizeObserver callback for header
+            roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
+            expect(iconsContainer.style.maxWidth).toBe('40px');
+
+            // Resize back up to 800px via window resize event
+            headerWidth = 800;
+            window.dispatchEvent(new Event('resize'));
+            expect(iconsContainer.style.maxWidth).toBe('');
+
+            document.body.removeChild(header);
+        } finally {
+            globalThis.ResizeObserver = originalRO;
+        }
+    });
 });

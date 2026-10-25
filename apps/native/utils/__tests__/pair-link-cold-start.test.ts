@@ -156,7 +156,15 @@ async function coldStart(href: string): Promise<{ landed: Route; log: string[] }
     document.body.appendChild(container);
     root = createRoot(container);
     root.render(h(RouterContainer, null, h(AccountProvider, null, h(RootLayoutNav))) as Parameters<Root['render']>[0]);
-    await new Promise((r) => setTimeout(r, 300));
+    // Flake cause: coldStart used a fixed 300 ms setTimeout which starved under load before AccountProvider's 10 ms timer and the guard effect cascade ran, leaving log empty.
+    // Wait for the asynchronous account loading and guard effects to settle deterministically.
+    await vi.waitFor(() => {
+        if (href === '/') {
+            expect(navState).toBe('(tabs)/index');
+        } else {
+            expect(log.length).toBeGreaterThanOrEqual(2);
+        }
+    }, { timeout: 15_000 });
     return { landed: navState, log };
 }
 

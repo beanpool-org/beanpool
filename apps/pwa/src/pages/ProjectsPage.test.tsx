@@ -482,7 +482,7 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Done' }));
     };
 
-    it("its one picture is the logo, said so; the banner photo is its shop's, chosen later in Manage (Marty, 24 Oct)", async () => {
+    it("its one picture is the logo, said so; the banner photo is its shop's, added next (Marty, 25 Oct)", async () => {
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
         fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
@@ -491,7 +491,7 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
         const picker = within(dialog).getByLabelText('Logo (optional)');
         expect(picker).toHaveAttribute('type', 'file');
-        expect(within(dialog).getByText('Its banner photo is chosen later, in Manage.')).toBeInTheDocument();
+        expect(within(dialog).getByText('You can add a banner photo next.')).toBeInTheDocument();
         expect(within(dialog).queryByText(/Cover Photo/i)).toBeNull();
     });
 

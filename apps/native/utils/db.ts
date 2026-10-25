@@ -8823,3 +8823,6 @@ export async function markThreadReadOnNode(conversationId: string, myPubkey: str
     markConversationReadLocally(conversationId, myPubkey).catch(() => { });
     await _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId });
 }
+
+export { changeEnterpriseShop } from './shop';
+

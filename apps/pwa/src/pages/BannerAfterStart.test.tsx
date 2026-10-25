@@ -5,6 +5,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import * as pictureCrop from '../lib/picture-crop';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -130,8 +131,8 @@ describe('banner-after-start (PWA)', () => {
 
         // Propose modal opens
         const proposeDialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
-        const nameInput = within(proposeDialog).getByLabelText(/Enterprise name or project title/i);
-        const purposeInput = within(proposeDialog).getByLabelText(/Purpose statement/i);
+        const nameInput = within(proposeDialog).getByPlaceholderText(/Community Tool Shed/i);
+        const purposeInput = within(proposeDialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i);
 
         fireEvent.change(nameInput, { target: { value: 'Mullum Honey' } });
         fireEvent.change(purposeInput, { target: { value: 'Local raw honey' } });
@@ -170,9 +171,9 @@ describe('banner-after-start (PWA)', () => {
         fireEvent.click(projectOption);
 
         const proposeDialog = screen.getByRole('dialog', { name: /Start a project/i });
-        const nameInput = within(proposeDialog).getByLabelText(/Enterprise name or project title/i);
-        const purposeInput = within(proposeDialog).getByLabelText(/Purpose statement/i);
-        const goalInput = within(proposeDialog).getByLabelText(/Funding goal amount/i);
+        const nameInput = within(proposeDialog).getByPlaceholderText(/Community Tool Shed/i);
+        const purposeInput = within(proposeDialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i);
+        const goalInput = within(proposeDialog).getByPlaceholderText(/500/i);
 
         fireEvent.change(nameInput, { target: { value: 'Solar Co-op' } });
         fireEvent.change(purposeInput, { target: { value: 'Solar panels' } });
@@ -223,12 +224,25 @@ describe('banner-after-start (PWA)', () => {
     });
 
     it('5. the button opens the crop step and saving sets the banner', async () => {
-        const entData = sampleEnterprise({ shop: { photoUrl: null } });
-        vi.spyOn(api, 'getTreasury').mockResolvedValue(entData as any);
-        const changeShopSpy = vi.spyOn(api, 'changeEnterpriseShop').mockResolvedValue({
-            success: true,
-            shop: { photoUrl: 'data:image/jpeg;base64,PWA_CROPPED_BANNER' },
-        } as any);
+        vi.spyOn(pictureCrop, 'drawPictureCrop').mockReturnValue('data:image/jpeg;base64,PWA_CROPPED_BANNER');
+        vi.spyOn(pictureCrop, 'readPictureFile').mockResolvedValue({
+            src: 'data:image/jpeg;base64,UkFX',
+            width: 1600,
+            height: 1200,
+            image: {} as HTMLImageElement,
+        });
+
+        let entData = sampleEnterprise({ shop: { photoUrl: null } });
+        vi.spyOn(api, 'getTreasury').mockImplementation(async () => entData as any);
+        const changeShopSpy = vi.spyOn(api, 'changeEnterpriseShop').mockImplementation(async (_key, changes: any) => {
+            if (changes.photo) {
+                entData = { ...entData, shop: { ...entData.shop, photoUrl: changes.photo } };
+            }
+            return {
+                success: true,
+                shop: { photoUrl: changes.photo },
+            } as any;
+        });
 
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
 
@@ -246,7 +260,7 @@ describe('banner-after-start (PWA)', () => {
         });
 
         // The crop dialog opens
-        const cropDialog = await screen.findByRole('dialog', { name: /Choose the part to show/i });
+        const cropDialog = await screen.findByRole('dialog', { name: /Choose the part (that shows|to show)/i });
         expect(cropDialog).toBeInTheDocument();
 
         // Complete crop

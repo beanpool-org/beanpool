@@ -73,10 +73,10 @@ Before a project reaches its goal, its leader can also cancel it (on the phone, 
 - On the web or phone, tap **Commons**, then **Start something** (on the phone, the round **+** button) and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)
 - Give it a **Name** and a **Purpose statement**.
 - For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.
-- Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Its banner photo, across the top of its page, is chosen later under **Manage**.
+- Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. You can add a banner photo next.
 - Tap **Start the project 🌱** or **Start the enterprise 🏛️**.
 
-It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one.
+It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one. When you start an enterprise, it opens on its own page with **Add a banner photo**: tap it to choose the photo and the part that shows, or **Not now** to leave it for later.
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 

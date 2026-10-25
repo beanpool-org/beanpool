@@ -341,7 +341,7 @@ describe('banner-after-start (Native)', () => {
         await typeInput(host!.querySelector('input[aria-label="Funding goal amount"]'), '1000');
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b =>
-            /start initiative|start project/i.test(b.getAttribute('aria-label') || b.textContent || '')
+            /start initiative|start the project|start project/i.test(b.getAttribute('aria-label') || b.textContent || '')
         );
         expect(submitBtn).toBeDefined();
 

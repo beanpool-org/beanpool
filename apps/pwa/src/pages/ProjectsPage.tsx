@@ -376,7 +376,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         setCreating(true);
         setCreateError(null);
         try {
-            await createEnterprise({
+            const res = await createEnterprise({
                 name: newTitle.trim(),
                 purpose: newDescription.trim(),
                 description: newDescription.trim(),
@@ -393,6 +393,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setNewDeadline('');
             setNewPhotos([]);
             await fetchEnterprises();
+            if (newLifecycle === 'ongoing' && res?.publicKey && onOpenTreasury) {
+                onOpenTreasury(res.publicKey);
+            }
         } catch (err: any) {
             setCreateError(err.message || t('Failed to propose enterprise'));
         } finally {
@@ -1155,7 +1158,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <label htmlFor="propose-logo" className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
                                     {t('Logo (optional)')}
                                 </label>
-                                <p className="m-0 mb-1 text-xs text-nature-400">{t('Its banner photo is chosen later, in Manage.')}</p>
+                                <p className="m-0 mb-1 text-xs text-nature-400">{t('You can add a banner photo next.')}</p>
                                 <input
                                     id="propose-logo"
                                     type="file"

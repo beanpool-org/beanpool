@@ -77,6 +77,24 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(screen.queryByRole('button', { name: 'My groups' })).toBeNull();
     });
 
+    it('only All and Chat groups chips are shown when enterprises are disabled on the node', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({
+            memberCount: 3,
+            postCount: 0,
+            transactionCount: 0,
+            commonsBalance: 0,
+            profile: 'local',
+            features: { beans: false, enterprises: false, decisions: false } as any,
+        });
+
+        render(<ProjectsPage identity={me} />);
+        const chipsContainer = await screen.findByTestId('group-filter-chips');
+        const chipLabels = within(chipsContainer).getAllByRole('button').map(b => b.textContent?.trim());
+        expect(chipLabels).toEqual(['All', '👥 Chat groups']);
+        expect(screen.queryByRole('button', { name: '🌱 Projects' })).toBeNull();
+        expect(screen.queryByRole('button', { name: '🏛️ Enterprises' })).toBeNull();
+    });
+
     it('a treasury whose keepers include the viewer is drawn under Yours first with its role word and a Manage link; lead first', async () => {
         const keptEnterprise: Treasury = {
             publicKey: 'treasury-eggs',

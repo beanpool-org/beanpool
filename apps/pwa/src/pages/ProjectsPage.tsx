@@ -28,7 +28,7 @@ import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting
 import { EnterpriseCard } from '../components/EnterpriseCard';
 import { LocalCommunitySheet } from '../components/LocalCommunityMark';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
-import { commonsHeading, findHeading, yoursEmpty, type GroupKind } from '../lib/commons-sections';
+import { commonsHeading, findHeading, yoursEmpty, enterprisesOn, type GroupKind } from '../lib/commons-sections';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -169,7 +169,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // are in preview (the global node) no project or enterprise can exist, so those two chips would only ever be empty:
     // they are not offered, and one picked before the mode arrived reads as All.
     const enterprisesPreview = enterprisesMode === 'preview';
-    const groupCategoryFilter: GroupKind = enterprisesPreview && (pickedGroupCategory === 'projects' || pickedGroupCategory === 'enterprises') ? 'all' : pickedGroupCategory;
+    const showEnterpriseChips = enterprisesOn(communityInfo?.features) && !enterprisesPreview;
+    const groupCategoryFilter: GroupKind = !showEnterpriseChips && (pickedGroupCategory === 'projects' || pickedGroupCategory === 'enterprises') ? 'all' : pickedGroupCategory;
     const filter: 'all' | 'ongoing' | 'bounded' = groupCategoryFilter === 'projects' ? 'bounded' : groupCategoryFilter === 'enterprises' ? 'ongoing' : 'all';
     const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
     const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat';
@@ -784,7 +785,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 <div className="px-4 pb-3 empty:hidden" data-testid="commons-filters">
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
                         <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
-                            {GROUP_CHIPS.filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
+                            {GROUP_CHIPS.filter(option => showEnterpriseChips || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
                                 <button
                                     key={option.key}
                                     onClick={() => setGroupCategoryFilter(option.key)}

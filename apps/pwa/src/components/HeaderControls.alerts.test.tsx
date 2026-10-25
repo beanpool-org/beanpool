@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as api from '../lib/api';
 import { HeaderControls } from './HeaderControls';
 import { HomePage } from '../pages/HomePage';
@@ -357,12 +357,16 @@ describe('HeaderControls needs-you alert icons', () => {
             // Resize header down to 320px
             headerWidth = 320;
             // Trigger ResizeObserver callback for header
-            roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
+            act(() => {
+                roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
+            });
             expect(iconsContainer.style.maxWidth).toBe('40px');
 
             // Resize back up to 800px via window resize event
             headerWidth = 800;
-            window.dispatchEvent(new Event('resize'));
+            act(() => {
+                window.dispatchEvent(new Event('resize'));
+            });
             expect(iconsContainer.style.maxWidth).toBe('');
 
             document.body.removeChild(header);

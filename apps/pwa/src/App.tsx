@@ -1183,7 +1183,10 @@ export function App() {
                             enterprisesPreview={enterprisesMode === 'preview'}
                             onNearYou={() => { closePagesOver(); setActiveTab('home'); }}
                             onGuide={(slug) => { closePagesOver(); navigateToTab('guide', slug); }}
-                            onBack={() => setOpenTreasuryPubkey(null)}
+                            onBack={() => {
+                                setOpenTreasuryPubkey(null);
+                                setOpenTreasuryTab('page');
+                            }}
                             onNavigatePost={(postId) => {
                                 closePagesOver();
                                 navigateToTab('marketplace', postId);

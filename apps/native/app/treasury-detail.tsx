@@ -483,7 +483,10 @@ export default function TreasuryDetailScreen() {
             setPledgeMemo('');
             load();
         } catch (e: any) {
-            Alert.alert(t('Pledge Failed'), e.message ? signedRequestWords(e.message) : t('Could not complete pledge.'));
+            const message = e?.code === 'project_closed'
+                ? t("This project's deadline has passed: it takes no more pledges.")
+                : (e.message ? signedRequestWords(e.message) : t('Could not complete pledge.'));
+            Alert.alert(t('Pledge Failed'), message);
         } finally {
             setPledging(false);
         }
@@ -610,7 +613,7 @@ export default function TreasuryDetailScreen() {
                             const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
                             // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
-                            const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle);
+                            const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle, detail?.deadlineAt);
                             return (
                                 <View style={styles.progressCard}>
                                     <View style={styles.progressHeader}>

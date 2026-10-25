@@ -80,6 +80,7 @@ export * from './amount-input.js';
 export * from './report-kind.js';
 export * from './group-options.js';
 export * from './start-something.js';
+export * from './enterprise-pledge.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's
 // commitment. A new export from group-crypto.ts is added here on purpose or not at all.

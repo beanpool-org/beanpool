@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { formatNumber, t, tn } from '@beanpool/core';
 import type { Treasury } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { takesPledges } from '../lib/enterprise-pledge';
 import { LocalCommunityPill } from './LocalCommunityMark';
 import { Sentence } from './Sentence';
 
@@ -189,7 +189,7 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                         </div>
 
                         {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
-                        {!isFunded && !pledgeClosedLine(treasury.status) && (
+                        {takesPledges(treasury) && (
                             <div
                                 aria-hidden="true"
                                 className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"

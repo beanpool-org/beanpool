@@ -35,7 +35,7 @@ import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../eng
 import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/shops.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
-import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -51,7 +51,7 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlOf, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
+import { avatarUrlOf, isPastDeadline, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { getThresholds } from '../config/local-config.js';
@@ -544,6 +544,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: word('This enterprise has been closed, so its funds can no longer be moved.') };
             return;
         }
+        const memberEnterprise = db.prepare('SELECT deadline_at FROM members WHERE public_key = ?').get(treasury) as any;
+        const projectRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(treasury) as any;
+        const deadline = memberEnterprise?.deadline_at ?? projectRow?.deadline_at;
+        if (isPastDeadline(deadline)) {
+            ctx.status = 409;
+            ctx.body = { error: PROJECT_DEADLINE_PASSED_ERROR, code: 'project_closed' };
+            return;
+        }
         // A visitor's row pledges nothing, as a key with no row pledges nothing (getActingMember): pledgeToProject moves the
         // Beans itself and asks nobody who the pledger is.
         const memberStatus = getActingMember(actor) ? statusOf(actor) : undefined;
@@ -571,8 +579,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             deps.broadcast?.({ type: 'project_updated', project: getCrowdfundProject(treasury) });
             ctx.body = { success: true, txId };
         } catch (err: any) {
-            ctx.status = 400;
-            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
+            ctx.status = err.status || 400;
+            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT), ...(err.code ? { code: err.code } : {}) };
         }
     };
 

@@ -472,7 +472,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             });
             await load();
         } catch (err: any) {
-            setActionFeedback({ at: 'pledge', type: 'error', message: err.message || t('Failed to complete pledge.') });
+            const message = err.code === 'project_closed'
+                ? t("This project's deadline has passed: it takes no more pledges.")
+                : (err.message || t('Failed to complete pledge.'));
+            setActionFeedback({ at: 'pledge', type: 'error', message });
         } finally {
             setPledging(false);
         }
@@ -2055,7 +2058,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
                                     const daysRemaining = getDaysRemaining(detail.deadlineAt);
                                     // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
-                                    const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle);
+                                    const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle, detail.deadlineAt);
 
                                     return (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">

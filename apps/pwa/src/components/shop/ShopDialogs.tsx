@@ -527,10 +527,10 @@ export function ShopAddOffersDialog({
                                         className={`w-6 h-6 rounded-md border flex items-center justify-center font-bold text-sm shrink-0 ${
                                             on
                                                 ? 'bg-bp-commit-fill border-transparent text-bp-commit-on'
-                                                : 'border-nature-400 dark:border-nature-600 bg-white dark:bg-nature-950 text-transparent'
+                                                : 'border-nature-400 dark:border-nature-600 bg-white dark:bg-nature-950'
                                         }`}
                                     >
-                                        ✓
+                                        {on ? '✓' : null}
                                     </span>
                                     <span className="text-sm text-nature-900 dark:text-white break-words line-clamp-2 flex-1">
                                         {o.title}

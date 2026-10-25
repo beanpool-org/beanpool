@@ -44,10 +44,10 @@ export function ShopToggle({
                     className={`w-6 h-6 rounded-md border flex items-center justify-center font-bold text-sm shrink-0 ${
                         on
                             ? 'bg-bp-commit-fill border-transparent text-bp-commit-on'
-                            : 'border-nature-400 dark:border-nature-600 bg-white dark:bg-nature-950 text-transparent'
+                            : 'border-nature-400 dark:border-nature-600 bg-white dark:bg-nature-950'
                     }`}
                 >
-                    ✓
+                    {on ? '✓' : null}
                 </span>
                 <span className="min-w-0 flex-1">
                     <span className="block text-sm font-bold text-nature-900 dark:text-white break-words">

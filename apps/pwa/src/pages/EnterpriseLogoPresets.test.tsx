@@ -91,10 +91,11 @@ describe('enterprise logo presets (web)', () => {
         it('offers preset avatars under Logo (optional); picking a preset sends bundled://<id>', async () => {
             render(<ProjectsPage identity={mockIdentity} />);
 
-            fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
-            fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
+            fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
+            const sheet = screen.getByRole('dialog', { name: /Start something/i });
+            fireEvent.click(within(sheet).getByRole('button', { name: /^Enterprise/i }));
 
-            const dialog = screen.getByRole('dialog');
+            const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
             expect(within(dialog).getByText('Logo (optional)')).toBeInTheDocument();
 
             // Preset avatar buttons should be offered
@@ -110,7 +111,7 @@ describe('enterprise logo presets (web)', () => {
             fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Seed saving and exchange' } });
 
             // Submit
-            fireEvent.click(within(dialog).getByRole('button', { name: /Propose Enterprise/i }));
+            fireEvent.click(within(dialog).getByRole('button', { name: /Start the enterprise/i }));
 
             await waitFor(() => expect(api.createEnterprise).toHaveBeenCalledTimes(1));
             const sent = vi.mocked(api.createEnterprise).mock.calls[0][0];
@@ -121,10 +122,11 @@ describe('enterprise logo presets (web)', () => {
         it('picking a photo file still works and sends the part chosen in the crop step', async () => {
             render(<ProjectsPage identity={mockIdentity} />);
 
-            fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
-            fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
+            fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
+            const sheet = screen.getByRole('dialog', { name: /Start something/i });
+            fireEvent.click(within(sheet).getByRole('button', { name: /^Enterprise/i }));
 
-            const dialog = screen.getByRole('dialog');
+            const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
             fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
             fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Tool Shed' } });
             fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Tool sharing' } });
@@ -137,7 +139,7 @@ describe('enterprise logo presets (web)', () => {
 
             await waitFor(() => expect(within(dialog).getByAltText('Preview')).toBeInTheDocument());
 
-            fireEvent.click(within(dialog).getByRole('button', { name: /Propose Enterprise/i }));
+            fireEvent.click(within(dialog).getByRole('button', { name: /Start the enterprise/i }));
 
             await waitFor(() => expect(api.createEnterprise).toHaveBeenCalledTimes(1));
             const sent = vi.mocked(api.createEnterprise).mock.calls[0][0];
@@ -148,9 +150,10 @@ describe('enterprise logo presets (web)', () => {
     describe('Propose Enterprise modal: the deciding review of 1e784a87', () => {
         const openPropose = async () => {
             render(<ProjectsPage identity={mockIdentity} />);
-            fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
-            fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
-            return screen.getByRole('dialog');
+            fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
+            const sheet = screen.getByRole('dialog', { name: /Start something/i });
+            fireEvent.click(within(sheet).getByRole('button', { name: /^Enterprise/i }));
+            return screen.getByRole('dialog', { name: /Start an enterprise/i });
         };
 
         it("the picker's heading takes the dark modal's readable colour, never the light-card one", async () => {
@@ -172,7 +175,7 @@ describe('enterprise logo presets (web)', () => {
             fireEvent.click(within(dialog).getByRole('button', { name: 'Select Leaf avatar' }));
             await act(async () => { finish(PHOTO_READ); });
             expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull();
-            const submit = within(dialog).getByRole('button', { name: /Propose Enterprise/i });
+            const submit = within(dialog).getByRole('button', { name: /Start the enterprise/i });
             expect(submit).not.toBeDisabled();
             fireEvent.click(submit);
             await waitFor(() => expect(api.createEnterprise).toHaveBeenCalledTimes(1));

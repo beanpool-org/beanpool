@@ -216,13 +216,12 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
             expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
         });
 
-        // Click propose button to open modal
-        // The one Create form hands over to the enterprise form when Beans are involved (§3.1).
-        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
-        expect(screen.queryByText('Project Team')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
+        // Click Start something button to open sheet, then choose Enterprise
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const startSheet = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(startSheet).getByRole('button', { name: /^Enterprise/i }));
 
-        const modalHeading = screen.getByRole('heading', { name: 'Propose an Enterprise / Project' });
+        const modalHeading = screen.getByRole('heading', { name: 'Start an enterprise' });
         expect(modalHeading).toBeInTheDocument();
 
         // Verify modal outer container has dynamic paddingBottom clearance (#791)
@@ -485,9 +484,10 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
     it("its one picture is the logo, said so; the banner photo is its shop's, chosen later in Manage (Marty, 24 Oct)", async () => {
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
-        const dialog = screen.getByRole('dialog');
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const startSheet = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(startSheet).getByRole('button', { name: /^Enterprise/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
         const picker = within(dialog).getByLabelText('Logo (optional)');
         expect(picker).toHaveAttribute('type', 'file');
         expect(within(dialog).getByText('Its banner photo is chosen later, in Manage.')).toBeInTheDocument();
@@ -521,9 +521,10 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
 
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
-        const dialog = screen.getByRole('dialog');
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const startSheet = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(startSheet).getByRole('button', { name: /^Enterprise/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
 
         fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
@@ -542,7 +543,7 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         expect(drawn).toEqual([{ width: 512, height: 512 }]);
         expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.7);
 
-        fireEvent.click(within(dialog).getByRole('button', { name: /Propose Enterprise/i }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /Start the enterprise/i }));
         await waitFor(() => expect(createEnterprise).toHaveBeenCalledTimes(1));
         const sent = vi.mocked(createEnterprise).mock.calls[0][0];
         expect(sent.avatar).toBe('data:image/jpeg;base64,UkVTSVpFRA==');
@@ -584,9 +585,10 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
     async function openProposeFormAndPick(): Promise<HTMLElement> {
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
-        const dialog = screen.getByRole('dialog');
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const startSheet = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(startSheet).getByRole('button', { name: /^Enterprise/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
         fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
         fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
@@ -612,7 +614,7 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         expect(within(dialog).getByRole('button', { name: /Preparing photo/i })).toBeDisabled();
         await chooseTheCrop();
         await within(dialog).findByAltText('Preview');
-        const propose = within(dialog).getByRole('button', { name: /Propose Enterprise/i });
+        const propose = within(dialog).getByRole('button', { name: /Start the enterprise/i });
         expect(propose).toBeEnabled();
         fireEvent.click(propose);
         await waitFor(() => expect(createEnterprise).toHaveBeenCalledTimes(1));
@@ -626,7 +628,7 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
 
         expect(await within(dialog).findByText('That photo could not be read. Please choose another one.')).toBeInTheDocument();
         expect(within(dialog).queryByAltText('Preview')).toBeNull();
-        expect(within(dialog).getByRole('button', { name: /Propose Enterprise/i })).toBeEnabled();
+        expect(within(dialog).getByRole('button', { name: /Start the enterprise/i })).toBeEnabled();
     });
 });
 
@@ -649,7 +651,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(screen.getByText('Groups:')).toBeInTheDocument();
         expect(screen.queryByText(/Propose Community Action/)).toBeNull();
         expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
-        expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Start something/i })).toBeInTheDocument();
     });
 
     it('where the node says it has them, or says nothing, Decide is there as before', async () => {
@@ -701,7 +703,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(sectionTabs()).toHaveLength(2);
         expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
         expect(screen.getByText('Groups:')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Start something/i })).toBeInTheDocument();
         // Switching to Decide tab shows the sample decision and voice credits card
         fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
         expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();

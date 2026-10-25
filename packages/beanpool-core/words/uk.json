@@ -842,5 +842,20 @@
     "few": "{n} речі · {out} позичено",
     "many": "{n} речей · {out} позичено",
     "other": "{n} речі · {out} позичено"
-  }
+  },
+  "Friends, neighbours, shared interests": "Друзі, сусіди, спільні інтереси",
+  "Open discussion space": "Простір для відкритого обговорення",
+  "Getting a practical job done together": "Спільне виконання практичних справ",
+  "People who share a skill or craft": "Люди зі спільними навичками або ремеслом",
+  "Open\u0004join policy": "Відкрита",
+  "Anyone can join immediately": "Будь-хто може приєднатися одразу",
+  "Request to Join\u0004join policy": "Запит на вступ",
+  "Convenor approval required to join": "Для вступу потрібне схвалення координатора",
+  "Invite Only\u0004join policy": "Лише за запрошенням",
+  "Convenor must invite new members": "Координатор має сам запросити нових учасників",
+  "🥖 With Beans involved?": "🥖 Залучено боби?",
+  "Start a project or an enterprise →": "Створити проєкт або підприємство →",
+  "Social Circle": "Коло спілкування",
+  "Working Group": "Робоча група",
+  "Guild": "Гільдія"
 }

@@ -842,5 +842,20 @@
     "few": "{n} вещи · {out} одолжено",
     "many": "{n} вещей · {out} одолжено",
     "other": "{n} вещи · {out} одолжено"
-  }
+  },
+  "Friends, neighbours, shared interests": "Друзья, соседи, общие интересы",
+  "Open discussion space": "Открытое пространство для обсуждений",
+  "Getting a practical job done together": "Совместное решение практических задач",
+  "People who share a skill or craft": "Люди с общими навыками или ремеслом",
+  "Open\u0004join policy": "Открыто",
+  "Anyone can join immediately": "Любой желающий может вступить сразу",
+  "Request to Join\u0004join policy": "Запрос на вступление",
+  "Convenor approval required to join": "Для вступления требуется одобрение координатора",
+  "Invite Only\u0004join policy": "Только по приглашению",
+  "Convenor must invite new members": "Координатор должен пригласить новых участников",
+  "🥖 With Beans involved?": "🥖 С участием бобов?",
+  "Start a project or an enterprise →": "Создать проект или предприятие →",
+  "Social Circle": "Круг общения",
+  "Working Group": "Рабочая группа",
+  "Guild": "Гильдия"
 }

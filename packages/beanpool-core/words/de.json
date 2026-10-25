@@ -768,5 +768,20 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n} Sache · {out} verliehen",
     "other": "{n} Sachen · {out} verliehen"
-  }
+  },
+  "Friends, neighbours, shared interests": "Freunde, Nachbarn, gemeinsame Interessen",
+  "Open discussion space": "Offener Diskussionsraum",
+  "Getting a practical job done together": "Gemeinsam eine praktische Aufgabe anpacken",
+  "People who share a skill or craft": "Menschen mit einer gemeinsamen Fähigkeit oder einem Handwerk",
+  "Open\u0004join policy": "Offen",
+  "Anyone can join immediately": "Jeder kann sofort beitreten",
+  "Request to Join\u0004join policy": "Beitritt anfragen",
+  "Convenor approval required to join": "Genehmigung des Koordinators zum Beitreten erforderlich",
+  "Invite Only\u0004join policy": "Nur mit Einladung",
+  "Convenor must invite new members": "Koordinator muss neue Mitglieder einladen",
+  "🥖 With Beans involved?": "🥖 Mit Bohnen beteiligt?",
+  "Start a project or an enterprise →": "Starte ein Projekt oder einen Betrieb →",
+  "Social Circle": "Freundeskreis",
+  "Working Group": "Arbeitsgruppe",
+  "Guild": "Gilde"
 }

@@ -555,6 +555,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
              setShowDealsModal(true);
              setDealsInitialTab('pending');
              onPostOpened?.();
+        } else if (openPostId === 'new-poll' || openPostId === 'new-event') {
+             onPostOpened?.();
+             onNavigate?.(openPostId === 'new-poll' ? 'map-post-poll' : 'map-post-event');
         } else if (openPostId && !loading) {
             // Once the first read has settled, not once it holds something: where the node reads by area the list
             // can be empty (nothing near), and the link must still open its listing (DESIGN-global-sync-by-area §5).

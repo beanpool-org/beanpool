@@ -768,5 +768,20 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n} eşya · {out} dışarıda",
     "other": "{n} eşya · {out} dışarıda"
-  }
+  },
+  "Friends, neighbours, shared interests": "Arkadaşlar, komşular, ortak ilgi alanları",
+  "Open discussion space": "Açık tartışma alanı",
+  "Getting a practical job done together": "Birlikte pratik bir iş yürütme",
+  "People who share a skill or craft": "Bir beceri ya da zanaatı paylaşan kişiler",
+  "Open\u0004join policy": "Açık",
+  "Anyone can join immediately": "Herkes hemen katılabilir",
+  "Request to Join\u0004join policy": "Katılma İsteği",
+  "Convenor approval required to join": "Katılmak için koordinatör onayı gerekir",
+  "Invite Only\u0004join policy": "Yalnızca Davetle",
+  "Convenor must invite new members": "Yeni üyeleri koordinatör davet etmelidir",
+  "🥖 With Beans involved?": "🥖 Fasulye dahil mi?",
+  "Start a project or an enterprise →": "Bir proje ya da girişim başlatın →",
+  "Social Circle": "Sosyal Çevre",
+  "Working Group": "Çalışma Grubu",
+  "Guild": "Lonca"
 }

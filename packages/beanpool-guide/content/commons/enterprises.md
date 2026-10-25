@@ -70,11 +70,11 @@ Before a project reaches its goal, its leader can also cancel it (on the phone, 
 
 ## Starting one
 
-- On the web, tap **Commons**, then **+ Create Group**, then **Start a project** or **Start an enterprise**. In the phone app, tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)
+- On the web or phone, tap **Commons**, then **Start something** (on the phone, the round **+** button) and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)
 - Give it a **Name** and a **Purpose statement**.
 - For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.
 - Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Its banner photo, across the top of its page, is chosen later under **Manage**.
-- Tap **Start the project 🌱** or **Start the enterprise 🏛️** (**Propose Enterprise** in the web app; it still starts at once).
+- Tap **Start the project 🌱** or **Start the enterprise 🏛️**.
 
 It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one.
 

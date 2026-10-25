@@ -326,9 +326,10 @@ describe("a member's own avatar: a square in a circle, 512 px (the web's old 128
 describe("Propose an enterprise: its logo", () => {
     it('a logo photo opens the crop dialog, a square in a circle; the part chosen is the one sent', async () => {
         render(<ProjectsPage identity={identity} />);
-        fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
-        const form = screen.getByRole('dialog');
+        // Commons S2: ＋ Start something → Enterprise opens the start form on the enterprise kind.
+        fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
+        fireEvent.click(within(screen.getByRole('dialog', { name: /Start something/i })).getByRole('button', { name: /^Enterprise/i }));
+        const form = screen.getByRole('dialog', { name: /Start an enterprise/i });
         fireEvent.click(within(form).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(form).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Tool Shed' } });
         fireEvent.change(within(form).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Tool sharing' } });
@@ -342,21 +343,22 @@ describe("Propose an enterprise: its logo", () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
         await within(form).findByAltText('Preview');
         expect(lastDraw()).toEqual({ from: [512, 120, 960, 960], to: [0, 0, 512, 512], canvas: { width: 512, height: 512 } });
-        fireEvent.click(within(form).getByRole('button', { name: /Propose Enterprise/i }));
+        fireEvent.click(within(form).getByRole('button', { name: /Start the enterprise/i }));
         await waitFor(() => expect(api.createEnterprise).toHaveBeenCalledTimes(1));
         expect(vi.mocked(api.createEnterprise).mock.calls[0][0].avatar).toBe(CROPPED);
     });
 
     it('a crop cancelled leaves the form as it was, and it can be sent without a logo', async () => {
         render(<ProjectsPage identity={identity} />);
-        fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
-        const form = screen.getByRole('dialog');
+        // Commons S2: ＋ Start something → Enterprise opens the start form on the enterprise kind.
+        fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
+        fireEvent.click(within(screen.getByRole('dialog', { name: /Start something/i })).getByRole('button', { name: /^Enterprise/i }));
+        const form = screen.getByRole('dialog', { name: /Start an enterprise/i });
         fireEvent.change(form.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [photo()] } });
         fireEvent.click(within(await cropDialog()).getByRole('button', { name: 'Cancel' }));
         await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull());
         expect(within(form).queryByAltText('Preview')).toBeNull();
-        expect(within(form).getByRole('button', { name: /Propose Enterprise/i })).toBeEnabled();
+        expect(within(form).getByRole('button', { name: /Start the enterprise/i })).toBeEnabled();
         await act(async () => {});
     });
 });

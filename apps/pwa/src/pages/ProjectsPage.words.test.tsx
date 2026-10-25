@@ -95,7 +95,7 @@ describe('the Commons page in the pseudo-locale', () => {
         render(<ProjectsPage identity={ME} />);
         fireEvent.click(await screen.findByRole('button', { name: xx('+ Propose a Project') }));
         const dialog = screen.getByRole('dialog');
-        expect(within(dialog).getByRole('heading').textContent).toBe(xx('Propose an Enterprise / Project'));
+        expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start a project'));
         expect(within(dialog).getByRole('button', { name: xx('Close dialog') })).toBeInTheDocument();
         expect(within(dialog).getByPlaceholderText(xx('e.g. {amount}').replace('{amount}', '500'))).toBeInTheDocument();
         expect(bypassing(dialog)).toEqual([]);
@@ -122,7 +122,9 @@ describe('the Commons page in the pseudo-locale', () => {
         render(<ProjectsPage identity={ME} initialSection="decide" />);
         await waitFor(() => expect(getDecisions).toHaveBeenCalled());
         await screen.findByText(xx('You can propose once you have completed a trade.'));
-        fireEvent.click(screen.getByRole('button', { name: xx('+ Propose') }));
+        fireEvent.click(screen.getByRole('button', { name: (n) => n.includes(xx('Start something')) }));
+        const sheet = screen.getByRole('dialog');
+        fireEvent.click(within(sheet).getByRole('button', { name: (n) => n.includes(xx('Decision')) }));
         expect(said).toEqual([xx('You can propose a Decision once you have completed a trade.')]);
         expect(bypassing(document.body, { said })).toEqual([]);
     });

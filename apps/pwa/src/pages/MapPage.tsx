@@ -168,6 +168,8 @@ interface Props {
     identity: BeanPoolIdentity | null;
     openNewPost?: boolean;
     initialGroupId?: string;
+    /** The kind the composer opens on when `openNewPost` comes from Commons' Start something (Poll, Event); else Need. */
+    initialPostType?: 'poll' | 'event';
     onOpenNewPostHandled?: () => void;
     /**
      * A tool's offer or need door (scratch/tools/DESIGN-tool-template-fable.md §1.4, T0.3): the composer opens with the
@@ -217,7 +219,7 @@ interface Props {
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -498,9 +500,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 setAudienceScope('group');
                 setTargetGroupId(initialGroupId);
             }
+            if (initialPostType) setNewPostType(initialPostType);
             tryOpenComposer();
         }
-    }, [openNewPost, initialGroupId, onOpenNewPostHandled, tryOpenComposer]);
+    }, [openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, tryOpenComposer]);
 
     // A tool's draft (openDraft): its fields in the composer, as the member would have typed them, and nothing posted.
     // Everything the draft doesn't say starts as a new post's would: a composer left open on a group, a pin or a peer

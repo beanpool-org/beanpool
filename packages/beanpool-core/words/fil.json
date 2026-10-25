@@ -768,5 +768,20 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n} gamit · {out} naipahiram",
     "other": "{n} gamit · {out} naipahiram"
-  }
+  },
+  "Friends, neighbours, shared interests": "Mga kaibigan, kapitbahay, magkakatulad na interes",
+  "Open discussion space": "Bukas na espasyo para sa talakayan",
+  "Getting a practical job done together": "Sama-samang pagtatapos ng praktikal na gawain",
+  "People who share a skill or craft": "Mga taong may magkatulad na kasanayan o sining",
+  "Open\u0004join policy": "Bukas",
+  "Anyone can join immediately": "Kahit sino ay maaaring sumali agad",
+  "Request to Join\u0004join policy": "Humiling na Sumali",
+  "Convenor approval required to join": "Kailangan ang pag-apruba ng convenor para sumali",
+  "Invite Only\u0004join policy": "Imbitasyon Lamang",
+  "Convenor must invite new members": "Dapat mag-imbita ang convenor ng mga bagong miyembro",
+  "🥖 With Beans involved?": "🥖 May kasamang munggo?",
+  "Start a project or an enterprise →": "Magsimula ng proyekto o negosyo →",
+  "Social Circle": "Social Circle",
+  "Working Group": "Working Group",
+  "Guild": "Guild"
 }

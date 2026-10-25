@@ -25,15 +25,15 @@ On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterpri
 ## Starting a group
 
 - On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.
-- In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
+- In the web app, open **Commons**, then **Groups**, and tap **Start something** and pick **Chat group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
-- Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.
+- Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. **Social Circle** is chosen for you.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
 - Tap **Create Group**. You become its **lead convenor**. On the phone, the app takes you straight into the new group's chat.
 
 You can start up to 5 groups in any 24 hours.
 
-With Beans involved? Start a project or an enterprise instead: tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**; on the web **Start a project** or **Start an enterprise**). See "Projects and enterprises".
+With Beans involved? Start a project or an enterprise instead: tap **Start something** (on the phone, the round **+** button) on **Commons**, then pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**). See "Projects and enterprises".
 
 ## Inviting people
 

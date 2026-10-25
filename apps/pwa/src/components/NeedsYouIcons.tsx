@@ -101,7 +101,7 @@ function fetchNeedsDeduped(): Promise<any> {
 export function NeedsYouIcons({
     identityPubkey,
     onNavigate,
-    isHome = false,
+    isHome: _isHome = false,
     activeTab,
     variant = 'header',
 }: {
@@ -295,7 +295,7 @@ export function NeedsYouIcons({
 
             if (titleSpan) {
                 // Non-map tab: HeaderTitle must keep its full width
-                let titleNeeded = 0;
+                let titleNeeded: number;
                 try {
                     const range = document.createRange();
                     range.selectNodeContents(titleSpan);

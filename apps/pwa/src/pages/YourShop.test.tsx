@@ -238,7 +238,8 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         const { rerender } = render(
             <ShopDetailPage id={SHOP_ID} identity={me} onBack={vi.fn()} onOpenYourShop={vi.fn()} onMessage={vi.fn()} />
         );
-        expect(await screen.findByText("Dave's Tools")).toBeInTheDocument();
+        const daveTitles = await screen.findAllByText("Dave's Tools");
+        expect(daveTitles.length).toBeGreaterThan(0);
         expect(screen.getByRole('button', { name: /Message Dave/i })).toBeInTheDocument();
         expect(screen.queryByTestId('shop-page-change')).not.toBeInTheDocument();
 
@@ -381,5 +382,44 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         expect(await screen.findByTestId('shop-closed-ended')).toBeInTheDocument();
         expect(screen.getByTestId('shop-closed-ended')).toHaveTextContent('3 Offers have ended');
         expect(screen.getByTestId('shop-open')).toBeInTheDocument();
+    });
+
+    it('8. dialogs: focus inside, Escape closes, focus returns (window capture keydown)', async () => {
+        const shopData = {
+            id: SHOP_ID,
+            name: "Ana's Shop",
+            ownerName: 'Ana',
+            category: 'tools',
+            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+            paused: false,
+            backOn: null,
+            photoUrl: null,
+        };
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') return { ok: true, status: 200, json: async () => ({ shop: shopData }) };
+            if (path.startsWith('/api/marketplace/posts?shop=')) return { ok: true, status: 200, json: async () => [] };
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        render(<YourShopPage identity={me} onBack={vi.fn()} />);
+        expect(await screen.findByTestId('shop-front')).toBeInTheDocument();
+
+        const nameButton = screen.getByTestId('shop-field-name');
+        nameButton.focus();
+        expect(document.activeElement).toBe(nameButton);
+
+        fireEvent.click(nameButton);
+        const nameDialog = await screen.findByTestId('shop-text-sheet');
+        expect(nameDialog).toBeInTheDocument();
+        const input = screen.getByTestId('shop-text-input');
+        expect(document.activeElement).toBe(input);
+
+        // Escape closes dialog and returns focus
+        fireEvent.keyDown(window, { key: 'Escape' });
+        await waitFor(() => {
+            expect(screen.queryByTestId('shop-text-sheet')).not.toBeInTheDocument();
+        });
+        expect(document.activeElement).toBe(nameButton);
     });
 });

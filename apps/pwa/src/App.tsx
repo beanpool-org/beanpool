@@ -63,6 +63,9 @@ import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
+import { YourShopPage } from './pages/YourShopPage';
+import { ShopDetailPage } from './pages/ShopDetailPage';
+import { takeShopParam } from './lib/shop';
 
 type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
@@ -237,6 +240,8 @@ export function App() {
     const clearEditEventPost = useCallback(() => setEditEventPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
+    const [openYourShop, setOpenYourShop] = useState(false);
+    const [openShopId, setOpenShopId] = useState<string | null>(null);
     // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
     // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
@@ -255,15 +260,17 @@ export function App() {
         setOpenDraft(draft);
         setActiveTab('map');
     }, []);
-    // A member's profile, an enterprise's page or a tool: each drawn over the tabs, and over Settings (z-[110] to its 100).
+    // A member's profile, an enterprise's page, their shop or a tool: each drawn over the tabs, and over Settings (z-[110] to its 100).
     // On md+ the sidebar stays beside it, so its tabs and its cog can be tapped with one open.
-    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool;
+    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool || openYourShop || !!openShopId;
     const isBottomNavVisible = !pageOver;
     // A tab, from the sidebar or the bottom nav, is shown with nothing over it.
     const closePagesOver = () => {
         setOpenProfilePubkey(null);
         setOpenTreasuryPubkey(null);
         setOpenTool(null);
+        setOpenYourShop(false);
+        setOpenShopId(null);
     };
     // The cog's, the sidebar's and the pill's: Settings as the member sees it. Opened, it closes a page over the tabs as a
     // tab does, or it opened under that page and nothing seemed to happen (tester, 23 Oct: from My profile the cog didn't
@@ -326,7 +333,7 @@ export function App() {
     // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
     // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
     const tourStillOffered = !!identity && isGuest === false && (tourOffered?.publicKey !== identity.publicKey || tourOffered.up);
-    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey || !!openTool;
+    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey || !!openTool || openYourShop || !!openShopId;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
     // The recent searches and "near you" answers (lib/members-on-demand) are kept by path alone: another account in this
@@ -416,6 +423,15 @@ export function App() {
             if (contextId) setOpenTreasuryPubkey(contextId);
             return;
         }
+        if (tab === 'shop-mine') {
+            setOpenYourShop(true);
+            return;
+        }
+        if (tab === 'shop') {
+            if (contextId) setOpenShopId(contextId);
+            else setOpenYourShop(true);
+            return;
+        }
         // A group's vote: the group's info, where its Decisions block is. Read first, so the sheet opens whole; a group
         // that can't be read now opens just its votes when they still hold the reader (#1784 review B1), else Commons.
         if (tab === 'group') {
@@ -476,6 +492,16 @@ export function App() {
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
+
+    // `/?shop=<id>` — a shared shop link.
+    const [linkedShop, setLinkedShop] = useState<string | null>(null);
+    useEffect(() => { setLinkedShop(takeShopParam()); }, []);
+    useEffect(() => {
+        if (!linkedShop) return;
+        if (linkedShop === 'mine') setOpenYourShop(true);
+        else setOpenShopId(linkedShop);
+        setLinkedShop(null);
+    }, [linkedShop]);
     // On the global lobby a visitor reads the shared listing first; the lobby keeps it in this tab (a join by sign-in
     // leaves the page), and it opens here once, when they have joined. Before the address's own, so that one wins.
     useEffect(() => {
@@ -1164,6 +1190,7 @@ export function App() {
                                 onComposer={openComposerFromTool}
                                 onGuide={(slug) => { setOpenTool(null); navigateToTab('guide', slug); }}
                                 onAddHomeCard={(type) => { setOpenTool(null); setAddHomeCard(type); setShowSettings(false); setActiveTab('home'); }}
+                                onShop={() => { setOpenTool(null); setOpenYourShop(true); }}
                             />
                         </Suspense>
                     )}
@@ -1224,6 +1251,59 @@ export function App() {
                                 }
                                 setActiveTab(tab as any);
                                 setShowSettings(false);
+                            }}
+                        />
+                    )}
+
+                    {/* Your shop Overlay */}
+                    {openYourShop && identity && (
+                        <YourShopPage
+                            identity={identity}
+                            onBack={() => setOpenYourShop(false)}
+                            onOpenShop={(shopId: string) => {
+                                setOpenYourShop(false);
+                                setOpenShopId(shopId);
+                            }}
+                            onOpenPost={(postId) => {
+                                closePagesOver();
+                                navigateToTab('marketplace', postId);
+                            }}
+                            onOpenTools={() => {
+                                setOpenYourShop(false);
+                                setOpenTool({ id: null, screen: 'main', key: null });
+                            }}
+                            onOpenDeals={() => {
+                                closePagesOver();
+                                navigateToTab('marketplace');
+                            }}
+                        />
+                    )}
+
+                    {/* Shop Detail Overlay */}
+                    {openShopId && (
+                        <ShopDetailPage
+                            id={openShopId}
+                            identity={identity}
+                            onBack={() => setOpenShopId(null)}
+                            onOpenYourShop={() => {
+                                setOpenShopId(null);
+                                setOpenYourShop(true);
+                            }}
+                            onOpenEnterprise={(pubkey) => {
+                                setOpenShopId(null);
+                                setOpenTreasuryPubkey(pubkey);
+                            }}
+                            onOpenProfile={(pubkey) => {
+                                setOpenShopId(null);
+                                setOpenProfilePubkey(pubkey);
+                            }}
+                            onOpenPost={(postId) => {
+                                closePagesOver();
+                                navigateToTab('marketplace', postId);
+                            }}
+                            onMessage={(pubkey) => {
+                                closePagesOver();
+                                navigateToTab('messages', pubkey);
                             }}
                         />
                     )}

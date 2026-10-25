@@ -72,6 +72,8 @@ import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
+import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
+import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -639,6 +641,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editPriceType, setEditPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+    const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
+    const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
 
     // Accept & Complete Inline Forms
@@ -1503,6 +1507,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                         </div>
                     </button>
+                    {selectedPost.shopId && (
+                        <div className="mt-2 pt-2 border-t border-nature-100 dark:border-nature-800">
+                            <button
+                                type="button"
+                                onClick={() => onNavigate?.('shop', selectedPost.shopId!)}
+                                data-testid="post-shop-link"
+                                className="flex items-center gap-2 text-sm font-semibold text-bp-ink-brand hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                            >
+                                <span aria-hidden="true">🏪</span>
+                                <span>{t('View shop')}</span>
+                            </button>
+                        </div>
+                    )}
                     {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md
                         §4): said here, so a pin on the map is never taken for the door. */}
                     {placeShownRoughly(selectedPost, identity?.publicKey, openMembership) && (
@@ -2380,6 +2397,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
+                                        setEditShop({ kind: 'hidden' });
+                                        setEditInShop(false);
+                                        if (selectedPost.type === 'offer') {
+                                            void (async () => {
+                                                try {
+                                                    const [mine, inShopId] = await Promise.all([
+                                                        readMyShop({ timeoutMs: 5000 }),
+                                                        readListingShopId(selectedPost.id),
+                                                    ]);
+                                                    const inShop = mine.state === 'open' && inShopId === mine.shop.id;
+                                                    setEditShop(shopToggleState(mine, { inShop }));
+                                                    setEditInShop(inShop);
+                                                } catch {
+                                                    setEditShop({ kind: 'hidden' });
+                                                }
+                                            })();
+                                        }
                                         setEditMode(true);
                                     }}
                                     className="w-full py-3.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-[15px] transition-all shadow-md"
@@ -2560,6 +2594,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                 </div>
 
+                                {editType === 'offer' && editShop.kind !== 'hidden' && (
+                                    <div className="mb-4">
+                                        <ShopToggle
+                                            state={editShop}
+                                            on={editInShop}
+                                            onChange={setEditInShop}
+                                            testId="edit-post-shop"
+                                        />
+                                    </div>
+                                )}
+
                                 {/* Save/Cancel */}
                                 <div className="flex gap-2">
                                     <button
@@ -2577,6 +2622,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             if (!price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
                                             setSaving(true);
                                             try {
+                                                const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
+                                                const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,
@@ -2586,6 +2633,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,
+                                                    ...(shopId !== undefined ? { shopId } : {}),
                                                 });
                                                 setSelectedPost(result.post);
                                                 setEditMode(false);

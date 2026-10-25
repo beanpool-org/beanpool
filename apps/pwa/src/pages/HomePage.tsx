@@ -63,6 +63,8 @@ import { sentCentre } from '../lib/listings-near';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide } from '../lib/guide';
+import { ShopHomeBody } from '../components/shop/ShopHomeBody';
+import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
@@ -1815,6 +1817,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // group shows as invited.
                 case 'invite': return onNavigate('group', target.id);
                 case 'invites': return onNavigate('projects');
+                case 'shop': return onNavigate('shop', (target as any).id);
+                case 'shop-mine': return onNavigate('shop-mine');
                 default: return undefined;
             }
         };
@@ -2054,6 +2058,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         <EnterpriseBody e={c.enterprise} onNavigate={onNavigate} />
                     </HomeCard>
                 );
+            case 'shop': {
+                const s = c.shop as ShopHomeCard | undefined;
+                return s ? (
+                    <HomeCard key={id} {...common}>
+                        <ShopHomeBody card={s} onNavigate={onNavigate} />
+                    </HomeCard>
+                ) : null;
+            }
             case 'events': {
                 const ev = c.events!;
                 return (

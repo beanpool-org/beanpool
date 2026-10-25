@@ -3488,5 +3488,21 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 繰り返し — 継続的な予約のため投稿を有効のままにする",
   "🔒 This community's listings are for its members": "🔒 このコミュニティの投稿はメンバー限定です",
   "🗳️ Poll": "🗳️ 投票",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "誰かの自宅で開く場合は、{approximate}を使って場所を約100 mに丸め、正確な場所は参加する人向けのメモに書いてください。"
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "誰かの自宅で開く場合は、{approximate}を使って場所を約100 mに丸め、正確な場所は参加する人向けのメモに書いてください。",
+  "Delete message": "メッセージを削除",
+  "Delete for everyone?": "全員に対して削除しますか？",
+  "It will read \"This message was deleted\" to everyone in the chat.": "チャット内の全員に「このメッセージは削除されました」と表示されます。",
+  "Remove this message?": "このメッセージを削除しますか？",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "チャット内の全員に「進行役によって削除されました」と表示されます。",
+  "Mute notifications": "通知をミュート",
+  "Unmute": "ミュート解除",
+  "For 8 hours": "8時間",
+  "For a week": "1週間",
+  "Always\u0004mute for": "常に",
+  "@mentions still reach you.": "@メンションは引き続き届きます。",
+  "Chat menu": "チャットメニュー",
+  "Close menu": "メニューを閉じる",
+  "{n} member · muted|{n} members · muted": {
+    "other": "{n}人のメンバー · ミュート中"
+  }
 }

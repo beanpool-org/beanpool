@@ -3613,5 +3613,22 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Repetível — mantenha a publicação ativa para reservas contínuas",
   "🔒 This community's listings are for its members": "🔒 As publicações desta comunidade são para os seus membros",
   "🗳️ Poll": "🗳️ Enquete",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Se for na casa de alguém, use {approximate} para arredondar a localização para cerca de 100 m e coloque o local exato na nota para quem for."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Se for na casa de alguém, use {approximate} para arredondar a localização para cerca de 100 m e coloque o local exato na nota para quem for.",
+  "Delete message": "Excluir mensagem",
+  "Delete for everyone?": "Excluir para todos?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Aparecerá como \"Esta mensagem foi apagada\" para todos na conversa.",
+  "Remove this message?": "Remover esta mensagem?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Aparecerá como \"Removido por um coordenador\" para todos na conversa.",
+  "Mute notifications": "Silenciar notificações",
+  "Unmute": "Reativar notificações",
+  "For 8 hours": "Por 8 horas",
+  "For a week": "Por uma semana",
+  "Always\u0004mute for": "Sempre",
+  "@mentions still reach you.": "Menções com @ ainda chegam até você.",
+  "Chat menu": "Menu da conversa",
+  "Close menu": "Fechar menu",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} membro · silenciado",
+    "other": "{n} membros · silenciado"
+  }
 }

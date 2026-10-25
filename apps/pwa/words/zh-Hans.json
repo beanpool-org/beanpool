@@ -3488,5 +3488,21 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 可重复 — 保持信息有效以供持续预约",
   "🔒 This community's listings are for its members": "🔒 此社区的信息仅供其成员查看",
   "🗳️ Poll": "🗳️ 投票",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "如果活动在某人家中，请使用{approximate}把位置取整到约 100 米，并把确切地点写在备注里，供参加的人查看。"
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "如果活动在某人家中，请使用{approximate}把位置取整到约 100 米，并把确切地点写在备注里，供参加的人查看。",
+  "Delete message": "删除消息",
+  "Delete for everyone?": "为所有人删除？",
+  "It will read \"This message was deleted\" to everyone in the chat.": "聊天室中的所有人将看到“此消息已删除”。",
+  "Remove this message?": "删除此消息？",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "聊天室中的所有人将看到“已由召集人移除”。",
+  "Mute notifications": "静音通知",
+  "Unmute": "取消静音",
+  "For 8 hours": "8 小时",
+  "For a week": "1 周",
+  "Always\u0004mute for": "始终",
+  "@mentions still reach you.": "@提及 仍会通知你。",
+  "Chat menu": "聊天菜单",
+  "Close menu": "关闭菜单",
+  "{n} member · muted|{n} members · muted": {
+    "other": "{n} 位成员 · 已静音"
+  }
 }

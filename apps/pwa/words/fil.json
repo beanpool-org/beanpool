@@ -3612,5 +3612,22 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Umuulit — panatilihing aktibo ang listing para sa patuloy na mga booking",
   "🔒 This community's listings are for its members": "🔒 Para sa mga miyembro nito ang mga listing ng komunidad na ito",
   "🗳️ Poll": "🗳️ Botohan",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Kung nasa bahay ito ng isang tao, gamitin ang {approximate} para i-round ang lokasyon sa humigit-kumulang 100 m, at ilagay ang eksaktong lugar sa tala para sa mga pupunta."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Kung nasa bahay ito ng isang tao, gamitin ang {approximate} para i-round ang lokasyon sa humigit-kumulang 100 m, at ilagay ang eksaktong lugar sa tala para sa mga pupunta.",
+  "Delete message": "Burahin ang mensahe",
+  "Delete for everyone?": "Burahin para sa lahat?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Mababasa itong \"Binura ang mensaheng ito\" ng lahat sa chat.",
+  "Remove this message?": "Alisin ang mensaheng ito?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Mababasa itong \"Inalis ng convenor\" ng lahat sa chat.",
+  "Mute notifications": "I-mute ang mga abiso",
+  "Unmute": "I-unmute",
+  "For 8 hours": "Nang 8 oras",
+  "For a week": "Nang isang linggo",
+  "Always\u0004mute for": "Palagi",
+  "@mentions still reach you.": "Maaabot ka pa rin ng mga @mention.",
+  "Chat menu": "Menu ng chat",
+  "Close menu": "Isara ang menu",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} miyembro · naka-mute",
+    "other": "{n} miyembro · naka-mute"
+  }
 }

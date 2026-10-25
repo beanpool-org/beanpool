@@ -3613,5 +3613,22 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Répétable — gardez l'annonce active pour les réservations en cours",
   "🔒 This community's listings are for its members": "🔒 Les annonces de cette communauté sont réservées à ses membres",
   "🗳️ Poll": "🗳️ Sondage",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Si c'est chez quelqu'un, utilisez {approximate} pour arrondir le lieu à environ 100 m, et indiquez l'endroit exact dans la note pour les personnes qui viennent."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Si c'est chez quelqu'un, utilisez {approximate} pour arrondir le lieu à environ 100 m, et indiquez l'endroit exact dans la note pour les personnes qui viennent.",
+  "Delete message": "Supprimer le message",
+  "Delete for everyone?": "Supprimer pour tout le monde ?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Il sera affiché « Ce message a été supprimé » pour tout le monde.",
+  "Remove this message?": "Supprimer ce message ?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Il sera affiché « Supprimé par un coordinateur » pour tout le monde.",
+  "Mute notifications": "Mettre en sourdine",
+  "Unmute": "Réactiver les notifications",
+  "For 8 hours": "Pendant 8 heures",
+  "For a week": "Pendant une semaine",
+  "Always\u0004mute for": "Toujours",
+  "@mentions still reach you.": "Les mentions @ vous parviennent toujours.",
+  "Chat menu": "Menu de la discussion",
+  "Close menu": "Fermer le menu",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} membre · en sourdine",
+    "other": "{n} membres · en sourdine"
+  }
 }

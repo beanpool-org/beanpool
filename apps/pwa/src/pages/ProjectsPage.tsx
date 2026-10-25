@@ -6,7 +6,9 @@ import {
     getCommonsBalance,
     getAllMembers, type MemberSummary,
     getGroups, type Group,
+    getYourGroups, type YourChat,
 } from '../lib/api';
+import { yoursRows } from '../lib/yours-rows';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
@@ -161,6 +163,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
+    const [yourChats, setYourChats] = useState<YourChat[] | null>(null);
+    const [loadingYourChats, setLoadingYourChats] = useState<boolean>(!!identity?.publicKey);
+    const [yourChatsError, setYourChatsError] = useState<string | null>(null);
     const [pickedGroupCategory, setGroupCategoryFilter] = useState<GroupKind>('all');
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
@@ -214,11 +219,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         try {
             setLoading(true);
             setError(null);
+            let treasuriesFailed = false;
             // Enterprises and Decisions in preview (the global node) are Example Valley's: their lists, the reader's voice
             // credits and the pool the Decide tab spends are not asked (lib/features readsOwn). Elsewhere, as before.
             const [readsTreasuries, readsDecisions] = await Promise.all([readsOwn('enterprises'), readsOwn('decisions')]);
             const [tresData, decData, commonsData, membersData] = await Promise.all([
-                readsTreasuries && getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
+                readsTreasuries && getTreasuries ? getTreasuries().catch((e) => {
+                    treasuriesFailed = true;
+                    console.warn('[ProjectsPage] Failed to fetch treasuries:', e);
+                    return { treasuries: [] };
+                }) : { treasuries: [] },
                 readsDecisions && getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
                 readsDecisions && getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
                 // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
@@ -226,6 +236,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 // Read only once the node has said it reads whole (the effect below reads them when it says so).
                 membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
+            if (treasuriesFailed) {
+                setYourChatsError(t('Could not load your groups.'));
+            }
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
             setMyPoolVoting(decData.myPoolVoting ?? null);
@@ -397,47 +410,55 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         try {
             const list = await getGroups();
             setGroups(Array.isArray(list) ? list : []);
-        } catch (e) {
+        } catch (e: any) {
             console.warn('[ProjectsPage] Failed to fetch groups:', e);
+            setYourChatsError(t('Could not load your groups.'));
         } finally {
             setLoadingGroups(false);
         }
     }, []);
 
+    const fetchYours = useCallback(async () => {
+        if (!identity?.publicKey) {
+            setYourChats([]);
+            setLoadingYourChats(false);
+            setYourChatsError(null);
+            return;
+        }
+        setLoadingYourChats(true);
+        setYourChatsError(null);
+        try {
+            const res = await (getYourGroups ? getYourGroups() : Promise.resolve({ items: [] }));
+            setYourChats(Array.isArray(res?.items) ? res.items : []);
+        } catch (e: any) {
+            console.warn('[ProjectsPage] Failed to fetch your-groups:', e);
+            setYourChatsError(t('Could not load your groups.'));
+        } finally {
+            setLoadingYourChats(false);
+        }
+    }, [identity?.publicKey]);
+
     useEffect(() => {
         if (activeSection === 'groups') {
+            fetchYours();
             fetchGroups();
         }
-    }, [activeSection, fetchGroups]);
+    }, [activeSection, fetchYours, fetchGroups]);
 
-    const yourKeptEnterprises = useMemo(() => {
-        if (!identity?.publicKey) return [];
-        const myPk = identity.publicKey;
-        const list = treasuries.filter(t => t.keepers?.some(k => (k.publicKey || k.pubkey) === myPk));
-        list.sort((a, b) => {
-            const aLead = a.keepers?.some(k => (k.publicKey || k.pubkey) === myPk && k.role === 'lead');
-            const bLead = b.keepers?.some(k => (k.publicKey || k.pubkey) === myPk && k.role === 'lead');
-            if (aLead !== bLead) return aLead ? -1 : 1;
-            return (a.name ?? '').localeCompare(b.name ?? '');
-        });
-        return list;
-    }, [treasuries, identity?.publicKey]);
+    const handleRetryYours = () => {
+        setYourChatsError(null);
+        fetchYours();
+        fetchEnterprises();
+        fetchGroups();
+    };
 
-    const yourKeptPubkeys = useMemo(() => new Set(yourKeptEnterprises.map(t => t.publicKey)), [yourKeptEnterprises]);
+    const { kept: yourKeptRows, groups: yourGroupRows } = useMemo(() => {
+        if (!identity?.publicKey) return { kept: [], groups: [] };
+        return yoursRows(yourChats, treasuries, identity.publicKey, groups);
+    }, [yourChats, treasuries, identity?.publicKey, groups]);
 
-    const yourGroups = useMemo(() => {
-        if (!identity?.publicKey) return [];
-        const list = groups.filter(g => g.viewerStatus === 'active' || (!g.viewerStatus && !!g.viewerRole));
-        list.sort((a, b) => {
-            const aConv = a.viewerRole === 'convenor';
-            const bConv = b.viewerRole === 'convenor';
-            if (aConv !== bConv) return aConv ? -1 : 1;
-            return (a.name ?? '').localeCompare(b.name ?? '');
-        });
-        return list;
-    }, [groups, identity?.publicKey]);
-
-    const yourGroupIds = useMemo(() => new Set(yourGroups.map(g => g.id)), [yourGroups]);
+    const yourKeptPubkeys = useMemo(() => new Set(yourKeptRows.map(k => k.chat.id)), [yourKeptRows]);
+    const yourGroupIds = useMemo(() => new Set(yourGroupRows.map(g => g.id)), [yourGroupRows]);
 
     const filteredGroups = useMemo(() => {
         return groups.filter(g => !yourGroupIds.has(g.id));
@@ -606,43 +627,70 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 <>
                 {/* Block 1: Yours */}
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full" data-testid="commons-yours">
-                    <div className="text-xs font-black uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-3">
+                    <h2 className="text-xs font-black uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-3">
                         {t('Yours')}
-                    </div>
-                    {yourKeptEnterprises.length > 0 || yourGroups.length > 0 ? (
+                    </h2>
+                    {loadingYourChats || (loading && !treasuries.length && !yourKeptRows.length && !yourChatsError) ? (
+                        <div className="py-8 text-center text-sm text-nature-600 dark:text-nature-400" role="status">
+                            {t('Loading groups...')}
+                        </div>
+                    ) : yourChatsError ? (
+                        <div className="py-6 text-center text-sm text-nature-600 dark:text-nature-400 space-y-2">
+                            <p role="alert">{yourChatsError}</p>
+                            <button
+                                type="button"
+                                onClick={handleRetryYours}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px]"
+                            >
+                                {t('Retry')}
+                            </button>
+                        </div>
+                    ) : yourKeptRows.length > 0 || yourGroupRows.length > 0 ? (
                         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
-                            {yourKeptEnterprises.map(e => {
-                                const myKeeper = e.keepers?.find(k => (k.publicKey || k.pubkey) === identity?.publicKey);
-                                const isProject = e.lifecycle === 'bounded' || (e.goalAmount != null && e.goalAmount > 0);
-                                const isLead = myKeeper?.role === 'lead';
+                            {yourKeptRows.map(item => {
+                                const e = item.chat;
+                                const summary = item.summary;
+                                const isProject = e.lifecycle === 'bounded' || summary?.lifecycle === 'bounded' || (summary?.goalAmount != null && summary.goalAmount > 0);
+                                const isLead = e.role === 'lead' || summary?.keepers?.some(k => (k.publicKey || k.pubkey) === identity?.publicKey && k.role === 'lead');
                                 const roleWord = isProject
                                     ? (isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role'))
                                     : (isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role'));
                                 const kindWord = isProject ? t('Project') : t('Enterprise');
-                                const isFunded = isProject && e.goalAmount != null && e.goalAmount > 0 && (e.currentAmount ?? e.balance ?? 0) >= e.goalAmount;
-                                const offersText = tn(e.liveOffers || 0, '{n} live offer', '{n} live offers');
-                                const line2 = isProject
-                                    ? t('{raised} of {goal} 🫘 raised', {
-                                        raised: formatNumber(e.currentAmount ?? e.balance ?? 0),
-                                        goal: formatNumber(e.goalAmount ?? 0),
-                                    })
-                                    : t('Balance {amount} 🫘 · {offers}', {
-                                        amount: formatNumber(e.balance || 0),
-                                        offers: offersText,
-                                    });
+                                const isFunded = isProject && summary?.goalAmount != null && summary.goalAmount > 0 && (summary.currentAmount ?? summary.balance ?? 0) >= summary.goalAmount;
+                                const offersText = summary ? tn(summary.liveOffers || 0, '{n} live offer', '{n} live offers') : '';
+                                const line2 = summary
+                                    ? (isProject
+                                        ? t('{raised} of {goal} 🫘 raised', {
+                                            raised: formatNumber(summary.currentAmount ?? summary.balance ?? 0),
+                                            goal: formatNumber(summary.goalAmount ?? 0),
+                                        })
+                                        : t('Balance {amount} 🫘 · {offers}', {
+                                            amount: formatNumber(summary.balance || 0),
+                                            offers: offersText,
+                                        }))
+                                    : null;
+
+                                const cardBadges: string[] = [];
+                                if (summary?.paused) cardBadges.push(t('PAUSED'));
+                                else if (summary?.status === 'winding_up') cardBadges.push(t('WINDING UP'));
+                                else if (summary?.status === 'completed' || summary?.status === 'closed') cardBadges.push(t('CLOSED'));
+                                if (isFunded) cardBadges.push(t('FUNDED'));
+                                cardBadges.push(kindWord);
+                                cardBadges.push(roleWord);
+                                const cardAriaLabel = [e.name, ...cardBadges].filter(Boolean).join(', ');
 
                                 return (
                                     <div
-                                        key={e.publicKey}
+                                        key={e.id}
                                         role="button"
                                         tabIndex={0}
-                                        aria-label={t('View details for {name}', { name: e.name })}
-                                        onClick={() => onOpenTreasury?.(e.publicKey)}
+                                        aria-label={cardAriaLabel}
+                                        onClick={() => onOpenTreasury?.(e.id)}
                                         onKeyDown={(ev) => {
                                             if (ev.target !== ev.currentTarget) return;
                                             if (ev.key === 'Enter' || ev.key === ' ') {
                                                 ev.preventDefault();
-                                                onOpenTreasury?.(e.publicKey);
+                                                onOpenTreasury?.(e.id);
                                             }
                                         }}
                                         className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 rounded-2xl cursor-pointer transition-all space-y-3 flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -650,24 +698,24 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         <div>
                                             <div className="flex items-start gap-3">
                                                 <div className="w-11 h-11 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0 overflow-hidden text-xl">
-                                                    {e.avatar || e.avatarUrl ? (
-                                                        <img src={resolveAvatarUrl(e.avatar || e.avatarUrl) || ''} alt="" className="w-full h-full object-cover" />
+                                                    {e.avatarUrl || summary?.avatar || summary?.avatarUrl ? (
+                                                        <img src={resolveAvatarUrl(e.avatarUrl || summary?.avatar || summary?.avatarUrl) || ''} alt="" className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <span>{isProject ? '🎯' : '🥖'}</span>
+                                                        <span>{e.badge || (isProject ? '🎯' : '🥖')}</span>
                                                     )}
                                                 </div>
                                                 <div className="min-w-0 flex-1">
                                                     <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{e.name}</h4>
                                                     <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                                        {e.paused ? (
+                                                        {summary?.paused ? (
                                                             <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">
                                                                 {t('⏸️ PAUSED')}
                                                             </span>
-                                                        ) : e.status === 'winding_up' ? (
+                                                        ) : summary?.status === 'winding_up' ? (
                                                             <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-transparent">
                                                                 {t('⏳ WINDING UP')}
                                                             </span>
-                                                        ) : e.status === 'completed' || e.status === 'closed' ? (
+                                                        ) : summary?.status === 'completed' || summary?.status === 'closed' ? (
                                                             <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-nature-800 text-nature-300 border border-transparent">
                                                                 {t('CLOSED')}
                                                             </span>
@@ -688,9 +736,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="text-xs text-nature-600 dark:text-nature-400 mt-2">
-                                                {line2}
-                                            </div>
+                                            {line2 && (
+                                                <div className="text-xs text-nature-600 dark:text-nature-400 mt-2">
+                                                    {line2}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex justify-end pt-2 border-t border-nature-100 dark:border-nature-900">
                                             <button
@@ -698,7 +748,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 aria-label={t('Manage {name}', { name: e.name })}
                                                 onClick={(ev) => {
                                                     ev.stopPropagation();
-                                                    onOpenTreasury?.(e.publicKey, 'manage');
+                                                    onOpenTreasury?.(e.id, 'manage');
                                                 }}
                                                 onKeyDown={(ev) => {
                                                     ev.stopPropagation();
@@ -711,61 +761,100 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     </div>
                                 );
                             })}
-                            {yourGroups.map(g => (
-                                <div
-                                    key={g.id}
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-label={t('View details for group {name}', { name: g.name })}
-                                    onClick={() => {
-                                        if (onNavigate) onNavigate('messages', g.id);
-                                        else setSelectedGroupForDetail(g);
-                                    }}
-                                    onKeyDown={(ev) => {
-                                        if (ev.key === 'Enter' || ev.key === ' ') {
-                                            ev.preventDefault();
+                            {yourGroupRows.map(g => {
+                                const fullGroup = groups.find(item => item.id === g.id);
+                                const category = g.category || fullGroup?.category;
+                                const memberCount = fullGroup?.memberCount;
+                                const description = fullGroup?.description;
+                                const joinPolicy = g.joinPolicy || fullGroup?.joinPolicy;
+                                const role = g.role || fullGroup?.viewerRole;
+
+                                return (
+                                    <div
+                                        key={g.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={t('View details for group {name}', { name: g.name })}
+                                        onClick={() => {
                                             if (onNavigate) onNavigate('messages', g.id);
-                                            else setSelectedGroupForDetail(g);
-                                        }
-                                    }}
-                                    className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 rounded-2xl cursor-pointer transition-all space-y-3 flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                >
-                                    <div>
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
-                                                        🏷️ {named(CATEGORY_WORDS, g.category, g.category.replace(/_/g, ' '))}
-                                                    </span>
-                                                    <span className="text-nature-600 dark:text-nature-400">•</span>
-                                                    <span className="text-[11px] text-nature-600 dark:text-nature-400">
-                                                        {tn(g.memberCount || 0, '{n} member', '{n} members')}
-                                                    </span>
+                                            else setSelectedGroupForDetail(fullGroup || {
+                                                id: g.id,
+                                                name: g.name,
+                                                category: category || 'general',
+                                                joinPolicy: joinPolicy || 'open',
+                                                memberCount: memberCount || 1,
+                                                description: description || '',
+                                                viewerRole: role,
+                                                viewerStatus: 'active',
+                                                createdAt: g.lastActivityAt || new Date().toISOString(),
+                                                createdBy: '',
+                                                slug: g.id,
+                                            });
+                                        }}
+                                        onKeyDown={(ev) => {
+                                            if (ev.key === 'Enter' || ev.key === ' ') {
+                                                ev.preventDefault();
+                                                if (onNavigate) onNavigate('messages', g.id);
+                                                else setSelectedGroupForDetail(fullGroup || {
+                                                    id: g.id,
+                                                    name: g.name,
+                                                    category: category || 'general',
+                                                    joinPolicy: joinPolicy || 'open',
+                                                    memberCount: memberCount || 1,
+                                                    description: description || '',
+                                                    viewerRole: role,
+                                                    viewerStatus: 'active',
+                                                    createdAt: g.lastActivityAt || new Date().toISOString(),
+                                                    createdBy: '',
+                                                    slug: g.id,
+                                                });
+                                            }
+                                        }}
+                                        className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 rounded-2xl cursor-pointer transition-all space-y-3 flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    >
+                                        <div>
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        {category && (
+                                                            <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
+                                                                🏷️ {named(CATEGORY_WORDS, category, category.replace(/_/g, ' '))}
+                                                            </span>
+                                                        )}
+                                                        {memberCount != null && (
+                                                            <>
+                                                                <span className="text-nature-600 dark:text-nature-400">•</span>
+                                                                <span className="text-[11px] text-nature-600 dark:text-nature-400">
+                                                                    {tn(memberCount, '{n} member', '{n} members')}
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </div>
                                                 </div>
+                                                {role && (
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                        role === 'convenor'
+                                                            ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                            : 'bg-nature-800 text-nature-300'
+                                                    }`}>
+                                                        {named(ROLE_WORDS, role, role)}
+                                                    </span>
+                                                )}
                                             </div>
-                                            {g.viewerRole && (
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                                    g.viewerRole === 'convenor'
-                                                        ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                                        : 'bg-nature-800 text-nature-300'
-                                                }`}>
-                                                    {named(ROLE_WORDS, g.viewerRole, g.viewerRole)}
-                                                </span>
+                                            {description && (
+                                                <p className="text-xs text-nature-700 dark:text-nature-300 line-clamp-2 leading-relaxed mt-2">
+                                                    {description}
+                                                </p>
                                             )}
                                         </div>
-                                        {g.description && (
-                                            <p className="text-xs text-nature-700 dark:text-nature-300 line-clamp-2 leading-relaxed mt-2">
-                                                {g.description}
-                                            </p>
-                                        )}
+                                        <div className="flex items-center justify-between pt-1 border-t border-nature-100 dark:border-nature-900 text-[11px] text-nature-600 dark:text-nature-400">
+                                            <span>{t('Join: {policy}', { policy: named(JOIN_POLICY_WORDS, joinPolicy, joinPolicy?.replace(/_/g, ' ') || '') })}</span>
+                                            <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">{t('Open chat →')}</span>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center justify-between pt-1 border-t border-nature-100 dark:border-nature-900 text-[11px] text-nature-600 dark:text-nature-400">
-                                        <span>{t('Join: {policy}', { policy: named(JOIN_POLICY_WORDS, g.joinPolicy, g.joinPolicy?.replace(/_/g, ' ') || '') })}</span>
-                                        <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">{t('Open chat →')}</span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <p className="text-sm text-nature-600 dark:text-nature-400">
@@ -788,6 +877,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {GROUP_CHIPS.filter(option => showEnterpriseChips || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
                                 <button
                                     key={option.key}
+                                    type="button"
+                                    aria-pressed={groupCategoryFilter === option.key}
                                     onClick={() => setGroupCategoryFilter(option.key)}
                                     className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
                                         groupCategoryFilter === option.key

@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import type { Treasury, Group } from '../lib/api';
-import { getTreasuries, getGroups } from '../lib/api';
+import type { Treasury, Group, YourChat } from '../lib/api';
+import { getTreasuries, getGroups, getYourGroups } from '../lib/api';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 
 vi.mock('../lib/avatar', () => ({
@@ -41,6 +41,7 @@ vi.mock('../lib/api', () => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 100 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(async () => []),
+    getYourGroups: vi.fn(async () => ({ items: [] })),
     createEnterprise: vi.fn(async () => ({ success: true })),
 }));
 
@@ -337,5 +338,205 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(within(findSection).getByText('Pending')).toBeInTheDocument();
         expect(within(findSection).queryByText('MEMBER')).toBeNull();
         expect(within(screen.getByTestId('commons-yours')).queryByText('Debate Society')).toBeNull();
+    });
+
+    it("a project's lead (bounded row in your-groups, absent from /api/treasuries) sees it under Yours with Manage", async () => {
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] });
+        const projectChat: YourChat = {
+            kind: 'enterprise',
+            id: 'treasury-shade',
+            conversationId: 'treasury-shade',
+            name: 'Shade House',
+            role: 'lead',
+            lifecycle: 'bounded',
+            badge: '🌱',
+            avatarUrl: null,
+            readOnly: false,
+            unreadCount: 0,
+            lastActivityAt: '2026-01-01T00:00:00Z',
+        };
+        vi.mocked(getYourGroups).mockResolvedValue({ items: [projectChat] });
+
+        const onOpenTreasury = vi.fn();
+        render(<ProjectsPage identity={me} onOpenTreasury={onOpenTreasury} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(within(yoursBlock).getByText('Shade House')).toBeInTheDocument();
+        expect(within(yoursBlock).getByText('Leader')).toBeInTheDocument();
+        expect(within(yoursBlock).getByText('Project')).toBeInTheDocument();
+
+        const manageBtn = within(yoursBlock).getByRole('button', { name: /Manage Shade House/i });
+        expect(manageBtn).toBeInTheDocument();
+        fireEvent.click(manageBtn);
+        expect(onOpenTreasury).toHaveBeenCalledWith('treasury-shade', 'manage');
+    });
+
+    it('shows loading state while Yours reads are pending, never "Nothing of yours yet"', async () => {
+        let resolveYourGroups: (value: any) => void;
+        vi.mocked(getYourGroups).mockImplementation(() => new Promise((resolve) => {
+            resolveYourGroups = resolve;
+        }));
+        render(<ProjectsPage identity={me} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(within(yoursBlock).getByText('Loading groups...')).toBeInTheDocument();
+        expect(within(yoursBlock).queryByText(/Nothing of yours yet/)).toBeNull();
+
+        // Resolve empty
+        resolveYourGroups!({ items: [] });
+        await waitFor(() => {
+            expect(within(yoursBlock).getByText('Nothing of yours yet. Start something with +, or find one below.')).toBeInTheDocument();
+            expect(within(yoursBlock).queryByText('Loading groups...')).toBeNull();
+        });
+    });
+
+    it('shows error state with Retry button on failed read, and clicking Retry reads again', async () => {
+        vi.mocked(getYourGroups).mockRejectedValueOnce(new Error('Network error'));
+        render(<ProjectsPage identity={me} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(await within(yoursBlock).findByText('Could not load your groups.')).toBeInTheDocument();
+        expect(within(yoursBlock).queryByText(/Nothing of yours yet/)).toBeNull();
+
+        const retryBtn = within(yoursBlock).getByRole('button', { name: 'Retry' });
+        expect(retryBtn).toBeInTheDocument();
+
+        // Now mock success on retry
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-eggs',
+                    conversationId: 'treasury-eggs',
+                    name: 'Community Eggs',
+                    role: 'keeper',
+                    lifecycle: 'ongoing',
+                    badge: '🏛️',
+                    avatarUrl: null,
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+            ],
+        });
+
+        fireEvent.click(retryBtn);
+
+        await waitFor(() => {
+            expect(within(yoursBlock).getByText('Community Eggs')).toBeInTheDocument();
+            expect(within(yoursBlock).queryByText('Could not load your groups.')).toBeNull();
+        });
+    });
+
+    it('shows "Nothing of yours yet…" only after a successful empty read', async () => {
+        vi.mocked(getYourGroups).mockResolvedValue({ items: [] });
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] });
+        vi.mocked(getGroups).mockResolvedValue([]);
+
+        render(<ProjectsPage identity={me} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        expect(await within(yoursBlock).findByText('Nothing of yours yet. Start something with +, or find one below.')).toBeInTheDocument();
+        expect(within(yoursBlock).queryByText('Loading groups...')).toBeNull();
+        expect(within(yoursBlock).queryByText('Could not load your groups.')).toBeNull();
+    });
+
+    it("the kept card's accessible name includes its role, status, and kind", async () => {
+        const keptEnterprise: Treasury = {
+            publicKey: 'treasury-eggs',
+            name: 'Community Eggs',
+            callsign: 'eggs',
+            balance: 40,
+            creditLine: 0,
+            liveOffers: 3,
+            lifecycle: 'ongoing',
+            status: 'active',
+            paused: true,
+            keepers: [
+                { publicKey: me.publicKey, callsign: 'Alice', role: 'lead' },
+            ],
+        };
+
+        const keptProject: Treasury = {
+            publicKey: 'treasury-shade',
+            name: 'Shade House',
+            callsign: 'shade',
+            balance: 500,
+            creditLine: 0,
+            liveOffers: 0,
+            goalAmount: 500,
+            currentAmount: 500,
+            lifecycle: 'bounded',
+            status: 'active',
+            keepers: [
+                { publicKey: me.publicKey, callsign: 'Alice', role: 'lead' },
+            ],
+        };
+
+        vi.mocked(getTreasuries).mockResolvedValue({
+            treasuries: [keptEnterprise, keptProject],
+        });
+        vi.mocked(getYourGroups).mockResolvedValue({
+            items: [
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-eggs',
+                    conversationId: 'treasury-eggs',
+                    name: 'Community Eggs',
+                    role: 'lead',
+                    lifecycle: 'ongoing',
+                    badge: '🏛️',
+                    avatarUrl: null,
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-shade',
+                    conversationId: 'treasury-shade',
+                    name: 'Shade House',
+                    role: 'lead',
+                    lifecycle: 'bounded',
+                    badge: '🌱',
+                    avatarUrl: null,
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+            ],
+        });
+
+        render(<ProjectsPage identity={me} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+
+        // Eggs card accessible name includes PAUSED, Enterprise, Lead keeper
+        const eggsCard = within(yoursBlock).getByRole('button', {
+            name: 'Community Eggs, PAUSED, Enterprise, Lead keeper',
+        });
+        expect(eggsCard).toBeInTheDocument();
+
+        // Shade House card accessible name includes FUNDED, Project, Leader
+        const shadeCard = within(yoursBlock).getByRole('button', {
+            name: 'Shade House, FUNDED, Project, Leader',
+        });
+        expect(shadeCard).toBeInTheDocument();
+    });
+
+    it('Yours heading is an h2 and chips have type="button" with aria-pressed', async () => {
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        const heading = within(yoursBlock).getByRole('heading', { level: 2, name: 'Yours' });
+        expect(heading).toBeInTheDocument();
+
+        const chipsContainer = screen.getByTestId('group-filter-chips');
+        const allChip = within(chipsContainer).getByRole('button', { name: 'All' });
+        expect(allChip).toHaveAttribute('type', 'button');
+        expect(allChip).toHaveAttribute('aria-pressed', 'true');
+
+        const projectsChip = within(chipsContainer).getByRole('button', { name: '🌱 Projects' });
+        expect(projectsChip).toHaveAttribute('type', 'button');
+        expect(projectsChip).toHaveAttribute('aria-pressed', 'false');
     });
 });

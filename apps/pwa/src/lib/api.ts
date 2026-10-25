@@ -1385,6 +1385,36 @@ export async function getGroups(filter?: { category?: string; q?: string; member
     return request('GET', `/api/groups${qs ? `?${qs}` : ''}`);
 }
 
+export interface YourChat {
+    kind: 'group' | 'enterprise' | 'event';
+    badge: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
+    id: string;
+    conversationId: string;
+    name: string;
+    avatarUrl: string | null;
+    role: string;
+    category?: string;
+    joinPolicy?: string;
+    eventStartAt?: string | null;
+    eventEndAt?: string | null;
+    readOnly?: boolean;
+    lastMessage?: any;
+    unreadCount?: number;
+    mute?: any;
+    lastActivityAt?: string;
+}
+
+export interface YourGroupsResponse {
+    items: YourChat[];
+    totalUnread?: number;
+    invites?: any[];
+}
+
+export async function getYourGroups(): Promise<YourGroupsResponse> {
+    return request('GET', '/api/your-groups');
+}
+
 export async function getGroup(id: string): Promise<Group> {
     return request('GET', `/api/groups/${encodeURIComponent(id)}`);
 }

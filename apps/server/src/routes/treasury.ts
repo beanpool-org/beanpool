@@ -32,7 +32,7 @@ import {
     passesReadGate, broadcast, type KeeperJoinRequest,
 } from '../state-engine.js';
 import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../engine/enterprise-shopfront.js';
-import { memberShop, shopOf, visitorShop } from '../engine/shops.js';
+import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/shops.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
@@ -395,8 +395,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // The shopfront's data (round 3 §4, §5): each keeper's badges and their live Offers' categories, and the
         // enterprise's, to a member of this node only, whatever ENFORCE_READ_AUTH says (engine/enterprise-shopfront.ts).
         const shopfront = shopfrontOf(treasury, treasuryKeepersForReader(treasury, backingReader), actor);
-        // Its shop, for the kind chip and "How we deal" on its page (round 3 §3, S5): to a member of this node what they read
-        // of it at GET /api/shops/:id, and to anyone else its kind and counts, as that route answers a visitor (round 2 §9.4).
+        // Its shop, for the category chip and "How we deal" on its page (round 3 §3, S5): to a member of this node what they
+        // read of it at GET /api/shops/:id, and to anyone else its category and counts, as that route answers a visitor
+        // (round 2 §9.4).
         const shopRow = shopOf(treasury);
         const shop = !shopRow ? null : actor && passesReadGate(actor) ? memberShop(shopRow, actor) : visitorShop(shopRow);
         // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
@@ -865,7 +866,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = requireOperator(ctx, treasury);
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
-        if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        // An Offer put in its shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
+        const category = b.category || newListingCategory(b.shopId);
+        if (!b.title || !category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, word('Each photo must be a JPEG, PNG or WebP image')) }; return; }
@@ -880,7 +883,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
             const limit = enterprisePostLimit(treasury, actor);
             // `shopId`: the enterprise's own shop, raw: the engine refuses any other (engine/shops.ts assertShopForPost).
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });
+            const post = createPost('offer', String(category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });
             if (!post) { ctx.status = 400; ctx.body = { error: word('Failed to create offer') }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };

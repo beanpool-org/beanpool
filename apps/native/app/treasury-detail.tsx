@@ -31,11 +31,11 @@ import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
 import {
     ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText,
-    ShopfrontTogether, ShopfrontVisitorNote, kindSinceLine, openListing,
+    ShopfrontTogether, ShopfrontVisitorNote, categorySinceLine, openListing,
 } from '../components/shopfront/Shopfront';
 import {
     featuredOf, hasShopfront, leadKeeperOf, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings,
-    readsAsMember, shopKindOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
+    readsAsMember, shopCategoryOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
 } from '../utils/shopfront';
 import { mayManage } from '../utils/enterprise-manage';
 import { decodeThreadMessage } from '../utils/enterprise-thread';
@@ -553,15 +553,16 @@ export default function TreasuryDetailScreen() {
                             </View>
                         )}
                         {/* The shopfront (DESIGN-shops-round3-enterprise-shopfront-fable.md §3, S5): its banner (its shop's one photo, or a
-                            quiet block in its kind's emoji), its logo (its avatar), its name, its kind and since when, and what kind of group it is. */}
+                            quiet block in its category's emoji), its logo (its avatar), its name, its category and since when, and what kind of
+                            group it is. */}
                         <ShopfrontHeader
                             name={name}
                             ownerKey={treasuryKey ?? ''}
                             logoUrl={avatar}
-                            kind={shopKindOf(detail?.shop)}
+                            category={shopCategoryOf(detail?.shop)}
                             bannerPhoto={shopPhotoOf(detail?.shop)}
                             fallbackEmoji={detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
-                            lines={[kindSinceLine(shopKindOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
+                            lines={[categorySinceLine(shopCategoryOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
                         />
 
                         {/* State banner every member sees (docs/the-commons.md §2.2) */}

@@ -173,7 +173,7 @@ const DECISIONS: ScopedDecisionList = {
     }],
     canPropose: true, rollSize: 3,
 };
-const SHOP = { id: SHOP_ID, kind: 'baking', counts: { things: 2 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(now - 30 * DAY) };
+const SHOP = { id: SHOP_ID, category: 'food', counts: { things: 2 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(now - 30 * DAY) };
 /** The enterprise as its lead keeper reads it: a request and a change waiting, a bid, two deals, a message to remove. */
 function leadsView(over: Record<string, unknown> = {}) {
     return {
@@ -470,7 +470,7 @@ for (const dark of [false, true]) {
             expect(byId('manage-face-purpose')).not.toBeNull();
             expect(byId('manage-face-about')).not.toBeNull();
             expect(byId('manage-face-logo')).not.toBeNull();
-            expect(byId('manage-face-kind')).toBeNull();
+            expect(byId('manage-face-category')).toBeNull();
             expect(byId('manage-face-how')).toBeNull();
             expect(byId('manage-face-banner')).toBeNull();
             expect(byId('manage-featured')).toBeNull();
@@ -503,15 +503,15 @@ for (const dark of [false, true]) {
                 expect(byId('manage-face-save')?.getAttribute('aria-disabled')).toBe('true');
 
                 await type(byId('manage-face-name'), 'Hill Bakery and Mill', 'name');
-                expect(byId('manage-face-kind')?.textContent).toContain('🍞 Cooked food and baking');
-                await click(byId('manage-face-kind'), 'Kind');
-                await click(byId('shop-kind-pick-food'), 'the kind');
-                expect(byId('shop-kind-sheet')).toBeNull();
-                expect(byId('manage-face-kind')?.textContent).toContain('🥕 Food from the garden or farm');
+                expect(byId('manage-face-category')?.textContent).toContain('🥕 Food');
+                await click(byId('manage-face-category'), 'Category');
+                await click(byId('shop-category-pick-goods'), 'the category');
+                expect(byId('shop-category-sheet')).toBeNull();
+                expect(byId('manage-face-category')?.textContent).toContain('📦 Goods');
                 await click(byId('manage-face-save'), 'Save');
                 expect(writes()).toEqual([
                     { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { name: 'Hill Bakery and Mill' } },
-                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food' } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { category: 'goods' } },
                 ]);
                 expect(byId('manage-face-saved')?.textContent).toBe('Saved.');
             });
@@ -629,21 +629,21 @@ for (const dark of [false, true]) {
                 await render('console');
                 await type(byId('manage-face-about'), 'We bake on Saturdays and Wednesdays.', 'About');
                 await type(byId('manage-face-how'), 'Saturdays only.', 'how we deal');
-                await click(byId('manage-face-kind'), 'Kind');
-                await click(byId('shop-kind-pick-food'), 'the kind');
+                await click(byId('manage-face-category'), 'Category');
+                await click(byId('shop-category-pick-goods'), 'the category');
                 await click(byId('manage-face-logo'), 'Change the logo');
                 await click(byId('picker-pick'), 'a picture');
                 await click(byId('manage-shop-add'), 'Put them in its shop');
                 expect(reads, 'the console read the enterprise again').toBeGreaterThan(1);
                 expect((byId('manage-face-about') as HTMLInputElement).value).toBe('We bake on Saturdays and Wednesdays.');
                 expect((byId('manage-face-how') as HTMLInputElement).value).toBe('Saturdays only.');
-                expect(byId('manage-face-kind')?.textContent).toContain('🥕 Food from the garden or farm');
+                expect(byId('manage-face-category')?.textContent).toContain('📦 Goods');
                 expect(byId('manage-face-logo-image')?.querySelector('[data-avatar="56"]')?.getAttribute('data-src')).toBe(PICKED);
                 expect((byId('manage-face-purpose') as HTMLInputElement).value).toBe('Bread and flour for the valley');
                 await click(byId('manage-face-save'), 'Save');
                 expect(writes().filter((w) => w.path !== `/api/treasury/${ENT}/shop/offers`)).toEqual([
                     { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { about: 'We bake on Saturdays and Wednesdays.', avatar: PICKED } },
-                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food', howToDeal: 'Saturdays only.' } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { category: 'goods', howToDeal: 'Saturdays only.' } },
                 ]);
             });
 
@@ -669,8 +669,8 @@ for (const dark of [false, true]) {
                 await render('console');
                 await click(byId('manage-face-logo'), 'Change the logo');
                 await click(byId('picker-pick'), 'a picture');
-                await click(byId('manage-face-kind'), 'Kind');
-                await click(byId('shop-kind-pick-food'), 'the kind');
+                await click(byId('manage-face-category'), 'Category');
+                await click(byId('shop-category-pick-goods'), 'the category');
                 await click(byId('manage-face-save'), 'Save');
                 expect(byId('manage-face-error')?.textContent).toBe('Its shop is closed for now.');
                 expect(byId('manage-face-partly')?.textContent).toBe('Its other changes were saved.');
@@ -680,13 +680,13 @@ for (const dark of [false, true]) {
                 await act(async () => { land!(leadsView({ avatar: NEW })); });
                 await settle();
                 expect(logo()).toBe(NEW);
-                expect(byId('manage-face-kind')?.textContent).toContain('🥕 Food from the garden or farm');
+                expect(byId('manage-face-category')?.textContent).toContain('📦 Goods');
                 shopOpen = true;
                 await click(byId('manage-face-save'), 'Save again');
                 expect(writes()).toEqual([
                     { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } },
-                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food' } },
-                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food' } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { category: 'goods' } },
+                    { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { category: 'goods' } },
                 ]);
             });
 

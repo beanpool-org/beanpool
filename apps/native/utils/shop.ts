@@ -1,7 +1,7 @@
 /**
  * A member's own shop on the phone (slice S4′ of scratch/tools/DESIGN-tool-template-fable.md §6; the shop model of
  * DESIGN-shops-and-tools-fable.md §2.1, §8, §9.1, and Marty's additions of 19 Oct 2026): a front window on their own
- * account, with a name, a kind, a blurb, "how I deal", and the Offers they put in it. This reads and changes it through
+ * account, with a name, a category, a blurb, "how I deal", and the Offers they put in it. This reads and changes it through
  * the node's routes in their real shapes (apps/server routes/shops.ts), signed as the member, and says it in words.
  *
  * - The node's answers: GET /api/shops/mine `{ shop | null }`; PUT `{ shop, paused, resumed }` with the Offers it moved
@@ -15,7 +15,8 @@
  * enterprise as the owner, signed as the keeper: its shop, its Offers put in it, Featured on one of them, and its face
  * (PUT /api/treasury/:t/profile, DESIGN-shops-round3-enterprise-shopfront-fable.md §4). The Market side is S5.
  */
-import { SHOP_KINDS, formatCount, formatDate, isShopKind, t, tn, word, type ShopCounts, type ShopKind, type WordKey } from '@beanpool/core';
+import { formatCount, formatDate, isShopCategory, t, tn, word, type ShopCategory, type ShopCounts, type WordKey } from '@beanpool/core';
+import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { signedGet, signedRequestWithMethod } from './db';
 
 /** The member's own shop, as the phone draws it. */
@@ -24,7 +25,8 @@ export interface MyShop {
     /** Their own name for it, or null: then it is "<ownerName>'s shop" ({@link shopTitle}). */
     name: string | null;
     ownerName: string;
-    kind: ShopKind | null;
+    /** One of the Market's categories (core SHOP_CATEGORIES), or null: none chosen, or one this build doesn't know. */
+    category: ShopCategory | null;
     blurb: string | null;
     howToDeal: string | null;
     counts: ShopCounts;
@@ -37,13 +39,13 @@ export interface MyShop {
 
 /** Home's "Your shop and tools" as the node sends it (`cards.shop`, apps/server routes/home-answer.ts ShopHomeCard). */
 export interface ShopHomeCard {
-    shop: { id: string; name: string | null; ownerName: string; kind: string | null; counts: ShopCounts; paused: boolean; backOn: string | null } | null;
+    shop: { id: string; name: string | null; ownerName: string; category: string | null; counts: ShopCounts; paused: boolean; backOn: string | null } | null;
 }
 
 /** What a change names: each field optional, null or empty text clears one (engine/shops.ts ShopChanges). */
 export interface MyShopChanges {
     name?: string | null;
-    kind?: ShopKind | null;
+    category?: ShopCategory | null;
     blurb?: string | null;
     howToDeal?: string | null;
     paused?: boolean;
@@ -52,28 +54,13 @@ export interface MyShopChanges {
     photo?: string | null;
 }
 
-/** The fourteen kinds (core SHOP_KINDS), each an emoji and its words. A kind picks the tools shown and gates nothing. */
-export const SHOP_KIND_WORDS: Readonly<Record<ShopKind, { emoji: string; name: WordKey }>> = {
-    tools: { emoji: '🛠️', name: word('Tools and equipment') },
-    food: { emoji: '🥕', name: word('Food from the garden or farm') },
-    baking: { emoji: '🍞', name: word('Cooked food and baking') },
-    repairs: { emoji: '🔧', name: word('Repairs') },
-    crafts: { emoji: '🎨', name: word('Making and crafts') },
-    lessons: { emoji: '📚', name: word('Lessons and tutoring') },
-    care: { emoji: '❤️', name: word('Care') },
-    rides: { emoji: '🚲', name: word('Rides and deliveries') },
-    rooms: { emoji: '🏠', name: word('Rooms, space and stays') },
-    buying: { emoji: '🧺', name: word('Buying together') },
-    seeds: { emoji: '🌱', name: word('Seeds and seedlings') },
-    energy: { emoji: '☀️', name: word('Water, power and fuel') },
-    animals: { emoji: '🐾', name: word('Animals and produce') },
-    labour: { emoji: '👷', name: word('Hands and labour') },
-};
-export const SHOP_KIND_IDS: readonly ShopKind[] = SHOP_KINDS;
-
-/** A kind as it is shown: its emoji and its words, "🛠️ Tools and equipment". */
-export function shopKindLabel(kind: ShopKind): string {
-    return t('{emoji} {kind}', { emoji: SHOP_KIND_WORDS[kind].emoji, kind: t(SHOP_KIND_WORDS[kind].name) }, 'a kind of shop, after its emoji');
+/**
+ * A shop's category as it is shown: the emoji and the words its listings have for it (constants/categories.ts), so a shop
+ * and its listings always agree: "💻 Tech". It picks the tools shown and where the shop's new listings start, and gates
+ * nothing.
+ */
+export function shopCategoryLabel(category: ShopCategory): string {
+    return t('{emoji} {label}', { emoji: categoryEmoji(category), label: categoryLabel(category) });
 }
 
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
@@ -90,7 +77,7 @@ export function readShop(raw: unknown): MyShop | null {
         id: s.id,
         name: text(s.name),
         ownerName: typeof s.ownerName === 'string' ? s.ownerName : '',
-        kind: isShopKind(s.kind) ? s.kind : null,
+        category: isShopCategory(s.category) ? s.category : null,
         blurb: text(s.blurb),
         howToDeal: text(s.howToDeal),
         counts: { things: count(c.things), available: count(c.available), toBorrow: count(c.toBorrow), toBuy: count(c.toBuy), out: count(c.out), newThisWeek: count(c.newThisWeek) },

@@ -12,7 +12,7 @@ written to it: read its three folders for a worked example.
 ## What a tool is
 
 - **A manifest in core**, `packages/beanpool-core/src/tools/<id>/`: pure data and pure functions (id, words, icon, shelf,
-  shop kinds, owner, permissions, its document's version and `read()`, the Tools row, examples, an optional Home card and
+  shop categories, owner, permissions, its document's version and `read()`, the Tools row, examples, an optional Home card and
   reminders). The types are `packages/beanpool-core/src/tools/manifest.ts`.
 - **A phone half**, `apps/native/tools/<id>/`, and **a web half**, `apps/pwa/src/tools/<id>/`: one component per screen
   the manifest names, `main` first.
@@ -54,7 +54,7 @@ it scrolls a box being typed in, and the buttons under it, above the keyboard),
 1. **`node scripts/tools/new-tool.mjs <id>`** copies `scripts/tools/_scaffold/` into the three roots as `<id>/` (a
    compiling empty tool with its fixtures and a test) and writes the three registry lines. Pick the id: 2 to 16 lowercase
    letters and hyphens, never two together; new-tool refuses one whose names in core are already taken (`tools`, `tool`).
-   Then the shelf (`stock`, `trade` or `books`), the shop kinds, the owner.
+   Then the shelf (`stock`, `trade` or `books`), the shop categories (the Market's, or `'all'`), the owner.
 2. **Fill the manifest** (`<id>/manifest.ts` in core): words through `word()` (a line with a count is a
    `wordn('{n} thing', '{n} things')` pair with its count as `n`, so "1 thing" reads right in every language), one emoji,
    the permissions you need and no more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the

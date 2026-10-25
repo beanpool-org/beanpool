@@ -507,7 +507,7 @@ export const TABLES: Record<string, TableEntry> = {
     member_tool_state: plain('public_key tool body updated_at'),
     // A shop (engine/shops.ts): a front window on a member's or an enterprise's account, its words, and its pause with the
     // Offers the pause took down. Its listings name it in their own rows (posts.shop_id); a close is a tombstone by its id.
-    shops: plain('id owner_pubkey name kind blurb how_to_deal opened_at paused_at back_on paused_posts updated_at photo_ref'),
+    shops: plain('id owner_pubkey name category blurb how_to_deal opened_at paused_at back_on paused_posts updated_at photo_ref'),
     // A shop's banner, out of its row (schema.sql shop_photos), verbatim: its one writer (engine/shops.ts setShopPhoto)
     // writes the shop's photo_ref with it, so both travel in the same delta; taking it down, and a close, is a tombstone by
     // the shop's id.

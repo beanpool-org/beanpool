@@ -193,14 +193,14 @@ describe('the reads', () => {
         expect(await readShopListingsForReader('s1')).toBeNull();
     });
     it("a shop's page: a member's shop, an enterprise's, a visitor's view, none, or no answer", async () => {
-        const memberShop = { id: 's1', kind: 'tools', counts: { things: 3 }, name: null, ownerPublicKey: 'o'.repeat(64), ownerName: 'Dave', enterprise: false, blurb: 'Tools to lend.', howToDeal: 'Knock first.', paused: false, backOn: null };
+        const memberShop = { id: 's1', category: 'tools', counts: { things: 3 }, name: null, ownerPublicKey: 'o'.repeat(64), ownerName: 'Dave', enterprise: false, blurb: 'Tools to lend.', howToDeal: 'Knock first.', paused: false, backOn: null };
         node.get = () => ({ status: 200, json: memberShop });
         expect(await readShopPage('s1')).toEqual({ state: 'shop', shop: readShopfrontShop(memberShop) });
         expect(node.gets).toEqual(['/api/shops/s1']);
-        expect(readShopfrontShop(memberShop)).toMatchObject({ id: 's1', kind: 'tools', ownerPublicKey: 'o'.repeat(64), ownerName: 'Dave', enterprise: false, howToDeal: 'Knock first.' });
+        expect(readShopfrontShop(memberShop)).toMatchObject({ id: 's1', category: 'tools', ownerPublicKey: 'o'.repeat(64), ownerName: 'Dave', enterprise: false, howToDeal: 'Knock first.' });
         node.get = () => ({ status: 200, json: { ...memberShop, enterprise: true, name: 'Lou Repairs' } });
         expect(await readShopPage('s1')).toEqual({ state: 'enterprise', ownerPublicKey: 'o'.repeat(64), name: 'Lou Repairs' });
-        node.get = () => ({ status: 200, json: { id: 's1', kind: 'tools', counts: { things: 3 } } });
+        node.get = () => ({ status: 200, json: { id: 's1', category: 'tools', counts: { things: 3 } } });
         expect(await readShopPage('s1')).toEqual({ state: 'visitor' });
         node.get = () => ({ status: 404, json: { code: 'shop_not_found' } });
         expect(await readShopPage('s1')).toEqual({ state: 'none' });

@@ -129,7 +129,7 @@ const BLURB = 'Tools to lend on our street: ladders, drills, a trailer.';
 const HOW = 'Knock first. Back by Sunday, please.';
 function memberShop(over: Record<string, unknown> = {}) {
     return {
-        id: SHOP, kind: 'tools', counts: { things: 3, available: 3, toBorrow: 2, toBuy: 1, out: 0, newThisWeek: 1 },
+        id: SHOP, category: 'tools', counts: { things: 3, available: 3, toBorrow: 2, toBuy: 1, out: 0, newThisWeek: 1 },
         name: "Dave's Tool Shed", ownerPublicKey: DAVE, ownerName: 'Dave', enterprise: false, blurb: BLURB, howToDeal: HOW,
         paused: false, backOn: null, openedAt: '2026-08-14T09:00:00.000Z', updatedAt: '2026-10-20T09:00:00.000Z', ...over,
     };
@@ -223,7 +223,7 @@ for (const dark of [false, true]) {
             expect(styleOf(byId('shopfront-banner')).backgroundColor).toBe(colors().brand.tint);
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
             expect(byId('shopfront-name')?.textContent).toBe("Dave's Tool Shed");
-            expect(host.textContent).toContain('🛠️ Tools and equipment · since Aug 2026');
+            expect(host.textContent).toContain('🛠️ Tools · since Aug 2026');
             expect(byId('shop-page-owner')?.textContent).toContain('Dave');
             expect(byId('shopfront-about')?.textContent).toContain(BLURB);
             expect(Array.from(byId('shopfront-featured')!.querySelectorAll('[data-testid^="shopfront-featured-"]')).map((e) => e.getAttribute('data-testid'))).toEqual(['shopfront-featured-l1']);
@@ -283,7 +283,7 @@ for (const dark of [false, true]) {
         });
 
         it("a visitor's view, a shop that is gone, and no answer: each said", async () => {
-            net.answer = node({ status: 200, json: { id: SHOP, kind: 'tools', counts: { things: 3 } } });
+            net.answer = node({ status: 200, json: { id: SHOP, category: 'tools', counts: { things: 3 } } });
             await renderIn();
             expect(byId('shopfront-visitor')?.textContent).toBe("Members of this community see a shop's name, its owner and what it offers.");
             expect(byId('shopfront-message')).toBeNull();

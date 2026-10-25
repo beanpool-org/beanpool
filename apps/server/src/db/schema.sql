@@ -2803,7 +2803,7 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
 -- 29. Shops (scratch/tools/DESIGN-shops-and-tools-fable.md §2.1, §9.1, slice S1, and Marty's answers of 19 Oct 2026): a front
 -- window on an account, a member's or an enterprise's, one each (engine/shops.ts openShop). Its listings name it
 -- (posts.shop_id). A member opens theirs; an enterprise's is made with it (state-engine.ts createTreasury). Read through
--- routes/shops.ts: a member sees it whole, a visitor its kind and counts only. Copied to a standby verbatim (a plain
+-- routes/shops.ts: a member sees it whole, a visitor its category and counts only. Copied to a standby verbatim (a plain
 -- table, engine/replication-manifest.ts); a close deletes it with a tombstone keyed by its id (engine/shops.ts).
 CREATE TABLE IF NOT EXISTS shops (
     id            TEXT PRIMARY KEY,
@@ -2816,9 +2816,10 @@ CREATE TABLE IF NOT EXISTS shops (
     -- name>'s shop" in the reader's language. Always NULL on an enterprise's: its name is the enterprise's, read from
     -- members, so it follows every rename.
     name          TEXT CHECK (name IS NULL OR length(CAST(name AS BLOB)) BETWEEN 1 AND 180),
-    -- One of the fourteen kinds (@beanpool/core SHOP_KINDS, checked by engine/shops.ts), or NULL. The shape only here, so a
-    -- kind added later needs no rebuild.
-    kind          TEXT CHECK (kind IS NULL OR (length(kind) BETWEEN 1 AND 24 AND kind NOT GLOB '*[^a-z-]*')),
+    -- One of the Market's categories (@beanpool/core SHOP_CATEGORIES, checked by engine/shops.ts), or NULL: the list its
+    -- listings pick from. The shape only here, so a category added later needs no rebuild. A node from before kept a kind
+    -- here (the column was `kind`): db.ts moveShopKindsToCategories renames it and moves each row to its category.
+    category      TEXT CHECK (category IS NULL OR (length(category) BETWEEN 1 AND 24 AND category NOT GLOB '*[^a-z-]*')),
     -- What it is, and "how I deal", each ≤ 300 characters in its owner's words. NULL: none. An enterprise's blurb reads as
     -- its purpose until a keeper writes one.
     blurb         TEXT CHECK (blurb IS NULL OR length(CAST(blurb AS BLOB)) <= 900),
@@ -2834,8 +2835,8 @@ CREATE TABLE IF NOT EXISTS shops (
     updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- Its banner, its one photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4): only its reference here
     -- (@beanpool/core avatarRefOf: its version), which its URL is made from (shopPhotoUrlOf); the photo is in shop_photos,
-    -- written with it by its one writer (engine/shops.ts setShopPhoto). NULL: none, and the apps draw a quiet block in its
-    -- kind's colour. Last, as db.ts adds it to an older database, before this file runs.
+    -- written with it by its one writer (engine/shops.ts setShopPhoto). NULL: none, and the apps draw a quiet block with its
+    -- category's emoji. Last, as db.ts adds it to an older database, before this file runs.
     photo_ref     TEXT
 );
 -- An account's shop (shopOf).

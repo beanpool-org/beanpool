@@ -262,3 +262,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-21 - FormerAddressBanner ARIA Live Region & Internationalization
 **Learning:** `FormerAddressBanner.tsx` displayed community migration alerts using `role="status"` without explicit `aria-live="polite"` or `aria-label`, preventing screen readers from describing the alert context, and hardcoded text strings without `t(...)` translation wrappers.
 **Action:** Added `aria-live="polite"` and `aria-label={t('Community address change alert')}` to the status container, wrapped text strings with `t(...)`, and verified test suite passing.
+
+## 2026-10-22 - AvatarPresetPicker Focus Ring Styling & Unit Tests
+**Learning:** `AvatarPresetPicker.tsx` container div used `focus:outline-none focus:ring-1 focus:ring-emerald-500` on a scrollable region (`tabIndex={0}`), showing focus rings on click while providing low-contrast focus indicators on keyboard navigation.
+**Action:** Replaced `focus:outline-none focus:ring-1` with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` and added comprehensive unit test coverage in `AvatarPresetPicker.test.tsx`.

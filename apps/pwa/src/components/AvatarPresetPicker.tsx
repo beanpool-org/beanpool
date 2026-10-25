@@ -29,7 +29,7 @@ export function AvatarPresetPicker({
                 role="region"
                 aria-label={heading}
                 style={{ display: 'flex', overflowX: 'auto', gap: '0.625rem' }}
-                className="flex gap-2.5 overflow-x-auto py-1 px-1 custom-scrollbar focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded-xl"
+                className="flex gap-2.5 overflow-x-auto py-1 px-1 custom-scrollbar focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl"
             >
                 {AVATAR_PRESETS.map((preset) => {
                     const uri = `bundled://${preset.id}`;

@@ -1179,7 +1179,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (activeConv.type !== 'dm') { setChatRefusal(NODE_READABLE_NO_PHOTOS_TEXT); return false; }
         setSending(true);
         try {
-            const dataUri = await resizePhotoFile(file);
+            const dataUri = await resizePhotoFile(file).catch(() => { throw new Error(t('Could not load image')); });
             // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
             // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.

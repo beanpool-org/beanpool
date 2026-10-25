@@ -157,7 +157,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         setBannerDismissed(true);
         try {
             localStorage.setItem(`bp_banner_prompt_dismissed_${pubkey}`, '1');
-        } catch {}
+        } catch {
+            // ignore storage access errors
+        }
     };
 
     const handleBannerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

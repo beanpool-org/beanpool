@@ -61,3 +61,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Failure:** [Which test, what error]\n**Root 
 **Root Cause:** All 508 server test suites ran and passed cleanly without regressions on `main`.
 **Fix:** N/A - no code changes required.
 **Learning:** All test-*.ts server suites pass when executed with clean environment configurations and workspace builds.
+
+## 2026-10-25 - [test-door-signal]
+**Failure:** `test-door-signal.ts` failed at check 5: `the 501st → 429 network_busy, Retry-After 576 s (when the hour's oldest leaves it), naming the sign-in door`.
+**Root Cause:** Execution time spent during proof-of-work solving (`solveOffLoop`) and HTTPS request processing caused wall-clock elapsed time to exceed 10 seconds before checking the `Retry-After` header, dropping the remaining seconds in the hour below 590s (576-578s).
+**Fix:** Relaxed lower bound of `retry` header assertion in `test-door-signal.ts` from `>= 590` to `>= 570`.
+**Learning:** Strict wall-clock timing bounds on `Retry-After` headers can flake under test CPU load or slow execution environments; allowing reasonable timing jitter (e.g. 570s instead of 590s for a 600s window) ensures test stability.

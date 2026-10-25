@@ -272,6 +272,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
                     name: 'Garden Crew',
                     role: 'convenor',
                     badge: null,
+                    avatarUrl: null,
                     category: 'working_group',
                     joinPolicy: 'open',
                     readOnly: false,

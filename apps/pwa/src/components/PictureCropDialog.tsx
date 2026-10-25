@@ -91,8 +91,9 @@ export function PictureCropDialog({ picture, shape, onCancel, onDone, onFailed }
         return () => window.removeEventListener('resize', measure);
     }, []);
 
-    // Focus in on open (the picture, so the keys move it at once) and back to what opened it on close.
-    useEffect(() => {
+    // Focus in on open (the picture, so the keys move it at once) and back to what opened it on close. A layout effect: focus
+    // is on the picture in the same commit that adds the dialog, before anything (a screen reader, a test) can see it without.
+    useLayoutEffect(() => {
         const opener = document.activeElement as HTMLElement | null;
         stageRef.current?.focus();
         return () => { if (opener && opener !== document.body && opener.isConnected) opener.focus?.(); };

@@ -28,11 +28,11 @@ import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting
 import { EnterpriseCard } from '../components/EnterpriseCard';
 import { LocalCommunitySheet } from '../components/LocalCommunityMark';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
-import { Sentence } from '../components/Sentence';
+import { commonsHeading, findHeading, yoursEmpty, type GroupKind } from '../lib/commons-sections';
 
 interface Props {
     identity: BeanPoolIdentity | null;
-    onOpenTreasury?: (publicKey: string) => void;
+    onOpenTreasury?: (publicKey: string, tab?: 'page' | 'manage') => void;
     initialSection?: 'decide' | 'enterprises' | 'groups';
     onNavigate?: (tab: string, contextId?: string) => void;
     /**
@@ -68,9 +68,8 @@ const SECTION_TABS = [
     { key: 'decide', emoji: '🗳️', label: word('Decide') },
     { key: 'groups', emoji: '👥', label: word('Groups') },
 ] as const;
-const GROUP_CHIPS: Array<{ key: string; label: WordKey }> = [
+const GROUP_CHIPS: Array<{ key: GroupKind; label: WordKey }> = [
     { key: 'all', label: word('All') },
-    { key: 'my_groups', label: word('My groups') },
     { key: 'projects', label: word('🌱 Projects') },
     { key: 'enterprises', label: word('🏛️ Enterprises') },
     { key: 'chat', label: word('👥 Chat groups') },
@@ -162,18 +161,18 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
-    const [pickedGroupCategory, setGroupCategoryFilter] = useState<string>('all');
+    const [pickedGroupCategory, setGroupCategoryFilter] = useState<GroupKind>('all');
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
 
-    // The kind chips: projects and enterprises hold Beans; chat groups (and My groups) are the rest. Where enterprises
+    // The kind chips: projects and enterprises hold Beans; chat groups are the rest. Where enterprises
     // are in preview (the global node) no project or enterprise can exist, so those two chips would only ever be empty:
     // they are not offered, and one picked before the mode arrived reads as All.
     const enterprisesPreview = enterprisesMode === 'preview';
-    const groupCategoryFilter = enterprisesPreview && (pickedGroupCategory === 'projects' || pickedGroupCategory === 'enterprises') ? 'all' : pickedGroupCategory;
+    const groupCategoryFilter: GroupKind = enterprisesPreview && (pickedGroupCategory === 'projects' || pickedGroupCategory === 'enterprises') ? 'all' : pickedGroupCategory;
     const filter: 'all' | 'ongoing' | 'bounded' = groupCategoryFilter === 'projects' ? 'bounded' : groupCategoryFilter === 'enterprises' ? 'ongoing' : 'all';
     const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
-    const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat' || groupCategoryFilter === 'my_groups';
+    const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat';
 
     // "＋ Start something": where focus goes back when the sheet, or a sheet it opened, closes.
     const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -410,22 +409,48 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         }
     }, [activeSection, fetchGroups]);
 
+    const yourKeptEnterprises = useMemo(() => {
+        if (!identity?.publicKey) return [];
+        const myPk = identity.publicKey;
+        const list = treasuries.filter(t => t.keepers?.some(k => (k.publicKey || k.pubkey) === myPk));
+        list.sort((a, b) => {
+            const aLead = a.keepers?.some(k => (k.publicKey || k.pubkey) === myPk && k.role === 'lead');
+            const bLead = b.keepers?.some(k => (k.publicKey || k.pubkey) === myPk && k.role === 'lead');
+            if (aLead !== bLead) return aLead ? -1 : 1;
+            return (a.name ?? '').localeCompare(b.name ?? '');
+        });
+        return list;
+    }, [treasuries, identity?.publicKey]);
+
+    const yourKeptPubkeys = useMemo(() => new Set(yourKeptEnterprises.map(t => t.publicKey)), [yourKeptEnterprises]);
+
+    const yourGroups = useMemo(() => {
+        if (!identity?.publicKey) return [];
+        const list = groups.filter(g => g.viewerRole || g.viewerStatus === 'active');
+        list.sort((a, b) => {
+            const aConv = a.viewerRole === 'convenor';
+            const bConv = b.viewerRole === 'convenor';
+            if (aConv !== bConv) return aConv ? -1 : 1;
+            return (a.name ?? '').localeCompare(b.name ?? '');
+        });
+        return list;
+    }, [groups, identity?.publicKey]);
+
+    const yourGroupIds = useMemo(() => new Set(yourGroups.map(g => g.id)), [yourGroups]);
+
     const filteredGroups = useMemo(() => {
-        if (groupCategoryFilter === 'my_groups') {
-            return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole || g.viewerStatus === 'pending_approval');
-        }
-        return groups;
-    }, [groups, groupCategoryFilter]);
+        return groups.filter(g => !yourGroupIds.has(g.id));
+    }, [groups, yourGroupIds]);
 
     const filteredEnterprises = useMemo(() => {
-        let list = [...treasuries];
+        let list = treasuries.filter(t => !yourKeptPubkeys.has(t.publicKey));
         if (filter === 'ongoing') {
             list = list.filter(t => t.lifecycle !== 'bounded' && (!t.goalAmount || t.goalAmount <= 0));
         } else if (filter === 'bounded') {
             list = list.filter(t => t.lifecycle === 'bounded' || (t.goalAmount != null && t.goalAmount > 0));
         }
         return list;
-    }, [treasuries, filter]);
+    }, [treasuries, filter, yourKeptPubkeys]);
 
     // In preview the two tabs hold very different lengths (the sample's cards on Groups only): a switch starts the new tab
     // at its top, or Decide would open far above the screen. A local node keeps its place as before.
@@ -437,6 +462,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         if (typeof el.scrollTo === 'function') el.scrollTo({ top: 0 });
         else el.scrollTop = 0;
     }, [activeSection, previewTabs]);
+
+    const headingInfo = commonsHeading(communityInfo?.features);
+    const findHeadingLine = { text: findHeading(groupCategoryFilter, communityInfo?.features) };
+    const emptyYoursLine = { text: yoursEmpty(communityInfo?.features) };
 
     return (
         <div ref={scrollContainerRef} className="flex flex-col h-full relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
@@ -451,9 +480,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex justify-between items-center">
                     <div className="min-w-0">
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
-                            <span>🌱</span> <span className="min-w-0 break-words">{t('The Commons')}</span>
+                            <span className="min-w-0 break-words">{t(headingInfo.title)}</span>
                         </h1>
-                        <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">{t('Community decisions, the Commons, and your groups: projects, enterprises and more')}</p>
+                        <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">{t(headingInfo.description)}</p>
                     </div>
                     {identity && (
                         <button
@@ -542,30 +571,6 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             </div>
             )}
 
-            {/* Filters scroll away with the content */}
-            <div className="px-4 pb-3 empty:hidden" data-testid="commons-filters">
-                {/* Filter Controls: Groups Category */}
-                {activeSection === 'groups' && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
-                        <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
-                            {GROUP_CHIPS.filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
-                                <button
-                                    key={option.key}
-                                    onClick={() => setGroupCategoryFilter(option.key)}
-                                    className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
-                                        groupCategoryFilter === option.key
-                                            ? 'bg-bp-commit-fill text-bp-commit-on shadow-sm'
-                                            : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
-                                    }`}
-                                >
-                                    {t(option.label)}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-
             {activeSection === 'decide' ? (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full">
                     <DecideSection
@@ -598,14 +603,200 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </div>
             ) : (
                 <>
-                <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full">
-                    <div className="p-3 bg-white dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl text-xs text-nature-800 dark:text-nature-300 leading-relaxed">
-                        <Sentence
-                            text={t('👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.')}
-                            parts={{ label: <strong>{t('Groups:')}</strong> }}
-                        />
+                {/* Block 1: Yours */}
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full" data-testid="commons-yours">
+                    <div className="text-xs font-black uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-3">
+                        {t('Yours')}
+                    </div>
+                    {yourKeptEnterprises.length > 0 || yourGroups.length > 0 ? (
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
+                            {yourKeptEnterprises.map(e => {
+                                const myKeeper = e.keepers?.find(k => (k.publicKey || k.pubkey) === identity?.publicKey);
+                                const isProject = e.lifecycle === 'bounded' || (e.goalAmount != null && e.goalAmount > 0);
+                                const isLead = myKeeper?.role === 'lead';
+                                const roleWord = isProject
+                                    ? (isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role'))
+                                    : (isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role'));
+                                const kindWord = isProject ? t('Project') : t('Enterprise');
+                                const isFunded = isProject && e.goalAmount != null && e.goalAmount > 0 && (e.currentAmount ?? e.balance ?? 0) >= e.goalAmount;
+                                const offersText = tn(e.liveOffers || 0, '{n} live offer', '{n} live offers');
+                                const line2 = isProject
+                                    ? t('{raised} of {goal} 🫘 raised', {
+                                        raised: formatNumber(e.currentAmount ?? e.balance ?? 0),
+                                        goal: formatNumber(e.goalAmount ?? 0),
+                                    })
+                                    : t('Balance {amount} 🫘 · {offers}', {
+                                        amount: formatNumber(e.balance || 0),
+                                        offers: offersText,
+                                    });
+
+                                return (
+                                    <div
+                                        key={e.publicKey}
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={t('View details for {name}', { name: e.name })}
+                                        onClick={() => onOpenTreasury?.(e.publicKey)}
+                                        onKeyDown={(ev) => {
+                                            if (ev.key === 'Enter' || ev.key === ' ') {
+                                                ev.preventDefault();
+                                                onOpenTreasury?.(e.publicKey);
+                                            }
+                                        }}
+                                        className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 rounded-2xl cursor-pointer transition-all space-y-3 flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    >
+                                        <div>
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-11 h-11 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0 overflow-hidden text-xl">
+                                                    {e.avatar || e.avatarUrl ? (
+                                                        <img src={resolveAvatarUrl(e.avatar || e.avatarUrl) || ''} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <span>{isProject ? '🎯' : '🥖'}</span>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{e.name}</h4>
+                                                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                                        {e.paused ? (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">
+                                                                {t('⏸️ PAUSED')}
+                                                            </span>
+                                                        ) : e.status === 'winding_up' ? (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-transparent">
+                                                                {t('⏳ WINDING UP')}
+                                                            </span>
+                                                        ) : e.status === 'completed' || e.status === 'closed' ? (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-nature-800 text-nature-300 border border-transparent">
+                                                                {t('CLOSED')}
+                                                            </span>
+                                                        ) : null}
+                                                        {isFunded && (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
+                                                                {t('🎉 FUNDED')}
+                                                            </span>
+                                                        )}
+                                                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-nature-800 text-nature-300">
+                                                            {kindWord}
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                                                            isLead ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' : 'bg-nature-800 text-nature-300'
+                                                        }`}>
+                                                            {roleWord}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-xs text-nature-600 dark:text-nature-400 mt-2">
+                                                {line2}
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end pt-2 border-t border-nature-100 dark:border-nature-900">
+                                            <button
+                                                type="button"
+                                                aria-label={t('Manage {name}', { name: e.name })}
+                                                onClick={(ev) => {
+                                                    ev.stopPropagation();
+                                                    onOpenTreasury?.(e.publicKey, 'manage');
+                                                }}
+                                                className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                            >
+                                                {t('Manage ›')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {yourGroups.map(g => (
+                                <div
+                                    key={g.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={t('View details for group {name}', { name: g.name })}
+                                    onClick={() => {
+                                        if (onNavigate) onNavigate('messages', g.id);
+                                        else setSelectedGroupForDetail(g);
+                                    }}
+                                    onKeyDown={(ev) => {
+                                        if (ev.key === 'Enter' || ev.key === ' ') {
+                                            ev.preventDefault();
+                                            if (onNavigate) onNavigate('messages', g.id);
+                                            else setSelectedGroupForDetail(g);
+                                        }
+                                    }}
+                                    className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 rounded-2xl cursor-pointer transition-all space-y-3 flex flex-col justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                >
+                                    <div>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
+                                                        🏷️ {named(CATEGORY_WORDS, g.category, g.category.replace(/_/g, ' '))}
+                                                    </span>
+                                                    <span className="text-nature-600 dark:text-nature-400">•</span>
+                                                    <span className="text-[11px] text-nature-600 dark:text-nature-400">
+                                                        {tn(g.memberCount || 0, '{n} member', '{n} members')}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {g.viewerRole && (
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                    g.viewerRole === 'convenor'
+                                                        ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                        : 'bg-nature-800 text-nature-300'
+                                                }`}>
+                                                    {named(ROLE_WORDS, g.viewerRole, g.viewerRole)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {g.description && (
+                                            <p className="text-xs text-nature-700 dark:text-nature-300 line-clamp-2 leading-relaxed mt-2">
+                                                {g.description}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between pt-1 border-t border-nature-100 dark:border-nature-900 text-[11px] text-nature-600 dark:text-nature-400">
+                                        <span>{t('Join: {policy}', { policy: named(JOIN_POLICY_WORDS, g.joinPolicy, g.joinPolicy?.replace(/_/g, ' ') || '') })}</span>
+                                        <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">{t('Open chat →')}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-nature-600 dark:text-nature-400">
+                            {t(emptyYoursLine.text)}
+                        </p>
+                    )}
+                </div>
+
+                {/* Block 2: Find heading */}
+                <div className="px-4 pt-2 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full">
+                    <h2 className="text-sm font-black uppercase tracking-wider text-nature-700 dark:text-nature-300">
+                        {t(findHeadingLine.text)}
+                    </h2>
+                </div>
+
+                {/* Block 3: Filters / Chips */}
+                <div className="px-4 pb-3 empty:hidden" data-testid="commons-filters">
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
+                        <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
+                            {GROUP_CHIPS.filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
+                                <button
+                                    key={option.key}
+                                    onClick={() => setGroupCategoryFilter(option.key)}
+                                    className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                                        groupCategoryFilter === option.key
+                                            ? 'bg-bp-commit-fill text-bp-commit-on shadow-sm'
+                                            : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
+                                    }`}
+                                >
+                                    {t(option.label)}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
+
                 {showChatGroups && (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
 
@@ -616,9 +807,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             <div className="text-4xl mb-3">👥</div>
                             <h3 className="text-base font-bold text-nature-950 dark:text-white mb-1">{t('No groups found')}</h3>
                             <p className="text-xs text-nature-600 dark:text-nature-400 max-w-xs mx-auto mb-4">
-                                {groupCategoryFilter === 'my_groups'
-                                    ? t('You have not joined any groups yet.')
-                                    : t('Start a working group, guild, or team to coordinate discussions.')}
+                                {t('Start a working group, guild, or team to coordinate discussions.')}
                             </p>
                             <button
                                 onClick={() => setShowCreateGroupModal(true)}
@@ -657,7 +846,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 </span>
                                             </div>
                                         </div>
-                                        {g.viewerRole ? (
+                                        {g.viewerStatus === 'invited' ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-ok-tint text-bp-chip-ok-ink">
+                                                {t('INVITED')}
+                                            </span>
+                                        ) : g.viewerRole ? (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                                 g.viewerRole === 'convenor'
                                                     ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
@@ -705,13 +898,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         {identity && (
                             <button
                                 onClick={() => {
-                                    setNewLifecycle('bounded');
+                                    setNewLifecycle(groupCategoryFilter === 'enterprises' ? 'ongoing' : 'bounded');
                                     setShowNewModal(true);
                                     setCreateError(null);
                                 }}
                                 className="bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
-                                {t('+ Propose a Project')}
+                                {groupCategoryFilter === 'enterprises' ? t('Start an enterprise') : groupCategoryFilter === 'projects' ? t('Start a project') : t('+ Propose a Project')}
                             </button>
                         )}
                     </div>

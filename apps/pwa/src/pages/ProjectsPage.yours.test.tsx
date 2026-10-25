@@ -4,7 +4,7 @@ import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, Group } from '../lib/api';
-import { getTreasuries, getBalance, getDecisions, getCommonsBalance, getGroups } from '../lib/api';
+import { getTreasuries, getGroups } from '../lib/api';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 
 vi.mock('../lib/avatar', () => ({
@@ -156,6 +156,8 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
     it('a group with viewerRole is under Yours, not in Find, and opens chat', async () => {
         const myGroup: Group = {
             id: 'group-garden',
+            slug: 'garden',
+            createdBy: 'pk-someone',
             name: 'Garden Crew',
             category: 'working_group',
             joinPolicy: 'open',
@@ -168,6 +170,8 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         const otherGroup: Group = {
             id: 'group-pottery',
+            slug: 'pottery',
+            createdBy: 'pk-someone',
             name: 'Pottery Guild',
             category: 'guild',
             joinPolicy: 'open',
@@ -219,8 +223,9 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] });
         vi.mocked(getGroups).mockResolvedValue([]);
 
-        const { rerender } = render(<ProjectsPage identity={me} />);
+        const { unmount } = render(<ProjectsPage identity={me} />);
         expect(await screen.findByText('Nothing of yours yet. Start something with +, or find one below.')).toBeInTheDocument();
+        unmount();
 
         // When enterprises are off
         vi.mocked(communityInfoOnce).mockResolvedValue({
@@ -229,18 +234,18 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             transactionCount: 0,
             commonsBalance: 0,
             profile: 'local',
-            features: { beans: false, enterprises: false, decisions: false },
+            features: { beans: false, enterprises: false, decisions: false } as any,
         });
 
-        rerender(<ProjectsPage identity={me} />);
-        await waitFor(() => {
-            expect(screen.getByText('No groups of yours yet. Start one with +, or join one below.')).toBeInTheDocument();
-        });
+        render(<ProjectsPage identity={me} />);
+        expect(await screen.findByText('No groups of yours yet. Start one with +, or join one below.')).toBeInTheDocument();
     });
 
     it('an invited group card says INVITED', async () => {
         const invitedGroup: Group = {
             id: 'group-chess',
+            slug: 'chess',
+            createdBy: 'pk-someone',
             name: 'Chess Club',
             category: 'social',
             joinPolicy: 'invite_only',

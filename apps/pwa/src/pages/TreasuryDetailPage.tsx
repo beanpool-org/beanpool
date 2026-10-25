@@ -113,9 +113,11 @@ interface Props extends LocalCommunityWays {
      * stale link, a notice) is not asked for and the page says why.
      */
     enterprisesPreview?: boolean;
+    /** The tab to open on ('page' default, or 'manage' when opened from a Manage link). */
+    initialTab?: 'page' | 'manage';
 }
 
-export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile, onMessage, enterprisesPreview, ...ways }: Props) {
+export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile, onMessage, enterprisesPreview, initialTab, ...ways }: Props) {
     // Example Valley's enterprise or project (a sample id: the Commons preview's cards): drawn from the sample, every
     // control a marker, nothing asked of the node. Only a sample id: any other key is a real one.
     const isEffectivePreview = isSampleId(pubkey);
@@ -128,8 +130,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
-    // The page or its keepers' Manage tab (round 3 §3, S8). Each enterprise opens on its page.
-    const [tab, setTab] = useState<'page' | 'manage'>('page');
+    // The page or its keepers' Manage tab (round 3 §3, S8). Each enterprise opens on its page unless initialTab asked.
+    const [tab, setTab] = useState<'page' | 'manage'>(initialTab ?? 'page');
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);

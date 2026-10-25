@@ -99,7 +99,7 @@ describe('the Commons page in the pseudo-locale', () => {
         await showIn('xx');
         render(<ProjectsPage identity={ME} />);
         expect(await screen.findByText(xx('INVITED'))).toBeInTheDocument();
-        expect(bypassing()).toEqual([]);
+        expect(bypassing(document.body, { others: ['Mushroom Growers', 'Fungi'] })).toEqual([]);
     });
 
     it('the form that proposes a project or an enterprise, and each refusal', async () => {
@@ -148,19 +148,19 @@ describe('the Commons page in English', () => {
         render(<ProjectsPage identity={ME} />);
         await screen.findByText('Seed Savers');
         expect(bracketed()).toBe(0);
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('🌱 The Commons');
+        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Commons');
         await waitFor(() => expect(screen.getByText('250.00 🫘')).toBeInTheDocument());
         const cards = screen.getAllByRole('button', { name: /^View details for group / });
-        expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['View details for group Seed Savers', 'View details for group Choir', 'View details for group Night Owls']);
+        expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['View details for group Seed Savers', 'View details for group Night Owls', 'View details for group Choir']);
         expect(within(cards[0]).getByText(/🏷️/).textContent).toBe('🏷️ working group');
         expect(within(cards[0]).getByText('3 members')).toBeInTheDocument();
         expect(within(cards[0]).getByText('convenor')).toBeInTheDocument();
         expect(within(cards[0]).getByText('Join: request to join')).toBeInTheDocument();
-        expect(within(cards[1]).getByText('1 member')).toBeInTheDocument();
-        expect(within(cards[1]).getByText('Pending')).toBeInTheDocument();
-        expect(within(cards[2]).getByText('0 members')).toBeInTheDocument();
-        expect(within(cards[2]).getByText(/🏷️/).textContent).toBe('🏷️ book club');
-        expect(within(cards[2]).getByText('Join: invite only')).toBeInTheDocument();
-        expect(screen.getByText(/A group is a place for some people/).textContent).toBe('👥 Groups: A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.');
+        expect(within(cards[1]).getByText('0 members')).toBeInTheDocument();
+        expect(within(cards[1]).getByText(/🏷️/).textContent).toBe('🏷️ book club');
+        expect(within(cards[1]).getByText('Join: invite only')).toBeInTheDocument();
+        expect(within(cards[2]).getByText('1 member')).toBeInTheDocument();
+        expect(within(cards[2]).getByText('Pending')).toBeInTheDocument();
+        expect(screen.queryByText(/A group is a place for some people/)).toBeNull();
     });
 });

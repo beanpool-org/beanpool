@@ -333,7 +333,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         expect(within(tabs).queryByText('Enterprises')).toBeNull();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
+        for (const text of ['Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
     });
@@ -648,7 +648,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         // Groups alone is no choice (audit item 5): the switcher goes with Decide.
         await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
-        expect(screen.getByText('Groups:')).toBeInTheDocument();
+        expect(screen.getByTestId('commons-yours')).toBeInTheDocument();
         expect(screen.queryByText(/Propose Community Action/)).toBeNull();
         expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
         expect(screen.getByRole('button', { name: /Start something/i })).toBeInTheDocument();
@@ -702,7 +702,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(screen.queryByTestId('voice-credits-card')).toBeNull();
         expect(sectionTabs()).toHaveLength(2);
         expect(kindChips()).toEqual(['All', '👥 Chat groups']);
-        expect(screen.getByText('Groups:')).toBeInTheDocument();
+        expect(screen.getByTestId('commons-yours')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Start something/i })).toBeInTheDocument();
         // Switching to Decide tab shows the sample decision and voice credits card
         fireEvent.click(screen.getByRole('button', { name: /Decide/ }));

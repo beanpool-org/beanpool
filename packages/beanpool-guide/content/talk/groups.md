@@ -42,7 +42,7 @@ You can invite people on the phone and in the web app. On the phone, a new group
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**). A short key prefix appears under each person's name so you can tell people with the same name apart.
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations in **Commons** yet: there, the line in **Needs you** opens the group, and they tap **Accept invitation**. When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so.
 
 If you take an invitation back and invite the same person again, they get no second alert within the hour. Someone who has blocked you still gets the invitation, with no alert.
 
@@ -103,7 +103,7 @@ At the end your phone says what happened: **Done** only when it handed every key
 
 ## Joining a group
 
-On the phone, in **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. In the web app, **Groups** lists every group you can see, yours marked with your role; **My groups** shows only yours. Each one shows the start of its description. Open a group to read all of it, then:
+In **Commons**, under **Groups**, the groups you are in are under **Yours**. Below them, the list shows groups you could join; filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do.
@@ -122,7 +122,7 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
 
-A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
+A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.

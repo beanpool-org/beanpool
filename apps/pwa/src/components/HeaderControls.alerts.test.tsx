@@ -7,7 +7,7 @@ import { HeaderControls } from './HeaderControls';
 import { NeedsYouIcons } from './NeedsYouIcons';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
-import { resetHomeStoreForTests } from '../lib/home-store';
+import { freshHomeForHeader, recordHomeAnswer, resetHomeStoreForTests } from '../lib/home-store';
 
 beforeEach(() => {
     resetHomeStoreForTests();
@@ -709,5 +709,103 @@ describe('HeaderControls needs-you alert icons', () => {
         } finally {
             window.innerWidth = originalWidth;
         }
+    });
+});
+
+/**
+ * Round 3 of the deciding review (6113c9ad): what the count chip says, and when a tab change away from Home asks the node.
+ * The header's slot is measured as the phone's row is (onLayout): its own width, from a ResizeObserver; here that width is
+ * given (jsdom lays nothing out).
+ */
+describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
+    const DEAL: NeedsItem = { kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you', target: { to: 'deal', postId: 'p1', txId: 't1' } };
+    const VOTE: NeedsItem = { kind: 'vote', count: 1, accent: true, label: 'Vote closes tomorrow', target: { to: 'decide' } };
+    const MESSAGE: NeedsItem = { kind: 'message', count: 1, accent: false, label: 'Unread message from Ana', target: { to: 'chat', conversationId: 'dm-ana' } };
+    const GROUP: NeedsItem = { kind: 'group', count: 3, accent: false, label: '3 new lines in Choir', target: { to: 'chat', conversationId: 'grp-choir' } };
+
+    /** The slot is `width` px wide; every observer hears of it at once, as the browser's first layout does. */
+    function slotWidth(width: number) {
+        vi.stubGlobal('ResizeObserver', class {
+            constructor(private cb: ResizeObserverCallback) {}
+            observe(target: Element) { this.cb([{ target, contentRect: target.getBoundingClientRect() } as ResizeObserverEntry], this as unknown as ResizeObserver); }
+            unobserve() {}
+            disconnect() {}
+        });
+        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+            const w = (this as HTMLElement).dataset.needsSlot !== undefined ? width : 0;
+            return { width: w, height: 44, top: 0, left: 0, right: w, bottom: 44, x: 0, y: 0, toJSON() {} } as DOMRect;
+        });
+    }
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+    });
+
+    it('the count chip, when it is all there is room for, says how many things need you: the number it draws', async () => {
+        slotWidth(30);
+        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, GROUP]) as any, ME.publicKey);
+        render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
+
+        const chip = await screen.findByTestId('header-needs-chip');
+        // Three kinds (the three lines of the sheet it opens), not the five the counts add up to, and not "3 more".
+        expect(chip).toHaveAccessibleName('3 things need you');
+        expect(chip.textContent).toBe('3');
+        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+    });
+
+    it('a lone •••, with no icon beside it, says how many things need you, not how many more', async () => {
+        slotWidth(44);
+        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE]) as any, ME.publicKey);
+        render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
+
+        const more = await screen.findByTestId('header-needs-more');
+        expect(more).toHaveAccessibleName('2 things need you');
+    });
+
+    it("away from Home, a tab change asks the node once Home's answer is older than the phone's 15 s: a need dealt with goes", async () => {
+        vi.useFakeTimers();
+        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: null, answer: makeHomeAnswer([]) as any });
+        // Home's own read, as the member left Home with a deal and an unread message.
+        recordHomeAnswer(makeHomeAnswer([DEAL, MESSAGE]) as any, ME.publicKey);
+
+        const { rerender } = render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
+        await act(async () => { await Promise.resolve(); });
+        // Home's answer is a moment old: drawn from, and nothing asked.
+        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.getByTestId('header-needs-message')).toBeInTheDocument();
+        expect(getHomeSpy).not.toHaveBeenCalled();
+
+        // 20 s later, Market: the phone would have read its deals and messages again on this page change.
+        await act(async () => { vi.advanceTimersByTime(20_000); });
+        await act(async () => {
+            rerender(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="marketplace" />);
+            await Promise.resolve();
+        });
+        await act(async () => { await Promise.resolve(); });
+        expect(getHomeSpy).toHaveBeenCalledTimes(1);
+        expect(getHomeSpy).toHaveBeenCalledWith({ cards: ['needs'] });
+        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+        expect(screen.queryByTestId('header-needs-message')).toBeNull();
+
+        // The header's own read is the header's: it never stands in for Home's answer.
+        expect(freshHomeForHeader(ME.publicKey)).toBeNull();
+    });
+
+    it("a tap on an icon or a line of the sheet forgets Home's copy: that need is about to change", async () => {
+        slotWidth(88);
+        const onNavigate = vi.fn();
+        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, MESSAGE]) as any, ME.publicKey);
+        render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" onNavigate={onNavigate} />);
+
+        fireEvent.click(await screen.findByTestId('header-needs-deal'));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p1');
+        expect(freshHomeForHeader(ME.publicKey)).toBeNull();
+
+        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, MESSAGE]) as any, ME.publicKey);
+        fireEvent.click(await screen.findByTestId('header-needs-more'));
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Vote closes tomorrow' }));
+        expect(onNavigate).toHaveBeenCalledWith('projects');
+        expect(freshHomeForHeader(ME.publicKey)).toBeNull();
     });
 });

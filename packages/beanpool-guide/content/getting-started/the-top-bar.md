@@ -36,7 +36,7 @@ A single slow check does not turn the dot red. It only goes red after more than 
 
 Between the bean and the buttons on the right, small icons appear only while something needs you. Each one is a kind of thing. Tap it to go straight there.
 
-- **A handshake:** a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.
+- **A handshake:** a deal is waiting for you. Someone asked for your listing and is waiting for you to answer, or your Beans are held in trust and waiting for you to release them. It does not show when you are waiting on them. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.
 - **A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. If the first vote is one in a group or a keepers' vote in an enterprise, the tap opens that group or enterprise instead. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.
 - **An envelope:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.
 - **A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.

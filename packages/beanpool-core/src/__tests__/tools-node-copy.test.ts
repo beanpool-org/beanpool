@@ -130,7 +130,7 @@ describe("the owner's path: never a body field naming anyone", () => {
 describe('a taken copy is read through the tool (readTakenBody)', () => {
     type Doc = { v: number; items: string[]; later?: unknown };
     const manifest = {
-        id: 'kit', name: word('Sample tool'), line: word('A tool for the tests.'), icon: '🧪', shelf: 'stock', shopKinds: 'all', owner: 'member',
+        id: 'kit', name: word('Sample tool'), line: word('A tool for the tests.'), icon: '🧪', shelf: 'stock', categories: 'all', owner: 'member',
         permissions: ['node-copy'], screens: ['main'], row: () => null, examples: [word('An example')],
         doc: {
             version: 2,

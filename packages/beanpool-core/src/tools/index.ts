@@ -9,7 +9,8 @@
  * entry in TOOLS. Pure: no I/O (the barrel is bundled for the phone, barrel-is-universal.test.ts).
  */
 import type { HomeCardType, HomeNodeFacts } from '../home-frame.js';
-import type { ShopKind, ToolManifest, ToolShelf } from './manifest.js';
+import type { ShopCategory } from '../shops.js';
+import type { ToolManifest, ToolShelf } from './manifest.js';
 import { THINGS } from './things/index.js';
 
 export * from './manifest.js';
@@ -33,23 +34,23 @@ export type ToolReader = 'member' | 'enterprise';
 
 const forReader = (t: ToolManifest, reader: ToolReader) => t.owner === 'both' || t.owner === reader;
 const onThisNode = (t: ToolManifest, facts: HomeNodeFacts) => t.onNode?.(facts) ?? true;
-const forKind = (t: ToolManifest, kind: ShopKind) => t.shopKinds === 'all' || t.shopKinds.includes(kind);
+const forCategory = (t: ToolManifest, category: ShopCategory) => t.categories === 'all' || t.categories.includes(category);
 
 /**
  * The tools on one shelf of the Tools screen (§1.5), in the registry's order: every tool on that shelf for this reader
- * that this node can have and, for a shop of a kind, only those for that kind (the rest are under "More tools",
+ * that this node can have and, for a shop in a category, only those for that category (the rest are under "More tools",
  * {@link toolsMore}). Nothing here names a tool, and nothing is shown locked: a tool a node can't have isn't listed.
  */
 export function toolsOnShelf(
-    shelf: ToolShelf, kind: ShopKind | null, reader: ToolReader, facts: HomeNodeFacts, tools: readonly ToolManifest[] = TOOLS,
+    shelf: ToolShelf, category: ShopCategory | null, reader: ToolReader, facts: HomeNodeFacts, tools: readonly ToolManifest[] = TOOLS,
 ): ToolManifest[] {
-    return tools.filter((t) => t.shelf === shelf && forReader(t, reader) && onThisNode(t, facts) && (kind === null || forKind(t, kind)));
+    return tools.filter((t) => t.shelf === shelf && forReader(t, reader) && onThisNode(t, facts) && (category === null || forCategory(t, category)));
 }
 
-/** The "More tools" heading for a shop of a kind: the reader's tools on this node that aren't for that kind. None without a kind. */
-export function toolsMore(kind: ShopKind | null, reader: ToolReader, facts: HomeNodeFacts, tools: readonly ToolManifest[] = TOOLS): ToolManifest[] {
-    if (kind === null) return [];
-    return tools.filter((t) => forReader(t, reader) && onThisNode(t, facts) && !forKind(t, kind));
+/** The "More tools" heading for a shop in a category: the reader's tools on this node that aren't for it. None without a category. */
+export function toolsMore(category: ShopCategory | null, reader: ToolReader, facts: HomeNodeFacts, tools: readonly ToolManifest[] = TOOLS): ToolManifest[] {
+    if (category === null) return [];
+    return tools.filter((t) => forReader(t, reader) && onThisNode(t, facts) && !forCategory(t, category));
 }
 
 /** The Home card type of a tool: `tool-<id>`. */

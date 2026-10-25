@@ -5,7 +5,8 @@
  *   GET  /api/shops?lat=&lng=&radiusKm=   → { shops: [shop + distanceKm] }   the shops near a place, nearest first
  *   GET  /api/shops/:id                   → shop                             one shop, 404 shop_not_found
  *   GET  /api/shops/mine                  → { shop: shop | null }            the signer's own
- *   PUT  /api/shops/mine { name?, kind?, blurb?, howToDeal?, paused?, backOn?, photo? }
+ *   PUT  /api/shops/mine { name?, category?, blurb?, howToDeal?, paused?, backOn?, photo? } (an app from before categories
+ *        sends kind?, kept as its category: engine/shops.ts)
  *                                         → { success, shop, paused, resumed }   opens it if need be, then changes it
  *   GET  /api/shops/:id/photo?v=&k=       → its banner's bytes, to a URL with its key; 404 for any other
  *   POST /api/shops/mine/close { endOffers? }
@@ -34,7 +35,7 @@
  *
  * A shop and the shops near a place are the listings' kind of read (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_*): a
  * member's of this node on a local community, and on a node that shows visitors the listings and not the people
- * (`guestListingsOnly`, the global node) anyone's, in the visitors' view. A visitor gets each shop's id, kind and counts,
+ * (`guestListingsOnly`, the global node) anyone's, in the visitors' view. A visitor gets each shop's id, category and counts,
  * and in the near list a whole-km distance worked out from the listings' areas (the listings' own visitors' read,
  * getPosts `coarse`), never its name, owner, blurb or "how I deal": a name a member typed can name them (§4, §9.4). A
  * member gets it whole. Every count is of the shop's listings as that reader may see them (engine/shops.ts
@@ -47,7 +48,7 @@
  * No route takes the owner from the query or the body: a member is `ctx.state.actor`, verified by the real
  * `requireSignature` middleware, and an enterprise is the path's, which the signer must keep (canOperateTreasury, as for
  * its Offers). An enterprise closed (pruned, disabled, suspended) has no shop to change; one wound up keeps its to read.
- * A change that publishes (its words, its kind, a new banner, a reopen, Offers put in, a close that puts a pause's Offers
+ * A change that publishes (its words, its category, a new banner, a reopen, Offers put in, a close that puts a pause's Offers
  * back up) is refused to a muted member or enterprise (G3); taking the banner down is not one.
  *
  * ## The main server only, for a change
@@ -181,7 +182,7 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => Owner | undefined) {
             if (!owner) return;
             const body = (ctx.requestBody ?? {}) as ShopChanges;
             try {
-                const publishes = body.name !== undefined || body.kind !== undefined || body.blurb !== undefined
+                const publishes = body.name !== undefined || body.category !== undefined || body.kind !== undefined || body.blurb !== undefined
                     || body.howToDeal !== undefined || body.paused === false || newPhoto(body.photo) || !shopOf(owner.key);
                 if (publishes) assertMayPublish(owner);
                 const done = changeShop(owner.key, body, { enterprise: owner.enterprise, actor: owner.actor });

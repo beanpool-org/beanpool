@@ -346,7 +346,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
     '/api/marketplace/posts',        // marketplace board: public only with the visitors' view on (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT)
-    '/api/shops',                    // the shops near a place: public only with the visitors' view on, kind and counts (routes/shops.ts)
+    '/api/shops',                    // the shops near a place: public only with the visitors' view on, category and counts (routes/shops.ts)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
@@ -399,7 +399,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
     /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)
-    /^\/api\/shops\/(?!mine$)[^/]+$/,                      // one shop: public only with the visitors' view on, kind and counts (PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS)
+    /^\/api\/shops\/(?!mine$)[^/]+$/,                      // one shop: public only with the visitors' view on, category and counts (PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS)
     /^\/api\/shops\/[^/]+\/photo$/,                         // <img> a shop's banner binary; served only to a URL carrying its key, which only a member's shop read hands out (engine/avatar-keys.ts)
 ];
 
@@ -455,7 +455,7 @@ export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set
 // their own.
 export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/marketplace/posts',
-    // The shops near a place (routes/shops.ts): the listings' front windows, a visitor's in kind and counts only.
+    // The shops near a place (routes/shops.ts): the listings' front windows, a visitor's in category and counts only.
     '/api/shops',
 ]);
 /** The same rule for the listings' parameterised reads: one shop (routes/shops.ts), never the signer's own (`mine`). */

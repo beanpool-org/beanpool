@@ -23,7 +23,7 @@ export const SCAFFOLD: ToolManifest<ScaffoldDoc> = {
     line: word('One line on what this tool keeps for you.'),
     icon: '🧩',
     shelf: 'stock',
-    shopKinds: 'all',
+    categories: 'all',
     owner: 'member',
     permissions: SCAFFOLD_PERMISSIONS,
     doc: { version: SCAFFOLD_DOC_VERSION, empty: emptyScaffoldDoc, read: readScaffoldDoc },

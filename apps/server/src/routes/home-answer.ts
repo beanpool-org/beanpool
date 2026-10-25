@@ -326,9 +326,9 @@ export interface HomeCards {
 
 /**
  * The reader's own shop on "Your shop and tools" (engine/shops.ts memberShop, as their own GET /api/shops/mine reads it):
- * its own name or none (the apps say "<ownerName>'s shop"), its kind, its counts, and whether it is closed for now.
+ * its own name or none (the apps say "<ownerName>'s shop"), its category, its counts, and whether it is closed for now.
  */
-export interface ShopHomeCard { id: string; name: string | null; ownerName: string; kind: string | null; counts: ShopCounts; paused: boolean; backOn: string | null }
+export interface ShopHomeCard { id: string; name: string | null; ownerName: string; category: string | null; counts: ShopCounts; paused: boolean; backOn: string | null }
 
 /** A saved search's card (type `search`): the words and distance it was saved with, and the first listings that match. */
 export interface SearchCard { q: string; kind: HomeSearchSettings['kind']; category: string | null; km: number | null; items: MarketItem[]; more: boolean }
@@ -782,7 +782,7 @@ function shopCard(c: Ctx): NonNullable<HomeCards['shop']> {
     return {
         shop: {
             id: shop.id, name: shop.name === null ? null : clip(shop.name, NAME_CHARS), ownerName: clip(shop.ownerName, NAME_CHARS),
-            kind: shop.kind, counts: shop.counts, paused: shop.paused, backOn: shop.backOn,
+            category: shop.category, counts: shop.counts, paused: shop.paused, backOn: shop.backOn,
         },
     };
 }

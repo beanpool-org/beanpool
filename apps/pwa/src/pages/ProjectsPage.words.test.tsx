@@ -23,6 +23,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(),
+    getYourGroups: vi.fn(async () => ({ items: [] })),
 }));
 
 import { getDecisions, getGroups, getTreasuries } from '../lib/api';
@@ -64,29 +65,47 @@ describe('the Commons page in the pseudo-locale', () => {
         render(<ProjectsPage identity={ME} />);
         expect(await screen.findByText('Seed Savers')).toBeInTheDocument();
         await screen.findByText('Garden Solar Pumps');
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`🌱 ${xx('The Commons')}`);
+        expect(screen.getByRole('heading', { level: 1 }).textContent?.trim()).toBe(xx('Commons'));
         expect(within(screen.getByTestId('commons-section-tabs')).getByText(xx('Decide'))).toBeInTheDocument();
         expect(within(screen.getByTestId('group-filter-chips')).getAllByRole('button').map((b) => b.textContent))
-            .toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups'].map((w) => xx(w)));
+            .toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups'].map((w) => xx(w)));
         expect(screen.getByText(xx('{n} members').replace('{n}', '3'))).toBeInTheDocument();
         expect(screen.getByText(xx('Pending'))).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: xx('View details for group {name}').replace('{name}', 'Seed Savers') })).toBeInTheDocument();
+        // Yours cards open the chat (named by the group, its role and "Open chat"); Find cards open the group's details.
+        expect(screen.getByRole('button', { name: xx('View details for group {name}').replace('{name}', 'Choir') })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: new RegExp(`^Seed Savers, .+, ${xx('Open chat →').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) })).toBeInTheDocument();
         expect(bracketed()).toBeGreaterThan(30);
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
     });
 
-    it('nothing yet: no groups, no enterprises, and My groups empty', async () => {
+    it('nothing yet: no groups, no enterprises, and Yours empty', async () => {
         vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
         vi.mocked(getGroups).mockResolvedValue([] as never);
         await showIn('xx');
         render(<ProjectsPage identity={ME} />);
+        expect(await screen.findByText(xx('Nothing of yours yet. Start something with +, or find one below.'))).toBeInTheDocument();
         expect(await screen.findByText(xx('No groups found'))).toBeInTheDocument();
         expect(await screen.findByText(xx('No enterprises found'))).toBeInTheDocument();
         expect(screen.getByText(xx('Start a working group, guild, or team to coordinate discussions.'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
-        fireEvent.click(within(screen.getByTestId('group-filter-chips')).getByText(xx('My groups')));
-        expect(screen.getByText(xx('You have not joined any groups yet.'))).toBeInTheDocument();
-        expect(bypassing()).toEqual([]);
+    });
+
+    it('an invited group in the pseudo-locale shows INVITED', async () => {
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
+        vi.mocked(getGroups).mockResolvedValue([{
+            id: 'g1',
+            name: 'Mushroom Growers',
+            category: 'working_group',
+            joinPolicy: 'open',
+            memberCount: 2,
+            viewerStatus: 'invited',
+            description: 'Fungi',
+            createdAt: '2026-01-01T00:00:00Z',
+        }] as never);
+        await showIn('xx');
+        render(<ProjectsPage identity={ME} />);
+        expect(await screen.findByText(xx('INVITED'))).toBeInTheDocument();
+        expect(bypassing(document.body, { others: ['Mushroom Growers', 'Fungi'] })).toEqual([]);
     });
 
     it('the form that proposes a project or an enterprise, and each refusal', async () => {
@@ -135,19 +154,23 @@ describe('the Commons page in English', () => {
         render(<ProjectsPage identity={ME} />);
         await screen.findByText('Seed Savers');
         expect(bracketed()).toBe(0);
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('🌱 The Commons');
+        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Commons');
         await waitFor(() => expect(screen.getByText('250.00 🫘')).toBeInTheDocument());
-        const cards = screen.getAllByRole('button', { name: /^View details for group / });
-        expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual(['View details for group Seed Savers', 'View details for group Choir', 'View details for group Night Owls']);
+        // Yours (Seed Savers, Night Owls) open the chat and say the role; Find (Choir) opens the details.
+        const cards = [
+            screen.getByRole('button', { name: 'Seed Savers, convenor, Open chat →' }),
+            screen.getByRole('button', { name: 'Night Owls, observer, Open chat →' }),
+            screen.getByRole('button', { name: 'View details for group Choir' }),
+        ];
         expect(within(cards[0]).getByText(/🏷️/).textContent).toBe('🏷️ working group');
         expect(within(cards[0]).getByText('3 members')).toBeInTheDocument();
         expect(within(cards[0]).getByText('convenor')).toBeInTheDocument();
         expect(within(cards[0]).getByText('Join: request to join')).toBeInTheDocument();
-        expect(within(cards[1]).getByText('1 member')).toBeInTheDocument();
-        expect(within(cards[1]).getByText('Pending')).toBeInTheDocument();
-        expect(within(cards[2]).getByText('0 members')).toBeInTheDocument();
-        expect(within(cards[2]).getByText(/🏷️/).textContent).toBe('🏷️ book club');
-        expect(within(cards[2]).getByText('Join: invite only')).toBeInTheDocument();
-        expect(screen.getByText(/A group is a place for some people/).textContent).toBe('👥 Groups: A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.');
+        expect(within(cards[1]).getByText('0 members')).toBeInTheDocument();
+        expect(within(cards[1]).getByText(/🏷️/).textContent).toBe('🏷️ book club');
+        expect(within(cards[1]).getByText('Join: invite only')).toBeInTheDocument();
+        expect(within(cards[2]).getByText('1 member')).toBeInTheDocument();
+        expect(within(cards[2]).getByText('Pending')).toBeInTheDocument();
+        expect(screen.queryByText(/A group is a place for some people/)).toBeNull();
     });
 });

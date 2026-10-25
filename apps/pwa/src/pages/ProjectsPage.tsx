@@ -637,7 +637,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 const e = item.chat;
                                 const summary = item.summary;
                                 const isProject = e.lifecycle === 'bounded' || summary?.lifecycle === 'bounded' || (summary?.goalAmount != null && summary.goalAmount > 0);
-                                const isLead = e.role === 'lead' || summary?.keepers?.some(k => (k.publicKey || k.pubkey) === identity?.publicKey && k.role === 'lead');
+                                const isLead = e.role === 'lead' || summary?.keepers?.some(k => !k.suspended && (k.publicKey || k.pubkey) === identity?.publicKey && k.role === 'lead');
                                 const roleWord = isProject
                                     ? (isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role'))
                                     : (isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role'));

@@ -555,4 +555,50 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         view.rerender(<ProjectsPage identity={me} isMember={true} />);
         await waitFor(() => expect(getYourGroups).toHaveBeenCalledTimes(1));
     });
+
+    it('does not grant lead status to a suspended lead keeper in summary.keepers', async () => {
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-suspended-lead',
+                    conversationId: 'treasury-suspended-lead',
+                    name: 'Suspended Lead Org',
+                    role: 'keeper',
+                    lifecycle: 'ongoing',
+                    badge: '🏛️',
+                    avatarUrl: null,
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+            ],
+        });
+        vi.mocked(getTreasuries).mockResolvedValueOnce({
+            treasuries: [
+                {
+                    publicKey: 'treasury-suspended-lead',
+                    name: 'Suspended Lead Org',
+                    callsign: 'org',
+                    balance: 50,
+                    creditLine: 0,
+                    liveOffers: 1,
+                    lifecycle: 'ongoing',
+                    status: 'active',
+                    keepers: [
+                        { publicKey: me.publicKey, role: 'lead', callsign: 'Alice', suspended: true },
+                    ],
+                },
+            ],
+        });
+
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        const card = within(yoursBlock).getByRole('button', {
+            name: 'Suspended Lead Org, Enterprise, Keeper',
+        });
+        expect(card).toBeInTheDocument();
+        expect(within(card).queryByText('Lead keeper')).toBeNull();
+        expect(within(card).getByText('Keeper')).toBeInTheDocument();
+    });
 });

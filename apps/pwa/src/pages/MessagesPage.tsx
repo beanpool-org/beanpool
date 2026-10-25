@@ -122,28 +122,6 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
 }
 
-/** Resize/compress a picked image to a JPEG data URI (keeps attachments light). */
-function resizeImageToDataUri(file: File, maxW: number, quality: number): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const img = new window.Image();
-        const url = URL.createObjectURL(file);
-        img.onload = () => {
-            URL.revokeObjectURL(url);
-            const scale = Math.min(1, maxW / img.width);
-            const w = Math.round(img.width * scale);
-            const h = Math.round(img.height * scale);
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            const cctx = canvas.getContext('2d');
-            if (!cctx) { reject(new Error(t('Canvas not supported'))); return; }
-            cctx.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(t('Could not load image'))); };
-        img.src = url;
-    });
-}
-
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
 function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[] | Map<string, MarketplaceTransaction>) {
     let metaObj: any = null;
@@ -1065,7 +1043,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     /**
      * A photo in a group's chat (DESIGN-group-chat-photos-fable.md §2.2): fitted within 800 px on its longest side
-     * (lib/photo-resize.ts, the rule for every photo; a DM's keeps its 1000 px until that is decided), then its caption
+     * (lib/photo-resize.ts, the rule for every photo, a DM's too), then its caption
      * sealed as part 'body' and the photo as part 'attachment' under the line's one key and the keyring's epoch, both sealed
      * again on a 409 (lib/group-chat-lines.ts sendSealedGroupLine). Only ever sealed: a node from before locked chats gets
      * none (§2.6). Every refusal is said above the box, the picture kept; not optimistic, as a DM photo isn't.
@@ -1201,7 +1179,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (activeConv.type !== 'dm') { setChatRefusal(NODE_READABLE_NO_PHOTOS_TEXT); return false; }
         setSending(true);
         try {
-            const dataUri = await resizeImageToDataUri(file, 1000, 0.7);
+            const dataUri = await resizePhotoFile(file);
             // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
             // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.

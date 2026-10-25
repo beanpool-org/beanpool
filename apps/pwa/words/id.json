@@ -1104,7 +1104,6 @@
   "REQUESTED\u0004deal status": "DIMINTA",
   "REJECTED\u0004deal status": "DITOLAK",
   "PAUSED\u0004listing status": "DIJEDA",
-  "Canvas not supported": "Canvas tidak didukung",
   "Could not load image": "Tidak dapat memuat gambar",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "other": "{n} kacang disimpan dalam jaminan."

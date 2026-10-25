@@ -1169,6 +1169,34 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             />
         );
     }
+    // The deals sheet, drawn by the list AND the listing page (its "All your deals ›" opens it there).
+    const dealsModal = (
+        <MyDealsModal
+            visible={showDealsModal}
+            preview={dealsMode === 'preview'}
+            identity={identity}
+            onClose={() => setShowDealsModal(false)}
+            posts={posts}
+            transactions={myTransactions}
+            initialTab={dealsInitialTab}
+            onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
+            onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
+            onNavigateToPost={async (postId, txId) => {
+                setShowDealsModal(false);
+                const found = posts.find(p => p.id === postId);
+                if (found) {
+                    setSelectedPost(found);
+                    if (txId) setSelectedTxId(txId);
+                }
+            }}
+            onPromptReview={(review) => {
+                setShowDealsModal(false);
+                setReviewStars(5);
+                setReviewComment('');
+                setPromptReviewForTx(review);
+            }}
+        />
+    );
     if (selectedPost) {
         if (selectedPost.type === 'event') {
             return (
@@ -1519,12 +1547,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      <div className="flex flex-col gap-2 mt-4">
                          {isPayer ? (
                              <>
-                                 <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
-                                     {t('✅ You took this up on {date} · {n} Beans held in trust', {
-                                         date: formatDate(new Date(activeTx?.createdAt || selectedPost.createdAt), 'day-month'),
-                                         n: formatNumber(activeTx?.credits ?? selectedPost.credits),
-                                     })}
-                                 </p>
+                                 {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
+                                     deal's own date, never the post's while the deals are still loading. */}
+                                 {!isOwnPost && activeTx?.createdAt && (
+                                     <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
+                                         {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                             date: formatDate(new Date(activeTx.createdAt), 'day-month'),
+                                             n: formatNumber(activeTx.credits ?? selectedPost.credits),
+                                         })}
+                                     </p>
+                                 )}
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
                                      {t("Release the Beans when it's done.")}
                                  </p>
@@ -2677,6 +2709,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClose={() => setLightboxState(null)}
                     />
                 )}
+                {dealsModal}
             </div>
         );
     }
@@ -3644,30 +3677,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
-            <MyDealsModal
-                visible={showDealsModal}
-                preview={dealsMode === 'preview'}
-                identity={identity}
-                onClose={() => setShowDealsModal(false)}
-                posts={posts}
-                transactions={myTransactions}
-                initialTab={dealsInitialTab}
-                onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
-                onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
-                onNavigateToPost={async (postId, txId) => {
-                    const found = posts.find(p => p.id === postId);
-                    if (found) {
-                        setSelectedPost(found);
-                        if (txId) setSelectedTxId(txId);
-                    }
-                }}
-                onPromptReview={(review) => {
-                    setShowDealsModal(false);
-                    setReviewStars(5);
-                    setReviewComment('');
-                    setPromptReviewForTx(review);
-                }}
-            />
+            {dealsModal}
 
             <PricingGuideModal
                 isOpen={showPricingGuide}

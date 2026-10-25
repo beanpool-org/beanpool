@@ -665,9 +665,26 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         createdAt: '2026-10-24T10:00:00.000Z',
     };
 
+    const myNeedPending = {
+        id: 'post-myneed',
+        title: 'Fix my fence',
+        description: 'Two panels down',
+        type: 'need',
+        category: 'services',
+        credits: 20,
+        priceType: 'fixed',
+        status: 'pending',
+        repeatable: false,
+        authorPublicKey: identity.publicKey,
+        authorCallsign: identity.callsign,
+        pendingTransactionId: 'tx-myneed',
+        createdAt: '2026-10-03T10:00:00.000Z',
+    };
+
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => {
+            if (filter?.id === 'post-myneed') return [myNeedPending] as any;
             if (filter?.id === 'post-rec') return [recurringOffer] as any;
             if (filter?.id === 'post-oneoff') return [oneOffPending] as any;
             return [recurringOffer, oneOffPending] as any;
@@ -704,7 +721,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         await screen.findByText('Gardening Mentorship');
 
         // Panel with Release button must be visible
-        expect(screen.getByRole('button', { name: /Release Credits/i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 })).toBeInTheDocument();
 
         // The new payer words:
         expect(screen.getByText(/You took this up on.*45 Beans held in trust/)).toBeInTheDocument();
@@ -714,6 +731,42 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
 
         // Accept Offer button must stay hidden
         expect(screen.queryByRole('button', { name: /Accept Offer/i })).not.toBeInTheDocument();
+    });
+
+    // Deciding review on 9bf7d11d, finding 1: the link opens the deals sheet from the listing page itself.
+    it('"All your deals ›" on the listing page opens My Deals there', async () => {
+        const myPendingTx: api.MarketplaceTransaction = {
+            id: 'tx-damo', postId: 'post-rec', postTitle: 'Gardening Mentorship', credits: 45, status: 'pending',
+            buyerPublicKey: identity.publicKey, buyerCallsign: identity.callsign, sellerPublicKey: 'damo-pk', sellerCallsign: 'Damo',
+            createdAt: '2026-10-24T10:00:00.000Z',
+        };
+        render(<MarketplacePage identity={identity} openPostId="post-rec" transactions={[myPendingTx]} />);
+        await screen.findByText('Gardening Mentorship');
+        expect(screen.queryByRole('heading', { name: 'My Deals' })).not.toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: /All your deals ›/ }, { timeout: 5000 }));
+        expect(await screen.findByRole('heading', { name: 'My Deals' })).toBeInTheDocument();
+    });
+
+    // Finding 2: on a Need the author pays, and is never told they "took this up".
+    it("a Need's author, who pays, sees Release but not \"You took this up\"", async () => {
+        const needTx: api.MarketplaceTransaction = {
+            id: 'tx-myneed', postId: 'post-myneed', postTitle: 'Fix my fence', credits: 20, status: 'pending',
+            buyerPublicKey: identity.publicKey, buyerCallsign: identity.callsign, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper',
+            createdAt: '2026-10-24T10:00:00.000Z',
+        };
+        render(<MarketplacePage identity={identity} openPostId="post-myneed" transactions={[needTx]} />);
+        await screen.findByText('Fix my fence');
+        expect(await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 })).toBeInTheDocument();
+        expect(screen.queryByText(/You took this up on/)).not.toBeInTheDocument();
+    });
+
+    // Finding 3: no deal loaded yet → no date at all (never the post's own date).
+    it('with the deal not loaded, the payer line names no date', async () => {
+        render(<MarketplacePage identity={identity} openPostId="post-myneed" transactions={[]} />);
+        await screen.findByText('Fix my fence');
+        await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 });
+        expect(screen.queryByText(/You took this up on/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/3 Oct/)).not.toBeInTheDocument();
     });
 
     it("a stranger's pending tx on the same recurring Offer shows neither the panel nor my words, and shows Accept", async () => {
@@ -739,6 +792,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         );
 
         await screen.findByText('Gardening Mentorship');
+        await screen.findByRole('button', { name: /Accept Offer/i }, { timeout: 5000 });
 
         // Panel with Release button must NOT be visible
         expect(screen.queryByRole('button', { name: /Release Credits/i })).not.toBeInTheDocument();
@@ -776,7 +830,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         await screen.findByText('Old Lawn Mower');
 
         // Panel with Release button is visible
-        expect(screen.getByRole('button', { name: /Release Credits/i })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 })).toBeInTheDocument();
 
         // Shows payer words
         expect(screen.getByText(/You took this up on.*30 Beans held in trust/)).toBeInTheDocument();

@@ -1229,12 +1229,16 @@ export default function PostDetailModal() {
                     <View style={styles.ownPostActions}>
                         {isPayer ? (
                             <>
-                                <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                                    {t('✅ You took this up on {date} · {n} Beans held in trust', {
-                                        date: formatDate(new Date(activeTx?.created_at || activeTx?.createdAt || post.created_at || post.createdAt), 'day-month'),
-                                        n: formatNumber(activeTx?.credits ?? post.credits),
-                                    })}
-                                </Text>
+                                {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
+                                    deal's own date, never the post's while the deals are still loading. */}
+                                {!isOwnPost && !!(activeTx?.created_at || activeTx?.createdAt) && (
+                                    <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                                        {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                            date: formatDate(new Date(activeTx.created_at || activeTx.createdAt), 'day-month'),
+                                            n: formatNumber(activeTx.credits ?? post.credits),
+                                        })}
+                                    </Text>
+                                )}
                                 <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: post.type === 'offer' && !!post.repeatable ? 4 : 12, paddingHorizontal: 16 }}>
                                     {t("Release the Beans when it's done.")}
                                 </Text>

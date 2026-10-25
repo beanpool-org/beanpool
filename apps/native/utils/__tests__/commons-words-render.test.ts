@@ -36,6 +36,8 @@ vi.hoisted(() => {
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 
+vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
+
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', switch: 'switch', checkbox: 'checkbox', tab: 'tab', tablist: 'tablist', radiogroup: 'radiogroup', progressbar: 'progressbar' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -335,7 +337,7 @@ const type = async (el: Element | null | undefined, text: string) => {
 const shown = (english: string, lang: UiLang = 'xx') => (lang === 'xx' ? pseudoLocalise(english) : english);
 /** The button whose own words hold `english` as drawn now. */
 const button = (english: string, lang: UiLang = 'xx') => Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(shown(english, lang))) ?? null;
-const byLabel = (label: string) => host.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`);
+const byLabel = (label: string) => Array.from(host.querySelectorAll('[aria-label]')).find((el) => el.getAttribute('aria-label') === label) ?? null;
 const byPlaceholder = (english: string) => host.querySelector(`input[placeholder="${shown(english).replace(/"/g, '\\"')}"]`);
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** A sentence drawn now with some number for {n} (a count that moves with the clock). */
@@ -404,18 +406,40 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         node.treasuries = [];
         await renderIn('xx');
         await toGroups();
-        expect(host.textContent).toContain(pseudoLocalise('No other groups yet'));
+        expect(host.textContent).toContain(pseudoLocalise('No others yet'));
         await click(button('🌱 Projects'), 'Projects chip');
         expect(host.textContent).toContain(pseudoLocalise('No projects to back yet'));
-        expect(host.textContent).toContain(pseudoLocalise('+ Start a project'));
+        expect(host.textContent).toContain(pseudoLocalise('Start a project'));
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
-        expect(host.textContent).toContain(pseudoLocalise('+ Start an enterprise'));
+        expect(host.textContent).toContain(pseudoLocalise('Start an enterprise'));
         store.map.delete('beanpool_anchor_url');
-        await click(byLabel(pseudoLocalise('Start a project or an enterprise')), 'the +');
+        await click(button('Start an enterprise'), 'Start an enterprise button');
         expect(alerts.said).toContain(pseudoLocalise('Connect to a community first.'));
         await click(button('👥 Chat groups'), 'Chat groups chip');
         expect(host.textContent).toContain(pseudoLocalise('No other groups to join'));
-        expect(host.textContent).toContain(pseudoLocalise('+ Create a Group'));
+        expect(host.textContent).toContain(pseudoLocalise('Start a group'));
+        expect(bypassing()).toEqual([]);
+    });
+
+    it('the Start something sheet words in the member language', async () => {
+        await renderIn('xx');
+        await toGroups();
+        const fab = byLabel(pseudoLocalise('Start something'));
+        await click(fab, 'Start something FAB');
+        expect(host.textContent).toContain(pseudoLocalise('Start something'));
+        expect(host.textContent).toContain(pseudoLocalise('Chat group'));
+        expect(host.textContent).toContain(pseudoLocalise('A place to talk with some people. Holds no Beans.'));
+        expect(host.textContent).toContain(pseudoLocalise('Project'));
+        expect(host.textContent).toContain(pseudoLocalise('A goal in Beans, a leader, usually an end date.'));
+        expect(host.textContent).toContain(pseudoLocalise('Enterprise'));
+        expect(host.textContent).toContain(pseudoLocalise('Keeps going and trades. Its keepers run it.'));
+        expect(host.textContent).toContain(pseudoLocalise('Decision'));
+        expect(host.textContent).toContain(pseudoLocalise('A binding vote for the whole community.'));
+        expect(host.textContent).toContain(pseudoLocalise('IN THE MARKET'));
+        expect(host.textContent).toContain(pseudoLocalise('Poll'));
+        expect(host.textContent).toContain(pseudoLocalise('A quick question for everyone. Open vote.'));
+        expect(host.textContent).toContain(pseudoLocalise('Event'));
+        expect(host.textContent).toContain(pseudoLocalise("A time and a place. People say they're going."));
         expect(bypassing()).toEqual([]);
     });
 
@@ -468,7 +492,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         await click(byLabel(pseudoLocalise('Decide Section')), 'Decide');
         expect(host.querySelector('[data-testid="pool-vote-blocker"]')?.textContent).toBe(pseudoLocalise('Voting on community money opens after your first completed trade.'));
         expect(host.textContent).toContain(pseudoLocalise('For money votes · opens after your first completed trade'));
-        await click(byLabel(pseudoLocalise('Propose a decision')), 'the +');
+        await click(byLabel(pseudoLocalise('Start something')), 'the +');
+        await click(button('Decision'), 'Decision');
         expect(alerts.said).toContain(pseudoLocalise('Complete a Trade First'));
         expect(bypassing()).toEqual([]);
     });
@@ -574,14 +599,15 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
 
 describe('the start-a-project form and the new-poll form in the pseudo-locale', () => {
     it('Start an Enterprise / Project: every field, the missing-fields line, a deadline picked, the answer', async () => {
+        params.now = { kind: 'bounded' };
         await renderIn('xx', createElement(ProposeProjectScreen));
-        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start an Enterprise / Project')));
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start a project')));
         expect(host.textContent).toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
         expect(bypassing(), 'form').toEqual([]);
         // The missing-fields line hides itself 3 s later on a bare timer in propose-project.tsx, run here on a fake clock so it
         // never outlives the test: left running, it can fire after the file's jsdom is gone ("window is not defined").
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-        const start = byLabel(pseudoLocalise('Start initiative'));
+        const start = byLabel(pseudoLocalise('Start the project 🌱'));
         expect(start, 'Start').toBeTruthy();
         await act(async () => { (start as HTMLElement).click(); });
         expect(host.textContent).toContain(pseudoLocalise('⚠️ Please complete all required fields'));
@@ -595,8 +621,9 @@ describe('the start-a-project form and the new-poll form in the pseudo-locale', 
         await type(byPlaceholder('e.g. Community Tool Shed'), 'Tool shed');
         await type(host.querySelector('input[aria-label="' + pseudoLocalise('Purpose statement') + '"]'), 'Lend tools');
         await type(host.querySelector('input[placeholder="0"]'), '120');
-        await click(byLabel(pseudoLocalise('Start initiative')), 'Start');
-        expect(alerts.said).toContain(pseudoLocalise('Initiative Started 🌱'));
+        await click(byLabel(pseudoLocalise('Start the project 🌱')), 'Start');
+        expect(alerts.said).toContain(pseudoLocalise('Project started 🌱'));
+        expect(alerts.said).toContain(pseudoLocalise('Your project is open for backing.'));
         await click(button('🏛️ Enterprise'), 'Enterprise');
         OTHERS.push('Tool shed', 'Lend tools');
         expect(bypassing(), 'answers').toEqual([]);
@@ -604,12 +631,13 @@ describe('the start-a-project form and the new-poll form in the pseudo-locale', 
     });
 
     it('in English, the deadline reads as a day ("30 Nov 2026"), not its UTC date', async () => {
+        params.now = { kind: 'bounded' };
         picked.date = new Date(2026, 10, 30, 0, 30);
         await renderIn('en', createElement(ProposeProjectScreen));
         await click(byLabel('Select funding deadline date'), 'the deadline');
         expect(host.textContent).toContain('30 Nov 2026');
         expect(byLabel('Funding deadline: 30 Nov 2026')).not.toBeNull();
-        expect(host.textContent).toContain('START AN ENTERPRISE / PROJECT');
+        expect(host.textContent).toContain('START A PROJECT');
     });
 
     it('New Community Poll: the fields, options, durations, open vote, the placeless note, its questions', async () => {
@@ -718,7 +746,7 @@ describe('the Commons at 320 dp with 1.3× text, in the pseudo-locale', () => {
         act(() => root.unmount());
         root = createRoot(host);
         await renderIn('xx', createElement(ProposeProjectScreen));
-        const header = Array.from(host.querySelectorAll('span')).find((s) => s.textContent === inCapitalsOf(pseudoLocalise('Start an Enterprise / Project')))!;
+        const header = Array.from(host.querySelectorAll('span')).find((s) => s.textContent === inCapitalsOf(pseudoLocalise('Start a project or an enterprise')))!;
         expect(header.getAttribute('data-shrink')).toBe('1');
     });
 

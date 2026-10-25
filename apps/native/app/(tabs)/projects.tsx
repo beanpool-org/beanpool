@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, DeviceEventEmitter, RefreshControl, ScrollView, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem } from '../../utils/db';
@@ -8,7 +8,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
-import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
@@ -23,6 +23,8 @@ import { EnterpriseCard, commonsCardStyles } from '../../components/EnterpriseCa
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sample-screens';
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
+import { StartSomethingSheet } from '../../components/StartSomethingSheet';
+import { startRows, startTarget, type StartRowKey } from '../../utils/start-something';
 import { Sentence } from '../../components/Sentence';
 import { formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import { memberShelves, phoneTools } from '../../tools/index';
@@ -42,6 +44,9 @@ const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
 };
 const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
 const named = (table: Readonly<Record<string, WordKey>>, name: string, asWritten: string) => (own(table, name) ? t(table[name]) : asWritten);
+
+/** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
+const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(fn, 350) : fn());
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -95,6 +100,7 @@ export default function ProjectsScreen() {
     const kindChips = groupKindChips(reader.effective);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
+    const [showStartSomething, setShowStartSomething] = useState(false);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [pickedSection, setActiveSection] = useState<CommonsSection | null>(null);
     // The kind chip over the one Groups list: projects, enterprises, chat groups, or all of them.
@@ -325,9 +331,14 @@ export default function ProjectsScreen() {
         return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);
     }, [groups, enterprises, yourGroups, groupKind, reader.effective]);
     const groupsEmpty = commonsGroupsEmpty(groupKind, reader.effective);
-    // The + on Groups: a project or enterprise on those chips, otherwise the create form (which offers both, with Beans).
-    const startsProject = commonsPlusStartsProject(activeSection, groupKind, reader.effective);
-    const openProposeProject = async () => {
+
+    const sheetRows = useMemo(() => startRows(reader.effective, {
+        canPropose: canProposeDecision,
+        decisionsPreview,
+        enterprisesPreview,
+    }), [reader.effective, canProposeDecision, decisionsPreview, enterprisesPreview]);
+
+    const openProposeProject = async (kind?: 'bounded' | 'ongoing') => {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) {
             Alert.alert(t('Not Connected'), t('Connect to a community first.'), [
@@ -336,7 +347,43 @@ export default function ProjectsScreen() {
             ]);
             return;
         }
-        router.push('/propose-project');
+        router.push(kind ? { pathname: '/propose-project', params: { kind } } : '/propose-project');
+    };
+
+    const handlePickStartRow = async (key: StartRowKey) => {
+        setShowStartSomething(false);
+        const target = startTarget(key);
+        afterModal(async () => {
+            if ('modal' in target && target.modal === 'chat') {
+                createGroup.open();
+                return;
+            }
+            if ('modal' in target && target.modal === 'decision') {
+                if (decisionsPreview) {
+                    setShowDecisionsSheet(true);
+                    return;
+                }
+                const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+                if (!anchorUrl) {
+                    Alert.alert(t('Not Connected'), t('Connect to a community before proposing a decision.'), [
+                        { text: t('Cancel'), style: 'cancel' },
+                        { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+                    ]);
+                    return;
+                }
+                if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
+                setShowProposeDecision(true);
+                return;
+            }
+            if ('pathname' in target && target.pathname === '/propose-project') {
+                await openProposeProject(target.params.kind);
+                return;
+            }
+            if ('pathname' in target && target.pathname === '/(tabs)/market') {
+                router.push(target as any);
+                return;
+            }
+        });
     };
 
     const renderEnterpriseItem = ({ item }: { item: TreasurySummary }) => <EnterpriseCard item={item} />;
@@ -637,50 +684,41 @@ export default function ProjectsScreen() {
                         </View>
                     ) : (
                         <View style={styles.emptyState}>
-                            <Text style={styles.emptyEmoji}>{groupsEmpty.action === 'project' ? '🌱' : '👥'}</Text>
+                            <Text style={styles.emptyEmoji}>{groupsEmpty.action === 'enterprise' ? '🏛️' : groupsEmpty.action === 'project' ? '🌱' : '👥'}</Text>
                             <Text style={styles.emptyTitle}>{t(groupsEmpty.title)}</Text>
                             <Text style={styles.emptyDesc}>{t(groupsEmpty.desc)}</Text>
-                            <Pressable
-                                accessibilityRole="button"
-                                style={styles.emptyBtn}
-                                onPress={groupsEmpty.action === 'project' ? openProposeProject : createGroup.open}
-                            >
-                                <Text style={styles.emptyBtnText}>
-                                    {groupsEmpty.action === 'project' ? (groupKind === 'enterprises' ? t('+ Start an enterprise') : t('+ Start a project')) : t('+ Create a Group')}
-                                </Text>
-                            </Pressable>
+                            {groupsEmpty.action && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={styles.emptyBtn}
+                                    onPress={() => {
+                                        if (groupsEmpty.action === 'enterprise') {
+                                            void openProposeProject('ongoing');
+                                        } else if (groupsEmpty.action === 'project') {
+                                            void openProposeProject('bounded');
+                                        } else {
+                                            createGroup.open();
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.emptyBtnText}>
+                                        {groupsEmpty.action === 'enterprise'
+                                            ? t('Start an enterprise')
+                                            : groupsEmpty.action === 'project'
+                                                ? t('Start a project')
+                                                : t('Start a group')}
+                                    </Text>
+                                </Pressable>
+                            )}
                         </View>
                     )
                 }
             />
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={activeSection === 'decide' ? t('Propose a decision') : startsProject ? t('Start a project or an enterprise') : t('Create a group')}
+                accessibilityLabel={t('Start something')}
                 style={styles.fab}
-                onPress={async () => {
-                    if (startsProject) {
-                        await openProposeProject();
-                        return;
-                    }
-                    if (activeSection === 'groups') {
-                        createGroup.open();
-                        return;
-                    }
-                    if (decisionsPreview && activeSection === 'decide') {
-                        setShowDecisionsSheet(true);
-                        return;
-                    }
-                    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-                    if (!anchorUrl) {
-                        Alert.alert(t('Not Connected'), t('Connect to a community before proposing a decision.'), [
-                            { text: t('Cancel'), style: 'cancel' },
-                            { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
-                        ]);
-                        return;
-                    }
-                    if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
-                    setShowProposeDecision(true);
-                }}
+                onPress={() => setShowStartSomething(true)}
             >
                 <MaterialCommunityIcons name="plus" size={30} color={colors.text.inverse} />
             </Pressable>
@@ -730,6 +768,13 @@ export default function ProjectsScreen() {
                         }
                     });
                 }}
+            />
+
+            <StartSomethingSheet
+                visible={showStartSomething}
+                onClose={() => setShowStartSomething(false)}
+                rows={sheetRows}
+                onPick={handlePickStartRow}
             />
         </View>
     );

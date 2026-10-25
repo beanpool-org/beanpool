@@ -15,7 +15,10 @@
  *      their removal; another group's line by this group's path; a system line) is 404, word for word the answer of a
  *      missing id, nothing stored; signed out is 401, as every group route
  *   4. one report per reporter per message, whatever its status; a second reporter files their own; a repeat that changes
- *      the reason to Child safety changes the one on file; a report of the member is not taken for a report of their line
+ *      the reason to Child safety changes the one on file; a report of the member is not taken for a report of their line.
+ *      Child safety on a report a moderator closed (dismissed or handled) files a new one with the key sent with it, told
+ *      to the owners once, the closed one as they left it; a further repeat finds the new one and adds nothing; any other
+ *      reason on a closed one is still the one on file. The assistant calls a message's report a group_message report
  *   5. the form: their own line, a messageId, a reason, the disclosure's shape and its epoch; the hourly report limit
  *   6. who reaches the view: owners' tokens and a moderator's session, no member's signature; a report of a post or a
  *      member has no message to open
@@ -51,6 +54,8 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { dmPublicKeyOf, groupMessageKey, openGroupLineWithMessageKey, sealGroupLine, type GroupLinePart } from '@beanpool/core';
 import { getImageStore } from './storage/image-store.js';
 import { freshGroupEpoch } from './group-test-payload.js';
+import { getAlertsStatus } from './services/alerts.js';
+import { AGENT_TOOLS, type AgentGrant } from './agent/tools.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -345,6 +350,75 @@ async function main(): Promise<void> {
     const ofBob = await call('POST', alice, '/api/reports', { targetPubkey: bob.pk, reason: 'Spam or scam' });
     assert(ofBob.status === 200 && !ofBob.body?.duplicate && ofBob.body?.report?.id !== repId,
         `a report of Bob himself is its own, not taken for the report of his line (got ${show(ofBob)})`);
+
+    // Child safety on a report a moderator closed (the deciding review of #2470): a new report, as /api/reports files one
+    // once nothing is pending, told as a new one is. The closed one is never reopened or changed: an actioned one counts
+    // towards a suspension (member-wizards.ts reportMaySuspend).
+    const childTold = () => getAlertsStatus().history.filter((e) => e.key === 'reports.child').reduce((n, e) => n + (e.count ?? 1), 0);
+    const rowOf = (id: string) => db.prepare('SELECT status, reason, disclosure, updated_at FROM abuse_reports WHERE id = ?').get(id) as any;
+    const pendingChild = (reporter: string, messageId: string) => (db.prepare(`SELECT id FROM abuse_reports
+        WHERE reporter_pubkey = ? AND target_message_id = ? AND status = 'pending' AND reason = 'Child safety'`).all(reporter, messageId) as { id: string }[]).map((r) => r.id);
+    const dismissedRow = rowOf(repId);
+    let toldBefore = childTold();
+    const childOnDismissed = await report(alice, photo, { reason: 'Child safety' });
+    const newOnDismissed = pendingChild(alice.pk, photo.id);
+    assert(childOnDismissed.status === 200 && !childOnDismissed.body?.duplicate && newOnDismissed.length === 1
+        && childOnDismissed.body?.report?.id === newOnDismissed[0] && reportRows(alice.pk, photo.id) === 2,
+        `Child safety on a dismissed report files a new one, pending (got ${show(childOnDismissed)})`);
+    assert(childTold() === toldBefore + 1, `and the owners are told of it as a child-safety report, once (${childTold() - toldBefore} told)`);
+    assert(dismissedRow?.status === 'reviewed' && dismissedRow?.reason === 'Offensive content: not ok here' && JSON.stringify(rowOf(repId)) === JSON.stringify(dismissedRow),
+        `the dismissed one stays as the moderator left it (got ${JSON.stringify(rowOf(repId))?.slice(0, 200)})`);
+    const childAgain = await report(alice, photo, { reason: 'Child safety' });
+    const otherAgain = await report(alice, photo, { reason: 'Spam or scam' });
+    assert(childAgain.body?.duplicate === true && childAgain.body?.report?.id === newOnDismissed[0] && otherAgain.body?.duplicate === true
+        && otherAgain.body?.report?.id === newOnDismissed[0] && reportRows(alice.pk, photo.id) === 2 && childTold() === toldBefore + 1
+        && rowOf(newOnDismissed[0] ?? '')?.reason === 'Child safety',
+        `a further repeat finds the new one, whatever its reason, and adds nothing (got ${show(childAgain)} / ${show(otherAgain)})`);
+
+    const handledLine = await send(bob, g, 'Sentinel words Nora reports twice');
+    const firstOfNora = await call('POST', nora, reportPath(g), { messageId: handledLine.id, reason: 'Spam or scam', disclosure: { epoch: handledLine.epoch, mk: b64(crypto.randomBytes(32)) } });
+    const noraRepId: string = firstOfNora.body?.report?.id ?? '';
+    const handled = await call('POST', null, `/api/local/admin/reports/${noraRepId}/action`, {}, admin);
+    const handledRow = rowOf(noraRepId);
+    assert(firstOfNora.status === 200 && handled.status === 200 && handledRow?.status === 'actioned',
+        `(Nora reports Bob's line with a key that opens nothing, and a moderator marks it handled: ${show(handled)})`);
+    toldBefore = childTold();
+    const otherOnHandled = await report(nora, handledLine, { reason: 'Offensive content' });
+    assert(otherOnHandled.status === 200 && otherOnHandled.body?.duplicate === true && otherOnHandled.body?.report?.id === noraRepId
+        && reportRows(nora.pk, handledLine.id) === 1 && childTold() === toldBefore,
+        `another reason on a handled report: still the one on file, nothing new (got ${show(otherOnHandled)})`);
+    const childOnHandled = await report(nora, handledLine, { reason: 'Child safety' });
+    const newOnHandled = pendingChild(nora.pk, handledLine.id);
+    assert(childOnHandled.status === 200 && !childOnHandled.body?.duplicate && newOnHandled.length === 1
+        && childOnHandled.body?.report?.id === newOnHandled[0] && reportRows(nora.pk, handledLine.id) === 2,
+        `Child safety on a handled report files a new one, pending (got ${show(childOnHandled)})`);
+    assert(childTold() === toldBefore + 1, `and the owners are told of it once (${childTold() - toldBefore} told)`);
+    assert(handledRow?.reason === 'Spam or scam' && JSON.stringify(rowOf(noraRepId)) === JSON.stringify(handledRow),
+        `the handled one stays as the moderator left it, actioned (got ${JSON.stringify(rowOf(noraRepId))?.slice(0, 200)})`);
+    let newDisclosure: any = null;
+    try { newDisclosure = JSON.parse(rowOf(newOnHandled[0] ?? '')?.disclosure); } catch { /* stays null */ }
+    const newView = await viewOf(newOnHandled[0] ?? '');
+    assert(newDisclosure?.mk === b64(mkOf(handledLine)) && newView.body?.message?.words?.state === 'verified' && newView.body?.message?.words?.text === handledLine.text,
+        `the new one keeps the key sent with it, which opens the line (got ${newView.body?.message?.words?.state})`);
+    const handledAgain = await report(nora, handledLine, { reason: 'Child safety' });
+    assert(handledAgain.body?.duplicate === true && handledAgain.body?.report?.id === newOnHandled[0] && reportRows(nora.pk, handledLine.id) === 2 && childTold() === toldBefore + 1,
+        `a further repeat finds the new one and adds nothing (got ${show(handledAgain)})`);
+
+    // The assistant (agent/tools.ts) calls a message's report what it is, and still never sees its key or its words.
+    const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: owner.pk, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null };
+    const tool = (name: string) => AGENT_TOOLS.find((t) => t.name === name)!;
+    const got = tool('report_get').run(grant, { report_id: repId }, 'B0UNDARY') as any;
+    const listedOpen = tool('reports_list').run(grant, { include_text: true }, 'B0UNDARY') as any;
+    const asListed = (listedOpen.result?.reports ?? []).find((r: any) => r.id === newOnDismissed[0]);
+    assert(got.ok && got.result?.report?.targetKind === 'group_message' && asListed?.targetKind === 'group_message',
+        `the assistant's report_get and reports_list call it a group_message report (got ${got.result?.report?.targetKind} / ${asListed?.targetKind})`);
+    const ofMember = tool('report_get').run(grant, { report_id: ofBob.body?.report?.id ?? '' }, 'B0UNDARY') as any;
+    assert(ofMember.result?.report?.targetKind === 'member', `a report of the member is still a member report (got ${ofMember.result?.report?.targetKind})`);
+    const seen = JSON.stringify([got, listedOpen]);
+    assert(!seen.includes(b64(mkOf(photo))) && !seen.includes(b64(mkOf(handledLine))) && !seen.includes(photo.text) && !seen.includes(handledLine.text),
+        'and it is given neither the key nor the words');
+    const removeIt = tool('suggest_action').run(grant, { kind: 'remove_reported', report_id: newOnDismissed[0] ?? '', reason: 'Take it down' }, 'B0UNDARY');
+    assert(!removeIt.ok, `nor may it suggest removing one, as there is no post to remove (got ${JSON.stringify(removeIt)})`);
 
     // ── 5. The form ──────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 5. Refusals of form ---');

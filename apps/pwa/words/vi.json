@@ -3496,5 +3496,10 @@
   "Close menu": "Đóng menu",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} thành viên · đã tắt tiếng"
-  }
+  },
+  "View photo full screen": "Xem ảnh toàn màn hình",
+  "Photo message": "Tin nhắn hình ảnh",
+  "Full-size photo": "Ảnh kích thước đầy đủ",
+  "Dismiss full-size photo": "Đóng ảnh kích thước đầy đủ",
+  "Close photo": "Đóng ảnh"
 }

@@ -3496,5 +3496,10 @@
   "Close menu": "Tutup menu",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} anggota · dibisukan"
-  }
+  },
+  "View photo full screen": "Lihat foto layar penuh",
+  "Photo message": "Pesan foto",
+  "Full-size photo": "Foto ukuran penuh",
+  "Dismiss full-size photo": "Tutup foto ukuran penuh",
+  "Close photo": "Tutup foto"
 }

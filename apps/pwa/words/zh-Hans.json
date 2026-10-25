@@ -3496,5 +3496,10 @@
   "Close menu": "关闭菜单",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} 位成员 · 已静音"
-  }
+  },
+  "View photo full screen": "全屏查看照片",
+  "Photo message": "照片消息",
+  "Full-size photo": "全屏照片",
+  "Dismiss full-size photo": "关闭全屏照片",
+  "Close photo": "关闭照片"
 }

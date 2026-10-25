@@ -3621,5 +3621,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} জন সদস্য · মিউট করা",
     "other": "{n} জন সদস্য · মিউট করা"
-  }
+  },
+  "View photo full screen": "পুরো স্ক্রিনে ছবি দেখুন",
+  "Photo message": "ছবির বার্তা",
+  "Full-size photo": "বড় ছবি",
+  "Dismiss full-size photo": "বড় ছবি বন্ধ করুন",
+  "Close photo": "ছবি বন্ধ করুন"
 }

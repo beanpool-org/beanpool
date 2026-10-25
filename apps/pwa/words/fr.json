@@ -3622,5 +3622,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} membre · en sourdine",
     "other": "{n} membres · en sourdine"
-  }
+  },
+  "View photo full screen": "Afficher la photo en plein écran",
+  "Photo message": "Message avec photo",
+  "Full-size photo": "Photo plein écran",
+  "Dismiss full-size photo": "Fermer la photo plein écran",
+  "Close photo": "Fermer la photo"
 }

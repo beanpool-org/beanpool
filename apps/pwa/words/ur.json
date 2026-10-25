@@ -3621,5 +3621,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} رکن · خاموش",
     "other": "{n} اراکین · خاموش"
-  }
+  },
+  "View photo full screen": "تصویر فل اسکرین میں دیکھیں",
+  "Photo message": "تصویری پیغام",
+  "Full-size photo": "فل سائز تصویر",
+  "Dismiss full-size photo": "فل سائز تصویر بند کریں",
+  "Close photo": "تصویر بند کریں"
 }

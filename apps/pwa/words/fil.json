@@ -3621,5 +3621,10 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} miyembro · naka-mute",
     "other": "{n} miyembro · naka-mute"
-  }
+  },
+  "View photo full screen": "Tingnan ang litrato nang full screen",
+  "Photo message": "Mensaheng litrato",
+  "Full-size photo": "Full-size na litrato",
+  "Dismiss full-size photo": "I-dismiss ang full-size na litrato",
+  "Close photo": "Isara ang litrato"
 }

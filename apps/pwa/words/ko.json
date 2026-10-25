@@ -3496,5 +3496,10 @@
   "Close menu": "메뉴 닫기",
   "{n} member · muted|{n} members · muted": {
     "other": "멤버 {n}명 · 알림 꺼짐"
-  }
+  },
+  "View photo full screen": "사진 전체 화면으로 보기",
+  "Photo message": "사진 메시지",
+  "Full-size photo": "원본 사진",
+  "Dismiss full-size photo": "사진 닫기",
+  "Close photo": "사진 닫기"
 }

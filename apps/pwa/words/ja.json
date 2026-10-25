@@ -3496,5 +3496,10 @@
   "Close menu": "メニューを閉じる",
   "{n} member · muted|{n} members · muted": {
     "other": "{n}人のメンバー · ミュート中"
-  }
+  },
+  "View photo full screen": "写真を全画面で表示",
+  "Photo message": "写真メッセージ",
+  "Full-size photo": "全画面写真",
+  "Dismiss full-size photo": "全画面写真を閉じる",
+  "Close photo": "写真を閉じる"
 }

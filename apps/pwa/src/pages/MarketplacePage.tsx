@@ -1257,7 +1257,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
         // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
         // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
-        const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id) : undefined;
+        const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
+            && (t.status === 'pending' || t.status === 'requested')) : undefined;   // a finished pin gives way to the listing's live deal
         const activeTx = pinnedTx
             ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             

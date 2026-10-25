@@ -606,8 +606,8 @@ export default function PostDetailModal() {
                             FROM marketplace_transactions t 
                             LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
                             LEFT JOIN members s ON t.seller_pubkey = s.public_key 
-                            WHERE t.id = ?
-                        `, [singleTxId]).then(updateActiveTx);
+                            WHERE t.id = ? AND t.post_id = ?
+                        `, [singleTxId, singleId]).then(updateActiveTx);   // a deal shows only on ITS listing (a hand-made link pairs any)
                     } else if (activeIdentity) {
                         const currentPost = await getPost(singleId);
                         let isKeeper = false;

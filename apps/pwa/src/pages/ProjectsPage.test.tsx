@@ -678,7 +678,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
     });
 
     it('and with Decisions off and enterprises on: Decide tab in preview, no sample enterprise, the real Commons pool', async () => {
-        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
+        const info = { ...globalInfo, features: { ...globalInfo.features, beans: true, decisions: false, enterprises: true, showcase: true } };
         vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByText('Commons Pool')).toBeInTheDocument();

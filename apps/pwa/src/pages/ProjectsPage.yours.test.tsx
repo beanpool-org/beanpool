@@ -56,6 +56,14 @@ const otherMemberKey = 'other-public-key-2222';
 describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.1 §3.5, §5 S4)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(communityInfoOnce).mockResolvedValue({
+            memberCount: 3,
+            postCount: 0,
+            transactionCount: 0,
+            commonsBalance: 100,
+            profile: 'local',
+            features: { beans: true, enterprises: true, decisions: true },
+        });
     });
 
     it('page title is "Commons" (drops "The" and the 🌱 before it)', async () => {
@@ -309,6 +317,6 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(within(findSection).getByText('Debate Society')).toBeInTheDocument();
         expect(within(findSection).getByText('Pending')).toBeInTheDocument();
         expect(within(findSection).queryByText('MEMBER')).toBeNull();
-        expect(screen.queryByTestId('commons-yours')).toBeNull();
+        expect(within(screen.getByTestId('commons-yours')).queryByText('Debate Society')).toBeNull();
     });
 });

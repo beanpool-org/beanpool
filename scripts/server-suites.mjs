@@ -103,6 +103,7 @@ export const SUITES = [
     'test-distance-search-perf',
     'test-global-directory',
     'test-home',
+    'test-home-deal-step',
     'test-home-answer-parse-lands',
     'test-knock',
     'test-commons-conservation',

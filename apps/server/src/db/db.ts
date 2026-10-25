@@ -3236,7 +3236,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             : 'This project is no longer taking pledges. Your Beans have not moved.');
     }
     const entPub = (project as any).enterprise_pubkey || project.id;
-    const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
+    const ent = db.prepare('SELECT is_treasury, paused, status, deadline_at FROM members WHERE public_key = ?').get(entPub) as any;
     if (ent?.is_treasury) {
         if (ent.paused === 1) throw new Error("Enterprise is paused — not accepting pledges");
         if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error("Enterprise is not accepting pledges");

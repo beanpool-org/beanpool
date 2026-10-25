@@ -4,12 +4,14 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import os from 'node:os';
+
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(PWA_DIR);
 const SHOTS_DIR = path.join(PWA_DIR, 'e2e', 'screenshots', 'header-alerts');
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
-const ARTIFACTS_DIR = '/Users/marty/.gemini/antigravity-cli/brain/b66a755a-4cac-430e-bb0d-78502ff18dcc/screenshots';
+const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || process.env.HEADER_ALERTS_SHOTS_DIR || path.join(os.tmpdir(), 'header-alerts-shots');
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
 const server = await createServer({

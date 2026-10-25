@@ -17,7 +17,7 @@ export interface ChatPhotoViewerProps {
     onClose: () => void;
 }
 
-const FOCUSABLE = 'button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'button:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNode {
     const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -42,7 +42,7 @@ export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNo
     onKey.current = (e: KeyboardEvent) => {
         const mine = dialogRef.current;
         if (!mine) return;
-        const open = document.querySelectorAll('[role="dialog"]');
+        const open = document.querySelectorAll('[role="dialog"], [role="alertdialog"], [aria-modal="true"]');
         if (open[open.length - 1] !== mine) return;
 
         if (e.key === 'Escape') {
@@ -98,7 +98,7 @@ export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNo
                 aria-label={t('Dismiss full-size photo')}
                 onClick={onClose}
                 className="absolute inset-0 w-full h-full border-0 bg-transparent cursor-pointer p-0 m-0"
-                tabIndex={0}
+                tabIndex={-1}
             />
 
             {/* Photo container: never upscaled past its own natural size (width: auto, height: auto, max: min(100%, 800px)) */}

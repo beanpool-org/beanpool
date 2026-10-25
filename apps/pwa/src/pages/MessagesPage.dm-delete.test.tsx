@@ -25,6 +25,7 @@ import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys } from '../lib/group-chat-keys';
 import * as api from '../lib/api';
+import { isUserBlocked } from '../lib/blocklist';
 
 if (typeof window !== 'undefined' && window.HTMLElement) {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -127,6 +128,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    vi.mocked(isUserBlocked).mockReturnValue(false);
     vi.unstubAllGlobals();
 });
 
@@ -170,12 +172,28 @@ describe('Web one-to-one chats: Delete own line', () => {
         // Ana sees tombstone: "This message was deleted"
         await screen.findByText('This message was deleted');
         expect(screen.queryByText('See you at the library at 3pm')).toBeNull();
+        // A deleted line offers no Reply, React or Report (the node refuses a reaction to it), as on the phone
+        const goneLine = screen.getByText('This message was deleted').closest('[id^="msg-"]') as HTMLElement;
+        for (const name of ['Reply to message', 'React to message', 'Report message', 'Delete message']) {
+            expect(within(goneLine).queryByRole('button', { name })).toBeNull();
+        }
 
         // Ben also sees the line as deleted ("for both of you")
         cleanup();
         await openChat(benIdentity);
         await screen.findByText('This message was deleted');
         expect(screen.queryByText('See you at the library at 3pm')).toBeNull();
+    });
+
+    it('with the peer blocked, your own line offers no Delete, as on the phone', async () => {
+        vi.mocked(isUserBlocked).mockReturnValue(true);
+        thread.messages = [sent(ana, 'Bring the ladder please')];
+
+        // A blocked peer's chat has no composer to wait for: wait for the line itself
+        render(<MessagesPage identity={anaIdentity} openConversationId={CONV} />);
+        const line = (await screen.findByText('Bring the ladder please')).closest('[id^="msg-"]') as HTMLElement;
+
+        expect(within(line).queryByRole('button', { name: 'Delete message' })).toBeNull();
     });
 
     it("others' lines in a DM offer no Delete button", async () => {

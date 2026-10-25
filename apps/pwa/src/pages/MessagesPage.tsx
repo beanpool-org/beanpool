@@ -2243,8 +2243,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
                         const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
                         const editClosed = isTextEditable && elapsedMs > MESSAGE_EDIT_WINDOW_MS;
-                        // Group chats and DMs, as on the phone: an enterprise chat refuses it (403).
-                        const canDelete = ((isGroupChat && openGroup?.answer?.canPost !== false) || activeConv.type === 'dm') &&
+                        // Group chats and DMs, as on the phone: an enterprise chat refuses it (403). In a DM with a blocked peer the
+                        // phone's canPost is false, so it offers no Delete either.
+                        const canDelete = ((isGroupChat && openGroup?.answer?.canPost !== false) || (activeConv.type === 'dm' && !isPeerBlocked)) &&
                             isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
                         const canRemove = isGroupChat && isConvenor && !isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
 
@@ -2485,8 +2486,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </span>
                                         )}
                                         {/* No replies or reactions in a chat that is still a request: the opener's are
-                                            refused until it is accepted, and the person it is for decides first. */}
-                                        {!inRequest && <>
+                                            refused until it is accepted, and the person it is for decides first. Nor on
+                                            a deleted line: the node refuses a reaction to it (403), as the phone hides them. */}
+                                        {!inRequest && !isTombstone && <>
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); handleStartReply(msg); }}

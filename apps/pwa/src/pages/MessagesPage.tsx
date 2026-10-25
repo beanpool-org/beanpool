@@ -29,7 +29,8 @@ import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITI
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
     chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
-    groupLineShown, groupRemovedRuns, getDecryptedGroupAttachment, GROUP_CHAT_OLD_NODE_NOTICE, type GroupLineShown, type OpenedGroupThread,
+    groupLineShown, groupRemovedRuns, getDecryptedGroupAttachment, reportSealedGroupLine, GROUP_CHAT_OLD_NODE_NOTICE, type GroupLineShown,
+    type OpenedGroupThread,
 } from '../lib/group-chat-lines';
 import { resizePhotoFile } from '../lib/photo-resize';
 import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
@@ -323,6 +324,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Set by the expired Edit button, read once by the notice: focus moves to it on that press only, never on a later render
     const focusEditNoticeRef = useRef(false);
     const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
+    // One line of a locked group chat being reported with its key (group chat photos S6): its report card is open while set.
+    const [reportingLine, setReportingLine] = useState<ApiMessage | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
@@ -2462,6 +2465,32 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             {t('React')}
                                         </button>
+                                        {/* Someone else's line of a locked group chat, opened here: reported with its own key (S6). */}
+                                        {groupLine && groupLocked && !groupLine.mine && !groupLine.unattributed && !!openGroup?.thread?.views.get(msg.id)?.signer && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setReportingLine(msg); }}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    font: 'inherit',
+                                                    fontSize: '0.75rem',
+                                                    lineHeight: 1,
+                                                    padding: '4px 6px',
+                                                    minHeight: '24px',
+                                                    cursor: 'pointer',
+                                                    color: 'var(--accent)',
+                                                    fontWeight: 600,
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    textDecoration: 'underline',
+                                                    textUnderlineOffset: '2px',
+                                                }}
+                                                aria-label={t('Report message')}
+                                            >
+                                                {t('Report', undefined, 'button: report a message')}
+                                            </button>
+                                        )}
                                         </>}
                                         {canEdit && (
                                             <button
@@ -2891,6 +2920,30 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         reporterPubkey={identity.publicKey}
                         targetPubkey={reportTarget.pubkey}
                         targetName={reportTarget.name}
+                    />
+                )}
+                {reportingLine && openGroup && (
+                    // The DM report card's reasons and words, sending this one line with its key (lib/group-chat-lines.ts).
+                    <ReportModal
+                        isOpen
+                        onClose={() => setReportingLine(null)}
+                        reporterPubkey={identity.publicKey}
+                        targetPubkey={reportingLine.authorPubkey}
+                        targetName=""
+                        title={t('Report this message')}
+                        note={reportingLine.type === 'image'
+                            ? t("This community's moderators will see this one message, its photo and who sent it. Nothing else in this chat is shared with them.")
+                            : t("This community's moderators will see this one message and who sent it. Nothing else in this chat is shared with them.")}
+                        onSubmitReason={async (reason) => {
+                            try {
+                                await reportSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
+                                    groupId: groupIdKey(openGroup.id), messageId: reportingLine.id, view: openGroup.thread?.views.get(reportingLine.id), reason,
+                                });
+                            } catch (e) {
+                                // This browser's own sentence in the member's language; the node's words as it sent them.
+                                throw new Error(chatLineWords(e instanceof Error ? e.message : '') || t('Could not reach the node.'));
+                            }
+                        }}
                     />
                 )}
             </div>

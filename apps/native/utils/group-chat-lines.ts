@@ -26,7 +26,8 @@
  */
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
-import { detectMentions, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
+import { detectMentions, groupMessageKey, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
+import { toBase64 } from '@beanpool/core';
 import { groupKeyring, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     groupLineView, isSealedGroupLine, GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT,
@@ -239,6 +240,33 @@ export async function getDecryptedGroupAttachment(
     } catch {
         return null;
     }
+}
+
+/** Refused before anything is sent: the line being reported didn't open here, so this phone has no key of its own to hand over. */
+export const GROUP_REPORT_NO_KEY_TEXT = "This message's key isn't on this phone, so it can't be reported from here.";
+
+/**
+ * Report one line of a locked chat to the community's moderators, with its key (DESIGN-group-chat-photos-fable.md §5 S6;
+ * the encryption design §13): that message's own key (groupMessageKey, through the crypto door) under the epoch that opened
+ * it here, which opens its words and its photo and nothing else in the chat. Only a line this phone opened and named
+ * (`view.signer`): a hidden, waiting or unverified line has no key here to give. Signed and routed under the keyring's id,
+ * as a send is. Resolves with the node's answer (`duplicate` for a report already on file); throws its refusal.
+ */
+export async function reportSealedGroupLine(
+    nodeUrl: string, identity: BeanPoolIdentity, store: GroupKeyStore,
+    input: { groupId: string; messageId: string; view: GroupLineView | null | undefined; reason: string },
+): Promise<any> {
+    const view = input.view;
+    if (!view || view.hidden || view.waitingKey || view.unverified || !view.signer || view.epoch === null) throw new Error(GROUP_REPORT_NO_KEY_TEXT);
+    const ring = groupKeyring(nodeUrl, identity, input.groupId, store);
+    const key = ring.openedKey(view.epoch) ?? await ring.keyFor(view.epoch).catch(() => undefined);
+    if (!key) throw new Error(GROUP_REPORT_NO_KEY_TEXT);
+    const messageId = input.messageId.toLowerCase();
+    const res = await signedPost(nodeUrl, `/api/groups/${encodeURIComponent(ring.groupId)}/chat/report`,
+        { messageId, reason: input.reason, disclosure: { epoch: view.epoch, mk: toBase64(groupMessageKey(key, messageId)) } }, identity);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new GroupKeysRequestError(body?.message || body?.error || `The node answered ${res.status}.`, res.status, body);
+    return body;
 }
 
 /** Beside "Unverified" for a line a locked chat holds unsealed (review of #1788, finding 3). */

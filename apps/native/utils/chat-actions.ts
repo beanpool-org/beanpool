@@ -135,6 +135,12 @@ export interface ChatViewer {
     canPost: boolean;
     /** A group's convenor or an event's host: may remove other people's messages. */
     isModerator?: boolean;
+    /**
+     * A locked group chat: someone else's line can be reported to the community's moderators with its key (group chat
+     * photos S6). Nowhere else: an event chat and an enterprise thread are node-readable and keep their own report, and a
+     * DM reports the person.
+     */
+    reportsLines?: boolean;
     now?: number;
 }
 
@@ -148,6 +154,8 @@ export interface MessageActions {
     remove: boolean;
     /** Reported when the author's own message is past the edit window (and would otherwise be editable). */
     editClosed?: boolean;
+    /** "Report message": someone else's line in a locked group chat, reported with its key (set only when on offer). */
+    report?: boolean;
 }
 
 const NO_ACTIONS: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false };
@@ -287,6 +295,18 @@ export function canReplyToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     return m.sendState !== 'failed';
 }
 
+/**
+ * Report a message (group chat photos S6): someone else's line in a locked group chat, one this phone opened and named, so
+ * it holds the key to hand over. Never a system line, a tombstone, a line still in flight or one shown as nobody's.
+ * Observers may report: they read the chat.
+ */
+export function canReportMessage(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (viewer.kind !== 'group' || !viewer.reportsLines) return false;
+    if (!viewer.myPubkey || isMine(m, viewer)) return false;
+    if (isSystemLine(m) || isTombstone(m) || m.unattributed) return false;
+    return !inFlight(m);
+}
+
 /** Everything tapping this bubble offers. One call so a screen can decide whether to open the bar at all. */
 export function messageActions(m: ChatMessage | null | undefined, viewer: ChatViewer): MessageActions {
     if (!m) return NO_ACTIONS;
@@ -298,11 +318,12 @@ export function messageActions(m: ChatMessage | null | undefined, viewer: ChatVi
         delete: canDeleteMessage(m, viewer),
         remove: canRemoveMessage(m, viewer),
         ...(closed ? { editClosed: true } : {}),
+        ...(canReportMessage(m, viewer) ? { report: true } : {}),
     };
 }
 
 export function hasAnyAction(a: MessageActions): boolean {
-    return a.reply || a.react || a.edit || a.delete || a.remove;
+    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.report;
 }
 
 /** WhatsApp-style day label: Today / Yesterday / "Mon 12 May" (core's date, in the member's language). */

@@ -50,6 +50,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.": word("This phone knows this conversation as a direct message, not a group's chat. Nothing was sent."),
     "This message's key isn't on this phone, so it can't be edited here.": word("This message's key isn't on this phone, so it can't be edited here."),
     'This message is no longer in this chat.': word('This message is no longer in this chat.'),
+    "This message's key isn't on this phone, so it can't be reported from here.": word("This message's key isn't on this phone, so it can't be reported from here."),
     'Failed to edit message.': word('Failed to edit message.'),
     // utils/db.ts: why a line wasn't sent or changed, and why a chat didn't open (the chat screen's alerts and its notice).
     'You are off-grid. Please connect to a BeanPool Node to send messages.': word('You are off-grid. Please connect to a BeanPool Node to send messages.'),

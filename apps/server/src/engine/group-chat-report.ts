@@ -15,15 +15,15 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { isNodeMember } from '@beanpool/engine';
-import { isGroupEncryptedNonce, openGroupLineWithMessageKey, type GroupLineBinding, type GroupLinePart } from '@beanpool/core';
+import { isGroupEncryptedNonce, openGroupLineWithMessageKey, word, type GroupLineBinding, type GroupLinePart } from '@beanpool/core';
 import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from './group-thread.js';
 import { fromEpochOf } from './group-keys.js';
 import { attachmentDataOfAsync, type AttachmentRow } from '../storage/image-columns.js';
 import { getImageStore } from '../storage/image-store.js';
 
 /** The one answer for a line the reporter may not report, whatever the reason: an id nobody has says no more. */
-export const GROUP_LINE_REPORT_NOT_FOUND = 'Message not found';
-export const GROUP_LINE_REPORT_OWN = 'You cannot report your own message.';
+export const GROUP_LINE_REPORT_NOT_FOUND = word('Message not found');
+export const GROUP_LINE_REPORT_OWN = word('You cannot report your own message.');
 export const GROUP_LINE_REPORT_FORM = "A report of a message names it, gives a reason and hands over its key: { messageId, reason, disclosure: { epoch, mk } }.";
 export const GROUP_LINE_REPORT_EPOCH = "The key handed over is for another epoch than the message's.";
 

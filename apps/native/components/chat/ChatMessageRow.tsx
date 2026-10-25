@@ -30,6 +30,8 @@ interface Props {
     onEdit: () => void;
     onDelete: () => void;
     onRemove: () => void;
+    /** Report this message (a locked group chat's line): only where actions.report offers it. */
+    onReport?: () => void;
     onPickEmoji: (emoji: string) => void;
     onPressUrl: (url: string) => void;
     authorLabel?: string | null;
@@ -41,7 +43,7 @@ interface Props {
 
 export function ChatMessageRow({
     item, isMe, styles, kind, actions, showActions, showEmojiPicker, pickerPosition,
-    onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onPickEmoji, onPressUrl,
+    onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onReport, onPickEmoji, onPressUrl,
     authorLabel, quote, attachment, status, footer,
 }: Props) {
     const actionBar = showActions ? (
@@ -55,6 +57,7 @@ export function ChatMessageRow({
             onEdit={onEdit}
             onDelete={onDelete}
             onRemove={onRemove}
+            onReport={onReport}
         />
     ) : null;
 

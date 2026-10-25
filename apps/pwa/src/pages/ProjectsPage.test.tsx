@@ -765,8 +765,9 @@ describe('Commons with members on demand (review of #1861, N1)', () => {
         const globalInfo = { ...localInfo, profile: 'global' as const, features: { beans: false, decisions: false, membersOnDemand: true } };
         vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
         render(<ProjectsPage identity={backerIdentity} />);
-        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument());
+        expect(screen.queryByText('Community Garden Solar Irrigation')).toBeNull();
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
         expect(getTreasuries).toHaveBeenCalled();
         expect(getAllMembers).not.toHaveBeenCalled();

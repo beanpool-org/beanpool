@@ -223,6 +223,10 @@ export interface NodeReport {
     targetPulseItemId?: string;
     /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
+    /** A report of one group chat message, made with its key: the message's id (open it with fetchReportedMessage). */
+    targetMessageId?: string;
+    /** That message's chat and whether it is a photo line, never its words; `removed` once it is gone. */
+    groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
     [key: string]: unknown;
 }
 
@@ -1323,6 +1327,64 @@ export async function fetchReports(
         pendingCount: typeof json.pendingCount === 'number' ? json.pendingCount : reports.filter((r) => r.outcome === 'open').length,
         limit: typeof json.limit === 'number' ? json.limit : limit,
         offset: typeof json.offset === 'number' ? json.offset : offset,
+    };
+}
+
+/**
+ * The one group chat message a report names, as the key its reporter handed over opens it (server:
+ * engine/group-chat-report.ts). Each part is 'verified' against the key that signed it, or 'unverified' ("could not be
+ * verified"); the words are 'gone' once deleted or removed, and a photo 'unavailable' where the server holds none (after a
+ * standby took over: chat photos are not copied to a standby).
+ */
+export interface ReportedMessage {
+    id: string;
+    groupId: string | null;
+    groupName: string | null;
+    sentAt: string | null;
+    editedAt: string | null;
+    authorPubkey: string | null;
+    authorCallsign: string | null;
+    signer: string | null;
+    words: { state: 'verified'; text: string } | { state: 'unverified' } | { state: 'gone'; by: 'author' | 'convenor' | null };
+    photo: { state: 'verified'; dataUri: string } | { state: 'unverified' } | { state: 'unavailable' } | null;
+}
+
+const REPORTED_PHOTO = /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i;
+
+/**
+ * Opens the message a group chat report names (GET /api/local/admin/reports/:id/message), for the moderators' Reports and
+ * the owners' People & Safety. Anything the node sends that is not one of the shapes above reads as "could not be verified";
+ * a photo is only ever a base64 image data URI, so nothing else reaches an <img>.
+ */
+export async function fetchReportedMessage(
+    nodeUrl: string,
+    reportId: string,
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<ReportedMessage> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) throw new Error('Valid report ID is required');
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/message`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken), credentials: 'same-origin' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}: ${res.statusText}`);
+    const m = json?.message ?? {};
+    const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+    const w = m.words ?? {};
+    const words: ReportedMessage['words'] = w.state === 'verified' && typeof w.text === 'string'
+        ? { state: 'verified', text: w.text }
+        : w.state === 'gone'
+            ? { state: 'gone', by: w.by === 'author' || w.by === 'convenor' ? w.by : null }
+            : { state: 'unverified' };
+    const p = m.photo;
+    const photo: ReportedMessage['photo'] = !p || typeof p !== 'object'
+        ? null
+        : p.state === 'verified' && typeof p.dataUri === 'string' && REPORTED_PHOTO.test(p.dataUri)
+            ? { state: 'verified', dataUri: p.dataUri }
+            : p.state === 'unavailable' ? { state: 'unavailable' } : { state: 'unverified' };
+    return {
+        id: str(m.id) ?? reportId, groupId: str(m.groupId), groupName: str(m.groupName), sentAt: str(m.sentAt), editedAt: str(m.editedAt),
+        authorPubkey: str(m.authorPubkey), authorCallsign: str(m.authorCallsign), signer: words.state === 'verified' ? str(m.signer) : null,
+        words, photo,
     };
 }
 

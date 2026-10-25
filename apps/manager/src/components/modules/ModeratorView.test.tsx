@@ -206,6 +206,47 @@ describe('ModeratorView report actions', () => {
         expect(posted('/reports/r-post/dismiss')).toHaveLength(1);
     });
 
+    it('opens a group chat message reported with its key, verified, and offers handled or dismiss only', async () => {
+        const message = {
+            id: 'r-message', reason: 'Offensive content', createdAt: '2026-10-25T09:00:00Z', outcome: 'open', reporterCallsign: 'Rita',
+            targetCallsign: 'Oscar', postId: null, pulseItem: null, targetMessageId: 'm-1',
+            groupMessage: { groupId: 'g-1', groupName: 'Garden Crew', photo: false, removed: false },
+        };
+        REPORTS.push(message as typeof REPORTS[number]);
+        try {
+            mockNode();
+            const answer = vi.fn(async (input: string, init?: RequestInit) => {
+                calls.push({ url: String(input), method: (init?.method || 'GET').toUpperCase(), body: undefined });
+                return reply(200, { success: true, message: {
+                    id: 'm-1', groupId: 'g-1', groupName: 'Garden Crew', authorPubkey: 'ab'.repeat(32), authorCallsign: 'Oscar',
+                    signer: 'ab'.repeat(32), sentAt: '2026-10-25T08:00:00Z', editedAt: null,
+                    words: { state: 'verified', text: 'You lot are useless' }, photo: null,
+                } });
+            });
+            const nodeFetch = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>);
+            vi.stubGlobal('fetch', vi.fn((input: string, init?: RequestInit) => (/\/reports\/r-message\/message$/.test(String(input)) ? answer(input, init) : nodeFetch(input, init))));
+            await act(async () => {
+                render(<ModeratorView nodeUrl="https://mullum.example" communityName="Mullum" onLogout={() => {}} />);
+            });
+            await waitFor(() => expect(screen.getAllByTestId('moderator-report')).toHaveLength(4));
+            const card = screen.getAllByTestId('moderator-report')[3];
+            expect(await within(card).findByText('You lot are useless')).toBeInTheDocument();
+            expect(within(card).getByText('Verified')).toBeInTheDocument();
+            expect(within(card).getByText(/Group chat message · Garden Crew · from Oscar/)).toBeInTheDocument();
+            expect(within(card).queryByText(/A report about a member/)).toBeNull();
+            expect(answer).toHaveBeenCalledTimes(1);
+            expect(within(card).queryByRole('button', { name: /Remove/ })).toBeNull();
+            await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Mark handled' })); });
+            expect(posted('/reports/r-message/action')[0].body).toMatchObject({ deletePost: false, removePulseItem: false });
+            // The other cards never ask for a message.
+            const asked = calls.filter(c => c.url.includes('/message')).map(c => c.url);
+            expect(asked).toHaveLength(1);
+            expect(asked[0]).toMatch(/\/api\/local\/admin\/reports\/r-message\/message$/);
+        } finally {
+            REPORTS.pop();
+        }
+    });
+
     it('filters by outcome and shows the open count', async () => {
         await renderView();
         expect(screen.getByRole('button', { name: 'Open (3)' })).toHaveAttribute('aria-pressed', 'true');

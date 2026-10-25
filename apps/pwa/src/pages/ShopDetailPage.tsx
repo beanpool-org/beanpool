@@ -46,6 +46,10 @@ export function ShopDetailPage({
     const [listings, setListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
     const [logo, setLogo] = useState<string | null>(null);
     const activeReqRef = useRef(0);
+    const onOpenEnterpriseRef = useRef(onOpenEnterprise);
+    useEffect(() => {
+        onOpenEnterpriseRef.current = onOpenEnterprise;
+    }, [onOpenEnterprise]);
 
     const load = useCallback(async (afresh = false, isCallActive: () => boolean = () => true) => {
         const reqId = ++activeReqRef.current;
@@ -63,7 +67,7 @@ export function ShopDetailPage({
         const r = await readShopPage(id);
         if (!isActive()) return;
         if (r.state === 'enterprise') {
-            onOpenEnterprise?.(r.ownerPublicKey);
+            onOpenEnterpriseRef.current?.(r.ownerPublicKey);
             return;
         }
         setRead(r);
@@ -81,7 +85,7 @@ export function ShopDetailPage({
             .catch(() => {});
         const items = await readShopListingsForReader(r.shop.id);
         if (isActive()) setListings(items);
-    }, [id, onOpenEnterprise]);
+    }, [id]);
 
     useEffect(() => {
         let active = true;

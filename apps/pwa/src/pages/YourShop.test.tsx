@@ -494,4 +494,62 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         // Unmount should clean up without error
         unmount();
     });
+
+    it('10. ShopDetailPage keeps load stable across parent re-renders and does not re-read or blank', async () => {
+        let readCount = 0;
+        const shopData = {
+            id: 'shop-stable',
+            name: 'Stable Shop',
+            ownerName: 'Alice',
+            ownerPublicKey: 'alice-pubkey',
+            category: 'tools',
+            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+            paused: false,
+            backOn: null,
+            photoUrl: null,
+        };
+
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/shop-stable') {
+                readCount++;
+                return { ok: true, status: 200, json: async () => shopData };
+            }
+            if (path.startsWith('/api/marketplace/posts?shop=shop-stable')) {
+                return { ok: true, status: 200, json: async () => [] };
+            }
+            if (path === '/api/members/alice-pubkey') {
+                return { ok: true, status: 200, json: async () => ({ avatar: null }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        function Parent({ renderCount }: { renderCount: number }) {
+            return (
+                <div>
+                    <span>Parent render {renderCount}</span>
+                    <ShopDetailPage
+                        id="shop-stable"
+                        identity={me}
+                        onBack={vi.fn()}
+                        onOpenEnterprise={() => {}}
+                    />
+                </div>
+            );
+        }
+
+        const { rerender } = render(<Parent renderCount={1} />);
+
+        // First load completes and shows the shop name
+        expect(await screen.findByTestId('shopfront-name')).toHaveTextContent('Stable Shop');
+        expect(readCount).toBe(1);
+
+        // Re-render parent with a new inline onOpenEnterprise reference
+        rerender(<Parent renderCount={2} />);
+
+        // Page should NEVER blank (no spinner appears) and readShopPage should NOT be called again
+        expect(screen.queryByTestId('shop-page-spinner')).not.toBeInTheDocument();
+        expect(screen.getByTestId('shopfront-name')).toHaveTextContent('Stable Shop');
+        expect(readCount).toBe(1);
+    });
 });

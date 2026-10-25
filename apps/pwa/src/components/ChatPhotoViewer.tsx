@@ -8,7 +8,7 @@
  *   before any page listener can hear it.
  * - Same accessible names as the phone: "Dismiss full-size photo", "Close photo", "Full-size photo".
  */
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { t } from '@beanpool/core';
 
@@ -19,7 +19,7 @@ export interface ChatPhotoViewerProps {
 
 const FOCUSABLE = 'button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps) {
+export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNode {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     const closeBtnRef = useRef<HTMLButtonElement | null>(null);
     const closeRef = useRef(onClose);

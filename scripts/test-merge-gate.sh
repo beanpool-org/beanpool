@@ -125,6 +125,9 @@ KEPT=$(sed -n 's/^Full logs of every check kept in //p' "$S/out")
 has "stopped run (local): ...held output included" "$KEPT/test.log" "stub test: held output"
 case "$KEPT" in */tmp.*) rm -rf "$KEPT" ;; esac
 
+# ── The real test-all.sh: --continue runs every package, and the report marks only what failed ────
+expect 0 "test-all --continue: every package runs to its own result" "" -- bash "$REPO_ROOT/scripts/test-all-continue.sh"
+
 # ── A throwaway repository with a bare origin ────────────────────────────────────────────────────────────────────
 export TMPDIR="$T/tmp"; mkdir -p "$TMPDIR"
 export GIT_CONFIG_GLOBAL="$T/gitconfig" GIT_CONFIG_NOSYSTEM=1

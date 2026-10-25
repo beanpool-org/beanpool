@@ -148,6 +148,11 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         fireEvent.click(manageButtons[0]);
         expect(onOpenTreasury).toHaveBeenCalledWith('treasury-shade', 'manage');
 
+        // Keydown on Manage button stops propagation and does not trigger card default open
+        onOpenTreasury.mockClear();
+        fireEvent.keyDown(manageButtons[0], { key: 'Enter' });
+        expect(onOpenTreasury).not.toHaveBeenCalledWith('treasury-shade');
+
         // Unkept enterprise is in Find, NOT in Yours
         expect(within(yoursBlock).queryByText('Community Bakery')).toBeNull();
         expect(screen.getByText('Community Bakery')).toBeInTheDocument();

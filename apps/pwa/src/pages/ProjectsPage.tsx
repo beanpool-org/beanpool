@@ -638,6 +638,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         aria-label={t('View details for {name}', { name: e.name })}
                                         onClick={() => onOpenTreasury?.(e.publicKey)}
                                         onKeyDown={(ev) => {
+                                            if (ev.target !== ev.currentTarget) return;
                                             if (ev.key === 'Enter' || ev.key === ' ') {
                                                 ev.preventDefault();
                                                 onOpenTreasury?.(e.publicKey);
@@ -697,6 +698,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 onClick={(ev) => {
                                                     ev.stopPropagation();
                                                     onOpenTreasury?.(e.publicKey, 'manage');
+                                                }}
+                                                onKeyDown={(ev) => {
+                                                    ev.stopPropagation();
                                                 }}
                                                 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px] flex items-center justify-center"
                                             >

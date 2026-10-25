@@ -700,8 +700,8 @@ describe('MarketplacePage: shop parity for editing offers', () => {
             if (path === '/api/shops/mine') {
                 return { ok: true, status: 200, json: async () => ({ shop: null }) };
             }
-            if (path.startsWith('/api/marketplace/posts/')) {
-                return { ok: true, status: 200, json: async () => ({ shopId: null }) };
+            if (path.startsWith('/api/marketplace/posts')) {
+                return { ok: true, status: 200, json: async () => [{ id: 'post-public', type: 'offer', status: 'active', audienceScope: 'public', shopId: null }] };
             }
             return { ok: false, status: 404, json: async () => ({}) };
         });
@@ -760,8 +760,8 @@ describe('MarketplacePage: shop parity for editing offers', () => {
                 shopClosed = true;
                 return { ok: true, status: 200, json: async () => ({ success: true, cleared: 0, ended: 0, resumed: 0 }) };
             }
-            if (path.startsWith('/api/marketplace/posts/')) {
-                return { ok: true, status: 200, json: async () => ({ shopId: null }) };
+            if (path.startsWith('/api/marketplace/posts')) {
+                return { ok: true, status: 200, json: async () => [{ id: 'post-public', type: 'offer', status: 'active', audienceScope: 'public', shopId: null }] };
             }
             return { ok: false, status: 404, json: async () => ({}) };
         });

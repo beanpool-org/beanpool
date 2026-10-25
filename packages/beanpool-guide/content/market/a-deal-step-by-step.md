@@ -45,6 +45,8 @@ The price on the post cannot change while someone is asking for it or their bean
 
 A Repeatable post goes back up after each deal, and several people can be in a deal on it at once. Any other post is marked finished.
 
+Each person can be in one deal on a Repeatable post at a time. Taking it up again while yours is under way starts nothing new: the app says **You already have a deal under way on this. Finish or cancel it first.** Once yours is released, cancelled or declined, you can take it up again straight away.
+
 ## Reviews
 
 After releasing, the person paying is asked to rate the deal: 1 to 5 stars and a short, optional comment. Tap **Submit Rating**, or **Skip for now**.

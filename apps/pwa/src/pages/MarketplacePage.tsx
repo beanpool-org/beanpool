@@ -73,7 +73,7 @@ import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
-import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
+import { closeMyShop, readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -2401,8 +2401,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPhotos(selectedPost.photos || []);
                                         setEditShop({ kind: 'hidden' });
                                         setEditInShop(false);
-                                        if (selectedPost.type === 'offer') {
-                                            const targetPostId = selectedPost.id;
+                                        const post = selectedPost;
+                                        const scope = (post as any).audience_scope ?? post.audienceScope ?? 'public';
+                                        const authorPk = (post as any).author_pubkey ?? post.authorPublicKey;
+                                        const originNode = (post as any).origin_node ?? (post as any).originNode;
+                                        const targetGroupId = (post as any).target_group_id ?? post.targetGroupId;
+                                        const targetPubkey = (post as any).target_pubkey ?? (post as any).targetPubkey;
+                                        if (post.type === 'offer' && authorPk === identity?.publicKey && scope === 'public' && !originNode && !targetGroupId && !targetPubkey) {
+                                            const targetPostId = post.id;
                                             void (async () => {
                                                 try {
                                                     const [mine, inShopId] = await Promise.all([
@@ -2629,21 +2635,33 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setSaving(true);
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
+                                                const willOpenShop = editShop.kind === 'none' && editType === 'offer' && editInShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
-                                                const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
-                                                    type: editType,
-                                                    category: editCategory,
-                                                    title: editTitle.trim(),
-                                                    description: editDescription.trim(),
-                                                    credits: price.ok ? price.value : 0,
-                                                    priceType: editPriceType,
-                                                    repeatable: editRepeatable,
-                                                    photos: editPhotos,
-                                                    ...(shopId !== undefined ? { shopId } : {}),
-                                                });
-                                                setSelectedPost(result.post);
-                                                setEditMode(false);
-                                                refresh();
+                                                try {
+                                                    const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
+                                                        type: editType,
+                                                        category: editCategory,
+                                                        title: editTitle.trim(),
+                                                        description: editDescription.trim(),
+                                                        credits: price.ok ? price.value : 0,
+                                                        priceType: editPriceType,
+                                                        repeatable: editRepeatable,
+                                                        photos: editPhotos,
+                                                        ...(shopId !== undefined ? { shopId } : {}),
+                                                    });
+                                                    setSelectedPost(result.post);
+                                                    setEditMode(false);
+                                                    refresh();
+                                                } catch (saveErr: any) {
+                                                    if (willOpenShop && shopId) {
+                                                        try {
+                                                            await closeMyShop(false);
+                                                        } catch {
+                                                            /* best-effort rollback */
+                                                        }
+                                                    }
+                                                    throw saveErr;
+                                                }
                                             } catch (e: any) {
                                                 setError(e.message || t('Failed to save'));
                                             } finally {

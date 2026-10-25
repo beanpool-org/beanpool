@@ -23,12 +23,10 @@ interface ActionsProps {
     onEdit: () => void;
     onDelete: () => void;
     onRemove: () => void;
-    /** Report this message to the community's moderators (a locked group chat's line, with its key). */
-    onReport?: () => void;
 }
 
 export function ChatMessageActions({
-    actions, isMe, styles, emojiPickerOpen, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onReport,
+    actions, isMe, styles, emojiPickerOpen, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove,
 }: ActionsProps) {
     const { colors } = useTheme();
     return (
@@ -62,11 +60,6 @@ export function ChatMessageActions({
             {actions.remove && (
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Remove this message')} style={[styles.circleActionButton, styles.circleActionButtonDanger]} onPress={onRemove}>
                     <MaterialCommunityIcons name="close-octagon-outline" size={16} color={colors.text.inverse} />
-                </Pressable>
-            )}
-            {actions.report && onReport && (
-                <Pressable accessibilityRole="button" accessibilityLabel={t('Report message')} style={styles.circleActionButton} onPress={onReport}>
-                    <MaterialCommunityIcons name="flag-outline" size={16} color={colors.text.inverse} />
                 </Pressable>
             )}
         </View>

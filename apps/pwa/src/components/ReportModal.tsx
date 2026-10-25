@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { reportAbuse } from '../lib/api';
 import { useCoversScreen } from '../lib/screen-cover';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
@@ -106,12 +107,14 @@ export function ReportModal({
         }
     }
 
-    return (
+    // On document.body, above the app's own header and tabs (zIndex 100, App.tsx) and its banner (z-[120]): drawn inside a
+    // tab's page, as in a chat, the card sat under them, its title and its Submit cut at 320 px with 130% text.
+    return <>{createPortal(
         <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="report-modal-title"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
         >
             <div
                 ref={modalCardRef}
@@ -228,6 +231,7 @@ export function ReportModal({
                 </div>
                 </>)}
             </div>
-        </div>
-    );
+        </div>,
+        document.body,
+    )}</>;
 }

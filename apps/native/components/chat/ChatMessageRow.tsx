@@ -7,8 +7,10 @@
  */
 
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
+import { useTheme } from '../../app/ThemeContext';
 import type { ChatMessage, MessageActions, ChatKind } from '../../utils/chat-actions';
 import { ChatBubble, type ChatQuote } from './ChatBubble';
 import { ChatEmojiPicker, ChatMessageActions } from './ChatMessageActions';
@@ -57,9 +59,9 @@ export function ChatMessageRow({
             onEdit={onEdit}
             onDelete={onDelete}
             onRemove={onRemove}
-            onReport={onReport}
         />
     ) : null;
+    const { colors } = useTheme();
 
     return (
         <View style={[styles.messageRowContainer, isMe ? styles.messageRowMe : styles.messageRowOther]}>
@@ -89,6 +91,13 @@ export function ChatMessageRow({
                         {t('You can edit a message for 15 minutes after sending it.')}
                     </Text>
                 </View>
+            )}
+            {/* Under the line, not a fourth round button: beside a wide bubble at 320dp those already reach the edge. */}
+            {showActions && actions.report && onReport && (
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Report message')} onPress={onReport} style={[styles.reportLineButton, isMe && { alignSelf: 'flex-end' }]}>
+                    <MaterialCommunityIcons name="flag-outline" size={18} color={colors.text.body} />
+                    <Text style={styles.reportLineText}>{t('Report message')}</Text>
+                </Pressable>
             )}
         </View>
     );

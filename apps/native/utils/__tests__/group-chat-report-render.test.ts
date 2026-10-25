@@ -70,15 +70,7 @@ vi.mock('../../components/chat/ChatMessageList', () => ({
     ChatMessageList: (p: any) => createElement('div', null, ...(p.items || []).map((it: any, i: number) => createElement('div', { key: i, 'data-item': it.id }, p.renderMessage(it)))),
     scrollChatToBottom: () => { },
 }));
-// A bubble's row as a tap target and, once open, the real action bar (ChatMessageActions) with the screen's own handlers.
-vi.mock('../../components/chat/ChatMessageRow', async () => {
-    const { ChatMessageActions } = await import('../../components/chat/ChatMessageActions');
-    return {
-        ChatMessageRow: (p: any) => createElement('div', { 'data-row': '1' },
-            createElement('button', { 'data-bubble': '1', onClick: () => p.onPressBubble({ nativeEvent: { pageY: 400 } }) }, p.item?.text ?? ''),
-            p.showActions ? createElement(ChatMessageActions, { ...p, emojiPickerOpen: false }) : null),
-    };
-});
+// The row, its bubble and its actions are the real ones (components/chat/ChatMessageRow.tsx): Report sits under the line.
 vi.mock('../../components/chat/ChatComposer', async () => {
     const R = await import('react');
     return { ChatComposer: R.forwardRef((_p: any, _r: any) => R.createElement('div', null)) };
@@ -171,7 +163,8 @@ async function open(): Promise<void> {
     });
     await settle();
 }
-const tapBubble = (id: string) => click(host.querySelector(`[data-item="${id}"] [data-bubble]`));
+// The bubble is the line's first button: the actions under and beside it appear only once it is tapped.
+const tapBubble = (id: string) => click(host.querySelector(`[data-item="${id}"] button`));
 
 describe('Report message in a locked group chat (S6)', () => {
     it("someone else's line offers it; the sheet says what is shared; Submit reports that line with its view and says Reported", async () => {

@@ -11,7 +11,7 @@ import type { ShopListing } from '../shop';
  */
 const DETAIL = {
     name: 'Hill Bakery', purpose: 'Bread for the valley', about: 'We bake on Saturdays.', isLeadOrSoleKeeperOrAdmin: true,
-    shop: { id: 'shop-1', kind: 'baking', howToDeal: 'Pick up at the hall.' },
+    shop: { id: 'shop-1', category: 'food', howToDeal: 'Pick up at the hall.' },
 };
 const offer = (id: string, over: Partial<ShopListing> = {}): ShopListing => ({
     id, title: id, status: 'active', lendable: false, shopId: 'shop-1', audienceScope: 'public', originNode: null, photo: null, featuredAt: null, ...over,
@@ -31,10 +31,11 @@ describe('who may open the console', () => {
 describe('what one Save sends', () => {
     const before = faceFormOf(DETAIL);
 
-    it('the form as the detail has it, its kind and how we deal from its shop', () => {
-        expect(before).toEqual({ name: 'Hill Bakery', purpose: 'Bread for the valley', about: 'We bake on Saturdays.', kind: 'baking', howToDeal: 'Pick up at the hall.', logo: null });
-        expect(faceFormOf({ name: 'X', shop: null })).toEqual({ name: 'X', purpose: '', about: '', kind: null, howToDeal: '', logo: null });
-        expect(faceFormOf({ shop: { kind: 'not-a-kind' } }).kind).toBeNull();
+    it('the form as the detail has it, its category and how we deal from its shop', () => {
+        expect(before).toEqual({ name: 'Hill Bakery', purpose: 'Bread for the valley', about: 'We bake on Saturdays.', category: 'food', howToDeal: 'Pick up at the hall.', logo: null });
+        expect(faceFormOf({ name: 'X', shop: null })).toEqual({ name: 'X', purpose: '', about: '', category: null, howToDeal: '', logo: null });
+        expect(faceFormOf({ shop: { category: 'not-a-category' } }).category).toBeNull();
+        expect(faceFormOf({ shop: { kind: 'baking' } }).category).toBeNull();
     });
 
     it('nothing changed sends nothing; spaces typed around the words are no change', () => {
@@ -42,11 +43,11 @@ describe('what one Save sends', () => {
         expect(savesAnything(faceSaveOf(before, { ...before, name: ' Hill Bakery ', about: 'We bake on Saturdays.  ' }, true))).toBe(false);
     });
 
-    it('each changed field to its own route, trimmed: the face to the profile, its kind and how we deal to its shop', () => {
-        const draft = { ...before, name: ' Hill Bakery and Mill ', about: 'Saturdays and Wednesdays.', kind: 'food' as const, howToDeal: '', logo: 'data:image/jpeg;base64,AA' };
+    it('each changed field to its own route, trimmed: the face to the profile, its category and how we deal to its shop', () => {
+        const draft = { ...before, name: ' Hill Bakery and Mill ', about: 'Saturdays and Wednesdays.', category: 'goods' as const, howToDeal: '', logo: 'data:image/jpeg;base64,AA' };
         expect(faceSaveOf(before, draft, true)).toEqual({
             face: { name: 'Hill Bakery and Mill', about: 'Saturdays and Wednesdays.', avatar: 'data:image/jpeg;base64,AA' },
-            shop: { kind: 'food', howToDeal: null },
+            shop: { category: 'goods', howToDeal: null },
         });
     });
 
@@ -55,15 +56,15 @@ describe('what one Save sends', () => {
         expect(faceSaveOf(before, draft, false)).toEqual({ face: { about: 'New words.' }, shop: {} });
     });
 
-    it('About emptied goes as empty words, which the node clears; a kind taken off goes as none', () => {
-        expect(faceSaveOf(before, { ...before, about: '   ', kind: null }, false)).toEqual({ face: { about: '' }, shop: { kind: null } });
+    it('About emptied goes as empty words, which the node clears; a category taken off goes as none', () => {
+        expect(faceSaveOf(before, { ...before, about: '   ', category: null }, false)).toEqual({ face: { about: '' }, shop: { category: null } });
     });
 
     // Its shop's routes take its keepers only (PR #2405 review 4355986004): a node admin who keeps none of it leads it.
-    it('a node admin who keeps none of it sends its face only, never its kind or how we deal', () => {
-        const draft = { ...before, name: 'Renamed', about: 'New words.', kind: 'food' as const, howToDeal: 'Somewhere else.' };
+    it('a node admin who keeps none of it sends its face only, never its category or how we deal', () => {
+        const draft = { ...before, name: 'Renamed', about: 'New words.', category: 'goods' as const, howToDeal: 'Somewhere else.' };
         expect(faceSaveOf(before, draft, true, false)).toEqual({ face: { name: 'Renamed', about: 'New words.' }, shop: {} });
-        expect(savesAnything(faceSaveOf(before, { ...before, kind: 'food', howToDeal: '' }, true, false))).toBe(false);
+        expect(savesAnything(faceSaveOf(before, { ...before, category: 'goods', howToDeal: '' }, true, false))).toBe(false);
     });
 
     // Its banner is its shop's one photo (round 3 §0 row 4; Marty, 24 Oct): a keeper's, through its shop's route.
@@ -85,11 +86,11 @@ describe('the form when the enterprise is read again, and once saved', () => {
     const before = faceFormOf(DETAIL);
 
     it('a read keeps each field the keeper changed and takes the node\'s for the rest', () => {
-        const draft = { ...before, about: 'Saturdays and Wednesdays.', kind: 'food' as const, howToDeal: '', logo: 'data:image/jpeg;base64,AA' };
+        const draft = { ...before, about: 'Saturdays and Wednesdays.', category: 'goods' as const, howToDeal: '', logo: 'data:image/jpeg;base64,AA' };
         const read = faceFormOf({ ...DETAIL, purpose: 'Bread and flour for the valley', about: 'Someone else wrote this.' });
         expect(faceOnRead({ before, draft }, read)).toEqual({
             before: read,
-            draft: { ...read, about: 'Saturdays and Wednesdays.', kind: 'food', howToDeal: '', logo: 'data:image/jpeg;base64,AA' },
+            draft: { ...read, about: 'Saturdays and Wednesdays.', category: 'goods', howToDeal: '', logo: 'data:image/jpeg;base64,AA' },
         });
         // Nothing typed: the form is the node's.
         expect(faceOnRead({ before, draft: before }, read)).toEqual({ before: read, draft: read });
@@ -97,7 +98,7 @@ describe('the form when the enterprise is read again, and once saved', () => {
         const { draft: kept } = faceOnRead({ before, draft }, read);
         expect(faceSaveOf(read, kept, true)).toEqual({
             face: { about: 'Saturdays and Wednesdays.', avatar: 'data:image/jpeg;base64,AA' },
-            shop: { kind: 'food', howToDeal: null },
+            shop: { category: 'goods', howToDeal: null },
         });
     });
 
@@ -111,13 +112,13 @@ describe('the form when the enterprise is read again, and once saved', () => {
     });
 
     it('only its face went: the shop\'s part stays as typed, still to send; a field typed again while it went stays too', () => {
-        const typed = { ...before, about: 'New words.', kind: 'food' as const, logo: 'data:image/jpeg;base64,AA' };
+        const typed = { ...before, about: 'New words.', category: 'goods' as const, logo: 'data:image/jpeg;base64,AA' };
         const sent = faceSaveOf(before, typed, true);
         const later = { ...typed, about: 'Newer words.' };
         const after = faceAfterSave({ before, draft: later }, typed, { face: sent.face, shop: {} });
         expect(after.before).toEqual({ ...before, about: 'New words.' });
-        expect(after.draft).toEqual({ ...before, about: 'Newer words.', kind: 'food', logo: null });
-        expect(faceSaveOf(after.before, after.draft, true)).toEqual({ face: { about: 'Newer words.' }, shop: { kind: 'food' } });
+        expect(after.draft).toEqual({ ...before, about: 'Newer words.', category: 'goods', logo: null });
+        expect(faceSaveOf(after.before, after.draft, true)).toEqual({ face: { about: 'Newer words.' }, shop: { category: 'goods' } });
     });
 
     it('a banner photo picked stays through a read; once its shop took it, it is not sent again; its shop refused, it is', () => {

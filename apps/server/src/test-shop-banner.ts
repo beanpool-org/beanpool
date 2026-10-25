@@ -1,7 +1,7 @@
 /**
  * A shop's banner: its one photo, which its keepers choose (scratch/tools/DESIGN-shops-round3-enterprise-shopfront-fable.md
  * §0 row 4, §3, §5; Marty, 24 Oct 2026, of the enterprise page: "the banner is blank just a building icon"). An enterprise's
- * any keeper sets, as its kind and How we deal; a member's shop's, its owner (the member's shop page is the same layout).
+ * any keeper sets, as its category and How we deal; a member's shop's, its owner (the member's shop page is the same layout).
  *
  * Over REAL HTTPS through the real signature middleware:
  *
@@ -14,7 +14,7 @@
  *      names no photo, keep it and charge nothing
  *   3. clear: `photo: null` takes it down with a tombstone, and its URL opens nothing
  *   4. who may: unsigned, a member who keeps nothing here, a keeper of another enterprise and a community admin who
- *      doesn't keep it (as for its kind and How we deal) are refused and nothing is stored; a muted keeper can't put one
+ *      doesn't keep it (as for its category and How we deal) are refused and nothing is stored; a muted keeper can't put one
  *      up and can take one down; a closed enterprise's shop can't change
  *   5. the caps: what is no picture (someone's URL, an SVG, a shipped picture's name, a face's URL, text), more pixels than
  *      a node stores, and more bytes than a photo may hold are refused, nothing stored and nothing charged
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
     const keptSecond = keptOf(entShop);
     const sentBack = await call('PUT', kit, treasuryShop(ent), { photo: secondUrl, howToDeal: 'Ring the bell.' });
     const absolute = await call('PUT', kit, treasuryShop(ent), { photo: `https://some.node${secondUrl}` });
-    const noPhotoNamed = await call('PUT', lou, treasuryShop(ent), { kind: 'repairs' });
+    const noPhotoNamed = await call('PUT', lou, treasuryShop(ent), { category: 'services' });
     assert(sentBack.status === 200 && absolute.status === 200 && noPhotoNamed.status === 200 && keptOf(entShop) === keptSecond
         && noPhotoNamed.body?.shop?.photoUrl === secondUrl && usage(lou) === louBefore,
         `its own URL sent back, and a change that names no photo, keep it and charge nothing (${show(sentBack)} | ${show(absolute)} | ${show(noPhotoNamed)})`);
@@ -353,7 +353,7 @@ async function main(): Promise<void> {
     // ── 7. a visitor's view ─────────────────────────────────────────────────────────────────────
     console.log('\n── 7. a visitor\'s view ──');
     const visitorView = attempt(() => shops.visitorShop(shops.shopById(entShop)));
-    assert(!!visitorView && !('photoUrl' in visitorView) && JSON.stringify(Object.keys(visitorView).sort()) === JSON.stringify(['counts', 'id', 'kind']),
+    assert(!!visitorView && !('photoUrl' in visitorView) && JSON.stringify(Object.keys(visitorView).sort()) === JSON.stringify(['category', 'counts', 'id']),
         `a visitor's view of a shop never carries its photo (${JSON.stringify(visitorView)})`);
     const stranger = await call('GET', null, shopPath(entShop));
     assert((stranger.status === 401 || stranger.status === 403) && !stranger.text.includes('/photo'), `nor does a stranger's read here (${show(stranger)})`);

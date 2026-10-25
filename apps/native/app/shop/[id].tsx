@@ -2,12 +2,12 @@
  * A shop's page (slice S5 of scratch/tools/DESIGN-shops-round3-enterprise-shopfront-fable.md §3 "The member's shop page",
  * on DESIGN-shops-and-tools-fable.md §8 "The shop page (visitor)"): `/shop/<id>`, a member's shop as any member here reads
  * it. The same shopfront as an enterprise's page (components/shopfront), minus keepers and money: the banner, the owner's
- * picture as its logo, its name, kind and since when, the owner's trust line, About (its blurb), Featured, its sections,
+ * picture as its logo, its name, category and since when, the owner's trust line, About (its blurb), Featured, its sections,
  * How I deal, and Message, a DM to the owner.
  *
  * - An enterprise's shop is its page: this replaces itself with /treasury-detail, as the profile screen does for an
  *   enterprise's key (E1).
- * - A visitor's view of it (the node sends its kind and counts only, round 2 §9.4) is the cut-off, said in a sentence.
+ * - A visitor's view of it (the node sends its category and counts only, round 2 §9.4) is the cut-off, said in a sentence.
  * - The owner's own: no Message; the way to change it is Your shop (/shop/mine).
  * - None, and no answer, are each said; Try again reads it again.
  */
@@ -27,7 +27,7 @@ import { HOME_TARGET_DP } from '../../components/home/HomeParts';
 import { PostAuthorTrust } from '../../components/PostAuthorTrust';
 import { ToolButton, ToolEmpty, ToolSection } from '../../tools/ui';
 import {
-    ShopfrontFeatured, ShopfrontHeader, ShopfrontMessage, ShopfrontSections, ShopfrontText, ShopfrontVisitorNote, kindSinceLine,
+    ShopfrontFeatured, ShopfrontHeader, ShopfrontMessage, ShopfrontSections, ShopfrontText, ShopfrontVisitorNote, categorySinceLine,
 } from '../../components/shopfront/Shopfront';
 import { shopStateLine, shopTitle } from '../../utils/shop';
 import {
@@ -124,10 +124,10 @@ export default function ShopPageScreen() {
                             name={title}
                             ownerKey={shop.ownerPublicKey}
                             logoUrl={logo}
-                            kind={shop.kind}
+                            category={shop.category}
                             bannerPhoto={shop.photoUrl}
                             fallbackEmoji="🏪"
-                            lines={[kindSinceLine(shop.kind, sinceLine(shop.openedAt)), shop.paused ? shopStateLine(shop) : null]}
+                            lines={[categorySinceLine(shop.category, sinceLine(shop.openedAt)), shop.paused ? shopStateLine(shop) : null]}
                         />
                         {/* The owner's trust line, a 48 dp target to their profile (the line on its own is a card's 30 dp). */}
                         <Pressable

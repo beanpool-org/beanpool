@@ -74,7 +74,7 @@ function droppable(inner: MemoryIndexedDB) {
 interface Doc { v: number; items: string[] }
 const tool: ToolManifest<Doc> = {
     id: 'notes', name: word('New tool'), line: word('One line on what this tool keeps for you.'), icon: '🧩', shelf: 'stock',
-    shopKinds: 'all', owner: 'member', permissions: [], screens: ['main'], row: () => null, examples: [],
+    categories: 'all', owner: 'member', permissions: [], screens: ['main'], row: () => null, examples: [],
     doc: {
         version: 1,
         empty: () => ({ v: 1, items: [] }),

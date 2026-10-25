@@ -14,8 +14,8 @@
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
 import {
-    SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, isShopKind, normalizeCategory, t, tierIndexForName, tn, word,
-    type ShopKind, type TierName, type WordKey,
+    SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word,
+    type ShopCategory, type TierName, type WordKey,
 } from '@beanpool/core';
 import { getMarketplacePosts } from './api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
@@ -231,33 +231,19 @@ export function messageLabel(name: string, kind: 'enterprise' | 'project'): stri
 
 // ── lines ───────────────────────────────────────────────────────────────────────────────────────
 
-/** The fourteen kinds of shop, each its emoji and its words (the phone's utils/shop.ts SHOP_KIND_WORDS). */
-export const SHOP_KIND_WORDS: Readonly<Record<ShopKind, { emoji: string; name: WordKey }>> = {
-    tools: { emoji: '🛠️', name: word('Tools and equipment') },
-    food: { emoji: '🥕', name: word('Food from the garden or farm') },
-    baking: { emoji: '🍞', name: word('Cooked food and baking') },
-    repairs: { emoji: '🔧', name: word('Repairs') },
-    crafts: { emoji: '🎨', name: word('Making and crafts') },
-    lessons: { emoji: '📚', name: word('Lessons and tutoring') },
-    care: { emoji: '❤️', name: word('Care') },
-    rides: { emoji: '🚲', name: word('Rides and deliveries') },
-    rooms: { emoji: '🏠', name: word('Rooms, space and stays') },
-    buying: { emoji: '🧺', name: word('Buying together') },
-    seeds: { emoji: '🌱', name: word('Seeds and seedlings') },
-    energy: { emoji: '☀️', name: word('Water, power and fuel') },
-    animals: { emoji: '🐾', name: word('Animals and produce') },
-    labour: { emoji: '👷', name: word('Hands and labour') },
-};
-
-/** A kind as it is shown: its emoji and its words, "🛠️ Tools and equipment". */
-export function shopKindLabel(kind: ShopKind): string {
-    return t('{emoji} {kind}', { emoji: SHOP_KIND_WORDS[kind].emoji, kind: t(SHOP_KIND_WORDS[kind].name) }, 'a kind of shop, after its emoji');
+/**
+ * A shop's category as it is shown: the emoji and the words its listings have for it (categoryEmoji, categoryLabel), so a
+ * shop and its listings always agree: "💻 Tech & Digital". It picks the tools shown and where the shop's new listings
+ * start, and gates nothing.
+ */
+export function shopCategoryLabel(category: ShopCategory): string {
+    return t('{emoji} {label}', { emoji: categoryEmoji(category), label: categoryLabel(category) });
 }
 
-/** A shop's kind, when it is one of the fourteen. */
-export function shopKindOf(raw: unknown): ShopKind | null {
-    const kind = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).kind : null;
-    return isShopKind(kind) ? kind : null;
+/** A shop's category, when it is one of the Market's (core SHOP_CATEGORIES). */
+export function shopCategoryOf(raw: unknown): ShopCategory | null {
+    const category = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).category : null;
+    return isShopCategory(category) ? category : null;
 }
 
 /** A shop's banner, its one photo's URL as the node gave it (keyed), or null: none, or a node from before banners. */
@@ -274,9 +260,9 @@ export function sinceLine(since: unknown): string | null {
     return t('since {date}', { date: formatDate(d, 'month-year') }, 'how long a shop or enterprise has been here');
 }
 
-/** Its kind and since when, in one line: "🔧 Repairs · since Sep 2026". */
-export function kindSinceLine(kind: ShopKind | null, since: string | null): string | null {
-    const parts = [kind ? shopKindLabel(kind) : null, since].filter((p): p is string => !!p);
+/** Its category and since when, in one line: "💻 Tech & Digital · since Sep 2026". */
+export function categorySinceLine(category: ShopCategory | null, since: string | null): string | null {
+    const parts = [category ? shopCategoryLabel(category) : null, since].filter((p): p is string => !!p);
     return parts.length ? parts.join(' · ') : null;
 }
 
@@ -331,7 +317,7 @@ export interface Face {
     name: string;
     purpose: string;
     about: string;
-    kind: ShopKind | null;
+    category: ShopCategory | null;
     howToDeal: string;
     /** A new logo, the picture the keeper chose (already the 800 px copy); absent for no change. */
     avatar?: string;
@@ -341,7 +327,7 @@ export interface Face {
 
 /**
  * What one Save sends, each field that changed to its own route: the name and purpose only from the lead (or an admin),
- * About and the logo from any keeper (PUT /api/treasury/:t/profile); the kind, how we deal and the banner photo from a
+ * About and the logo from any keeper (PUT /api/treasury/:t/profile); the category, how we deal and the banner photo from a
  * keeper, who may change its shop (PUT /api/treasury/:t/shop). Words are sent trimmed, as the node keeps them; how we deal
  * emptied is none (null), and so is a banner taken down.
  */
@@ -353,7 +339,7 @@ export function faceChanges(was: Face, now: Face, may: { lead: boolean; shop: bo
     if (may.lead && trimmed(now.purpose) !== trimmed(was.purpose)) profile.purpose = trimmed(now.purpose);
     if (trimmed(now.about) !== trimmed(was.about)) profile.about = trimmed(now.about);
     if (now.avatar) profile.avatar = now.avatar;
-    if (may.shop && now.kind !== was.kind) shop.kind = now.kind;
+    if (may.shop && now.category !== was.category) shop.category = now.category;
     if (may.shop && trimmed(now.howToDeal) !== trimmed(was.howToDeal)) shop.howToDeal = trimmed(now.howToDeal) || null;
     if (may.shop && now.banner !== undefined) shop.photo = now.banner;
     return { profile, shop };

@@ -1,6 +1,6 @@
 /**
  * The sheets of Your shop (app/shop/mine.tsx; DESIGN-shops-and-tools-fable.md §8 and Marty's additions of 19 Oct 2026;
- * slice S4′): one field at a time (its name, what it is, how I deal), its kind, Close for now (and when it is back), Close
+ * slice S4′): one field at a time (its name, what it is, how I deal), its category, Close for now (and when it is back), Close
  * my shop (its Offers kept on their own, or ended), and "Add my live Offers". Each says what will happen before the tap,
  * shows the node's refusal in the node's own words, and with open deals offers the way to them. One column, every target
  * at least 48 dp, colours from the central tokens. Keyboard: lifted by useModalKeyboardLift from the root provider; never
@@ -9,12 +9,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SHOP_BLURB_LIMIT, SHOP_HOW_TO_DEAL_LIMIT, SHOP_NAME_LIMIT, t, type ShopKind } from '@beanpool/core';
+import { SHOP_BLURB_LIMIT, SHOP_CATEGORIES, SHOP_HOW_TO_DEAL_LIMIT, SHOP_NAME_LIMIT, t, type ShopCategory } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
 import { editHomeStyles } from '../home/EditHomeSheet';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
-import { SHOP_KIND_IDS, backOnChoices, shopKindLabel, type BackOnChoice, type ShopListing } from '../../utils/shop';
+import { backOnChoices, shopCategoryLabel, type BackOnChoice, type ShopListing } from '../../utils/shop';
 
 /** A refusal as a sheet shows it: the node's sentence, and its code (open deals offer the way to them). */
 export interface ShopSheetRefusal { message: string; code?: string }
@@ -139,33 +139,34 @@ export function ShopTextSheet({ field, value, defaultName, busy, refusal, colors
     );
 }
 
-// ── its kind ─────────────────────────────────────────────────────────────────────────────────────
+// ── its category ─────────────────────────────────────────────────────────────────────────────────
 
-export function ShopKindSheet({ visible, kind, busy, refusal, colors, onPick, onClose }: {
+/** The Market's categories (core SHOP_CATEGORIES), each with the emoji and words its listings show, and None. */
+export function ShopCategorySheet({ visible, category, busy, refusal, colors, onPick, onClose }: {
     visible: boolean;
-    kind: ShopKind | null;
+    category: ShopCategory | null;
     busy: boolean;
     refusal: ShopSheetRefusal | null;
     colors: AppColors;
-    onPick: (kind: ShopKind | null) => void;
+    onPick: (category: ShopCategory | null) => void;
     onClose: () => void;
 }) {
     const s = homeStyles(colors);
-    const pick = (k: ShopKind | null) => { if (!busy) onPick(k); };
-    const chip = (id: string, label: string, on: boolean, value: ShopKind | null) => (
+    const pick = (c: ShopCategory | null) => { if (!busy) onPick(c); };
+    const chip = (id: string, label: string, on: boolean, value: ShopCategory | null) => (
         <Pressable key={id} onPress={() => pick(value)} style={[s.chip, on && s.chipOn]} accessibilityRole="radio"
-            accessibilityState={{ selected: on, checked: on }} accessibilityLabel={label} testID={`shop-kind-pick-${id}`}>
+            accessibilityState={{ selected: on, checked: on }} accessibilityLabel={label} testID={`shop-category-pick-${id}`}>
             <Text style={[s.chipText, on && s.chipTextOn]}>{label}</Text>
         </Pressable>
     );
     return (
-        <Sheet visible={visible} title={t('What kind of shop')} colors={colors} onClose={onClose} testID="shop-kind-sheet">
+        <Sheet visible={visible} title={t('Category')} colors={colors} onClose={onClose} testID="shop-category-sheet">
             <Text style={s.note}>{t('It helps neighbours find you, and picks the tools shown. It changes nothing else.')}</Text>
-            <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel={t('What kind of shop')}>
-                {SHOP_KIND_IDS.map((k) => chip(k, shopKindLabel(k), kind === k, k))}
-                {chip('none', t('None'), kind === null, null)}
+            <View style={s.chips} accessibilityRole="radiogroup" accessibilityLabel={t('Category')}>
+                {SHOP_CATEGORIES.map((c) => chip(c, shopCategoryLabel(c), category === c, c))}
+                {chip('none', t('None'), category === null, null)}
             </View>
-            <Refused refusal={refusal} colors={colors} testID="shop-kind" />
+            <Refused refusal={refusal} colors={colors} testID="shop-category" />
         </Sheet>
     );
 }

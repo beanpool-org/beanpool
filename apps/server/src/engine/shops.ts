@@ -1,7 +1,7 @@
 /**
  * Shops (slice S1 of scratch/tools/DESIGN-shops-and-tools-fable.md, §2.1, §4, §9.1, §9.4, §9.5; Marty's answers and
  * decision of 19 Oct 2026): a shop is a front window on an account, a member's or an enterprise's. It has a name, a
- * kind, a blurb and "how I deal", and the Offers its owner puts in it (posts.shop_id). The same window moves from a
+ * category, a blurb and "how I deal", and the Offers its owner puts in it (posts.shop_id). The same window moves from a
  * person to an enterprise unchanged when the till must split (slice S6); until then a member's shop is theirs, and all
  * its Beans are theirs.
  *
@@ -24,7 +24,12 @@
  *   Closed, the row goes with a tombstone, and its Offers stay as ordinary Offers (the ones a pause took down back on the
  *   board) or end, as its owner picks. Closing an enterprise's shop winds up nothing.
  * - Read (routes/shops.ts): a member gets it whole, with counts of its listings as that member sees them; a visitor (the
- *   global profile's visitors' view) gets its kind and counts only, since a name a member typed can name them (§4).
+ *   global profile's visitors' view) gets its category and counts only, since a name a member typed can name them (§4).
+ * - Its category (Marty, 25 Oct 2026): one of the Market's (@beanpool/core SHOP_CATEGORIES), the list its listings pick
+ *   from, or none. It picks the tools the apps show and where its new listings start (routes/marketplace.ts and the
+ *   enterprise's offer route, newListingCategory), and gates nothing. An app from before categories sends a kind, one of
+ *   the fourteen a shop had before: it is kept as the category it became (core SHOP_CATEGORY_KINDS), and that app reads
+ *   no kind back (its shops show none) until it is updated.
  * - Featured (featureOffer; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 7, §4, and Marty's answers of 23 Oct):
  *   up to six of its Offers, stamped on the listing (posts.featured_at), so every copy of the listing knows. Out of the
  *   shop, or the shop closed, the stamp goes.
@@ -42,7 +47,7 @@
  */
 import crypto from 'node:crypto';
 import {
-    isShopKind, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, SHOP_NAME_LIMIT, SHOP_BLURB_LIMIT, SHOP_HOW_TO_DEAL_LIMIT,
+    isShopCategory, shopCategoryOfKind, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, SHOP_NAME_LIMIT, SHOP_BLURB_LIMIT, SHOP_HOW_TO_DEAL_LIMIT,
     SHOP_BACK_ON_MAX_DAYS, SHOP_FEATURED_MAX, MAX_PICTURE_BYTES, avatarRefOf, shopOfPhotoUrl, shopPhotoUrlOf, word, type ShopCounts,
     type TextLimit,
 } from '@beanpool/core';
@@ -69,7 +74,7 @@ export const SHOP_PAUSED_ADD = 'This shop is closed for now. Reopen it first, th
 export const SHOP_PAUSED_RESUME = 'This is in a shop that is closed for now. Reopen the shop to put it back up.';
 export const SHOP_NONE = 'There is no shop here to change. Open one first.';
 export const SHOP_NAME_IS_ENTERPRISE = "An enterprise's shop has the enterprise's name, so it changes when the enterprise's name does.";
-export const SHOP_KIND_REFUSED = word('Pick one of the kinds of shop the app shows, or none.');
+export const SHOP_CATEGORY_REFUSED = word('Pick one of the categories the app shows, or none.');
 export const SHOP_NAME_NOT_TEXT = "A shop's name must be text.";
 export const SHOP_BLURB_NOT_TEXT = 'What a shop is must be text.';
 export const SHOP_HOW_TO_DEAL_NOT_TEXT = '"How I deal" must be text.';
@@ -95,7 +100,8 @@ export interface ShopRow {
     id: string;
     owner_pubkey: string;
     name: string | null;
-    kind: string | null;
+    /** One of the Market's categories (core SHOP_CATEGORIES), or null: none. */
+    category: string | null;
     blurb: string | null;
     how_to_deal: string | null;
     opened_at: string;
@@ -198,6 +204,9 @@ export function openShop(owner: string, now: number = Date.now()): ShopRow {
 /** What a PUT may change. Every field is optional; null or empty text clears one. */
 export interface ShopChanges {
     name?: unknown;
+    /** One of the Market's categories, or null or empty text for none. */
+    category?: unknown;
+    /** An app from before categories: one of the fourteen kinds, kept as its category (core shopCategoryOfKind), or null. */
     kind?: unknown;
     blurb?: unknown;
     howToDeal?: unknown;
@@ -216,6 +225,30 @@ function cleanText(raw: unknown, limit: TextLimit, what: string, notText: string
     if (v === '') return null;
     if (!fitsTextLimit(v, limit)) throw new ShopRefusal(400, 'shop_text_refused', textTooLongMessage(what, limit));
     return v;
+}
+
+/**
+ * A category as it will be stored: undefined to leave it, null to clear it (null or empty text), else one of the Market's
+ * (core SHOP_CATEGORIES). `category` wins over `kind`, which an app from before categories sends: one of the fourteen kinds,
+ * kept as the category it became (core shopCategoryOfKind). Refused, in a sentence: anything else.
+ */
+function cleanCategory(changes: ShopChanges): string | null | undefined {
+    const fromKind = changes.category === undefined;
+    const sent = fromKind ? changes.kind : changes.category;
+    if (sent === undefined) return undefined;
+    if (sent === null || sent === '') return null;
+    const category = fromKind ? shopCategoryOfKind(sent) : isShopCategory(sent) ? sent : null;
+    if (category === null) throw new ShopRefusal(400, 'shop_category_refused', SHOP_CATEGORY_REFUSED);
+    return category;
+}
+
+/**
+ * The category a new listing put in `shopId` starts in when it names none of its own (Marty, 25 Oct 2026): the shop's, or
+ * null (no shop by that id, or one in no category); its author can change it like any listing's. Read before the post's
+ * own checks refuse a shop that isn't the author's (assertShopForPost), which write nothing and answer no category.
+ */
+export function newListingCategory(shopId: unknown): string | null {
+    return shopById(shopId)?.category ?? null;
 }
 
 /** How far the clocks furthest behind and ahead of UTC are (UTC−12, UTC+14). */
@@ -301,9 +334,10 @@ export interface ShopListingsMoved {
  * Opens `owner`'s shop if need be and changes what the PUT names (ShopChanges), all of it or nothing. `enterprise`: the
  * owner is an enterprise, whose shop has the enterprise's name (a name sent is refused). `actor`: who sends it, the owner
  * unless a keeper writes for an enterprise, charged for a new banner (the day's photo budget). Pausing and reopening move
- * its Offers (see the file's head). Refused, before anything is written: a text over its limit or not text, a kind that is
- * none of the fourteen, a back-on day that is not one, a banner the photo rule refuses (cleanShopPhoto) or past the
- * actor's day of photos (429), a back-on day for a shop that stays open, a pause while a deal is open.
+ * its Offers (see the file's head). Refused, before anything is written: a text over its limit or not text, a category
+ * that is none of the Market's (an old app's kind none of the fourteen), a back-on day that is not one, a banner the
+ * photo rule refuses (cleanShopPhoto) or past the actor's day of photos (429), a back-on day for a shop that stays open, a
+ * pause while a deal is open.
  */
 export function changeShop(owner: string, changes: ShopChanges, opts: { enterprise: boolean; actor?: string }, now: number = Date.now()): { shop: ShopRow } & ShopListingsMoved {
     assertPlainTablesWritable();
@@ -313,9 +347,7 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
     const name = cleanText(changes.name, SHOP_NAME_LIMIT, "A shop's name", SHOP_NAME_NOT_TEXT);
     const blurb = cleanText(changes.blurb, SHOP_BLURB_LIMIT, 'What a shop is', SHOP_BLURB_NOT_TEXT);
     const howToDeal = cleanText(changes.howToDeal, SHOP_HOW_TO_DEAL_LIMIT, '"How I deal"', SHOP_HOW_TO_DEAL_NOT_TEXT);
-    if (changes.kind !== undefined && changes.kind !== null && !isShopKind(changes.kind)) {
-        throw new ShopRefusal(400, 'shop_kind_refused', SHOP_KIND_REFUSED);
-    }
+    const category = cleanCategory(changes);
     if (changes.paused !== undefined && typeof changes.paused !== 'boolean') throw new ShopRefusal(400, 'shop_paused_refused', SHOP_PAUSED_NOT_A_FLAG);
     const backOn = cleanBackOn(changes.backOn, now);
     const photo = cleanShopPhoto(changes.photo, shopOf(owner)?.id);
@@ -332,7 +364,7 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
         const sets: string[] = [];
         const values: unknown[] = [];
         if (name !== undefined) { sets.push('name = ?'); values.push(name); }
-        if (changes.kind !== undefined) { sets.push('kind = ?'); values.push(changes.kind); }
+        if (category !== undefined) { sets.push('category = ?'); values.push(category); }
         if (blurb !== undefined) { sets.push('blurb = ?'); values.push(blurb); }
         if (howToDeal !== undefined) { sets.push('how_to_deal = ?'); values.push(howToDeal); }
 
@@ -572,10 +604,10 @@ export function countsOf(posts: MarketplacePost[], now: number = Date.now()): Sh
     };
 }
 
-/** A shop as a visitor gets it: what kind it is and how much is in it, and nobody (§4, §9.4). */
+/** A shop as a visitor gets it: its category and how much is in it, and nobody (§4, §9.4). */
 export interface VisitorShop {
     id: string;
-    kind: string | null;
+    category: string | null;
     counts: ShopCounts;
 }
 
@@ -594,12 +626,12 @@ export interface MemberShop extends VisitorShop {
     backOn: string | null;
     openedAt: string;
     updatedAt: string;
-    /** Its banner's URL, with its key (shopPhotoUrlOf), or null: none, and the apps draw a quiet block in its kind's colour. */
+    /** Its banner's URL, with its key (shopPhotoUrlOf), or null: none, and the apps draw a quiet block with its category's emoji. */
     photoUrl: string | null;
 }
 
 export function visitorShop(shop: ShopRow, now: number = Date.now()): VisitorShop {
-    return { id: shop.id, kind: shop.kind, counts: countsOf(shopListingsFor(shop.id, undefined), now) };
+    return { id: shop.id, category: shop.category, counts: countsOf(shopListingsFor(shop.id, undefined), now) };
 }
 
 export function memberShop(shop: ShopRow, reader: string | undefined, now: number = Date.now()): MemberShop {
@@ -609,7 +641,7 @@ export function memberShop(shop: ShopRow, reader: string | undefined, now: numbe
     const ownerName = owner?.callsign ?? '';
     return {
         id: shop.id,
-        kind: shop.kind,
+        category: shop.category,
         counts: countsOf(shopListingsFor(shop.id, reader), now),
         name: enterprise ? ownerName : shop.name,
         ownerPublicKey: shop.owner_pubkey,

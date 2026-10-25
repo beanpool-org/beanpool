@@ -8,8 +8,9 @@
  * Pure: no I/O.
  */
 import { SHOWCASE_FEATURES } from '../features.js';
+import { SHOP_CATEGORIES } from '../shops.js';
 import {
-    SHOP_KINDS, TOOL_ID_PATTERN, TOOL_LIMITS, TOOL_PERMISSIONS, TOOL_SHELVES,
+    TOOL_ID_PATTERN, TOOL_LIMITS, TOOL_PERMISSIONS, TOOL_SHELVES,
     type ToolDue, type ToolLine, type ToolManifest,
 } from './manifest.js';
 
@@ -89,12 +90,12 @@ export function toolManifestProblems(m: ToolManifest): string[] {
         say('its icon is one emoji.');
     }
     if (!TOOL_SHELVES.includes(m.shelf)) say(`its shelf is one of ${TOOL_SHELVES.join(', ')}.`);
-    if (m.shopKinds !== 'all') {
-        if (!Array.isArray(m.shopKinds)) say("its shopKinds are 'all' or a list of shop kinds.");
+    if (m.categories !== 'all') {
+        if (!Array.isArray(m.categories)) say("its categories are 'all' or a list of the Market's categories.");
         else {
-            const unknown = m.shopKinds.filter((k) => !(SHOP_KINDS as readonly string[]).includes(k));
-            if (unknown.length) say(`${unknown.join(', ')} is not a shop kind (${SHOP_KINDS.join(', ')}).`);
-            if (repeated(m.shopKinds).length) say(`its shopKinds name ${repeated(m.shopKinds).join(', ')} more than once.`);
+            const unknown = m.categories.filter((c) => !(SHOP_CATEGORIES as readonly string[]).includes(c));
+            if (unknown.length) say(`${unknown.join(', ')} is not one of the Market's categories (${SHOP_CATEGORIES.join(', ')}).`);
+            if (repeated(m.categories).length) say(`its categories name ${repeated(m.categories).join(', ')} more than once.`);
         }
     }
     if (!['member', 'enterprise', 'both'].includes(m.owner)) say("its owner is 'member', 'enterprise' or 'both'.");

@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHOP_FEATURED_MAX, pseudoLocalise, setLanguage } from '@beanpool/core';
 import * as api from './api';
 import {
-    categoryEmoji, categoryLabel, faceChanges, featuredOf, keeperBadgeLine, keeperRoleWord, kindSinceLine, leadKeeperOf, listingPriceLine,
+    categoryEmoji, categoryLabel, categorySinceLine, faceChanges, featuredOf, keeperBadgeLine, keeperRoleWord, leadKeeperOf, listingPriceLine,
     listingStateLine, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings, readShopfrontListing, readsAsMember,
-    shelfLine, shelfOf, shopKindLabel, shopKindOf, shopSectionsOf, sinceLine, type ShopfrontListing,
+    shelfLine, shelfOf, shopCategoryLabel, shopCategoryOf, shopSectionsOf, sinceLine, type ShopfrontListing,
 } from './shopfront';
 
 const offer = (over: Record<string, unknown> = {}) => ({
@@ -134,16 +134,18 @@ describe('the keepers', () => {
 });
 
 describe('the lines', () => {
-    it('its kind and since, in one line; since in the month and year; the money in one line', () => {
-        expect(shopKindOf({ kind: 'repairs' })).toBe('repairs');
-        expect(shopKindOf({ kind: 'spaceships' })).toBeNull();
-        expect(shopKindOf(null)).toBeNull();
-        expect(shopKindLabel('repairs')).toBe('🔧 Repairs');
+    it("its category and since, in one line, as its listings show the category; since in the month and year; the money in one line", () => {
+        expect(shopCategoryOf({ category: 'tech' })).toBe('tech');
+        expect(shopCategoryOf({ category: 'spaceships' })).toBeNull();
+        expect(shopCategoryOf({ kind: 'repairs' })).toBeNull();
+        expect(shopCategoryOf(null)).toBeNull();
+        expect(shopCategoryLabel('tech')).toBe(`${categoryEmoji('tech')} ${categoryLabel('tech')}`);
+        expect(shopCategoryLabel('tech')).toBe('💻 Tech & Digital');
         expect(sinceLine('2026-09-03T10:00:00.000Z')).toBe('since Sep 2026');
         expect(sinceLine(null)).toBeNull();
         expect(sinceLine('not a date')).toBeNull();
-        expect(kindSinceLine('repairs', 'since Sep 2026')).toBe('🔧 Repairs · since Sep 2026');
-        expect(kindSinceLine(null, null)).toBeNull();
+        expect(categorySinceLine('tech', 'since Sep 2026')).toBe('💻 Tech & Digital · since Sep 2026');
+        expect(categorySinceLine(null, null)).toBeNull();
         expect(moneyLine(12, 50)).toBe('12 🫘 · credit line 50 🫘');
     });
     it('every word through t(): the pseudo-locale', () => {
@@ -184,11 +186,11 @@ describe('the keepers\' console: the shelf and the face', () => {
         expect(shelfLine(2)).toBe('2 of 6 on the shelf');
     });
     it('only what changed goes, each to its own route; the name and purpose only from the lead', () => {
-        const was = { name: 'Hill Bakery', purpose: 'Bread', about: 'We bake.', kind: 'baking' as const, howToDeal: 'Saturdays.' };
+        const was = { name: 'Hill Bakery', purpose: 'Bread', about: 'We bake.', category: 'food' as const, howToDeal: 'Saturdays.' };
         expect(faceChanges(was, { ...was }, { lead: true, shop: true })).toEqual({ profile: {}, shop: {} });
-        expect(faceChanges(was, { ...was, name: ' Hill Mill ', kind: 'food' }, { lead: true, shop: true })).toEqual({ profile: { name: 'Hill Mill' }, shop: { kind: 'food' } });
+        expect(faceChanges(was, { ...was, name: ' Hill Mill ', category: 'goods' }, { lead: true, shop: true })).toEqual({ profile: { name: 'Hill Mill' }, shop: { category: 'goods' } });
         expect(faceChanges(was, { ...was, name: 'Hill Mill', about: 'New.' }, { lead: false, shop: true })).toEqual({ profile: { about: 'New.' }, shop: {} });
-        expect(faceChanges(was, { ...was, howToDeal: '', kind: null }, { lead: true, shop: false })).toEqual({ profile: {}, shop: {} });
+        expect(faceChanges(was, { ...was, howToDeal: '', category: null }, { lead: true, shop: false })).toEqual({ profile: {}, shop: {} });
         expect(faceChanges(was, { ...was, howToDeal: '' }, { lead: true, shop: true })).toEqual({ profile: {}, shop: { howToDeal: null } });
         expect(faceChanges(was, { ...was, avatar: 'data:image/jpeg;base64,/9j/AAAA' }, { lead: false, shop: true })).toEqual({ profile: { avatar: 'data:image/jpeg;base64,/9j/AAAA' }, shop: {} });
     });

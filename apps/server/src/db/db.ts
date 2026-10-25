@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
+import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -1187,6 +1187,42 @@ export function addHealthAccessLogToken(d: Database.Database): boolean {
     return true;
 }
 
+/**
+ * A shop picks one of the Market's categories (Marty, 25 Oct 2026). On a node made before, the shops table's `kind`
+ * becomes `category` (schema.sql: RENAME COLUMN keeps its place and its CHECK, which then names `category`, as a fresh
+ * install has it), and every shop moves to the category its kind became (@beanpool/core SHOP_CATEGORY_KINDS): a kind
+ * whose id is a category's (tools, food, care, energy, animals, labour) stays as it is, the others move, and a value that
+ * is none of the fourteen becomes no category, as a shop with none is. Both in one transaction, at every boot: once moved,
+ * no row holds a value that is no category, so the UPDATE finds nothing and nothing is stamped again. A moved row is
+ * stamped by its table's touch trigger (stampPlainTables), so a delta carries it to the standbys; a standby renames and
+ * moves its own copy the same way at its boot, so its import writes the column its main server sends. Before the
+ * schema.sql exec, which makes the table with the column on a database from before shops (no table here: nothing to do).
+ * An older image booted back on the data reads no kind (its shops show none) and refuses to change one.
+ */
+function moveShopKindsToCategories(): void {
+    try {
+        const columns = (db.prepare(`SELECT name FROM pragma_table_info('shops')`).all() as { name: string }[]).map((c) => c.name);
+        if (columns.length === 0) return;
+        const moves = (Object.entries(SHOP_CATEGORY_KINDS) as Array<[string, { kinds: readonly string[] }]>)
+            .flatMap(([category, row]) => row.kinds.filter((kind) => kind !== category).map((kind) => [kind, category]));
+        db.transaction(() => {
+            if (columns.includes('kind') && !columns.includes('category')) {
+                db.exec('ALTER TABLE shops RENAME COLUMN kind TO category');
+                console.log('[DB] Shops: the kind column is now category, one of the Market\'s categories');
+            }
+            const moved = db.prepare(`
+                UPDATE shops SET category = CASE category ${moves.map(() => 'WHEN ? THEN ?').join(' ')} ELSE NULL END
+                WHERE category IS NOT NULL AND category NOT IN (${SHOP_CATEGORIES.map(() => '?').join(', ')})
+            `).run(...moves.flat(), ...SHOP_CATEGORIES).changes;
+            if (moved > 0) console.log(`[DB] Shops: ${moved} moved from a kind to its category`);
+        })();
+    } catch (e) {
+        // Nothing is renamed or moved, and the next boot tries again. Until then a change to a shop's category is refused
+        // (no such column) and every shop reads as in none.
+        console.error('[DB] ❌ Could not move shops from kinds to categories:', e);
+    }
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -1573,6 +1609,8 @@ export function initSchema() {
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.
     try { db.prepare(`ALTER TABLE shops ADD COLUMN photo_ref TEXT`).run(); } catch { }
+    // A shop's kind becomes one of the Market's categories, once (moveShopKindsToCategories).
+    moveShopKindsToCategories();
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
     // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.

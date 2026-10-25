@@ -359,7 +359,7 @@ const NOW = Date.parse('2026-10-20T09:00:00.000Z');
 const DAY = 86_400_000;
 const KIT: ToolManifest<KitDoc> = {
     id: 'fixture-kit', name: word('Fixture kit'), line: word('Everything a tool can draw, for the tests.'), icon: '🧪',
-    shelf: 'stock', shopKinds: 'all', owner: 'member', permissions: KIT_PERMISSIONS,
+    shelf: 'stock', categories: 'all', owner: 'member', permissions: KIT_PERMISSIONS,
     doc: { version: 1, empty: () => ({ v: 1, items: [] }), read: readKit, maxBytes: 2_000 },
     screens: ['main', 'item'],
     row: (d) => ({ key: word('{count} kept here'), values: { count: d.items.length } }),

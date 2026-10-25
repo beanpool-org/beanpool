@@ -6,7 +6,7 @@
  *
  * - What the node sends, read tolerantly: its listings (GET /api/marketplace/posts with `author=` or `shop=`: photos,
  *   the Featured stamp, the shop), the keepers of an enterprise with their badges (GET /api/treasury/:t, a member's read
- *   only: round 3 §5), and a shop (GET /api/shops/:id: a member's view, or a visitor's kind and counts).
+ *   only: round 3 §5), and a shop (GET /api/shops/:id: a member's view, or a visitor's category and counts).
  * - Featured: the shelf of up to six live Offers, the latest featured first (core SHOP_FEATURED_MAX).
  * - The sections: to buy, book a time, to borrow, and what an enterprise is looking for (its Needs).
  * - The badges are recognition and gate nothing (memory: tiers are merit badges); the page says so once.
@@ -14,7 +14,7 @@
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SHOP_FEATURED_MAX, formatCount, formatDate, formatNumber, isShopKind, t, tn, tierIndexForName, TIER_LEVELS, type ShopKind, type TierName } from '@beanpool/core';
+import { SHOP_FEATURED_MAX, formatCount, formatDate, formatNumber, isShopCategory, t, tn, tierIndexForName, TIER_LEVELS, type ShopCategory, type TierName } from '@beanpool/core';
 import { signedGet } from './db';
 import { readShop, type MyShop } from './shop';
 import { TIER_WORDS } from './trust-tier';
@@ -249,10 +249,10 @@ export function readShopfrontShop(raw: unknown): ShopfrontShop | null {
     return { ...shop, ownerPublicKey: s.ownerPublicKey, enterprise: s.enterprise === true, openedAt: text(s.openedAt) };
 }
 
-/** A shop's kind, when it is one of the fourteen. */
-export function shopKindOf(raw: unknown): ShopKind | null {
-    const kind = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).kind : null;
-    return isShopKind(kind) ? kind : null;
+/** A shop's category, when it is one of the Market's this build knows (a newer one, or none, is null). */
+export function shopCategoryOf(raw: unknown): ShopCategory | null {
+    const category = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).category : null;
+    return isShopCategory(category) ? category : null;
 }
 
 /** A shop's banner, its one photo's address as the node gave it (keyed), or null: none, a visitor's view, or a node from before banners. */

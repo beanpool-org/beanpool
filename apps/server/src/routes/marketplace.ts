@@ -52,6 +52,7 @@ import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.j
 import { ownWithheldLine, withheldAttachmentFor } from '../engine/withheld-lines.js';
 import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
+import { newListingCategory } from '../engine/shops.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
@@ -755,7 +756,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
         const post = type === 'event'
             ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts, timeOut)
             : createPost(
-            type, category || 'other', title, description || '',
+            // A listing put in a shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
+            type, category || newListingCategory(shopId) || 'other', title, description || '',
             // A loan's fee may be per day or per week too (S3), and is passed as sent, so one priced by the hour or the month
             // is refused in the engine's words rather than made one fee. Any other listing is one fee or by the hour, as before.
             Number(credits) || 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,

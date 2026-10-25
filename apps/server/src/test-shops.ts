@@ -6,8 +6,8 @@
  * Over REAL HTTPS through the real signature middleware:
  *
  *   1. a member's shop: none at first; opened by a PUT with nothing in it (no name: the apps say "<name>'s shop" in the
- *      member's language), one per member (the same id again); dressed one field at a time (name, kind, blurb, how I
- *      deal), each held to its bound in a sentence, an empty one cleared; a kind that is none of the fourteen refused
+ *      member's language), one per member (the same id again); dressed one field at a time (name, category, blurb, how
+ *      I deal), each held to its bound in a sentence, an empty one cleared; a category that is none of the Market's refused
  *   2. what goes in it: an Offer put in at create, by the edit toggle (and out again), and by "Add my live Offers"; refused,
  *      writing nothing: a Need or an event, another member's shop, a shop that isn't there, an Offer for a group or one
  *      person, a batch naming anything but the member's own live Offers. An enterprise's Offers go in its shop through its
@@ -17,7 +17,7 @@
  *      ones too; given twice, 400
  *   4. a shop read by a member: its name, owner, words and counts (things, available, to borrow, to buy, out, new this
  *      week); one that isn't there 404
- *   5. a visitor (the global profile's visitors' view): one shop and the shops near a place answer kind and counts
+ *   5. a visitor (the global profile's visitors' view): one shop and the shops near a place answer category and counts
  *      only, never the name, the owner or their words; no member's key or name anywhere in the answer; the listings keep
  *      their shop and lose their author; a member reads the whole shop; without the visitors' view a stranger is refused
  *   6. shops near a place: those with a live listing within the radius, nearest first, each once; a shop with more
@@ -37,7 +37,7 @@
  *      one delta leave the standby the new shop, not none; the standby answers each shop read as the main server does,
  *      and an enterprise's shop's name follows the enterprise's row
  *  12. Home's "Your shop and tools" (slice S4′, built by the node): asked by its id, the reader's own shop (its name or
- *      none, its owner's name, kind, counts as their own read says, closed for now and back on), or none in it, never left
+ *      none, its owner's name, category, counts as their own read says, closed for now and back on), or none in it, never left
  *      out; nothing of another member's; not asked, not built; with no `cards=`, built when the member's layout holds it
  *  13. the owner's word over a shop closed for now: their pause of an Offer the shop paused is taken (anyone else's is
  *      not) and makes the pause theirs, as ending it or editing it out of the shop does; a pause of one they paused already
@@ -135,7 +135,7 @@ const nearPath = (lat: number, lng: number, km?: number) => `/api/shops?lat=${la
 const entShop = (t: string) => `/api/treasury/${t}/shop`;
 
 // ── what is kept, read straight from the database ─────────────────────────────────────────────────
-interface ShopRow { id: string; owner_pubkey: string; name: string | null; kind: string | null; blurb: string | null; how_to_deal: string | null;
+interface ShopRow { id: string; owner_pubkey: string; name: string | null; category: string | null; blurb: string | null; how_to_deal: string | null;
     opened_at: string; paused_at: string | null; back_on: string | null; paused_posts: string | null; updated_at: string }
 const shopRowOf = (pk: string) => attempt(() => db.prepare('SELECT * FROM shops WHERE owner_pubkey = ?').get(pk) as ShopRow | undefined);
 const shopRowById = (id: string) => attempt(() => db.prepare('SELECT * FROM shops WHERE id = ?').get(id) as ShopRow | undefined);
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
     const opened = await call('PUT', dave, MINE, {});
     const daveShop: string = opened.body?.shop?.id;
     assert(opened.status === 200 && typeof daveShop === 'string' && opened.body.shop.name === null && opened.body.shop.ownerName === 'DaveSentinel'
-        && opened.body.shop.ownerPublicKey === dave.pk && opened.body.shop.enterprise === false && opened.body.shop.kind === null
+        && opened.body.shop.ownerPublicKey === dave.pk && opened.body.shop.enterprise === false && opened.body.shop.category === null
         && opened.body.shop.paused === false && opened.body.shop.counts?.things === 0,
         `opened by a PUT with nothing in it: no name of its own, its owner named, nothing in it (${show(opened)})`);
     const row1 = shopRowOf(dave.pk);
@@ -202,16 +202,16 @@ async function main(): Promise<void> {
     const again = await call('PUT', dave, MINE, {});
     assert(again.status === 200 && again.body?.shop?.id === daveShop && everyShop().filter(s => s.owner_pubkey === dave.pk).length === 1,
         `one shop per member: a second PUT is the same shop (${show(again)})`);
-    const dressed = await call('PUT', dave, MINE, { name: "Dave's Tool Shed", kind: 'tools', blurb: 'Drills, ladders, a tent.', howToDeal: 'Pick up from the front gate, back within a week.' });
-    assert(dressed.status === 200 && dressed.body?.shop?.name === "Dave's Tool Shed" && dressed.body.shop.kind === 'tools'
+    const dressed = await call('PUT', dave, MINE, { name: "Dave's Tool Shed", category: 'tools', blurb: 'Drills, ladders, a tent.', howToDeal: 'Pick up from the front gate, back within a week.' });
+    assert(dressed.status === 200 && dressed.body?.shop?.name === "Dave's Tool Shed" && dressed.body.shop.category === 'tools'
         && dressed.body.shop.blurb === 'Drills, ladders, a tent.' && dressed.body.shop.howToDeal === 'Pick up from the front gate, back within a week.',
-        `dressed: name, kind, blurb and how I deal (${show(dressed)})`);
-    const onlyKind = await call('PUT', dave, MINE, { kind: 'repairs' });
-    assert(onlyKind.status === 200 && onlyKind.body?.shop?.kind === 'repairs' && onlyKind.body.shop.name === "Dave's Tool Shed" && onlyKind.body.shop.blurb === 'Drills, ladders, a tent.',
+        `dressed: name, category, blurb and how I deal (${show(dressed)})`);
+    const onlyCategory = await call('PUT', dave, MINE, { category: 'services' });
+    assert(onlyCategory.status === 200 && onlyCategory.body?.shop?.category === 'services' && onlyCategory.body.shop.name === "Dave's Tool Shed" && onlyCategory.body.shop.blurb === 'Drills, ladders, a tent.',
         'one field at a time: the others stay as they were');
     const before = JSON.stringify(shopRowOf(dave.pk));
     const refusals = [
-        await call('PUT', dave, MINE, { kind: 'weapons' }),
+        await call('PUT', dave, MINE, { category: 'weapons' }),
         await call('PUT', dave, MINE, { name: 'x'.repeat(61) }),
         await call('PUT', dave, MINE, { blurb: 'y'.repeat(301) }),
         await call('PUT', dave, MINE, { howToDeal: 'z'.repeat(301) }),
@@ -219,12 +219,12 @@ async function main(): Promise<void> {
         await call('PUT', dave, MINE, { backOn: 'soon', paused: true }),
     ];
     assert(refusals.every(r => r.status === 400 && typeof r.body?.error === 'string' && r.body.error.length > 10) && JSON.stringify(shopRowOf(dave.pk)) === before,
-        `refused in a sentence, writing nothing: a kind that isn't one, a name over 60, a blurb or how I deal over 300, a name that isn't text, a back-on that isn't a date (${refusals.map(r => r.status).join(', ')}: ${refusals.map(r => r.body?.error).join(' | ')})`);
-    const cleared = await call('PUT', dave, MINE, { howToDeal: '  ', kind: null });
-    assert(cleared.status === 200 && cleared.body?.shop?.howToDeal === null && cleared.body.shop.kind === null && shopRowOf(dave.pk)?.how_to_deal === null,
-        'an empty one is cleared, and null clears a kind');
-    await call('PUT', dave, MINE, { kind: 'tools' });
-    const annShop: string = (await call('PUT', ann, MINE, { name: "Ann's Garden", kind: 'food' })).body?.shop?.id;
+        `refused in a sentence, writing nothing: a category that isn't one, a name over 60, a blurb or how I deal over 300, a name that isn't text, a back-on that isn't a date (${refusals.map(r => r.status).join(', ')}: ${refusals.map(r => r.body?.error).join(' | ')})`);
+    const cleared = await call('PUT', dave, MINE, { howToDeal: '  ', category: null });
+    assert(cleared.status === 200 && cleared.body?.shop?.howToDeal === null && cleared.body.shop.category === null && shopRowOf(dave.pk)?.how_to_deal === null,
+        'an empty one is cleared, and null clears a category');
+    await call('PUT', dave, MINE, { category: 'tools' });
+    const annShop: string = (await call('PUT', ann, MINE, { name: "Ann's Garden", category: 'food' })).body?.shop?.id;
     assert(typeof annShop === 'string' && annShop !== daveShop, "another member's shop is their own");
     const unsignedMine = await call('GET', null, MINE);
     assert(unsignedMine.status === 401 || unsignedMine.status === 403, `a member's own shop is a signed read (${show(unsignedMine)})`);
@@ -332,7 +332,7 @@ async function main(): Promise<void> {
     const read = await call('GET', cy, shopPath(daveShop));
     const c = read.body?.counts ?? {};
     assert(read.status === 200 && read.body?.id === daveShop && read.body.name === "Dave's Tool Shed" && read.body.ownerName === 'DaveSentinel'
-        && read.body.ownerPublicKey === dave.pk && read.body.kind === 'tools' && read.body.blurb === 'Drills, ladders, a tent.' && read.body.enterprise === false,
+        && read.body.ownerPublicKey === dave.pk && read.body.category === 'tools' && read.body.blurb === 'Drills, ladders, a tent.' && read.body.enterprise === false,
         `its name, owner and words (${show(read)})`);
     assert(c.things === 4 && c.available === 4 && c.toBorrow === 1 && c.toBuy === 3 && c.out === 0 && c.newThisWeek === 4,
         `its counts: 4 things (the paused hose not among them), 1 to borrow, 3 to buy (${JSON.stringify(c)})`);
@@ -341,7 +341,7 @@ async function main(): Promise<void> {
     await call('POST', dave, '/api/marketplace/posts/resume', { postId: hoseId, authorPublicKey: dave.pk });
 
     // ── 5. a visitor ────────────────────────────────────────────────────────────────────────────
-    console.log('\n── 5. a visitor: kind and counts only ──');
+    console.log('\n── 5. a visitor: category and counts only ──');
     const sentinels = [dave.pk, ann.pk, 'DaveSentinel', 'AnnSentinel', "Dave's Tool Shed", 'Drills, ladders', 'Pick up from', "Ann's Garden"];
     const leaks = (text: string) => sentinels.filter(s => text.includes(s));
     const localStranger = await call('GET', null, shopPath(daveShop));
@@ -353,14 +353,14 @@ async function main(): Promise<void> {
     try {
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as Array<[string, Id | null]>) {
             const one = await call('GET', id, shopPath(daveShop));
-            assert(one.status === 200 && same(Object.keys(one.body ?? {}).sort(), ['counts', 'id', 'kind']) && one.body.kind === 'tools'
+            assert(one.status === 200 && same(Object.keys(one.body ?? {}).sort(), ['category', 'counts', 'id']) && one.body.category === 'tools'
                 && one.body.counts?.things === 5 && leaks(one.text).length === 0,
-                `${who}: one shop is its id, kind and counts, and nobody (${show(one)})`);
+                `${who}: one shop is its id, category and counts, and nobody (${show(one)})`);
             const near = await call('GET', id, nearPath(MULLUM.lat, MULLUM.lng, 50));
             const shops: any[] = near.body?.shops ?? [];
-            assert(near.status === 200 && shops.length === 2 && shops.every(s => same(Object.keys(s).sort(), ['counts', 'distanceKm', 'id', 'kind']) && Number.isInteger(s.distanceKm))
+            assert(near.status === 200 && shops.length === 2 && shops.every(s => same(Object.keys(s).sort(), ['category', 'counts', 'distanceKm', 'id']) && Number.isInteger(s.distanceKm))
                 && leaks(near.text).length === 0,
-                `${who}: the shops near a place are each id, kind, counts and a whole-km distance, and nobody (${show(near)})`);
+                `${who}: the shops near a place are each id, category, counts and a whole-km distance, and nobody (${show(near)})`);
             const posts = await listShop(id, daveShop);
             assert(posts.status === 200 && (posts.body as any[]).length === 5 && (posts.body as any[]).every(p => p.shopId === daveShop && p.authorPublicKey === 'hidden')
                 && leaks(posts.text).length === 0,
@@ -378,7 +378,7 @@ async function main(): Promise<void> {
     // ── 6. near a place ─────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. shops near a place ──');
     await offerId(ann, 'Ann seedlings', { shopId: annShop, lat: NEAR_MULLUM.lat, lng: NEAR_MULLUM.lng });
-    const eveShop: string = (await call('PUT', eve, MINE, { kind: 'baking' })).body?.shop?.id;
+    const eveShop: string = (await call('PUT', eve, MINE, { category: 'food' })).body?.shop?.id;
     await offerId(eve, 'Eve bread', { shopId: eveShop, lat: CASTLEMAINE.lat, lng: CASTLEMAINE.lng });
     const fromAnn = await call('GET', cy, nearPath(NEAR_MULLUM.lat, NEAR_MULLUM.lng, 50));
     const order = (fromAnn.body?.shops ?? []).map((s: any) => s.id);
@@ -526,12 +526,12 @@ async function main(): Promise<void> {
     assert(asKeeper.status === 200 && asKeeper.body?.shop?.id === bikesShop && asKeeper.body.shop.name === 'Bo Bikes Sentinel'
         && asKeeper.body.shop.blurb === 'Bikes fixed and lent around town.' && asKeeper.body.shop.enterprise === true,
         `its name is the enterprise's, its blurb the purpose (${show(asKeeper)})`);
-    const notKeeper = await call('PUT', dave, entShop(bikes), { kind: 'repairs' });
+    const notKeeper = await call('PUT', dave, entShop(bikes), { category: 'services' });
     const notKeeperRead = await call('GET', dave, entShop(bikes));
     assert(notKeeper.status === 403 && notKeeperRead.status === 403, `only a keeper reads it as its keeper or changes it (${show(notKeeper)}; ${show(notKeeperRead)})`);
-    const keeperPut = await call('PUT', cy, entShop(bikes), { kind: 'repairs', blurb: 'Tune-ups on Saturdays.' });
+    const keeperPut = await call('PUT', cy, entShop(bikes), { category: 'services', blurb: 'Tune-ups on Saturdays.' });
     const nameRefused = await call('PUT', cy, entShop(bikes), { name: 'Another name' });
-    assert(keeperPut.status === 200 && keeperPut.body?.shop?.kind === 'repairs' && keeperPut.body.shop.blurb === 'Tune-ups on Saturdays.'
+    assert(keeperPut.status === 200 && keeperPut.body?.shop?.category === 'services' && keeperPut.body.shop.blurb === 'Tune-ups on Saturdays.'
         && nameRefused.status === 400 && nameRefused.body?.code === 'shop_name_is_enterprise',
         `a keeper dresses it; its name can't be set apart from the enterprise's (${show(keeperPut)}; ${show(nameRefused)})`);
     const entRead = await call('GET', dave, shopPath(bikesShop));
@@ -565,7 +565,7 @@ async function main(): Promise<void> {
     console.log('\n── 11. a standby ──');
     const snapshot = JSON.stringify(everyShop());
     setNodeRole('backup');
-    const sChanges = [await call('PUT', cy, MINE, {}), await call('PUT', cy, entShop(bikes), { kind: 'tools' }),
+    const sChanges = [await call('PUT', cy, MINE, {}), await call('PUT', cy, entShop(bikes), { category: 'tools' }),
         await call('POST', ann, `${MINE}/close`, {}), await call('POST', cy, `${entShop(bikes)}/close`, {}), await call('POST', ann, `${MINE}/offers`, { postIds: [] })];
     const sRead = await call('GET', cy, shopPath(bikesShop));
     setNodeRole('primary');
@@ -606,7 +606,7 @@ async function main(): Promise<void> {
     const keptShops = everyShop();
     const keptPosts = shopPosts();
     await call('PUT', cy, entShop(bikes), { howToDeal: 'Ring the bell.' });
-    const cyShop: string = (await call('PUT', cy, MINE, { kind: 'rides' })).body?.shop?.id;
+    const cyShop: string = (await call('PUT', cy, MINE, { category: 'transport' })).body?.shop?.id;
     const cyThing = await offerId(cy, 'Cy rides', { shopId: cyShop });
     const eveThings = (db.prepare('SELECT id FROM posts WHERE shop_id = ?').all(eveShop) as { id: string }[]).map(r => r.id);
     await call('POST', eveNew, `${MINE}/close`, {});
@@ -648,7 +648,7 @@ async function main(): Promise<void> {
     const keptShops2 = everyShop();
     const keptPosts2 = shopPosts();
     await call('POST', cy, `${MINE}/close`, {});
-    const cyShop2: string = (await call('PUT', cy, MINE, { kind: 'tools' })).body?.shop?.id;
+    const cyShop2: string = (await call('PUT', cy, MINE, { category: 'tools' })).body?.shop?.id;
     const afterShops2 = everyShop();
     const afterPosts2 = shopPosts();
     const reopenDelta: any = await exportSyncState(nodeId, sinceReopen);
@@ -677,7 +677,7 @@ async function main(): Promise<void> {
     assert(importError === '' && same(everyShop(), afterShops2) && same(shopPosts(), afterPosts2)
         && shopRowOf(cy.pk)?.id === cyShop2 && shopRowById(cyShop) === undefined && shopIdOf(cyThing) === null,
         `the standby follows: the new shop in, the old one gone (${importError || `${everyShop().filter(s => s.owner_pubkey === cy.pk).map(s => s.id === cyShop2 ? 'new' : 'old').join(', ') || 'none'}`})`);
-    assert(sOld.status === 404 && sNew.status === 200 && sNew.body?.kind === 'tools',
+    assert(sOld.status === 404 && sNew.status === 200 && sNew.body?.category === 'tools',
         `and answers as the main server does (${show(sOld)}; ${show(sNew)})`);
     // An enterprise's name travels in its members row: the shop's follows it on the standby too.
     const projectShopId: string = projectShop.body?.shop?.id ?? '';
@@ -706,16 +706,16 @@ async function main(): Promise<void> {
     const idaHome = await home(ida, 'needs,shop,community');
     assert(idaHome.status === 200 && same(idaHome.body?.cards?.shop, { shop: null }),
         `asked by its id, a member with no shop gets the card with none in it, never left out (${show(idaHome)})`);
-    const joShop: string = (await call('PUT', jo, MINE, { name: "Jo's Bike Fixes", kind: 'repairs' })).body?.shop?.id;
+    const joShop: string = (await call('PUT', jo, MINE, { name: "Jo's Bike Fixes", category: 'services' })).body?.shop?.id;
     await offerId(jo, 'Puncture fix', { shopId: joShop });
     await offerId(jo, 'Pump to borrow', { shopId: joShop, lendable: true, lendMaxDays: 7 });
     await offerId(jo, 'Old saddle'); // not in the shop
     const joRead = await call('GET', jo, MINE);
     const joHome = await home(jo, 'shop');
     const card = joHome.body?.cards?.shop?.shop;
-    assert(joHome.status === 200 && card?.id === joShop && card.name === "Jo's Bike Fixes" && card.ownerName === 'JoSentinel' && card.kind === 'repairs'
+    assert(joHome.status === 200 && card?.id === joShop && card.name === "Jo's Bike Fixes" && card.ownerName === 'JoSentinel' && card.category === 'services'
         && card.paused === false && card.backOn === null && same(card.counts, joRead.body?.shop?.counts) && card.counts?.things === 2 && card.counts?.toBorrow === 1,
-        `a member's own shop: its name, kind and counts as their own read of it says (${show(joHome)})`);
+        `a member's own shop: its name, category and counts as their own read of it says (${show(joHome)})`);
     const unnamed: string = (await call('PUT', ida, MINE, {})).body?.shop?.id;
     const idaOpened = (await home(ida, 'shop')).body?.cards?.shop?.shop;
     assert(idaOpened?.id === unnamed && idaOpened.name === null && idaOpened.ownerName === 'IdaSentinel',
@@ -785,7 +785,7 @@ async function main(): Promise<void> {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);
-    console.log('⭐️ A shop is a front window on an account: the owner\'s alone to dress, a visitor\'s kind and counts, on every standby.');
+    console.log('⭐️ A shop is a front window on an account: the owner\'s alone to dress, a visitor\'s category and counts, on every standby.');
     process.exit(0);
 }
 

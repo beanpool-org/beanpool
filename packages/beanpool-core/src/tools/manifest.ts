@@ -9,6 +9,7 @@
  */
 import type { ShowcaseFeature } from '../features.js';
 import type { HomeNodeFacts } from '../home-frame.js';
+import type { ShopCategory } from '../shops.js';
 import type { PluralWord, WordKey } from '../words.js';
 
 /** A tool's id: the store key (the node's member_tool_state.tool ≤ 24), the route param and the Home card type's tail. */
@@ -22,16 +23,6 @@ export const TOOL_ID_PATTERN = /^(?=.{2,16}$)[a-z]+(?:-[a-z]+)*$/;
 /** The three shelves of the Tools screen (round 2 §7): what you have, how you deal, how it's going. */
 export type ToolShelf = 'stock' | 'trade' | 'books';
 export const TOOL_SHELVES: readonly ToolShelf[] = ['stock', 'trade', 'books'];
-
-/**
- * The fourteen shop kinds (DESIGN-shops-and-tools-fable.md §6), by the ids a shop keeps: tools and equipment, food from
- * the garden or farm, cooked food and baking, repairs, making and crafts, lessons and tutoring, care, rides and deliveries,
- * rooms and space, buying together, seeds and seedlings, water power and fuel, animals and produce, hands and labour.
- */
-export const SHOP_KINDS = [
-    'tools', 'food', 'baking', 'repairs', 'crafts', 'lessons', 'care', 'rides', 'rooms', 'buying', 'seeds', 'energy', 'animals', 'labour',
-] as const;
-export type ShopKind = (typeof SHOP_KINDS)[number];
 
 /** Whose tool it is: a member's, an enterprise's (opened from its console with the enterprise as owner), or either. */
 export type ToolOwner = 'member' | 'enterprise' | 'both';
@@ -129,8 +120,11 @@ export interface ToolManifest<D = unknown> {
     /** One emoji. No new fonts, ever. */
     icon: string;
     shelf: ToolShelf;
-    /** The shop kinds whose shelves show it, or every kind. */
-    shopKinds: readonly ShopKind[] | 'all';
+    /**
+     * The shop categories whose shelves show it (core SHOP_CATEGORIES, the Market's), or every one: those whose nearest old
+     * shop kind showed it (shops.ts SHOP_CATEGORY_KINDS `toolsLike`), for a tool from before categories.
+     */
+    categories: readonly ShopCategory[] | 'all';
     owner: ToolOwner;
     /** Whether a node of this kind can have it (default: everywhere, global included). */
     onNode?(facts: HomeNodeFacts): boolean;

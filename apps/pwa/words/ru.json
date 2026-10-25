@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "Не удалось создать личность. Попробуйте ещё раз.",
   "Failed to initialize device pairing on node relay": "Не удалось начать связывание устройства через ретранслятор узла",
   "Failed to load image.": "Не удалось загрузить изображение.",
-  "Failed to read file.": "Не удалось прочитать файл.",
   "Failed to submit report. Please try again.": "Не удалось отправить жалобу. Попробуйте ещё раз.",
   "Find people around a place or an interest, and talk together.": "Находите людей по месту или по интересам и общайтесь друг с другом.",
   "Find them any time under **Settings → Recovery Phrase**.": "Они всегда доступны в **Настройки → Фраза восстановления**.",

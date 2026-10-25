@@ -12,8 +12,8 @@
  *   full); its live Offers not in its shop yet go in with one tap; no shop yet, one tap opens it.
  *
  * One column, every target at least 48 dp, words through t(), colours from the central tokens (tools/ui.tsx, Home's
- * card parts), at 320 dp and 1.3× text. The logo is the phone's small copy (512 px, utils/image-processing.ts) and the banner
- * photo a listing photo's (800 px, utils/banner-photo.ts), never more.
+ * card parts), at 320 dp and 1.3× text. The logo and the banner photo are the parts of their photos the keeper chose on the
+ * crop screen (components/PictureCrop.tsx): the logo 512 px square, the banner 3:1 at 800 px (utils/banner-photo.ts), never more.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
@@ -30,6 +30,7 @@ import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, 
 import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm, type FaceSave, type FaceState } from '../../utils/enterprise-manage';
 import { shopPhotoOf } from '../../utils/shopfront';
 import { pickBannerPhoto } from '../../utils/banner-photo';
+import { usePictureCrop } from '../PictureCrop';
 import { useNodeUri } from './Shopfront';
 
 /** Its face: one form, one Save. `onSaved` reads the enterprise again once anything was written. */
@@ -69,12 +70,14 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
     const bannerValue = draft.banner !== undefined ? draft.banner : shopBanner;
     const bannerShown = useNodeUri(bannerValue);
     const [pickingBanner, setPickingBanner] = useState(false);
+    // The banner's crop step: the strip of the photo that shows, 3:1 as its page draws it (components/PictureCrop.tsx).
+    const cropper = usePictureCrop(colors);
     const pickBanner = async () => {
         if (busy || pickingBanner) return;
         setPickingBanner(true);
         setError(null);
         try {
-            const photo = await pickBannerPhoto();
+            const photo = await pickBannerPhoto(cropper.crop);
             if (photo) edit({ banner: photo });
         } catch {
             setError(t("That picture couldn't be read. Try another."));
@@ -189,6 +192,7 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
             <ShopCategorySheet visible={choosingCategory} category={draft.category} busy={false} refusal={null} colors={colors}
                 onPick={(c) => { edit({ category: c }); setChoosingCategory(false); }} onClose={() => setChoosingCategory(false)} />
             <AvatarPickerSheet visible={picking} title={t('Its logo')} colors={colors} onClose={() => setPicking(false)} onSelectImage={(uri) => edit({ logo: uri })} />
+            {cropper.element}
         </ToolSection>
     );
 }
@@ -315,8 +319,8 @@ const styles = StyleSheet.create({
     logoText: { flex: 1, minWidth: 0 },
     logoLabel: { fontSize: 13, fontWeight: '700' },
     bannerRow: { paddingVertical: 6, gap: 8 },
-    // The banner as its page draws it, a little smaller: the full width, cropped to fill.
-    bannerPreview: { height: 96, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
+    // The banner as its page draws it: the full width, 3:1 (core BANNER_PICTURE), so the strip chosen is the strip seen.
+    bannerPreview: { aspectRatio: 3, borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
     bannerImage: { width: '100%', height: '100%' },
     waits: { opacity: 0.6, minHeight: HOME_TARGET_DP },
 });

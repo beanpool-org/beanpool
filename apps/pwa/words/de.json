@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "Identität konnte nicht erstellt werden. Bitte versuche es erneut.",
   "Failed to initialize device pairing on node relay": "Die Geräteverknüpfung über das Knoten-Relay konnte nicht gestartet werden",
   "Failed to load image.": "Bild konnte nicht geladen werden.",
-  "Failed to read file.": "Datei konnte nicht gelesen werden.",
   "Failed to submit report. Please try again.": "Meldung konnte nicht gesendet werden. Bitte versuche es erneut.",
   "Find people around a place or an interest, and talk together.": "Finde Leute rund um einen Ort oder ein Interesse und redet miteinander.",
   "Find them any time under **Settings → Recovery Phrase**.": "Du findest sie jederzeit unter **Einstellungen → Wiederherstellungsphrase**.",

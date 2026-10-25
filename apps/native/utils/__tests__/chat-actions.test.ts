@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import {
     MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, REMOVED_BY_HOST_TEXT,
     REMOVED_BY_KEEPER_TEXT, NOT_AVAILABLE_YET,
-    buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage,
+    buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage, canReportMessage,
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
     shouldFollowNewMessages, shouldShowChatLoadError, showsAuthorName, threadMessageDisplayText, tombstoneText,
@@ -208,6 +208,33 @@ describe('the whole action bar', () => {
         const groupThem = messageActions(someoneElseAt16Min, viewer({ kind: 'group' }));
         expect(groupThem.edit).toBe(false);
         expect((groupThem as any).editClosed).toBeFalsy();
+    });
+});
+
+describe('Report message (group chat photos S6)', () => {
+    const locked = (o: Partial<ChatViewer> = {}) => viewer({ kind: 'group', reportsLines: true, ...o });
+
+    it('is offered on someone else\'s line in a locked group chat, an observer\'s view too, and opens the bar on its own', () => {
+        expect(canReportMessage(msg({ senderId: THEM }), locked())).toBe(true);
+        const observer = messageActions(msg({ senderId: THEM }), locked({ canPost: false }));
+        expect(observer).toEqual({ reply: false, react: false, edit: false, delete: false, remove: false, report: true });
+        expect(hasAnyAction(observer)).toBe(true);
+        expect(messageActions(msg({ senderId: THEM }), locked({ isModerator: true }))).toEqual({ reply: true, react: true, edit: false, delete: false, remove: true, report: true });
+    });
+
+    it('is never offered on my own line, a system line, a tombstone, a line in flight or one shown as nobody\'s', () => {
+        expect(canReportMessage(msg(), locked())).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM, type: 'system' }), locked())).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM, type: 'removed', metadata: { removed: true, removedBy: THEM } }), locked())).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM, sendState: 'sending' }), locked())).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM, unattributed: true }), locked())).toBe(false);
+        expect(canReportMessage(msg({ senderId: THEM }), locked({ myPubkey: null }))).toBe(false);
+    });
+
+    it('is never offered outside a locked group chat: an unlocked one, an event chat, an enterprise thread, a DM', () => {
+        expect(canReportMessage(msg({ senderId: THEM }), viewer({ kind: 'group' }))).toBe(false);
+        for (const kind of ['event', 'enterprise', 'dm'] as const) expect(canReportMessage(msg({ senderId: THEM }), viewer({ kind, reportsLines: true }))).toBe(false);
+        expect('report' in messageActions(msg({ senderId: THEM }), viewer({ kind: 'group' }))).toBe(false);
     });
 });
 

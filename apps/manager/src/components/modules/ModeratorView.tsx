@@ -4,6 +4,7 @@ import { PhoneReturnLink } from '../layout/ReturnLinks';
 import type { BackLink } from '../../lib/came-from';
 import { MODERATOR_MANUAL_PAGES } from '../../lib/manual';
 import { BurstDigestCard, BurstPanel } from './BurstCleanup';
+import { ReportedGroupMessage } from './ReportedGroupMessage';
 import {
     REMOVAL_REASONS,
     actionNodeReport,
@@ -127,6 +128,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                 <p className="text-sm text-nature-300 m-0">
                     What members have reported. You can take down a reported post or Pulse item, or dismiss the report.
                     The author is told their post was removed and why, never by whom; whoever reported it hears the outcome.
+                    A message from a locked group chat shows here only when its reporter shared its key, and only that one message.
                 </p>
 
                 <BurstDigestCard nodeUrl={nodeUrl} onOpen={setBurstAnchor} reloadKey={burstReload} onAvailability={setBurstsHere} />
@@ -246,7 +248,10 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                 </span>
             </div>
 
-            {hasPost ? (
+            {report.targetMessageId ? (
+                // A locked group chat's message, reported with its key: opened here, verified, and nothing else of the chat.
+                <ReportedGroupMessage nodeUrl={nodeUrl} reportId={report.id} groupName={report.groupMessage?.groupName} />
+            ) : hasPost ? (
                 <div className="space-y-1">
                     <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
                         Post{report.postAuthorCallsign ? ` by ${report.postAuthorCallsign}` : ''}{report.postRemoved ? ' · already down' : ''}

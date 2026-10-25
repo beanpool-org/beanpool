@@ -7,8 +7,10 @@
  */
 
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t } from '@beanpool/core';
+import { useTheme } from '../../app/ThemeContext';
 import type { ChatMessage, MessageActions, ChatKind } from '../../utils/chat-actions';
 import { ChatBubble, type ChatQuote } from './ChatBubble';
 import { ChatEmojiPicker, ChatMessageActions } from './ChatMessageActions';
@@ -30,6 +32,8 @@ interface Props {
     onEdit: () => void;
     onDelete: () => void;
     onRemove: () => void;
+    /** Report this message (a locked group chat's line): only where actions.report offers it. */
+    onReport?: () => void;
     onPickEmoji: (emoji: string) => void;
     onPressUrl: (url: string) => void;
     authorLabel?: string | null;
@@ -41,7 +45,7 @@ interface Props {
 
 export function ChatMessageRow({
     item, isMe, styles, kind, actions, showActions, showEmojiPicker, pickerPosition,
-    onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onPickEmoji, onPressUrl,
+    onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onReport, onPickEmoji, onPressUrl,
     authorLabel, quote, attachment, status, footer,
 }: Props) {
     const actionBar = showActions ? (
@@ -57,6 +61,7 @@ export function ChatMessageRow({
             onRemove={onRemove}
         />
     ) : null;
+    const { colors } = useTheme();
 
     return (
         <View style={[styles.messageRowContainer, isMe ? styles.messageRowMe : styles.messageRowOther]}>
@@ -86,6 +91,13 @@ export function ChatMessageRow({
                         {t('You can edit a message for 15 minutes after sending it.')}
                     </Text>
                 </View>
+            )}
+            {/* Under the line, not a fourth round button: beside a wide bubble at 320dp those already reach the edge. */}
+            {showActions && actions.report && onReport && (
+                <Pressable accessibilityRole="button" accessibilityLabel={t('Report message')} onPress={onReport} style={[styles.reportLineButton, isMe && { alignSelf: 'flex-end' }]}>
+                    <MaterialCommunityIcons name="flag-outline" size={18} color={colors.text.body} />
+                    <Text style={styles.reportLineText}>{t('Report message')}</Text>
+                </Pressable>
             )}
         </View>
     );

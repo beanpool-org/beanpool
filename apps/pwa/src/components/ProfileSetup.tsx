@@ -6,13 +6,14 @@
  * so saving the avatar never wipes them.
  */
 import { useState, useEffect, useRef } from 'react';
-import { t } from '@beanpool/core';
+import { AVATAR_PICTURE, t } from '@beanpool/core';
 import { updateMemberProfile, getMemberProfile, registerMember } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { OnboardingGuide } from './OnboardingGuide';
+import { usePictureCrop } from './PictureCropDialog';
 
 type Step = 'name' | 'avatar' | 'guide';
 const ORDER: Step[] = ['name', 'avatar', 'guide'];
@@ -62,26 +63,17 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
     const avatarOk = !!resolveAvatarUrl(avatar);
     const idx = ORDER.indexOf(step);
 
+    // A photo opens the crop dialog: the part the member chooses in the circle is their avatar, 512 px
+    // (components/PictureCropDialog.tsx). Cancel there keeps what they had.
+    const cropper = usePictureCrop();
     function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
+        e.target.value = '';
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 128;
-                canvas.height = 128;
-                const ctx = canvas.getContext('2d')!;
-                const size = Math.min(img.width, img.height);
-                const sx = (img.width - size) / 2;
-                const sy = (img.height - size) / 2;
-                ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
-                setAvatar(canvas.toDataURL('image/jpeg', 0.7));
-            };
-            img.src = reader.result as string;
-        };
-        reader.readAsDataURL(file);
+        setError(null);
+        cropper.crop(file, AVATAR_PICTURE)
+            .then((cropped) => { if (cropped) setAvatar(cropped); })
+            .catch(() => setError(t("That picture couldn't be read. Try another.")));
     }
 
     async function syncCallsign(trimmedCallsign: string) {
@@ -191,8 +183,9 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             </div>
                             <AvatarPresetPicker
                                 selected={avatar}
-                                onSelect={(uri) => setAvatar(uri)}
+                                onSelect={(uri) => { cropper.cancel(); setAvatar(uri); }}
                             />
+                            {cropper.dialog}
                         </div>
                         {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button

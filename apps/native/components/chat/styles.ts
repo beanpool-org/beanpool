@@ -70,6 +70,12 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
         marginTop: 4,
         maxWidth: '85%',
     },
+    // "Report message" under someone else's line in a locked group chat (S6): a 44dp target of its own.
+    reportLineButton: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, marginTop: 4, paddingHorizontal: 14,
+        borderRadius: 22, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, maxWidth: '85%',
+    },
+    reportLineText: { fontSize: 14, fontWeight: '600', color: colors.text.body, flexShrink: 1 },
     editClosedText: {
         fontSize: 11,
         lineHeight: 14,

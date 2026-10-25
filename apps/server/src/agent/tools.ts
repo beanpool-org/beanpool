@@ -126,9 +126,11 @@ function iso(value: unknown): string | null {
     return null;
 }
 
-function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'member' {
+function targetKind(r: AbuseReport): 'post' | 'pulse_item' | 'group_message' | 'member' {
     if (r.targetPulseItemId) return 'pulse_item';
     if (r.targetPostId || r.postId) return 'post';
+    // A group chat message's report (engine/group-chat-report.ts): about its author, and never its key or its words here.
+    if (r.targetMessageId) return 'group_message';
     return 'member';
 }
 
@@ -160,7 +162,8 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
     view.postDescription = kind === 'post' ? fence(boundary, what('reported post description'), r.postDescription) : null;
     view.authorCallsign = kind === 'post'
         ? fence(boundary, what("reported post author's name"), r.postAuthorCallsign)
-        : kind === 'member' ? fence(boundary, what("reported member's name"), r.targetCallsign) : null;
+        : kind === 'member' ? fence(boundary, what("reported member's name"), r.targetCallsign)
+            : kind === 'group_message' ? fence(boundary, what("reported message author's name"), r.targetCallsign) : null;
     return view;
 }
 
@@ -592,6 +595,7 @@ AGENT_TOOLS.push({
         if (!r) return { ok: false, error: 'No report has that id: list them with reports_list.' };
         const kindOf = targetKind(r);
         if (kind === 'remove_reported' && kindOf === 'member') return { ok: false, error: 'That report is about a member, not a post: there is nothing to remove.' };
+        if (kind === 'remove_reported' && kindOf === 'group_message') return { ok: false, error: 'That report is about a group chat message, not a post: there is nothing to remove.' };
         if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
             return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
         }

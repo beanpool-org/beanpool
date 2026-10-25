@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 156,
-  "hash": "6bb05568539f15c223e6326173b4700e9ad19b285aeb7df836155d4c79159d78",
+  "version": 157,
+  "hash": "5ab304e08bcc3fea04dcc568d3dd41e1bd714f7c03a4dc17c553cdb948e939e9",
   "sections": [
     {
       "id": "about",
@@ -769,7 +769,7 @@
         },
         {
           "type": "p",
-          "text": "For problems with a person or a trade, talk to the admins of your community. To report a post, an event or a Pulse post, tap its **🚩 Report** flag (on the phone, a post's button says **Report Post**). In the web app a chat with one person has a **Report** button too. Your community's admins are told. Pick **Child safety** if a child may be at risk. See \"Reporting a problem\". For ideas about the app itself, visit beanpool.org."
+          "text": "For problems with a person or a trade, talk to the admins of your community. To report a post, an event or a Pulse post, tap its **🚩 Report** flag (on the phone, a post's button says **Report Post**). In a group's chat, tap a message and then the flag to report it (in the web app, **Report** under it). In the web app a chat with one person has a **Report** button too. Your community's admins are told. Pick **Child safety** if a child may be at risk. See \"Reporting a problem\". For ideas about the app itself, visit beanpool.org."
         }
       ]
     },
@@ -1322,7 +1322,7 @@
         {
           "type": "ul",
           "items": [
-            "**Your Photo:** choose a photo or one of the ready-made pictures, or skip it and add one later from your profile. Some communities ask for a picture before your first post. People trade more easily with a face or a picture they recognise.",
+            "**Your Photo:** choose a photo or one of the ready-made pictures, or skip it and add one later from your profile. With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Some communities ask for a picture before your first post. People trade more easily with a face or a picture they recognise.",
             "After an invite, **← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others. On the global community there is no **← Back** here: you have already joined.",
             "**Your Area** (in a web browser on the global community, and in the phone app when you join the global community with an account you already have): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** (in a web browser, **I've written these words down somewhere safe**) is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in in the phone app, this step shows your sign-in protecting your account, and your words are one tap away under **Rather write down 12 words?**. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
@@ -2063,13 +2063,13 @@
             "Change what you like:",
             "**Callsign** is the name people see.",
             "**Bio** is a few words about you, up to 200 characters.",
-            "Tap the photo to change it: choose a photo or one of the ready-made pictures.",
+            "Tap the photo to change it: choose a photo or one of the ready-made pictures. With a photo, drag it and pinch it (or tap **−** and **+**) until the part you want is in the circle, then tap **Done**: that part is your picture. **Cancel** keeps the one you had.",
             "Tap **Save Profile**."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app, tap **Edit Profile**, change the photo with **Camera**, **Gallery**, or one of the ready-made pictures, and tap **Save Profile Changes**."
+          "text": "In the web app, tap **Edit Profile**, change the photo with **Camera**, **Gallery**, or one of the ready-made pictures, and tap **Save Profile Changes**. With a photo, drag it and zoom it (with the slider, **−** and **+**, or two fingers) until the part you want is in the circle, then tap **Done**. With a keyboard, the arrow keys move it and + and − zoom."
         },
         {
           "type": "p",
@@ -2227,7 +2227,7 @@
           "items": [
             "**A handshake:** a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
             "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. If the first vote is one in a group or a keepers' vote in an enterprise, the tap opens that group or enterprise instead. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
-            "**Two people with a plus:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.",
+            "**An envelope:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.",
             "**A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.",
             "**A group of people:** new lines in your groups, enterprise chats or event chats. Chats you have muted stay quiet here. The tap opens the chat, or **Talk**, at **Groups**, if there are several.",
             "**A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too."
@@ -2845,7 +2845,7 @@
             "**Posting an Offer or a Need:** use **New Post** on the **Map** page.",
             "**Appearance:** the choice is called **Same as device** instead of \"Same as phone\".",
             "**Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app show here too, once the phone has been online. A block made here does not show in the phone app, but your community keeps it, so their messages don't reach you on either. See \"Blocking someone\".",
-            "**Chats:** the web chat has **Report** and **Block** buttons at the top.",
+            "**Chats:** the web chat has **Report** and **Block** buttons at the top. In a group's chat, **Report** under someone's message reports that one message.",
             "**Your area:** on the global community the web app's Settings has **Your area** too, and its Market and Map start from it. See \"Your area\".",
             "**Global community:** on a local community, Settings has a **Global community** row under **BEANPOOL**, with its address and **The global community is one community among many. Your own community runs on its own server and never needs it.** It opens the worldwide community your community's server names, in a new tab. Your account isn't there until you bring it: in that tab, **Join**, then **I have my 12 words**. If your community names none, there is no row."
           ]
@@ -3222,7 +3222,7 @@
       "slug": "your-shop",
       "title": "Your Shop",
       "summary": "A front window on your own account, for the Offers you choose, under one name.",
-      "help": "Your Offers under one name. Name it, say what kind it is, give it a banner photo, close it for now, or close it.",
+      "help": "Your Offers under one name. Name it, pick its category, give it a banner photo, close it for now, or close it.",
       "section": "market",
       "related": [
         "posting",
@@ -3257,7 +3257,7 @@
         },
         {
           "type": "h2",
-          "text": "Its name, kind and words"
+          "text": "Its name, category and words"
         },
         {
           "type": "p",
@@ -3267,10 +3267,10 @@
           "type": "ul",
           "items": [
             "**Name**: up to 60 characters. Leave it empty to be called after you again.",
-            "**Kind**: one of fourteen, such as **Tools and equipment**, **Repairs** or **Food from the garden or farm**. It helps neighbours find you and picks the tools shown. It changes nothing else.",
+            "**Category**: one of the Market's categories, the same ones every listing has, such as **Tools**, **Food** or **Tech**. It helps neighbours find you and picks the tools shown. It changes nothing else.",
             "**About**: what it is, in a few words.",
             "**How I deal**: where to pick things up, and when they come back.",
-            "**Banner photo**: one photo across the top of your shop, as members see it. Tap it to choose one, or to change it; **Remove the banner photo** takes it down. With none, the top is a plain block with your shop's kind."
+            "**Banner photo**: one photo across the top of your shop, as members see it, three times as wide as it is tall. Tap it to choose one, or to change it: move the photo and zoom it until the strip you want is in the frame, then tap **Done**. That strip is what members see. **Remove the banner photo** takes it down. With none, the top is a plain block with your shop's category, shown with the same emoji as its listings."
           ]
         },
         {
@@ -3279,7 +3279,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **See it as members do** on Your shop. It shows your shop as other members here see it: its banner photo, its name, kind and since when, your picture and trust level, About, the Offers you feature, its Offers in sections (**To buy**, **Book a time**, **To borrow**), How I deal, and a **Message** button that opens a chat with you. To change it, tap **Change your shop**."
+          "text": "Tap **See it as members do** on Your shop. It shows your shop as other members here see it: its banner photo, its name, category and since when, your picture and trust level, About, the Offers you feature, its Offers in sections (**To buy**, **Book a time**, **To borrow**), How I deal, and a **Message** button that opens a chat with you. To change it, tap **Change your shop**."
         },
         {
           "type": "h2",
@@ -3335,7 +3335,7 @@
         },
         {
           "type": "p",
-          "text": "A shop works the same on the global community. Someone who has not joined sees what kind of shop it is and how many things are in it, never its name, its banner photo or your name."
+          "text": "A shop works the same on the global community. Someone who has not joined sees its category and how many things are in it, never its name, its banner photo or your name."
         },
         {
           "type": "h2",
@@ -4192,7 +4192,7 @@
         {
           "type": "ul",
           "items": [
-            "On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)",
+            "On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.",
             "In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.",
             "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
             "Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.",
@@ -4206,7 +4206,7 @@
         },
         {
           "type": "p",
-          "text": "With Beans involved? Start a project or an enterprise instead, from the bottom of the categories: on the phone **Start a project or an enterprise**, on the web **Start a project** or **Start an enterprise**. See \"Projects and enterprises\"."
+          "text": "With Beans involved? Start a project or an enterprise instead: tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**; on the web **Start a project** or **Start an enterprise**). See \"Projects and enterprises\"."
         },
         {
           "type": "h2",
@@ -4261,7 +4261,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see \"Messages\"."
+          "text": "In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, search the chat and report someone's message (**Report**, under it). Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see \"Messages\"."
         },
         {
           "type": "h2",
@@ -4278,7 +4278,8 @@
             "**React** opens seven emojis. One each; tap it again to take it back. The reactions show as a badge under the message.",
             "**Edit**, on your own messages, for 15 minutes. The message then shows **edited**. Photos cannot be edited.",
             "**Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.",
-            "**Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**."
+            "**Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**.",
+            "**Report** (a flag), on anybody else's message. Choose a reason, add a few words if you like, and tap **Submit report**. Your community's moderators get that one message, with its photo if it has one, and who sent it, and nothing else in the chat. See \"Reporting a problem\"."
           ]
         },
         {
@@ -4299,7 +4300,7 @@
         },
         {
           "type": "p",
-          "text": "An **observer** can read the chat but not write in it, react or reply."
+          "text": "An **observer** can read the chat but not write in it, react or reply. They can report a message."
         },
         {
           "type": "p",
@@ -4374,7 +4375,7 @@
         },
         {
           "type": "p",
-          "text": "When someone invites you to a group, your phone gets an alert, \"You were invited to join a group.\", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (two people with a plus). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off."
+          "text": "When someone invites you to a group, your phone gets an alert, \"You were invited to join a group.\", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off."
         },
         {
           "type": "p",
@@ -5741,7 +5742,7 @@
         {
           "type": "ul",
           "items": [
-            "its banner photo across the top, or a plain block with its kind's emoji when it has none, then its logo, its name, what kind of shop it is and since when it has been here;",
+            "its banner photo across the top, or a plain block with its category's emoji when it has none, then its logo, its name, its category and since when it has been here;",
             "what it is for;",
             "who keeps it (**Kept by**; **Run by** on a project), each with their trust level, stars and how many trades they have done. These badges show what each person has done. They don't decide anything;",
             "a project's goal and its pledge box;",
@@ -5757,7 +5758,7 @@
         },
         {
           "type": "p",
-          "text": "Where a community lets people who are not members read its pages, they see its logo, name and kind, what it is for, its keepers' names, About and a project's goal, but not its banner photo, listings, badges or money. Most communities don't: there, only members can open the page."
+          "text": "Where a community lets people who are not members read its pages, they see its logo, name and category, what it is for, its keepers' names, About and a project's goal, but not its banner photo, listings, badges or money. Most communities don't: there, only members can open the page."
         },
         {
           "type": "p",
@@ -5787,9 +5788,9 @@
           "type": "ul",
           "items": [
             "requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See \"Keepers\".",
-            "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its kind and **How we deal**. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, kind or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
+            "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its category and **How we deal**. Its category is one of the Market's categories, the same ones every listing has. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the category and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, category or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. With a photo, for the logo or the banner, move it and zoom it until the part you want is in the frame (a circle for the logo, a strip three times as wide as it is tall for the banner, as its page shows them), then tap **Done**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
             "**Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.",
-            "**Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.",
+            "**Operator controls:** **Post Offer** and **Post Need** post in its name (a new Offer starts in its shop's category, which you can change before you post), and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.",
             "**Decisions:** its keepers' votes.",
             "Removing a keeper, and stepping down.",
             "**Season & lifecycle controls:** pausing and closing it (below).",
@@ -5819,12 +5820,11 @@
         {
           "type": "ul",
           "items": [
-            "On the web, tap **Commons**, then **+ Create Group**, then **Start a project** or **Start an enterprise**. In the phone app, tap **Commons**, then **Groups**, pick **Projects** or **Enterprises**, then the round **+** button.",
-            "Choose **Project** or **Enterprise**.",
+            "On the web, tap **Commons**, then **+ Create Group**, then **Start a project** or **Start an enterprise**. In the phone app, tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)",
             "Give it a **Name** and a **Purpose statement**.",
             "For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.",
-            "Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). Its banner photo, across the top of its page, is chosen later under **Manage**.",
-            "Tap **Start Initiative** (**Propose Enterprise** in the web app; it still starts at once)."
+            "Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Its banner photo, across the top of its page, is chosen later under **Manage**.",
+            "Tap **Start the project 🌱** or **Start the enterprise 🏛️** (**Propose Enterprise** in the web app; it still starts at once)."
           ]
         },
         {
@@ -7054,7 +7054,7 @@
     {
       "slug": "reporting",
       "title": "Reporting a problem",
-      "summary": "Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.",
+      "summary": "Tell your community's moderators about a post, an event, a Pulse post, a project, an enterprise or a message in a group's chat.",
       "section": "settings",
       "related": [
         "blocking",
@@ -7073,7 +7073,8 @@
             "**A post in the Market:** open it and tap **Report Post** (in the web app, **Report**).",
             "**An event:** open it and tap **Report event**.",
             "**A Pulse post:** tap the flag on it.",
-            "**A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom."
+            "**A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom.",
+            "**A message in a group's chat:** on the phone, tap the message, then the flag (**Report message**). In the web app, tap **Report** under it. You can report anybody's message but your own."
           ]
         },
         {
@@ -7094,7 +7095,11 @@
         },
         {
           "type": "p",
-          "text": "There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See \"Blocking someone\"."
+          "text": "A group's chat is end-to-end encrypted, so your community's moderators can't read it. When you report a message there, your app sends that one message's own key with the report. With it the moderators can open that message, its photo if it has one, and see who sent it, and check that it really is theirs: a message someone changed, or one made up, shows them **Could not be verified**. The key opens nothing else in the chat. The report box tells you what goes. You can report each message once. The one exception is **Child safety**: if a moderator has already dealt with your report and you then choose **Child safety**, it goes to them as a new report."
+        },
+        {
+          "type": "p",
+          "text": "There is no separate button to report a person, or a message in a chat with one person, in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See \"Blocking someone\"."
         },
         {
           "type": "p",
@@ -7112,7 +7117,7 @@
           "type": "ul",
           "items": [
             "**A Market post or an event:** if they remove it, you get an alert: \"The post you reported was removed\". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.",
-            "**A Pulse post, a project, an enterprise or a person:** you are not told the outcome in the app.",
+            "**A Pulse post, a project, an enterprise, a person or a message in a group's chat:** you are not told the outcome in the app.",
             "The moderators see who sent each report. Nobody else is told who reported: not the person you reported, and not anyone else who reported the same thing."
           ]
         },

@@ -7,7 +7,7 @@
  * The node is a stubbed fetch, entered through the open door as WelcomePage.howItWorks.test.tsx does.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { photoStepNote } from '@beanpool/core';
 import { WelcomePage } from './WelcomePage';
 import { generateIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity } from '../lib/identity';
@@ -89,5 +89,67 @@ describe('the photo step with no picture picked', () => {
         await toPhotoStep(GLOBAL);
         fireEvent.click(screen.getByTitle('Green Bean'));
         expect(screen.queryByTestId('photo-step-note')).toBeNull();
+    });
+});
+
+describe('a photo picked at sign-up', () => {
+    // jsdom decodes no pictures and draws on no canvas: a stand-in for both records what was asked of them.
+    const drawn: Array<{ width: number; height: number; args: unknown[] }> = [];
+    let undo: () => void = () => {};
+    beforeEach(() => {
+        drawn.length = 0;
+        const image = window.Image;
+        class FakeImage {
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            width = 1600; height = 1200; naturalWidth = 1600; naturalHeight = 1200;
+            set src(_v: string) { setTimeout(() => this.onload?.(), 0); }
+        }
+        (window as any).Image = FakeImage;
+        const getContext = HTMLCanvasElement.prototype.getContext;
+        const toDataURL = HTMLCanvasElement.prototype.toDataURL;
+        (HTMLCanvasElement.prototype as any).getContext = function (this: HTMLCanvasElement) {
+            return { drawImage: (...args: unknown[]) => drawn.push({ width: this.width, height: this.height, args }) };
+        };
+        (HTMLCanvasElement.prototype as any).toDataURL = () => 'data:image/jpeg;base64,Q1JPUA==';
+        undo = () => {
+            (window as any).Image = image;
+            (HTMLCanvasElement.prototype as any).getContext = getContext;
+            (HTMLCanvasElement.prototype as any).toDataURL = toDataURL;
+        };
+    });
+    afterEach(() => undo());
+
+    const me = () => new File([new Uint8Array([0xff, 0xd8])], 'me.jpg', { type: 'image/jpeg' });
+
+    it('opens the crop dialog, a square in a circle, and keeps the part chosen at 512 px (never the old middle square at 128)', async () => {
+        await toPhotoStep(GLOBAL);
+        const inputs = Array.from(document.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
+        expect(inputs).toHaveLength(2);
+        for (const input of inputs) {
+            fireEvent.change(input, { target: { files: [me()] } });
+            const dialog = await screen.findByRole('dialog', { name: 'Choose the part that shows' });
+            expect(dialog).toHaveAttribute('data-aspect', '1');
+            expect(dialog).toHaveAttribute('data-round', 'true');
+            fireEvent.keyDown(dialog, { key: '+' });
+            fireEvent.keyDown(dialog, { key: 'ArrowLeft' });
+            fireEvent.keyDown(dialog, { key: 'ArrowLeft' });
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+            await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+            const last = drawn.at(-1)!;
+            expect({ width: last.width, height: last.height }).toEqual({ width: 512, height: 512 });
+            expect(last.args.slice(1)).toEqual([512, 120, 960, 960, 0, 0, 512, 512]);
+        }
+        expect(screen.getByAltText('Avatar Preview')).toHaveAttribute('src', 'data:image/jpeg;base64,Q1JPUA==');
+    });
+
+    it('Cancel keeps no picture', async () => {
+        await toPhotoStep(GLOBAL);
+        fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [me()] } });
+        const dialog = await screen.findByRole('dialog', { name: 'Choose the part that shows' });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(drawn).toEqual([]);
+        expect(screen.queryByAltText('Avatar Preview')).toBeNull();
     });
 });

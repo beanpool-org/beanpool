@@ -303,6 +303,30 @@ describe('PeopleSafetySection Component', () => {
         vi.unstubAllGlobals();
     });
 
+    it('opens a group chat message reported with its key, with the admin credentials, and nothing for other reports', async () => {
+        const fetchMock = vi.fn(async (url: string) => ({
+            ok: true, status: 200,
+            json: async () => (String(url).includes('/reports/rep_msg/message')
+                ? { success: true, message: { id: 'm1', groupName: 'Garden Crew', authorCallsign: 'bob', authorPubkey: mockMembers[1].publicKey,
+                    signer: mockMembers[1].publicKey, words: { state: 'unverified' }, photo: null } }
+                : { success: true, reports: [], total: 0, pendingCount: 0 }),
+        }));
+        vi.stubGlobal('fetch', fetchMock);
+        renderModeration([
+            { id: 'rep_msg', targetPubkey: mockMembers[1].publicKey, reason: 'Offensive content', status: 'pending', targetMessageId: 'm1',
+                groupMessage: { groupId: 'g1', groupName: 'Garden Crew', photo: false, removed: false } },
+            { id: 'rep_member', targetPubkey: mockMembers[1].publicKey, reason: 'Rude in chat', status: 'pending' },
+        ]);
+        expect(await screen.findByText('Could not be verified')).toBeInTheDocument();
+        expect(screen.getAllByTestId('reported-group-message')).toHaveLength(1);
+        const asked = fetchMock.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('/message'));
+        expect(asked).toHaveLength(1);
+        expect(asked[0]).toMatch(/\/api\/local\/admin\/reports\/rep_msg\/message$/);
+        const [, init] = fetchMock.mock.calls.find(([u]) => String(u).includes('/message')) as unknown as [string, RequestInit];
+        expect((init.headers as Record<string, string>)['X-Admin-Password']).toBe('admin-password');
+        vi.unstubAllGlobals();
+    });
+
     it('shows a removed Pulse item without a remove button, and no Pulse controls on member reports', async () => {
         renderModeration([
             {

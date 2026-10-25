@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "Không tạo được danh tính. Vui lòng thử lại.",
   "Failed to initialize device pairing on node relay": "Không khởi tạo được việc ghép nối thiết bị trên máy chủ chuyển tiếp",
   "Failed to load image.": "Không tải được hình ảnh.",
-  "Failed to read file.": "Không đọc được tệp.",
   "Failed to submit report. Please try again.": "Gửi báo cáo không thành công. Vui lòng thử lại.",
   "Find people around a place or an interest, and talk together.": "Tìm những người quanh một địa điểm hoặc một sở thích, và cùng trò chuyện.",
   "Find them any time under **Settings → Recovery Phrase**.": "Bạn có thể tìm lại chúng bất cứ lúc nào tại **Cài đặt → Cụm từ khôi phục**.",

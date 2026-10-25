@@ -2488,9 +2488,15 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
 
             if (remote.abuseReports) {
                 for (const ar of remote.abuseReports) {
-                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    // A message's report and its key come with the row, written once: the reporter's disclosure never changes.
+                    // Its reason can: a pending report changed to Child safety (updatePendingReportReason,
+                    // changeGroupLineReportReason) moves updated_at, and a copy that took only the status kept the old reason,
+                    // so a server that took over neither marked it nor listed it first (the review of #2470).
+                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at,
+                                    target_message_id, disclosure)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
+                                    reason = excluded.reason,
                                     status = excluded.status,
                                     updated_at = excluded.updated_at
                                 WHERE excluded.updated_at IS NOT NULL
@@ -2503,7 +2509,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ar.reason,
                         ar.createdAt,
                         ar.status || 'pending',
-                        ar.updatedAt || ar.createdAt
+                        ar.updatedAt || ar.createdAt,
+                        ar.targetMessageId || null,
+                        ar.disclosure || null
                     );
                 }
             }

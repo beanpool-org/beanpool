@@ -60,8 +60,11 @@ import {
     groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch, removeWithEpoch, approveWithEpoch, GroupChatKeyError,
     GROUP_KEY_ROLLBACK_TEXT, type GroupKeyStore,
 } from '../group-chat-keys';
-import { sendSealedGroupLine, editSealedGroupLine, openGroupThread, chatIsLocked, getDecryptedGroupAttachment, type GroupPhotoCache } from '../group-chat-lines';
-import { openLine } from '../group-chat-crypto';
+import {
+    sendSealedGroupLine, editSealedGroupLine, openGroupThread, chatIsLocked, getDecryptedGroupAttachment, reportSealedGroupLine, GROUP_REPORT_NO_KEY_TEXT,
+    type GroupPhotoCache,
+} from '../group-chat-lines';
+import { groupMessageKey, openGroupLineWithMessageKey, openLine } from '../group-chat-crypto';
 import { GROUP_LINE_UNVERIFIED_NAME, GROUP_LINE_UNVERIFIED_TEXT, type DisplayRosterRow } from '../group-line-display';
 import type { BeanPoolIdentity } from '../identity';
 import { buildSignedHeaders } from '../crypto';
@@ -544,6 +547,64 @@ describe('group chats on the phone, end to end against a real node', () => {
         const anaCache = memoryCache();
         expect(await getDecryptedGroupAttachment(URL_BASE, ana.identity, ana.store, { groupId: PG, line: await servedLine(ana, PG, firstPhotoId), view: anaView }, anaCache)).toBeNull();
         expect(anaCache.kept.size).toBe(0);
+    }, 60_000);
+
+    it('reporting a line (S6): the phone hands over that message\'s own key, which opens its caption and photo and no other line', async () => {
+        await control('limiters');
+        const v = await shown(cat, PG);
+        const view = v.opened.views.get(secondPhotoId)!;
+        expect([view.signer, view.epoch]).toEqual([ana.identity.publicKey, 4]);
+        const from = sent.length;
+        const res = await reportSealedGroupLine(URL_BASE, cat.identity, cat.store, { groupId: PG, messageId: secondPhotoId, view, reason: 'Offensive content: not here' });
+        expect(res).toMatchObject({ success: true, report: { targetMessageId: secondPhotoId, targetPubkey: ana.identity.publicKey, reporterPubkey: cat.identity.publicKey } });
+        const posted = sent.slice(from).filter((s) => s.method === 'POST' && s.path === `/api/groups/${PG}/chat/report`);
+        expect(posted.map((s) => s.status)).toEqual([200]);
+        const body = JSON.parse(posted[0].body!);
+        const key4 = (await ring(cat, PG).keyFor(4))!;
+        expect(body).toEqual({ messageId: secondPhotoId, reason: 'Offensive content: not here', disclosure: { epoch: 4, mk: Buffer.from(groupMessageKey(key4, secondPhotoId)).toString('base64') } });
+        const [row] = await control<any[]>('sql', { sql: 'SELECT reporter_pubkey, target_pubkey, target_message_id, disclosure FROM abuse_reports WHERE id = ?', params: [res.report.id], all: true });
+        expect(row).toEqual({ reporter_pubkey: cat.identity.publicKey, target_pubkey: ana.identity.publicKey, target_message_id: secondPhotoId, disclosure: JSON.stringify(body.disclosure) });
+
+        // What the moderators can open with it: that line's words and photo, signed by Ana, and no other line in the chat.
+        const mk = new Uint8Array(Buffer.from(body.disclosure.mk, 'base64'));
+        const line = await servedLine(cat, PG, secondPhotoId);
+        const photo = await json(await signedGet(URL_BASE, `/api/messages/${secondPhotoId}/attachment`, cat.identity));
+        const bind = { groupId: PG, epoch: 4, senderPubHex: ana.identity.publicKey, messageId: secondPhotoId, replyToId: null };
+        expect(openGroupLineWithMessageKey({ ciphertext: line.ciphertext, nonce: line.nonce }, { ...bind, part: 'body' }, mk).text).toBe('and the seedlings');
+        expect(openGroupLineWithMessageKey({ ciphertext: photo.data, nonce: photo.nonce }, { ...bind, part: 'attachment' }, mk).text).toBe(photos.get(secondPhotoId));
+        const others = (await getChat(ana, PG)).messages.filter((m: any) => m.id !== secondPhotoId && String(m.nonce).startsWith('group-xc20p-v1:'));
+        expect(others.length).toBeGreaterThan(0);
+        for (const m of others) {
+            const meta = typeof m.metadata === 'string' ? JSON.parse(m.metadata) : m.metadata;
+            for (const signer of [ana, ben, dov].map((p) => p.identity.publicKey)) {
+                expect(() => openGroupLineWithMessageKey({ ciphertext: m.ciphertext, nonce: m.nonce },
+                    { groupId: PG, epoch: meta.epoch, senderPubHex: signer, messageId: m.id, part: 'body', replyToId: meta.replyToId ?? null }, mk)).toThrow();
+            }
+        }
+
+        // Again: the report on file. A line from before Cat's membership, and her own line, are refused; nothing is filed.
+        const again = await reportSealedGroupLine(URL_BASE, cat.identity, cat.store, { groupId: PG, messageId: secondPhotoId, view, reason: 'Spam or scam' });
+        expect(again).toMatchObject({ duplicate: true, report: { id: res.report.id } });
+        const early = { ...view, epoch: 3 };
+        await expect(reportSealedGroupLine(URL_BASE, cat.identity, cat.store, { groupId: PG, messageId: firstPhotoId, view: early, reason: 'Spam or scam' }))
+            .rejects.toThrow(GROUP_REPORT_NO_KEY_TEXT);
+        const own = await say(cat, PG, 'my own words');
+        const ownView = (await shown(cat, PG)).opened.views.get(own.message.id)!;
+        await expect(reportSealedGroupLine(URL_BASE, cat.identity, cat.store, { groupId: PG, messageId: own.message.id, view: ownView, reason: 'Spam or scam' }))
+            .rejects.toMatchObject({ status: 400 });
+        const [{ c }] = await control<any[]>('sql', { sql: 'SELECT COUNT(*) AS c FROM abuse_reports WHERE reporter_pubkey = ?', params: [cat.identity.publicKey], all: true });
+        expect(c).toBe(1);
+    }, 60_000);
+
+    it('reporting refuses, before anything is sent, a line whose key is not on this phone', async () => {
+        const benNew: Phone = { ...ben, store: memoryGroupKeyStore() };
+        forgetGroupKeys();
+        const view = (await shown(benNew, PG)).opened.views.get(secondPhotoId)!;
+        expect(view.waitingKey).toBe(true);
+        const before = sent.length;
+        await expect(reportSealedGroupLine(URL_BASE, benNew.identity, benNew.store, { groupId: PG, messageId: secondPhotoId, view, reason: 'Spam or scam' }))
+            .rejects.toThrow(GROUP_REPORT_NO_KEY_TEXT);
+        expect(sent.slice(before).filter((s) => s.path.endsWith('/chat/report'))).toEqual([]);
     }, 60_000);
 
     it('every request stayed on this machine, and none was a readable group line', () => {

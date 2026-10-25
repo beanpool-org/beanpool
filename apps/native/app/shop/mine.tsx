@@ -6,8 +6,8 @@
  * - None yet: what a shop is, and Open my shop (a PUT with nothing in it: named "<their name>'s shop" until they name it).
  * - Open: its title, category and counts; its fields (Name · Category · About · How I deal · Banner photo), each tappable, in any
  *   order, none required; what is in it now, each opening its listing; "Add my live Offers"; the way to the tools. The
- *   banner photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4) goes up as the phone's 800 px copy
- *   (utils/banner-photo.ts) with a tap, and comes down with Remove.
+ *   banner photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4) goes up as the 3:1 strip the member chooses
+ *   on the crop screen, 800 px (utils/banner-photo.ts, components/PictureCrop.tsx), and comes down with Remove.
  * - Close for now (optionally back on a day): its Offers come off the Market and wait; one tap reopens it. Close my shop:
  *   its Offers stay in the Market on their own (the default) or end. Neither while a deal on one of its things is open:
  *   the node's sentence is shown, with the way to the deals.
@@ -35,6 +35,7 @@ import {
     shopTitle, type MyShop, type MyShopChanges, type MyShopRead, type ShopListing,
 } from '../../utils/shop';
 import { pickBannerPhoto } from '../../utils/banner-photo';
+import { usePictureCrop } from '../../components/PictureCrop';
 
 type Where = 'screen' | 'text' | 'category' | 'banner' | 'pause' | 'close' | 'add';
 
@@ -75,6 +76,8 @@ export default function YourShopScreen() {
     const [refusal, setRefusal] = useState<{ where: Where } & ShopSheetRefusal | null>(null);
     /** Just closed: how many of its Offers ended (null: they stay on their own). */
     const [closed, setClosed] = useState<{ ended: number | null } | null>(null);
+    /** The banner's crop step: the strip of the photo that shows on its shopfront (components/PictureCrop.tsx). */
+    const cropper = usePictureCrop(colors);
 
     const loadListings = useCallback(async (shop: MyShop) => {
         if (me) setListings(await readShopListings(shop.id, me));
@@ -116,13 +119,13 @@ export default function YourShopScreen() {
     const saveText = async (text: string | null) => {
         if (editing && await change({ [editing]: text }, 'text')) setEditing(null);
     };
-    /** A banner photo picked, as the phone's 800 px copy, goes up on its own; none picked changes nothing. */
+    /** A banner photo picked, as the 3:1 strip the member chose (800 px), goes up on its own; none picked or cancelled changes nothing. */
     const pickBanner = async () => {
         if (busy) return;
         setRefusal(null);
         let photo: string | null;
         try {
-            photo = await pickBannerPhoto();
+            photo = await pickBannerPhoto(cropper.crop);
         } catch {
             setRefusal({ where: 'banner', message: t("That picture couldn't be read. Try another.") });
             return;
@@ -309,6 +312,7 @@ export default function YourShopScreen() {
                 onCloseShop={(end) => { void closeShop(end); }} onClose={closeSheet} onDeals={openDeals} />
             <ShopAddOffersSheet visible={sheet === 'add'} offers={offers} busy={busy} refusal={refusedAt('add')} colors={colors}
                 onAdd={(ids) => { void add(ids); }} onClose={closeSheet} />
+            {cropper.element}
         </View>
     );
 }

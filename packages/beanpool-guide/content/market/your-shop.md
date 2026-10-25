@@ -26,7 +26,7 @@ Each of these is one field. Fill them in any order, or not at all:
 - **Category**: one of the Market's categories, the same ones every listing has, such as **Tools**, **Food** or **Tech**. It helps neighbours find you and picks the tools shown. It changes nothing else.
 - **About**: what it is, in a few words.
 - **How I deal**: where to pick things up, and when they come back.
-- **Banner photo**: one photo across the top of your shop, as members see it. Tap it to choose one, or to change it; **Remove the banner photo** takes it down. With none, the top is a plain block with your shop's category, shown with the same emoji as its listings.
+- **Banner photo**: one photo across the top of your shop, as members see it, three times as wide as it is tall. Tap it to choose one, or to change it: move the photo and zoom it until the strip you want is in the frame, then tap **Done**. That strip is what members see. **Remove the banner photo** takes it down. With none, the top is a plain block with your shop's category, shown with the same emoji as its listings.
 
 ## How members see it
 

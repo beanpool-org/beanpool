@@ -13,6 +13,7 @@ import { fitNeedsYou, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } 
 import { t, tn } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
 import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS } from '../lib/home-store';
+import { useDialogFocus } from './dialog-focus';
 import * as api from '../lib/api';
 
 export function moreLabel(hidden: number): string {
@@ -36,8 +37,8 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
     }
 }
 
-/** Slot width in pixels for each header alert icon. */
-export const HEADER_ALERT_SLOT_PX = 38;
+/** Slot width in pixels for each header alert icon. 44 px matches tour-check and pill height. */
+export const HEADER_ALERT_SLOT_PX = 44;
 
 function NeedSvg({ kind }: { kind: NeedsYouKind | 'more' }) {
     switch (kind) {
@@ -214,7 +215,7 @@ export function NeedsYouIcons({
             data-testid="header-needs-icons"
             className="flex items-center justify-end min-w-0 flex-shrink"
             style={{
-                height: `${HEADER_ALERT_SLOT_PX}px`,
+                height: '38px',
                 maxWidth: maxSlotWidth ? `${maxSlotWidth}px` : undefined,
             }}
         >
@@ -228,8 +229,8 @@ export function NeedsYouIcons({
                             aria-label={label}
                             title={label}
                             data-testid="header-needs-more"
-                            className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill text-white shrink-0"
-                            style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: `${HEADER_ALERT_SLOT_PX}px` }}
+                            className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill text-white shrink-0 h-[44px] min-h-[44px] -my-[3px]"
+                            style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
                         >
                             <NeedSvg kind="more" />
                         </button>
@@ -248,15 +249,15 @@ export function NeedsYouIcons({
                         title={entry.label}
                         data-testid={`header-needs-${k}`}
                         data-kind={k}
-                        className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 ${
+                        className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px] ${
                             isAccent ? 'text-amber-300' : 'text-white'
                         }`}
-                        style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: `${HEADER_ALERT_SLOT_PX}px` }}
+                        style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
                     >
                         <NeedSvg kind={k} />
                         {entry.count > 1 && (
                             <span
-                                className={`absolute top-1 right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
+                                className={`absolute top-2 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
                                     isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
                                 }`}
                             >
@@ -268,56 +269,85 @@ export function NeedsYouIcons({
             })}
 
             {sheet && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 px-4"
-                    onClick={() => setSheet(false)}
-                    data-testid="needs-sheet-backdrop"
-                >
-                    <div
-                        className="w-full max-w-sm bg-surface-card rounded-2xl shadow-xl overflow-hidden border border-border-secondary p-3 animate-fade-in"
-                        onClick={e => e.stopPropagation()}
-                        data-testid="needs-sheet"
-                    >
-                        <div className="flex items-center justify-between pb-2 border-b border-border-secondary px-2">
-                            <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
-                                {t('Needs you')}
-                            </span>
-                            <button
-                                onClick={() => setSheet(false)}
-                                aria-label={t('Close')}
-                                className="text-text-muted hover:text-text-primary p-1 rounded-full"
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="py-1 max-h-[60vh] overflow-y-auto">
-                            {entries.map((e) => (
-                                <button
-                                    key={e.kind}
-                                    onClick={() => {
-                                        setSheet(false);
-                                        goToWebNeedsTarget(e.target, onNavigate);
-                                    }}
-                                    aria-label={e.label}
-                                    className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer"
-                                >
-                                    <span className={e.accent ? 'text-amber-500 dark:text-amber-400' : 'text-text-secondary'}>
-                                        <NeedSvg kind={e.kind} />
-                                    </span>
-                                    <span className={`flex-1 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
-                                        {e.label}
-                                    </span>
-                                    <svg className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                                    </svg>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
+                <NeedsSheet
+                    entries={entries}
+                    onClose={() => setSheet(false)}
+                    onNavigate={onNavigate}
+                />
             )}
+        </div>
+    );
+}
+
+function NeedsSheet({
+    entries,
+    onClose,
+    onNavigate,
+}: {
+    entries: NeedsItem[];
+    onClose: () => void;
+    onNavigate?: (tab: string, ctxId?: string) => void;
+}) {
+    const dialogRef = useRef<HTMLDivElement | null>(null);
+    useDialogFocus(dialogRef, onClose);
+
+    return (
+        <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 px-4"
+            onClick={onClose}
+            data-testid="needs-sheet-backdrop"
+        >
+            <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="needs-sheet-title"
+                className="w-full max-w-sm bg-surface-card rounded-2xl shadow-xl overflow-hidden border border-border-secondary p-3 animate-fade-in"
+                onClick={e => e.stopPropagation()}
+                data-testid="needs-sheet"
+            >
+                <div className="flex items-center justify-between pb-2 border-b border-border-secondary px-2">
+                    <h2
+                        id="needs-sheet-title"
+                        tabIndex={-1}
+                        className="text-xs font-bold uppercase tracking-wider text-text-secondary outline-none"
+                    >
+                        {t('Needs you')}
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        aria-label={t('Close')}
+                        className="text-text-muted hover:text-text-primary p-1 rounded-full cursor-pointer"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div className="py-1 max-h-[60vh] overflow-y-auto">
+                    {entries.map((e) => (
+                        <button
+                            key={e.kind}
+                            onClick={() => {
+                                onClose();
+                                goToWebNeedsTarget(e.target, onNavigate);
+                            }}
+                            aria-label={e.label}
+                            className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px]"
+                        >
+                            <span className={e.accent ? 'text-amber-500 dark:text-amber-400' : 'text-text-secondary'}>
+                                <NeedSvg kind={e.kind} />
+                            </span>
+                            <span className={`flex-1 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
+                                {e.label}
+                            </span>
+                            <svg className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                            </svg>
+                        </button>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

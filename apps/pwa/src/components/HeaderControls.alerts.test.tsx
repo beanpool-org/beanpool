@@ -291,11 +291,26 @@ describe('HeaderControls needs-you alert icons', () => {
 
             const moreBtn = screen.getByRole('button', { name: '3 more things need you' });
             expect(moreBtn).toBeInTheDocument();
+            // Tap targets floor: 44 px tall, matching pill and tour-check
+            expect(moreBtn.className).toContain('h-[44px]');
 
-            // Clicking more opens the sheet
+            // Clicking more opens the dialog sheet (focusing opener first as real user click)
+            moreBtn.focus();
             fireEvent.click(moreBtn);
-            expect(screen.getByTestId('needs-sheet')).toBeInTheDocument();
-            expect(screen.getByText('Needs you')).toBeInTheDocument();
+            const dialog = screen.getByRole('dialog');
+            expect(dialog).toBeInTheDocument();
+            expect(dialog).toHaveAttribute('aria-modal', 'true');
+            expect(dialog).toHaveAttribute('aria-labelledby', 'needs-sheet-title');
+
+            // Escape closes the dialog and returns focus to opener
+            fireEvent.keyDown(dialog, { key: 'Escape' });
+            expect(screen.queryByRole('dialog')).toBeNull();
+            expect(document.activeElement).toBe(moreBtn);
+
+            // Reopen to test item selection
+            moreBtn.focus();
+            fireEvent.click(moreBtn);
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
 
             // Clicking an item in the sheet navigates and closes sheet
             const sheetMsg = screen.getByRole('button', { name: 'Unread message from Ana' });
@@ -383,7 +398,7 @@ describe('HeaderControls needs-you alert icons', () => {
             act(() => {
                 roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
             });
-            expect(iconsContainer.style.maxWidth).toBe('40px');
+            expect(iconsContainer.style.maxWidth).toBe('46px');
             expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
             expect(screen.queryByTestId('header-needs-deal')).toBeNull();
             expect(screen.queryByTestId('header-needs-vote')).toBeNull();
@@ -403,7 +418,7 @@ describe('HeaderControls needs-you alert icons', () => {
             act(() => {
                 roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
             });
-            expect(iconsContainer.style.maxWidth).toBe('40px');
+            expect(iconsContainer.style.maxWidth).toBe('46px');
             expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
 
             headerWidth = 800;

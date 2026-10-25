@@ -62,12 +62,29 @@ vi.mock('../lib/api', () => ({
     removeEventChatMessage: vi.fn(),
     sendMessageApi: vi.fn(),
     editMessageApi: vi.fn(),
-    deleteMessageApi: vi.fn(async (_messageId: string) => ({ success: true })),
-    removeGroupChatMessage: vi.fn(async (_groupId: string, _messageId: string) => ({ success: true })),
-    muteChatApi: vi.fn(async (conversationId: string, duration: string) => ({
-        success: true,
-        mute: duration === 'off' ? null : { conversationId, mutedUntil: null, always: duration === 'always' },
-    })),
+    deleteMessageApi: vi.fn(async (messageId: string) => {
+        const line = node.lines.find(l => l.id === messageId);
+        if (line) {
+            line.type = 'removed';
+            line.metadata = { ...(line.metadata || {}), removed: true, removedBy: line.author };
+        }
+        return { success: true };
+    }),
+    removeGroupChatMessage: vi.fn(async (_groupId: string, messageId: string) => {
+        const line = node.lines.find(l => l.id === messageId);
+        if (line) {
+            line.type = 'removed';
+            line.metadata = { ...(line.metadata || {}), removed: true, removedBy: ana.publicKey };
+        }
+        return { success: true };
+    }),
+    muteChatApi: vi.fn(async (conversationId: string, duration: string) => {
+        currentMute = duration === 'off' ? null : { conversationId, mutedUntil: null, always: duration === 'always' };
+        return {
+            success: true,
+            mute: currentMute,
+        };
+    }),
     toggleMessageReactionApi: vi.fn(),
     getMessageAttachmentApi: vi.fn(),
     completeMarketplaceTransaction: vi.fn(),
@@ -175,19 +192,19 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
         await screen.findByText('Ben photo caption');
 
         // Ana's own text message bubble
-        const anaTextBubble = screen.getByText('Ana speaks').closest('[id^="msg-"]')!;
+        const anaTextBubble = screen.getByText('Ana speaks').closest('[id^="msg-"]') as HTMLElement;
         expect(within(anaTextBubble).getByRole('button', { name: 'Delete message' })).toBeInTheDocument();
 
         // Ana's own photo line
-        const anaPhotoBubble = document.getElementById(`msg-${anaPhotoId}`)!;
+        const anaPhotoBubble = document.getElementById(`msg-${anaPhotoId}`) as HTMLElement;
         expect(within(anaPhotoBubble).getByRole('button', { name: 'Delete message' })).toBeInTheDocument();
 
         // Ben's text message bubble
-        const benTextBubble = screen.getByText('Ben speaks').closest('[id^="msg-"]')!;
+        const benTextBubble = screen.getByText('Ben speaks').closest('[id^="msg-"]') as HTMLElement;
         expect(within(benTextBubble).queryByRole('button', { name: 'Delete message' })).toBeNull();
 
         // Ben's photo line
-        const benPhotoBubble = document.getElementById(`msg-${benPhotoId}`)!;
+        const benPhotoBubble = document.getElementById(`msg-${benPhotoId}`) as HTMLElement;
         expect(within(benPhotoBubble).queryByRole('button', { name: 'Delete message' })).toBeNull();
     });
 
@@ -196,11 +213,11 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
         await openChat();
 
         // Convenor Ana sees Remove on Ben's line
-        const benBubble = screen.getByText('Ben speaks').closest('[id^="msg-"]')!;
+        const benBubble = screen.getByText('Ben speaks').closest('[id^="msg-"]') as HTMLElement;
         expect(within(benBubble).getByRole('button', { name: 'Remove message' })).toBeInTheDocument();
 
         // Convenor Ana does NOT see Remove on her own line (she sees Delete)
-        const anaBubble = screen.getByText('Ana speaks').closest('[id^="msg-"]')!;
+        const anaBubble = screen.getByText('Ana speaks').closest('[id^="msg-"]') as HTMLElement;
         expect(within(anaBubble).queryByRole('button', { name: 'Remove message' })).toBeNull();
         expect(within(anaBubble).getByRole('button', { name: 'Delete message' })).toBeInTheDocument();
 
@@ -210,7 +227,7 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
         isAnaConvenor = false;
         await openChat();
 
-        const benBubblePlain = screen.getByText('Ben speaks').closest('[id^="msg-"]')!;
+        const benBubblePlain = screen.getByText('Ben speaks').closest('[id^="msg-"]') as HTMLElement;
         expect(within(benBubblePlain).queryByRole('button', { name: 'Remove message' })).toBeNull();
         expect(within(benBubblePlain).queryByRole('button', { name: 'Delete message' })).toBeNull();
     });
@@ -218,7 +235,7 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
     it('confirming Delete calls deleteMessageApi with messageId and updates the line to tombstone', async () => {
         await openChat();
 
-        const anaBubble = screen.getByText('Ana speaks').closest('[id^="msg-"]')!;
+        const anaBubble = screen.getByText('Ana speaks').closest('[id^="msg-"]') as HTMLElement;
         const delBtn = within(anaBubble).getByRole('button', { name: 'Delete message' });
         await act(async () => { fireEvent.click(delBtn); });
 
@@ -240,13 +257,14 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
 
         const anaMsg = node.lines.find(l => l.author === ana.publicKey)!;
         expect(api.deleteMessageApi).toHaveBeenCalledWith(anaMsg.id);
+        await screen.findByText('This message was deleted');
     });
 
     it('confirming Remove calls removeGroupChatMessage with messageId and updates the line to tombstone', async () => {
         isAnaConvenor = true;
         await openChat();
 
-        const benBubble = screen.getByText('Ben speaks').closest('[id^="msg-"]')!;
+        const benBubble = screen.getByText('Ben speaks').closest('[id^="msg-"]') as HTMLElement;
         const remBtn = within(benBubble).getByRole('button', { name: 'Remove message' });
         await act(async () => { fireEvent.click(remBtn); });
 
@@ -268,6 +286,7 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
 
         const benMsg = node.lines.find(l => l.author === ben.publicKey)!;
         expect(api.removeGroupChatMessage).toHaveBeenCalledWith(G, benMsg.id);
+        await screen.findByText('Removed by a convenor');
     });
 
     it("Mute menu's four choices call /api/messages/mute and the header shows muted", async () => {
@@ -292,23 +311,28 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
         // Header shows muted
         await waitFor(() => expect(screen.getByText('2 members · muted')).toBeInTheDocument());
 
+        // Choice 4: Unmute (off) when already muted
+        await act(async () => { fireEvent.click(menuBtn); });
+        const unmuteBtn = screen.getByRole('button', { name: 'Unmute' });
+        await act(async () => { fireEvent.click(unmuteBtn); });
+        expect(api.muteChatApi).toHaveBeenCalledWith(G, 'off');
+        await waitFor(() => expect(screen.getByText('2 members')).toBeInTheDocument());
+
         // Choice 2: For a week
         await act(async () => { fireEvent.click(menuBtn); });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Mute notifications' })); });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'For a week' })); });
         expect(api.muteChatApi).toHaveBeenCalledWith(G, '1w');
 
+        // Unmute again
+        await act(async () => { fireEvent.click(menuBtn); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Unmute' })); });
+
         // Choice 3: Always
         await act(async () => { fireEvent.click(menuBtn); });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Mute notifications' })); });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Always' })); });
         expect(api.muteChatApi).toHaveBeenCalledWith(G, 'always');
-
-        // Choice 4: Unmute (off)
-        await act(async () => { fireEvent.click(menuBtn); });
-        const unmuteBtn = screen.getByRole('button', { name: 'Unmute' });
-        await act(async () => { fireEvent.click(unmuteBtn); });
-        expect(api.muteChatApi).toHaveBeenCalledWith(G, 'off');
     });
 
     it("a photo line's report sheet has the photo wording", async () => {
@@ -316,7 +340,7 @@ describe('Web group chats: Delete, Remove, Mute, photo report wording', () => {
         await openChat();
         await screen.findByText('A picture to report');
 
-        const benPhotoBubble = document.getElementById(`msg-${benPhotoId}`)!;
+        const benPhotoBubble = document.getElementById(`msg-${benPhotoId}`) as HTMLElement;
         const reportBtn = within(benPhotoBubble).getByRole('button', { name: 'Report message' });
         await act(async () => { fireEvent.click(reportBtn); });
 

@@ -12,6 +12,7 @@ import {
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
+    deleteMessageApi, removeGroupChatMessage, muteChatApi, type YourChatMute,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction, type GroupChatAnswer, type FriendEntry, type DmRequestEntry,
 } from '../lib/api';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
@@ -45,6 +46,9 @@ import { imageFromTransfer, dragCarriesFile, chatImageRefusal, NODE_READABLE_NO_
 import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
+import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
+import { ChatMenuModal } from '../components/ChatMenuModal';
+import { isMuted, groupHeaderDetail } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
@@ -304,6 +308,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
     // One line of a locked group chat being reported with its key (group chat photos S6): its report card is open while set.
     const [reportingLine, setReportingLine] = useState<ApiMessage | null>(null);
+    const [chatMute, setChatMute] = useState<YourChatMute | null>(null);
+    const [chatMenuOpen, setChatMenuOpen] = useState(false);
+    const [muteDialogOpen, setMuteDialogOpen] = useState(false);
+    const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<ApiMessage | null>(null);
+    const [confirmRemoveMsg, setConfirmRemoveMsg] = useState<ApiMessage | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
@@ -331,6 +340,43 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (id) void loadMessages(id);
         }
         else alert(err?.message || fallback);
+    }
+
+    async function handleSetMute(duration: '8h' | '1w' | 'always' | 'off') {
+        if (!activeConv) return;
+        setChatMenuOpen(false);
+        setMuteDialogOpen(false);
+        try {
+            const res = await muteChatApi(activeConv.id, duration);
+            const next = duration === 'off' ? null : (res?.mute ?? { conversationId: activeConv.id, mutedUntil: null, always: duration === 'always' });
+            setChatMute(next);
+        } catch (e: any) {
+            alert(e?.message || t('Could not reach the node.'));
+        }
+    }
+
+    async function handleConfirmDelete() {
+        if (!confirmDeleteMsg) return;
+        const msgToDelete = confirmDeleteMsg;
+        setConfirmDeleteMsg(null);
+        try {
+            await deleteMessageApi(msgToDelete.id);
+            if (activeConv) await loadMessages(activeConv.id);
+        } catch (e: any) {
+            alert(e?.message || t('Could not reach the node.'));
+        }
+    }
+
+    async function handleConfirmRemove() {
+        if (!confirmRemoveMsg || !activeConv) return;
+        const msgToRemove = confirmRemoveMsg;
+        setConfirmRemoveMsg(null);
+        try {
+            await removeGroupChatMessage(groupIdKey(activeConv.id), msgToRemove.id);
+            if (activeConv) await loadMessages(activeConv.id);
+        } catch (e: any) {
+            alert(e?.message || t('Could not reach the node.'));
+        }
     }
     const [dragActive, setDragActive] = useState(false);
     // `dragleave` fires for every child the pointer crosses, so count enters and
@@ -742,6 +788,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             return true;
         }));
         setGroupChat({ id: convId, answer, error, nodeSaysLocked, seenLocked, thread, roster });
+        setChatMute(answer?.mute ?? null);
         if (answer) {
             markConversationReadApi(identity.publicKey, convId).catch(() => {});
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
@@ -1746,7 +1793,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         </span>
                                         {activeConv.type === 'group_thread' && (
                                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                {tn(activeConv.participants.length, '{n} member', '{n} members')}
+                                                {groupHeaderDetail(activeConv.participants.length, isMuted(chatMute))}
                                             </span>
                                         )}
                                     </span>
@@ -1794,16 +1841,27 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         })()}
                     </div>
                     {activeConv.type === 'group_thread' && (
-                        <button
-                            type="button"
-                            data-testid="group-chat-search-toggle"
-                            onClick={() => setChatSearch((q) => (q === null ? '' : null))}
-                            aria-label={chatSearch === null ? t('Search this chat') : t('Close search')}
-                            aria-expanded={chatSearch !== null}
-                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
-                        >
-                            {chatSearch === null ? '🔍' : '✕'}
-                        </button>
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
+                            <button
+                                type="button"
+                                data-testid="group-chat-search-toggle"
+                                onClick={() => setChatSearch((q) => (q === null ? '' : null))}
+                                aria-label={chatSearch === null ? t('Search this chat') : t('Close search')}
+                                aria-expanded={chatSearch !== null}
+                                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
+                            >
+                                {chatSearch === null ? '🔍' : '✕'}
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="group-chat-menu-toggle"
+                                onClick={() => { setMuteDialogOpen(false); setChatMenuOpen(true); }}
+                                aria-label={t('Chat menu')}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '1.25rem', minWidth: '44px', minHeight: '44px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                ⋮
+                            </button>
+                        </div>
                     )}
 
                     {activeConv.type === 'dm' && peerPubkey && (
@@ -2150,11 +2208,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         } catch {}
 
                         const isTombstone = msg.type === 'removed' || metaObj?.removed === true;
+                        const isConvenor = isGroupChat && !!openGroup?.answer?.isConvenor;
                         const isTextEditable = isMe && !isTombstone && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
                             (!isGroupChat || openGroup?.answer?.canPost !== false);
                         const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
                         const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
                         const editClosed = isTextEditable && elapsedMs > MESSAGE_EDIT_WINDOW_MS;
+                        const canDelete = isMe && !isTombstone && msg.type !== 'system' && !msg.systemType &&
+                            (!isGroupChat || openGroup?.answer?.canPost !== false);
+                        const canRemove = isGroupChat && isConvenor && !isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
 
                         const reactions: { emoji: string; author: string }[] = Array.isArray(metaObj?.reactions)
                             ? metaObj.reactions.filter((r: any) => r && typeof r === 'object' && typeof r.emoji === 'string')
@@ -2470,6 +2532,56 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </button>
                                         )}
                                         </>}
+                                        {canDelete && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setConfirmDeleteMsg(msg); }}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    font: 'inherit',
+                                                    fontSize: '0.75rem',
+                                                    lineHeight: 1,
+                                                    padding: '4px 6px',
+                                                    minHeight: '24px',
+                                                    cursor: 'pointer',
+                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    fontWeight: 600,
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    textDecoration: 'underline',
+                                                    textUnderlineOffset: '2px',
+                                                }}
+                                                aria-label={t('Delete message')}
+                                            >
+                                                {t('Delete')}
+                                            </button>
+                                        )}
+                                        {canRemove && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setConfirmRemoveMsg(msg); }}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    font: 'inherit',
+                                                    fontSize: '0.75rem',
+                                                    lineHeight: 1,
+                                                    padding: '4px 6px',
+                                                    minHeight: '24px',
+                                                    cursor: 'pointer',
+                                                    color: 'var(--accent)',
+                                                    fontWeight: 600,
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    textDecoration: 'underline',
+                                                    textUnderlineOffset: '2px',
+                                                }}
+                                                aria-label={t('Remove message')}
+                                            >
+                                                {t('Remove')}
+                                            </button>
+                                        )}
                                         {canEdit && (
                                             <button
                                                 type="button"
@@ -2922,6 +3034,40 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 throw new Error(chatLineWords(e instanceof Error ? e.message : '') || t('Could not reach the node.'));
                             }
                         }}
+                    />
+                )}
+
+                <ChatConfirmDialog
+                    isOpen={!!confirmDeleteMsg}
+                    title={t('Delete for everyone?')}
+                    message={t('It will read "This message was deleted" to everyone in the chat.')}
+                    cancelLabel={t('Cancel')}
+                    confirmLabel={t('Delete')}
+                    destructive
+                    onCancel={() => setConfirmDeleteMsg(null)}
+                    onConfirm={handleConfirmDelete}
+                />
+                <ChatConfirmDialog
+                    isOpen={!!confirmRemoveMsg}
+                    title={t('Remove this message?')}
+                    message={t('It will read "Removed by a convenor" to everyone in the chat.')}
+                    cancelLabel={t('Keep it')}
+                    confirmLabel={t('Remove')}
+                    destructive
+                    onCancel={() => setConfirmRemoveMsg(null)}
+                    onConfirm={handleConfirmRemove}
+                />
+                {activeConv && activeConv.type === 'group_thread' && (
+                    <ChatMenuModal
+                        isOpen={chatMenuOpen || muteDialogOpen}
+                        muteOpen={muteDialogOpen}
+                        isMuted={isMuted(chatMute)}
+                        isConvenor={!!openGroup?.answer?.isConvenor}
+                        onClose={() => { setChatMenuOpen(false); setMuteDialogOpen(false); }}
+                        onOpenMute={() => setMuteDialogOpen(true)}
+                        onPickMute={handleSetMute}
+                        onSearch={() => setChatSearch('')}
+                        onGroupInfo={() => onNavigate?.('group', groupIdKey(activeConv.id))}
                     />
                 )}
             </div>

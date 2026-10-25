@@ -1013,6 +1013,13 @@ export async function getMessageAttachmentApi(messageId: string): Promise<Messag
  * whether they may post, and, on a node that locks group chats, `encryption` (the current epoch, whether it is stale,
  * this member's first epoch). A node from before locked chats answers without `encryption`.
  */
+export interface YourChatMute {
+    conversationId: string;
+    /** null while muted for good. */
+    mutedUntil: string | null;
+    always: boolean;
+}
+
 export interface GroupChatAnswer {
     conversation: Conversation;
     messages: (ApiMessage & { authorCallsign?: string | null })[];
@@ -1021,11 +1028,24 @@ export interface GroupChatAnswer {
     readOnly?: boolean;
     closedAt?: string | null;
     isConvenor?: boolean;
+    mute?: YourChatMute | null;
     encryption?: { current: number | null; stale: boolean; fromEpoch: number | null };
 }
 
 export async function getGroupChat(groupId: string, limit = 50): Promise<GroupChatAnswer> {
     return request('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`);
+}
+
+export async function deleteMessageApi(messageId: string): Promise<{ success: boolean; message?: ApiMessage }> {
+    return request('POST', '/api/messages/delete', { messageId });
+}
+
+export async function removeGroupChatMessage(groupId: string, messageId: string): Promise<{ success: boolean; message?: any }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/chat/remove`, { messageId });
+}
+
+export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off'): Promise<{ success: boolean; mute: YourChatMute | null }> {
+    return request('POST', '/api/messages/mute', { conversationId, duration });
 }
 
 export async function getConversationMessages(conversationId: string, limit = 50): Promise<{

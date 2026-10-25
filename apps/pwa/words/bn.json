@@ -3612,5 +3612,22 @@
   "💸 Cash also needed — for fuel or materials": "💸 নগদ অর্থও প্রয়োজন — জ্বালানি বা উপকরণের জন্য",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 পুনরাবৃত্তিযোগ্য — চলমান বুকিংয়ের জন্য তালিকা সক্রিয় রাখুন",
   "🔒 This community's listings are for its members": "🔒 এই কমিউনিটির তালিকাগুলো এর সদস্যদের জন্য",
-  "🗳️ Poll": "🗳️ পোল"
+  "🗳️ Poll": "🗳️ পোল",
+  "Delete message": "বার্তা মুছে ফেলুন",
+  "Delete for everyone?": "সবার জন্য মুছে ফেলবেন?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "এটি চ্যাটের সবাইকে দেখাবে \"এই বার্তাটি মুছে ফেলা হয়েছে\"।",
+  "Remove this message?": "এই বার্তাটি সরাবেন?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "এটি চ্যাটের সবাইকে দেখাবে \"আহ্বায়ক দ্বারা সরানো হয়েছে\"।",
+  "Mute notifications": "বিজ্ঞপ্তি মিউট করুন",
+  "Unmute": "আনমিউট করুন",
+  "For 8 hours": "৮ ঘণ্টার জন্য",
+  "For a week": "এক সপ্তাহের জন্য",
+  "Always\u0004mute for": "সবসময়",
+  "@mentions still reach you.": "@mentions এখনও আপনার কাছে পৌঁছাবে।",
+  "Chat menu": "চ্যাট মেনু",
+  "Close menu": "মেনু বন্ধ করুন",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} জন সদস্য · মিউট করা",
+    "other": "{n} জন সদস্য · মিউট করা"
+  }
 }

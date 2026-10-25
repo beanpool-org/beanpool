@@ -3612,5 +3612,22 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 تکرارشونده — آگهی را برای رزروهای پیاپی فعال نگه دارید",
   "🔒 This community's listings are for its members": "🔒 آگهی‌های این جامعه برای اعضای آن است",
   "🗳️ Poll": "🗳️ نظرسنجی",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "اگر در خانهٔ کسی است، از {approximate} استفاده کنید تا مکان تا حدود ۱۰۰ متر گرد شود، و نشانی دقیق را در یادداشت برای کسانی که می‌آیند بنویسید."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "اگر در خانهٔ کسی است، از {approximate} استفاده کنید تا مکان تا حدود ۱۰۰ متر گرد شود، و نشانی دقیق را در یادداشت برای کسانی که می‌آیند بنویسید.",
+  "Delete message": "حذف پیام",
+  "Delete for everyone?": "برای همه حذف شود؟",
+  "It will read \"This message was deleted\" to everyone in the chat.": "برای همه اعضای گفتگو عبارت «این پیام حذف شد» نمایش داده خواهد شد.",
+  "Remove this message?": "این پیام حذف شود؟",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "برای همه اعضای گفتگو عبارت «توسط یک هماهنگ‌کننده حذف شد» نمایش داده خواهد شد.",
+  "Mute notifications": "بی‌صدا کردن اعلان‌ها",
+  "Unmute": "لغو بی‌صدا",
+  "For 8 hours": "به مدت ۸ ساعت",
+  "For a week": "به مدت یک هفته",
+  "Always\u0004mute for": "همیشه",
+  "@mentions still reach you.": "پیام‌های اشاره‌شده (@) همچنان به دست شما می‌رسند.",
+  "Chat menu": "منوی گفتگو",
+  "Close menu": "بستن منو",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} عضو · بی‌صدا",
+    "other": "{n} عضو · بی‌صدا"
+  }
 }

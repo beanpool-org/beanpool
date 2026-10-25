@@ -62,7 +62,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             transactionCount: 0,
             commonsBalance: 100,
             profile: 'local',
-            features: { beans: true, enterprises: true, decisions: true },
+            features: { beans: true, enterprises: true, decisions: true } as any,
         });
     });
 
@@ -301,8 +301,8 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             slug: 'debate',
             createdBy: 'pk-someone',
             name: 'Debate Society',
-            category: 'cultural',
-            joinPolicy: 'apply',
+            category: 'guild',
+            joinPolicy: 'request_to_join',
             memberCount: 4,
             viewerStatus: 'pending_approval',
             viewerRole: 'member',

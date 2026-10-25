@@ -12,7 +12,8 @@
  *   tab, needs or width is measured. On the map the logo is drawn over that room: the slot stops 4 px short of it (at
  *   320–430 px there is no room at all). Between 28 and 44 px, a count chip in place of the icons.
  * - The side bar (768 px and up): a row of their own above the connection status, the "?" and Settings, wrapping rather
- *   than pushing them (five kinds fit in its 232 px).
+ *   than pushing them (five kinds fit in its 232 px). The header row still shows beside the side bar there (its md:hidden
+ *   loses to its inline display), and its slot draws nothing.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -61,41 +62,43 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
 /** Slot width in pixels for each header alert icon. 44 px matches tour-check and pill height. */
 export const HEADER_ALERT_SLOT_PX = 44;
 
-function NeedSvg({ kind }: { kind: NeedsYouKind | 'more' }) {
+/** `shadow`: on the header's photo, the phone's icon shadow (black at 75%, 1 px down, 4 px soft), so the icon reads on the vines. */
+function NeedSvg({ kind, shadow = false }: { kind: NeedsYouKind | 'more'; shadow?: boolean }) {
+    const cls = `w-[20px] h-[20px] shrink-0${shadow ? ' drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]' : ''}`;
     switch (kind) {
         case 'invite':
             return (
-                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="invite">
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="invite">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                 </svg>
             );
         case 'deal':
             return (
-                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="deal">
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="deal">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m11 17 2 2a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4l-2-2m-2-2-2-2a1 1 0 0 0-1.4 0L4 13.6a1 1 0 0 0 0 1.4l2 2m12-7 2.3-2.3a1 1 0 0 0 0-1.4l-2.6-2.6a1 1 0 0 0-1.4 0L12 8m1 7 2.3 2.3a1 1 0 0 0 1.4 0l2.6-2.6a1 1 0 0 0 0-1.4L17 11" />
                 </svg>
             );
         case 'vote':
             return (
-                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="vote">
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="vote">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" />
                 </svg>
             );
         case 'message':
             return (
-                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="message">
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="message">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a.75.75 0 0 1-.974-.974 5.96 5.96 0 0 1 1.057-4.035C4.54 14.654 4 13.38 4 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
                 </svg>
             );
         case 'group':
             return (
-                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="group">
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="group">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                 </svg>
             );
         case 'more':
             return (
-                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="more">
+                <svg className={cls} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="more">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
                 </svg>
             );
@@ -291,7 +294,10 @@ export function NeedsYouIcons({
     }, [identityPubkey]);
 
     // The slot's own width as the row lays it out (the phone's onLayout), again whenever it changes: a tab's name, the
-    // needs, the window, the text size. Its width is the row's CSS, never what is drawn in it, so this can't loop.
+    // needs, the window, the text size. Its width is the row's CSS, never what is drawn in it, so this can't loop. After
+    // the first, only the observer measures: it reports the width each frame settles on, where a measure in a layout
+    // effect can catch the row half-way (a tab change lays the new name beside the chip's words just before the chip
+    // goes to its dot) and keep it, with the observer never seeing a change to report.
     useLayoutEffect(() => {
         if (!slot || typeof ResizeObserver === 'undefined') return;
         const measure = () => setSlotWidth(slot.getBoundingClientRect().width);
@@ -302,7 +308,8 @@ export function NeedsYouIcons({
     }, [slot]);
 
     // On the map: the logo, centred on the header, is drawn over the room, and the slot reaches no further left than 4 px
-    // short of its right edge. Both are where the row puts them whatever the slot draws.
+    // short of its right edge: the bean, the word and the version under its end, which hangs past the logo's own box
+    // (12 px at 100% text, 19 at 130%). Both are where the row puts them whatever the slot draws.
     useLayoutEffect(() => {
         const room = slot?.parentElement;
         const logo = besideLogo ? slot?.closest('header')?.querySelector<HTMLElement>('[data-testid="header-logo"]') : null;
@@ -310,17 +317,20 @@ export function NeedsYouIcons({
             setLogoRoom(undefined);
             return;
         }
+        // The logo's mark (its first child; the second is the community's status, which opens below the row).
+        const parts = [logo, ...Array.from(logo.firstElementChild?.children ?? [])];
         const measure = () => {
             const r = room.getBoundingClientRect();
             if (!r.width) return; // hidden (the md: layout)
-            setLogoRoom(Math.max(0, Math.floor(r.right - logo.getBoundingClientRect().right - LOGO_CLEAR_PX)));
+            const logoRight = Math.max(...parts.map(p => p.getBoundingClientRect().right));
+            setLogoRoom(Math.max(0, Math.floor(r.right - logoRight - LOGO_CLEAR_PX)));
         };
         measure();
         let observer: ResizeObserver | null = null;
         if (typeof ResizeObserver !== 'undefined') {
             observer = new ResizeObserver(measure);
             observer.observe(room);
-            observer.observe(logo);
+            for (const p of parts) observer.observe(p);
         }
         let live = true;
         document.fonts?.ready?.then(() => {
@@ -331,12 +341,6 @@ export function NeedsYouIcons({
             observer?.disconnect();
         };
     }, [slot, besideLogo]);
-
-    // And at once, before the browser paints, when the slot's own rule changes: the needs (its basis), the logo's room (its
-    // max-width) or the tab (the name beside it). The observer above would hear of it too, but a frame late.
-    useLayoutEffect(() => {
-        if (slot && typeof ResizeObserver !== 'undefined') setSlotWidth(slot.getBoundingClientRect().width);
-    }, [slot, logoRoom, entries.length, activeTab]);
 
     if (!identityPubkey) return null;
 
@@ -375,7 +379,7 @@ export function NeedsYouIcons({
                 }`}
                 style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
             >
-                <NeedSvg kind={k} />
+                <NeedSvg kind={k} shadow={!isSidebar} />
                 {entry.count > 1 && (
                     <span
                         className={`absolute top-2 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
@@ -443,7 +447,7 @@ export function NeedsYouIcons({
                         className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] rounded-full text-white hover:bg-white/15"
                         style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
                     >
-                        <NeedSvg kind="more" />
+                        <NeedSvg kind="more" shadow />
                     </button>
                 );
             }
@@ -455,11 +459,13 @@ export function NeedsYouIcons({
     return (
         <>
             {/* The slot: a slot per kind wide at most, shrinking to nothing before the title gives way (HeaderTitle), and on
-                the map no further than the logo. 44 px tall for the targets, 38 px in the row (as the pill's). */}
+                the map no further than the logo. 44 px tall for the targets, 38 px in the row (as the pill's). From 768 px
+                none: the side bar has the icons there (SidebarStatus), and the header row, though its md:hidden loses to
+                its own inline display and it still shows beside the side bar, mustn't draw them a second time. */}
             <div
                 ref={setSlot}
                 data-needs-slot
-                className="flex items-center justify-end"
+                className="flex items-center justify-end md:hidden"
                 style={{
                     flex: `0 1 ${entries.length * HEADER_ALERT_SLOT_PX}px`,
                     minWidth: 0,

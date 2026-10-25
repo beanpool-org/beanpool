@@ -238,6 +238,8 @@ describe("App's header row: one mounted header, the tab and the needs changing i
         expect(slot.style.flex).toBe('0 1 132px');
         expect(slot.style.minWidth).toBe('0px');
         expect(slot.style.overflow).toBe('hidden');
+        // From 768 px the side bar has them: the header row (which still shows there) draws none.
+        expect(slot.className).toContain('md:hidden');
 
         // A kind more or less changes the slot's basis, not the title's.
         await needs([DEAL, VOTE, INVITE, MESSAGE, GROUP]);

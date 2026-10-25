@@ -442,7 +442,7 @@ describe('HeaderControls needs-you alert icons', () => {
         });
 
         // At 320px, Map tab logo right edge is at 247px, pill left (the row's middle's right) is at 208px (overlap)
-        stubRowLayout({ slot: 88, middleRight: 208, logoRight: 247 });
+        const relayout = stubRowLayout({ slot: 88, middleRight: 208, logoRight: 247 });
 
         render(<HeaderRow title={null} activeTab="map" />);
 
@@ -451,10 +451,13 @@ describe('HeaderControls needs-you alert icons', () => {
         expect(pill.className).toContain('z-[5]');
         expect(pill.className).not.toContain('z-10');
 
-        // At 320px on map tab, logo meets pill, so icons must be hidden (0 slots)
+        // At 320px on map tab, logo meets pill, so icons must be hidden (0 slots): the slot's max-width is 0, and the
+        // browser's next layout tells its observer so
         await act(async () => {
             await new Promise(r => setTimeout(r, 60));
         });
+        relayout();
+        expect(document.querySelector<HTMLElement>('[data-needs-slot]')!.style.maxWidth).toBe('0px');
         expect(screen.queryByTestId('header-needs-invite')).toBeNull();
         expect(screen.queryByTestId('header-needs-chip')).toBeNull();
     });

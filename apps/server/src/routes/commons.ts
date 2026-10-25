@@ -539,9 +539,10 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 
-    const projRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(projectId) as any
-        || db.prepare('SELECT deadline_at FROM members WHERE public_key = ?').get(projectId) as any;
-    if (isPastDeadline(projRow?.deadline_at)) {
+    const projRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(projectId) as any;
+    const memberRow = db.prepare('SELECT deadline_at FROM members WHERE public_key = ?').get(projectId) as any;
+    const deadline = projRow?.deadline_at ?? memberRow?.deadline_at;
+    if (isPastDeadline(deadline)) {
         ctx.status = 409;
         ctx.body = { error: PROJECT_DEADLINE_PASSED_ERROR, code: 'project_closed' };
         return;

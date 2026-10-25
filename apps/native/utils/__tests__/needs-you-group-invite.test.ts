@@ -208,12 +208,18 @@ async function renderHeader() {
     for (let i = 0; i < 10; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 }
 
-const inviteIcon = () => document.querySelector('[data-icon="account-multiple-plus-outline"]');
+const inviteIcon = () => document.querySelector('[data-icon="email-outline"]');
 
 describe('the header (components/NeedsYouIcons.tsx)', () => {
-    it('reading the node itself: the invitation is an icon, labelled, that opens its landing', async () => {
+    it('reading the node itself: the invitation is an envelope icon, not any person-plus, distinct from the bar button, that opens its landing', async () => {
         await renderHeader();
+        // Marty chose: the group invite alert gets its own icon (envelope), not person-plus, distinct from bar's invite button
+        expect(document.querySelector('[data-icon="account-multiple-plus-outline"]')).toBeNull();
+        expect(document.querySelector('[data-icon*="plus"]')).toBeNull();
         expect(inviteIcon()).not.toBeNull();
+        const iconName = inviteIcon()!.getAttribute('data-icon');
+        expect(iconName).toBe('email-outline');
+        expect(iconName).not.toBe('account-plus-outline');
         const button = inviteIcon()!.closest('button') as HTMLElement;
         expect(button.getAttribute('aria-label')).toBe("You're invited to join Garden Club");
         await act(async () => { button.click(); });

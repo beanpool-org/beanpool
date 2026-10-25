@@ -130,22 +130,13 @@ export function commonsGroupRows<E extends CommonsEnterprise>(
 }
 
 /** What the empty list says for a chip: word() keys, shown through t(). */
-export function commonsGroupsEmpty(kind: GroupKind, features: NodeFeatures | null | undefined): { title: WordKey; desc: WordKey; action: 'group' | 'project' } {
+export function commonsGroupsEmpty(kind: GroupKind, features: NodeFeatures | null | undefined): { title: WordKey; desc: WordKey; action: 'group' | 'project' | 'enterprise' | null } {
     if (!enterprisesOn(features) || kind === 'chat') {
         return { title: word('No other groups to join'), desc: word('Start one: a social circle, a working group, a guild.'), action: 'group' };
     }
     if (kind === 'projects') return { title: word('No projects to back yet'), desc: word('Got an idea that needs Beans? Start a project.'), action: 'project' };
-    if (kind === 'enterprises') return { title: word('No enterprises to join yet'), desc: word('Something that keeps going and trades? Start an enterprise.'), action: 'project' };
-    return { title: word('No other groups yet'), desc: word('Start one with +: a chat group, a project or an enterprise.'), action: 'group' };
-}
-
-/**
- * Whether the Commons "+" starts a project or an enterprise rather than a group: on Groups, on their chip, and only
- * where this node lists them (enterprisesOn, as the chips and the empty state). A link that asked for Enterprises picks
- * that chip even where they are off (the global node), and the "+" then opened a Beans form the node refuses.
- */
-export function commonsPlusStartsProject(section: CommonsSection, kind: GroupKind, features: NodeFeatures | null | undefined): boolean {
-    return section === 'groups' && enterprisesOn(features) && (kind === 'projects' || kind === 'enterprises');
+    if (kind === 'enterprises') return { title: word('No enterprises yet'), desc: word('Something that keeps going and trades? Start an enterprise.'), action: 'enterprise' };
+    return { title: word('No others yet'), desc: word('Start one with +: a chat group, a project or an enterprise.'), action: null };
 }
 
 /** Whether Talk's Groups view offers "Find groups": only where the Commons tab, which has them, is hidden. */

@@ -53,6 +53,18 @@ describe('RestorePointsPanel', () => {
         expect(calls).toHaveLength(0);
     });
 
+    it('shows a loading state while fetching restore points', async () => {
+        let resolveFetch: (value: any) => void;
+        vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveFetch = resolve; })));
+        render(<RestorePointsPanel activeNode={node} />);
+        expect(screen.getByTestId('restore-points-loading')).toHaveTextContent('Loading restore points…');
+        await act(async () => {
+            resolveFetch({ ok: true, status: 200, json: async () => ({ points: [] }) });
+        });
+        expect(screen.queryByTestId('restore-points-loading')).toBeNull();
+        expect(await screen.findByText(/No restore points yet/)).toBeInTheDocument();
+    });
+
     it('says when there are none, and when the list cannot be read', async () => {
         stubFetch(() => ({ status: 200, body: { points: [] } }));
         const view = render(<RestorePointsPanel activeNode={node} />);

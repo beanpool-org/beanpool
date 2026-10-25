@@ -147,6 +147,13 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
             {done && <div role="status" className="p-3 rounded-xl bg-nature-950 border border-terra-500/50 text-xs text-bp-ink-terra">{done}</div>}
             {listMessage && <p className="m-0 text-xs text-red-300" role="alert">{listMessage}</p>}
 
+            {points === null && !listMessage && (
+                <p className="text-xs text-nature-400 m-0 flex items-center gap-2" data-testid="restore-points-loading">
+                    <span className="animate-spin text-xs">🔄</span>
+                    <span>Loading restore points…</span>
+                </p>
+            )}
+
             {points && points.length === 0 && (
                 <p className="m-0 text-xs text-nature-400">No restore points yet. One is taken before every restore and roll-back.</p>
             )}

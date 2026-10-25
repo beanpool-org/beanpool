@@ -150,3 +150,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-12-12 - Replace catch err any in OffboardMemberWizard
 **Learning:** `OffboardMemberWizard.tsx` used `catch (err: any)` in async preview loading and offboard execution handlers, weakening error handling type safety.
 **Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.
+
+## 2026-12-13 - Add loading indicator for RestorePointsPanel
+**Learning:** `RestorePointsPanel.tsx` rendered an empty card body below the description header while fetching restore points (`points === null && !listMessage`), leaving operators without visual feedback during network calls.
+**Action:** Render an explicit loading indicator with an animated spinner when `points === null && !listMessage`.

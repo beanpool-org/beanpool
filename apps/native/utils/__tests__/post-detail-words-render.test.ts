@@ -155,7 +155,7 @@ const REQUESTS = [
 ];
 /** A deal held in trust on Kofi's Offer: the member pays. */
 const HELD = { ...HOURLY, id: 'p-held', status: 'pending', pending_transaction_id: 'tx-held' };
-const HELD_TX = { id: 'tx-held', post_id: 'p-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 24, hours: 2 };
+const HELD_TX = { id: 'tx-held', post_id: 'p-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 24, hours: 2, created_at: '2026-10-24T10:00:00.000Z' };
 /** The member's own Offer held in trust: the member is paid. */
 const MINE_HELD = { ...HOURLY, id: 'p-mine-held', status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign, accepted_by: KOFI.pubkey, accepted_by_callsign: KOFI.callsign, pending_transaction_id: 'tx-mine' };
 const MINE_HELD_TX = { id: 'tx-mine', post_id: 'p-mine-held', status: 'pending', buyer_pubkey: KOFI.pubkey, buyer_callsign: KOFI.callsign, seller_pubkey: ME.publicKey, credits: 24, hours: 2 };

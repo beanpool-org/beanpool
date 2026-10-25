@@ -654,6 +654,29 @@ describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
         expect(freshHomeForHeader(ME.publicKey)?.cards?.needs?.items.map(i => i.kind)).toEqual(['deal', 'message']);
     });
 
+    // Deciding review on 65302617: when nothing needs the member the node leaves the needs card OUT (home-answer.ts), it
+    // never sends needs: { items: [] }. That answer is an empty list, as the phone reads it: the last icon goes.
+    it('the node\'s answer with no needs card (nothing needs you) clears the last icon, away from Home', async () => {
+        vi.useFakeTimers();
+        const none = makeHomeAnswer([]) as any;
+        delete none.cards.needs;
+        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: null, answer: none });
+        recordHomeAnswer(makeHomeAnswer([DEAL]) as any, ME.publicKey);
+
+        const { rerender } = render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+
+        await act(async () => { vi.advanceTimersByTime(20_000); });
+        await act(async () => {
+            rerender(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="marketplace" />);
+            await Promise.resolve();
+        });
+        await act(async () => { await Promise.resolve(); });
+        expect(getHomeSpy).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+    });
+
     it("a tap on an icon or a line of the sheet forgets Home's copy: that need is about to change", async () => {
         slotWidth(88);
         const onNavigate = vi.fn();

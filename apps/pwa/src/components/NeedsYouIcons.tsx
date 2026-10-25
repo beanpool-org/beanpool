@@ -117,6 +117,13 @@ function fetchNeedsDeduped(): Promise<any> {
     return needsReadPromise || Promise.resolve({ notModified: true });
 }
 
+/** A Home answer's needs, or null when there is no answer to go by. The node leaves the needs card out when nothing needs
+ *  the member (home-answer.ts), so an answer whose cards have no needs is an empty list, as the phone reads it. */
+function needsOf(ans: { cards?: { needs?: { items?: NeedsItem[] } } } | null | undefined): NeedsItem[] | null {
+    if (!ans?.cards) return null;
+    return ans.cards.needs?.items ?? [];
+}
+
 export function NeedsYouIcons({
     identityPubkey,
     onNavigate,
@@ -177,13 +184,15 @@ export function NeedsYouIcons({
             // while it is younger than the gap between the header's own reads: the phone reads its deals and unread
             // messages again on every page change, so a need dealt with goes at the next tab change here too.
             const ans = onHome ? await homeForHeader(pk, HOME_HEADER_WAIT_MS) : await homeForHeader(pk, 0, NODE_MIN_GAP_MS);
-            if (ans?.cards?.needs?.items) {
-                setEntries(filterAndSort(ans.cards.needs.items));
+            const items = needsOf(ans);
+            if (items) {
+                setEntries(filterAndSort(items));
             } else if (!onHome) {
                 // The header's own read is the header's: never recorded as Home's answer (only Home's reads stand in).
                 const read = await fetchNeedsDeduped();
-                if (identityRef.current === pk && read && !read.notModified && read.answer?.cards?.needs?.items) {
-                    setEntries(filterAndSort(read.answer.cards.needs.items));
+                const readItems = read && !read.notModified ? needsOf(read.answer) : null;
+                if (identityRef.current === pk && readItems) {
+                    setEntries(filterAndSort(readItems));
                 }
             }
         } catch {
@@ -202,8 +211,9 @@ export function NeedsYouIcons({
 
         // Draw initial data if already fresh in store
         const fresh = freshHomeForHeader(identityPubkey);
-        if (fresh?.cards?.needs?.items) {
-            setEntries(filterAndSort(fresh.cards.needs.items));
+        const freshItems = needsOf(fresh);
+        if (freshItems) {
+            setEntries(filterAndSort(freshItems));
         }
 
         const g = createRefreshGate(NODE_MIN_GAP_MS, () => {
@@ -216,8 +226,9 @@ export function NeedsYouIcons({
 
         // Listen for future Home reads settling
         const unsubscribe = onHomeRead((ans, pk) => {
-            if (pk === identityPubkey && ans?.cards?.needs?.items) {
-                setEntries(filterAndSort(ans.cards.needs.items));
+            const readItems = needsOf(ans);
+            if (pk === identityPubkey && readItems) {
+                setEntries(filterAndSort(readItems));
             }
         });
 
@@ -383,7 +394,8 @@ export function NeedsYouIcons({
                 {entry.count > 1 && (
                     <span
                         className={`absolute top-2 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
-                            isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
+                            // The side bar is light in light mode: its badge takes the gold role tokens (as the header pill), never white.
+                            isSidebar ? 'bg-bp-gold-fill text-bp-gold-on' : isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
                         }`}
                     >
                         {entry.count > 9 ? '9+' : entry.count}

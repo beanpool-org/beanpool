@@ -7724,8 +7724,8 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
     let query = `
         SELECT mt.*, COALESCE(p.title, mt.post_title) as postTitle, p.photos as postPhotos, m1.callsign as buyerCallsign, m1.avatar_url as buyerAvatar, m2.callsign as sellerCallsign, m2.avatar_url as sellerAvatar,
                p.type as postType, p.author_pubkey as postAuthorPublicKey,
-               COALESCE(p.repeatable, 0) = 1 as postRepeatable,
-               COALESCE(p.lendable, 0) = 1 as postLendable,
+               p.repeatable as postRepeatable,
+               p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
         FROM marketplace_transactions mt

@@ -11,7 +11,8 @@ import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, ARCHETYPES, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
+import { usePictureCrop } from '../components/PictureCropDialog';
+import { parseArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
 
 /** Who can see the contact details: the phone's Settings → Profile options and words (word() keys, shown through t()). */
 const CONTACT_VISIBILITY = [
@@ -113,28 +114,18 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
         }
     };
 
+    // A photo from the camera or the files opens the crop dialog: the part the member chooses in the circle is their avatar,
+    // 512 px (components/PictureCropDialog.tsx; Marty, 25 Oct 2026). Cancel there keeps the avatar they had.
+    const cropper = usePictureCrop();
+    const [avatarUnread, setAvatarUnread] = useState(false);
     function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
+        e.target.value = '';
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            // Resize to 128x128 thumbnail
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 128;
-                canvas.height = 128;
-                const ctx = canvas.getContext('2d')!;
-                // Center crop
-                const size = Math.min(img.width, img.height);
-                const sx = (img.width - size) / 2;
-                const sy = (img.height - size) / 2;
-                ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
-                setAvatar(canvas.toDataURL('image/jpeg', 0.7));
-            };
-            img.src = reader.result as string;
-        };
-        reader.readAsDataURL(file);
+        setAvatarUnread(false);
+        cropper.crop(file, AVATAR_PICTURE)
+            .then((cropped) => { if (cropped) setAvatar(cropped); })
+            .catch(() => setAvatarUnread(true));
     }
 
     if (loading) {
@@ -198,10 +189,14 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                         {t('🖼️ Gallery')}
                     </button>
                 </div>
+                {avatarUnread && (
+                    <p role="alert" className="m-0 mt-3 text-sm font-semibold text-bp-ink-danger">{t("That picture couldn't be read. Try another.")}</p>
+                )}
                 <AvatarPresetPicker
                     selected={avatar}
-                    onSelect={(uri) => setAvatar(uri)}
+                    onSelect={(uri) => { cropper.cancel(); setAvatar(uri); }}
                 />
+                {cropper.dialog}
                 {avatar && (
                     <button
                         onClick={() => setAvatar(null)}

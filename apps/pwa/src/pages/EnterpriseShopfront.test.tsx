@@ -20,7 +20,20 @@ import axe from 'axe-core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import * as identityLib from '../lib/identity';
-import * as photoResize from '../lib/photo-resize';
+import * as pictureCrop from '../lib/picture-crop';
+
+/**
+ * A picture picked in Manage goes through the crop step (components/PictureCropDialog.tsx): the file read (jsdom decodes
+ * none, so a stand-in), the part chosen drawn as `drawn`. Returns the read's spy.
+ */
+function stubCrop(drawn: string) {
+    vi.spyOn(pictureCrop, 'drawPictureCrop').mockReturnValue(drawn);
+    return vi.spyOn(pictureCrop, 'readPictureFile').mockResolvedValue({ src: 'data:image/jpeg;base64,UkFX', width: 1600, height: 1200, image: {} as HTMLImageElement });
+}
+/** The crop step, as the keeper finishes it: Done on the part shown. */
+async function chooseTheCrop() {
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Done' }));
+}
 
 const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 const secret = ed25519.utils.randomSecretKey();
@@ -605,15 +618,16 @@ describe("the keepers' Manage tab", () => {
             ]);
         });
 
-        it('a new logo goes as the picture the keeper chose, made 800 px, with nothing else', async () => {
+        it('a new logo goes as the part of the picture the keeper chose, with nothing else', async () => {
             const PICKED = 'data:image/jpeg;base64,/9j/AAAA';
-            const resize = vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue(PICKED);
+            const read = stubCrop(PICKED);
             await open();
             const panel = await manage();
             const file = new File(['x'], 'logo.jpg', { type: 'image/jpeg' });
             fireEvent.change(within(panel).getByTestId('manage-face-logo-input'), { target: { files: [file] } });
+            await chooseTheCrop();
             await waitFor(() => expect(byId('manage-face-logo-image')?.getAttribute('src')).toBe(PICKED));
-            expect(resize).toHaveBeenCalledWith(file);
+            expect(read).toHaveBeenCalledWith(file);
             fireEvent.click(byId('manage-face-save')!);
             await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
             expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { avatar: PICKED } }]);
@@ -629,15 +643,16 @@ describe("the keepers' Manage tab", () => {
             expect(within(panel).getByTestId('manage-face-banner-input')).toHaveAttribute('accept', 'image/*');
         });
 
-        it('a keeper puts up a banner photo, made 800 px, sent to its shop alone', async () => {
+        it('a keeper puts up a banner photo, the strip they chose, sent to its shop alone', async () => {
             const PICKED = 'data:image/jpeg;base64,/9j/BBBB';
-            const resize = vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue(PICKED);
+            const read = stubCrop(PICKED);
             await open();
             const panel = await manage();
             const file = new File(['x'], 'banner.jpg', { type: 'image/jpeg' });
             fireEvent.change(within(panel).getByTestId('manage-face-banner-input'), { target: { files: [file] } });
+            await chooseTheCrop();
             await waitFor(() => expect(byId('manage-face-banner-image')?.getAttribute('src')).toBe(PICKED));
-            expect(resize).toHaveBeenCalledWith(file);
+            expect(read).toHaveBeenCalledWith(file);
             expect(byId('manage-face-banner')?.textContent).toBe('Change the banner photo');
             fireEvent.click(byId('manage-face-save')!);
             await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
@@ -668,7 +683,7 @@ describe("the keepers' Manage tab", () => {
         });
 
         it('a banner photo that cannot be read says so, and nothing is sent', async () => {
-            vi.spyOn(photoResize, 'resizePhotoFile').mockRejectedValue(new Error('bad'));
+            vi.spyOn(pictureCrop, 'readPictureFile').mockRejectedValue(new Error('bad'));
             await open();
             const panel = await manage();
             fireEvent.change(within(panel).getByTestId('manage-face-banner-input'), { target: { files: [new File(['x'], 'b.heic')] } });
@@ -747,7 +762,7 @@ describe("the keepers' Manage tab", () => {
         it('a picture saved before its shop change got no answer shows as the node holds it, read again; a retry sends the shop alone', async () => {
             const PICKED = 'data:image/jpeg;base64,/9j/AAAA';
             const HELD = `/api/treasury/${ENT}/avatar?v=2`;
-            vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue(PICKED);
+            stubCrop(PICKED);
             let shopTries = 0;
             const opts: NodeOpts = {
                 write: (method, path, body) => {
@@ -759,6 +774,7 @@ describe("the keepers' Manage tab", () => {
             await open(opts);
             const panel = await manage();
             fireEvent.change(within(panel).getByTestId('manage-face-logo-input'), { target: { files: [new File(['x'], 'logo.jpg', { type: 'image/jpeg' })] } });
+            await chooseTheCrop();
             await waitFor(() => expect(byId('manage-face-logo-image')?.getAttribute('src')).toBe(PICKED));
             fireEvent.change(byId('manage-face-how')!, { target: { value: 'Saturdays only.' } });
             fireEvent.click(byId('manage-face-save')!);

@@ -8,9 +8,9 @@ import {
     getGroups, type Group,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
-import { resizePhotoFile } from '../lib/photo-resize';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
+import { usePictureCrop } from '../components/PictureCropDialog';
 import { DecideSection } from '../components/DecideSection';
 import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
@@ -19,7 +19,7 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { modeFor, readerFeaturesOnce, readsOwn, useCommunityInfo, useReadsOwn } from '../lib/features';
-import { TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, type FeatureMode, type WordKey } from '@beanpool/core';
+import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, type FeatureMode, type WordKey } from '@beanpool/core';
 import { TOOL_APPS } from '../tools';
 import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
@@ -40,7 +40,7 @@ interface Props {
     isMember?: boolean | null;
 }
 
-/** Shown when the browser cannot read or decode the picked photo (resizePhotoFile rejected): a word() key, put through t() where shown. */
+/** Shown when the browser cannot read, decode or draw the picked photo (the crop rejected): a word() key, put through t() where shown. */
 const PHOTO_WORDS = { readError: word('That photo could not be read. Please choose another one.') } as const;
 
 /**
@@ -179,9 +179,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [newGoal, setNewGoal] = useState<number | ''>('');
     const [newDeadline, setNewDeadline] = useState('');
     const [newPhotos, setNewPhotos] = useState<string[]>([]);
-    // A picked photo is being resized; the form waits for it (handlePhotoUpload). Only the latest pick counts.
+    // A picked photo is being read or cropped; the form waits for it (handlePhotoUpload). Only the latest pick counts.
     const [preparingPhoto, setPreparingPhoto] = useState(false);
     const photoPick = useRef(0);
+    const cropper = usePictureCrop();
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
 
@@ -265,32 +266,28 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     }, [identity?.publicKey, canLoadBalance, readsBalance]);
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files) return;
-
-        Array.from(files).forEach((file) => {
-            if (!file.type.startsWith('image/')) return;
-            // Through the marketplace's canvas resize, never the raw file: 800px at most, and the camera's
-            // GPS and serial number stay on the device (G9a-3). The resize can take a second or two on an old
-            // phone, and the photo is the last field before the button, so the form waits for it: sent sooner,
-            // the enterprise would be created without the photo the member chose.
-            const pick = ++photoPick.current;
-            setPreparingPhoto(true);
-            resizePhotoFile(file)
-                .then((resized) => {
-                    if (pick !== photoPick.current) return;
-                    setNewPhotos([resized]); // Single avatar
-                    setCreateError((shown) => (shown === t(PHOTO_WORDS.readError) ? null : shown));
-                })
-                .catch((err) => {
-                    console.warn('[ProjectsPage] Could not read the picked photo:', err);
-                    if (pick === photoPick.current) setCreateError(t(PHOTO_WORDS.readError));
-                })
-                .finally(() => {
-                    if (pick === photoPick.current) setPreparingPhoto(false);
-                });
-        });
+        const file = e.target.files?.[0];
         e.target.value = '';
+        if (!file || !file.type.startsWith('image/')) return;
+        // Its logo is the part of the photo the member chooses in the crop dialog, a square shown in a circle (512 px),
+        // redrawn on a canvas, never the raw file: the camera's GPS and serial number stay on the device (G9a-3). The
+        // photo is the last field before the button, so the form waits for it: sent sooner, the enterprise would be
+        // created without the photo the member chose. Cancel there leaves the form as it was.
+        const pick = ++photoPick.current;
+        setPreparingPhoto(true);
+        cropper.crop(file, AVATAR_PICTURE)
+            .then((cropped) => {
+                if (pick !== photoPick.current || !cropped) return;
+                setNewPhotos([cropped]); // Single avatar
+                setCreateError((shown) => (shown === t(PHOTO_WORDS.readError) ? null : shown));
+            })
+            .catch((err) => {
+                console.warn('[ProjectsPage] Could not read the picked photo:', err);
+                if (pick === photoPick.current) setCreateError(t(PHOTO_WORDS.readError));
+            })
+            .finally(() => {
+                if (pick === photoPick.current) setPreparingPhoto(false);
+            });
     };
 
     const submitNewEnterprise = async (e: React.FormEvent) => {
@@ -857,12 +854,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     selected={newPhotos[0]}
                                     headingClassName="text-nature-400"
                                     onSelect={(uri) => {
-                                        // A photo still being resized must not land over the preset chosen after it.
+                                        // A photo still being read must not land over the preset chosen after it, nor open its crop.
                                         photoPick.current++;
+                                        cropper.cancel();
                                         setPreparingPhoto(false);
                                         setNewPhotos([uri]);
                                     }}
                                 />
+                                {cropper.dialog}
                             </div>
 
                             <div className="flex gap-3 pt-3">

@@ -1,44 +1,7 @@
 /**
- * Shared image processing utilities for BeanPool.
- * 
- * Memory-safe 2-pass pipeline for profile photos:
- * Pass 1: Pre-crop downscale to 1024px — prevents OOM on 48MP camera images
- * Pass 2: Final compress to 512px, 70% JPEG — network-optimal base64 avatar
+ * A member's or an enterprise's picture's address, ready to draw. A picture picked for an avatar or a logo is cut on the
+ * crop screen (utils/picture-crop.ts, components/PictureCrop.tsx: the part the member chose, 512 px square).
  */
-import * as ImageManipulator from 'expo-image-manipulator';
-
-const PRE_CROP_MAX = 1024;
-const FINAL_SIZE = 512;
-const FINAL_QUALITY = 0.7;
-
-/**
- * Process a picked image URI into a base64 data URI suitable for profile avatars.
- * Handles memory-safe downscaling to prevent OOM crashes on low-end devices/emulators.
- * 
- * @param uri - Local file URI from ImagePicker
- * @returns base64 data URI string, or null on failure
- */
-export async function processProfileImage(uri: string): Promise<string | null> {
-    try {
-        // Pass 1: Downscale to max 1024px before crop (prevents memory crash)
-        const preCrop = await ImageManipulator.manipulateAsync(
-            uri,
-            [{ resize: { width: PRE_CROP_MAX } }],
-            { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
-        );
-        // Pass 2: Final compress to 512px for ledger storage
-        const final = await ImageManipulator.manipulateAsync(
-            preCrop.uri,
-            [{ resize: { width: FINAL_SIZE } }],
-            { compress: FINAL_QUALITY, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-        );
-        return final.base64 ? `data:image/jpeg;base64,${final.base64}` : null;
-    } catch (e) {
-        console.error('[ImageProcessing] Profile image processing failed:', e);
-        return null;
-    }
-}
-
 import { getCachedAnchorUrl } from './node-post';
 
 /**

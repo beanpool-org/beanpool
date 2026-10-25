@@ -422,4 +422,76 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         });
         expect(document.activeElement).toBe(nameButton);
     });
+
+    it('9. ShopDetailPage discards stale async responses when id changes or component unmounts', async () => {
+        let resolveShop1: (val: any) => void = () => {};
+        const shop1Promise = new Promise((resolve) => {
+            resolveShop1 = resolve;
+        });
+
+        const shop1Data = {
+            id: 'shop-1',
+            name: "Alice's Workshop",
+            ownerName: 'Alice',
+            ownerPublicKey: 'alice-pubkey',
+            category: 'tools',
+            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+            paused: false,
+            backOn: null,
+            photoUrl: null,
+        };
+
+        const shop2Data = {
+            id: 'shop-2',
+            name: "Bob's Bakery",
+            ownerName: 'Bob',
+            ownerPublicKey: 'bob-pubkey',
+            category: 'food',
+            counts: { things: 2, available: 2, toBorrow: 0, toBuy: 2, out: 0, newThisWeek: 0 },
+            paused: false,
+            backOn: null,
+            photoUrl: null,
+        };
+
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/shop-1') {
+                return shop1Promise;
+            }
+            if (path === '/api/shops/shop-2') {
+                return { ok: true, status: 200, json: async () => shop2Data };
+            }
+            if (path.startsWith('/api/marketplace/posts?shop=shop-2')) {
+                return { ok: true, status: 200, json: async () => [] };
+            }
+            if (path.startsWith('/api/marketplace/posts?shop=shop-1')) {
+                return { ok: true, status: 200, json: async () => [] };
+            }
+            if (path === '/api/members/bob-pubkey' || path === '/api/members/alice-pubkey') {
+                return { ok: true, status: 200, json: async () => ({ avatar: null }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        const { rerender, unmount } = render(
+            <ShopDetailPage id="shop-1" identity={me} onBack={vi.fn()} />
+        );
+
+        // While shop-1 is in-flight, navigate to shop-2
+        rerender(<ShopDetailPage id="shop-2" identity={me} onBack={vi.fn()} />);
+
+        // Shop-2 resolves and renders
+        expect(await screen.findByTestId('shopfront-name')).toHaveTextContent("Bob's Bakery");
+
+        // Now late resolve shop-1
+        resolveShop1({ ok: true, status: 200, json: async () => shop1Data });
+        await new Promise((r) => setTimeout(r, 50));
+
+        // Shop-2 is still displayed; stale shop-1 response did not overwrite it
+        expect(screen.getByTestId('shopfront-name')).toHaveTextContent("Bob's Bakery");
+        expect(screen.queryByText("Alice's Workshop")).not.toBeInTheDocument();
+
+        // Unmount should clean up without error
+        unmount();
+    });
 });

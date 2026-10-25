@@ -3,7 +3,7 @@
  * scratch/tools/DESIGN-shops-round3-enterprise-shopfront-fable.md §3): `/shop/<id>`, a member's shop as
  * any member here reads it.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getMemberProfile } from '../lib/api';
@@ -45,31 +45,54 @@ export function ShopDetailPage({
     const [read, setRead] = useState<ShopPageRead | null>(null);
     const [listings, setListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
     const [logo, setLogo] = useState<string | null>(null);
+    const activeReqRef = useRef(0);
 
-    const load = useCallback(async (afresh = false) => {
+    const load = useCallback(async (afresh = false, isCallActive = () => true) => {
+        const reqId = ++activeReqRef.current;
+        const isActive = () => activeReqRef.current === reqId && isCallActive();
+
         if (!id) {
-            setRead({ state: 'none' });
+            if (isActive()) setRead({ state: 'none' });
             return;
         }
-        if (afresh) setRead(null);
+        if (afresh) {
+            setRead(null);
+            setListings(undefined);
+            setLogo(null);
+        }
         const r = await readShopPage(id);
+        if (!isActive()) return;
         if (r.state === 'enterprise') {
             onOpenEnterprise?.(r.ownerPublicKey);
             return;
         }
         setRead(r);
-        if (r.state !== 'shop') return;
+        if (r.state !== 'shop') {
+            setListings(null);
+            setLogo(null);
+            return;
+        }
         getMemberProfile(r.shop.ownerPublicKey)
             .then((m) => {
+                if (!isActive()) return;
                 const url = m?.avatar ?? (m as any)?.avatar_url ?? (m as any)?.avatarUrl;
                 setLogo(typeof url === 'string' && url.trim() ? url : null);
             })
             .catch(() => {});
-        setListings(await readShopListingsForReader(r.shop.id));
+        const items = await readShopListingsForReader(r.shop.id);
+        if (isActive()) setListings(items);
     }, [id, onOpenEnterprise]);
 
     useEffect(() => {
-        void load();
+        let active = true;
+        setRead(null);
+        setListings(undefined);
+        setLogo(null);
+        void load(false, () => active);
+        return () => {
+            active = false;
+            activeReqRef.current = 0;
+        };
     }, [load]);
 
     const shop = read?.state === 'shop' ? read.shop : null;

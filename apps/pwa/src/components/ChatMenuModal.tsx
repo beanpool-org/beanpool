@@ -26,8 +26,12 @@ interface Props {
     onInvite?: () => void;
 }
 
-export function ChatMenuModal({
-    isOpen,
+export function ChatMenuModal(props: Props): ReactNode {
+    if (!props.isOpen) return null;
+    return <ChatMenuModalContent {...props} />;
+}
+
+function ChatMenuModalContent({
     muteOpen,
     isMuted,
     isConvenor,
@@ -37,11 +41,9 @@ export function ChatMenuModal({
     onSearch,
     onGroupInfo,
     onInvite,
-}: Props): ReactNode {
+}: Omit<Props, 'isOpen'>): ReactNode {
     const dialogRef = useRef<HTMLDivElement>(null);
     useDialogFocus(dialogRef, onClose);
-
-    if (!isOpen) return null;
 
     return createPortal(
         <div

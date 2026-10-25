@@ -123,6 +123,38 @@ describe('a deal already under way on the listing (deal_open)', () => {
         expect(screen.queryByText('🤝 Accept Offer')).toBeNull();
     });
 
+    // Deciding review on 509dd543: the deal the refusal pinned belongs to ITS listing; the next listing opened is never at it.
+    it('the pinned deal stays with its listing: another listing offers Accept, and one held by someone else shows no Release', async () => {
+        const vase = { ...course, id: 'offer-vase', title: 'Glazed vase', repeatable: false, authorPublicKey: 'sam-pk', authorCallsign: 'Sam' };
+        const mower = { ...course, id: 'offer-mower', title: 'Old lawn mower', repeatable: false, status: 'pending', pendingTransactionId: 'tx-other',
+            authorPublicKey: 'sam-pk', authorCallsign: 'Sam' };
+        stubNode([course, vase, mower]);
+        vi.spyOn(api, 'acceptMarketplacePost').mockRejectedValue(refused({ error: 'x', code: 'deal_open', transactionId: 'tx-course' }));
+        const onPostOpened = () => {};
+        const view = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-course" onPostOpened={onPostOpened} transactions={[]} />);
+        await screen.findByRole('heading', { name: /Pottery course/ });
+        await settle();
+        fireEvent.click(screen.getByText('🤝 Accept Offer'));
+        await screen.findByText('Accept this Offer?');
+        fireEvent.click(screen.getByText('Confirm'));
+        await waitFor(() => expect(said.length).toBe(1));
+        view.rerender(<MarketplacePage identity={identity} isMember={true} openPostId="offer-course" onPostOpened={onPostOpened} transactions={[deal({})]} />);
+        await settle();
+
+        // On to another of the same author's listings, as from Posted by → their profile: no deal of the member's there.
+        view.rerender(<MarketplacePage identity={identity} isMember={true} openPostId="offer-vase" onPostOpened={onPostOpened} transactions={[deal({})]} />);
+        await screen.findByRole('heading', { name: /Glazed vase/ });
+        await settle();
+        expect(screen.getByText('🤝 Accept Offer')).toBeInTheDocument();
+        expect(screen.queryByText(/Release Credits/)).toBeNull();
+
+        // And a one-off held for someone else: never the member's Release.
+        view.rerender(<MarketplacePage identity={identity} isMember={true} openPostId="offer-mower" onPostOpened={onPostOpened} transactions={[deal({})]} />);
+        await screen.findByRole('heading', { name: /Old lawn mower/ });
+        await settle();
+        expect(screen.queryByText(/Release Credits/)).toBeNull();
+    });
+
     it('the deal the node named is the one opened, by its id: a request still waiting (nothing held) as well', async () => {
         stubNode([course]);
         vi.spyOn(api, 'acceptMarketplacePost').mockRejectedValue(refused({ error: 'x', code: 'deal_open', transactionId: 'tx-asked' }));

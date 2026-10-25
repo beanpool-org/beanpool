@@ -1255,9 +1255,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // definition of the fee, so it is imported.
         const commissionNeeded = Math.round(selectedPost.credits * (1 + TRANSACTION_FEE_RATE) * 100) / 100;
 
-        const activeTx = selectedTxId 
-            ? myTransactions.find(t => t.id === selectedTxId)
-            : myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
+        // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
+        // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
+        const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id) : undefined;
+        const activeTx = pinnedTx
+            ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             
         // --- Escrow Roles ---
         const isAcceptedByMe = activeTx 

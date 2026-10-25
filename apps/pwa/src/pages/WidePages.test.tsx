@@ -12,6 +12,8 @@ import { MessagesPage } from './MessagesPage';
 import { ProjectsPage } from './ProjectsPage';
 import { ToolsPage } from './ToolsPage';
 import { ChannelsPage } from './ChannelsPage';
+import { YourShopPage } from './YourShopPage';
+import { ShopDetailPage } from './ShopDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getPulseFeed, getConversationMessages, getConversations, getTreasuries, getYourGroups, type PulseFeedItem, type Treasury } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -342,6 +344,32 @@ describe('Wide screen layout: Commons, Tools, and Channels container pins', () =
         expect(formContainer.className).not.toContain('xl:max-w-6xl');
         expect(formContainer.className).not.toContain('md:max-w-4xl');
         expect(formContainer.className).not.toContain('lg:max-w-5xl');
+    });
+
+    it('Shop pages preserve max-w-xl reading width (not widened to 6xl)', async () => {
+        const { container: shopContainer, unmount } = render(
+            <YourShopPage
+                identity={testIdentity}
+                onBack={vi.fn()}
+            />
+        );
+        const inner = shopContainer.querySelector('.max-w-xl') as HTMLElement;
+        expect(inner).not.toBeNull();
+        expect(inner.className).toContain('max-w-xl');
+        expect(inner.className).not.toContain('xl:max-w-6xl');
+        unmount();
+
+        const { container: detailContainer } = render(
+            <ShopDetailPage
+                id="shop-1"
+                identity={testIdentity}
+                onBack={vi.fn()}
+            />
+        );
+        const detailInner = detailContainer.querySelector('.max-w-xl') as HTMLElement;
+        expect(detailInner).not.toBeNull();
+        expect(detailInner.className).toContain('max-w-xl');
+        expect(detailInner.className).not.toContain('xl:max-w-6xl');
     });
 });
 

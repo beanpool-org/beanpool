@@ -432,6 +432,16 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing(), 'the cancel question').toEqual([]);
     });
 
+    // Deals S1 deciding review: on a Need the author pays, and is never told they "took this up".
+    it("a deal held in trust on the member's own Need: Release, but not \"You took this up\"", async () => {
+        const NEED_HELD = { ...NEED, id: 'p-need-held', status: 'pending', pending_transaction_id: 'tx-need' };
+        const NEED_TX = { id: 'tx-need', post_id: 'p-need-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 20, hours: 1, created_at: '2026-10-24T10:00:00.000Z' };
+        await open(NEED_HELD, 'xx', { first: (sql) => (sql.includes('marketplace_transactions') ? NEED_TX : null) }, 'tx-need');
+        expect(host.textContent).toContain(pseudoLocalise("Release the Beans when it's done."));
+        expect(host.textContent).not.toContain(pseudoLocalise('✅ You took this up on {date} · {n} Beans held in trust').split('{')[0]);
+        expect(bypassing(), 'own need held').toEqual([]);
+    });
+
     it('a deal held in trust on a recurring Offer shows the recurring note', async () => {
         const RECURRING_HELD = { ...OFFER, id: 'p-rec-held', status: 'active', repeatable: 1, pending_transaction_id: 'tx-rec' };
         const REC_TX = { id: 'tx-rec', post_id: 'p-rec-held', status: 'pending', buyer_pubkey: ME.publicKey, seller_pubkey: KOFI.pubkey, seller_callsign: KOFI.callsign, credits: 12, hours: null, created_at: iso(now - 2 * 3600_000) };

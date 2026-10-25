@@ -18,8 +18,12 @@ interface Props {
     onConfirm: () => void;
 }
 
-export function ChatConfirmDialog({
-    isOpen,
+export function ChatConfirmDialog(props: Props): ReactNode {
+    if (!props.isOpen) return null;
+    return <ChatConfirmDialogContent {...props} />;
+}
+
+function ChatConfirmDialogContent({
     title,
     message,
     cancelLabel,
@@ -27,11 +31,9 @@ export function ChatConfirmDialog({
     destructive = true,
     onCancel,
     onConfirm,
-}: Props): ReactNode {
+}: Omit<Props, 'isOpen'>): ReactNode {
     const dialogRef = useRef<HTMLDivElement>(null);
     useDialogFocus(dialogRef, onCancel);
-
-    if (!isOpen) return null;
 
     return createPortal(
         <div

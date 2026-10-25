@@ -296,7 +296,7 @@ describe('HeaderControls needs-you alert icons', () => {
             count: 1,
             accent: true,
             label: 'A deal is waiting for you',
-            target: { to: 'deal', postId: 'post-1' },
+            target: { to: 'deal', postId: 'post-1', txId: 'tx-1' },
         };
         const voteItem: NeedsItem = {
             kind: 'vote',

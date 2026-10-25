@@ -314,6 +314,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [newPostPhotos, setNewPostPhotos] = useState<string[]>([]);
     const [composerShop, setComposerShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [composerInShop, setComposerInShop] = useState(false);
+    const cancelDraftShopRef = useRef<(() => void) | null>(null);
     const [posting, setPosting] = useState(false);
     // The node refused the post for a new account's limit or a moderation pause (G3): its own words, shown in the
     // form above the button, and the limits card for a limit. Cleared when the form closes.
@@ -538,16 +539,21 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             pinDropMarkerRef.current = null;
         }
         setValidationErrors(new Set());
+        let active = true;
+        cancelDraftShopRef.current = () => { active = false; };
         if (openDraft.type === 'offer') {
             void (async () => {
                 try {
                     const mine = await readMyShop({ timeoutMs: 5000 });
+                    if (!active) return;
                     const st = shopToggleState(mine);
                     setComposerShop(st);
                     setComposerInShop(shopTakesOffers(st) && openDraft.shop !== false);
                 } catch {
-                    setComposerShop({ kind: 'hidden' });
-                    setComposerInShop(false);
+                    if (active) {
+                        setComposerShop({ kind: 'hidden' });
+                        setComposerInShop(false);
+                    }
                 }
             })();
         } else {
@@ -555,6 +561,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setComposerInShop(false);
         }
         tryOpenComposer();
+        return () => {
+            active = false;
+            cancelDraftShopRef.current = null;
+        };
     }, [openDraft, onDraftOpened, tryOpenComposer]);
 
     // Initialize map
@@ -1307,6 +1317,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setPostLat(null);
             setPostLng(null);
             setPinDropMode(false);
+            cancelDraftShopRef.current?.();
             setComposerShop({ kind: 'hidden' });
             setComposerInShop(false);
             if (pinDropMarkerRef.current) {
@@ -2323,6 +2334,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         setPinDropMode(false);
                         setPostLat(null);
                         setPostLng(null);
+                        cancelDraftShopRef.current?.();
                         setComposerShop({ kind: 'hidden' });
                         setComposerInShop(false);
                         setEventIsCopy(false);

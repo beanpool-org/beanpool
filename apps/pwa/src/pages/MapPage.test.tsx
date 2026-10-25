@@ -2614,4 +2614,68 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
             shopId: 'shop-created',
         });
     });
+
+    it('cancels pending readMyShop resolution if composer is dismissed before fetch resolves, avoiding shop toggle state leak', async () => {
+        let resolveMine!: (val: any) => void;
+        const minePromise = new Promise((resolve) => {
+            resolveMine = resolve;
+        });
+
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                await minePromise;
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        shop: {
+                            id: 'shop-alice',
+                            name: "Alice's Workshop",
+                            ownerName: 'Alice',
+                            ownerPublicKey: mockIdentity.publicKey,
+                            category: 'tools',
+                            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+                            paused: false,
+                            backOn: null,
+                            photoUrl: null,
+                        },
+                    }),
+                };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, shop: true }} />);
+        });
+
+        const panel = await view!.findByTestId('map-new-post-panel');
+        // While readMyShop is pending, shop toggle is not yet resolved
+        expect(within(panel).queryByTestId('composer-shop-toggle')).toBeNull();
+
+        // Member dismisses composer by clicking "✕"
+        const closeBtn = within(panel).getByText('✕');
+        await act(async () => {
+            fireEvent.click(closeBtn);
+        });
+        expect(view!.queryByTestId('map-new-post-panel')).toBeNull();
+
+        // Now resolve the in-flight readMyShop
+        await act(async () => {
+            resolveMine(undefined);
+            await new Promise(r => setTimeout(r, 10));
+        });
+
+        // Open composer manually via the "+" FAB button
+        const fab = view!.getByLabelText('New Post');
+        await act(async () => {
+            fireEvent.click(fab);
+        });
+
+        const newPanel = await view!.findByTestId('map-new-post-panel');
+        // The manually opened composer must NOT have the shop toggle leaked into it
+        expect(within(newPanel).queryByTestId('composer-shop-toggle')).toBeNull();
+    });
 });

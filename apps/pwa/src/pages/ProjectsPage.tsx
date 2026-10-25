@@ -642,6 +642,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     ? (isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role'))
                                     : (isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role'));
                                 const kindWord = isProject ? t('Project') : t('Enterprise');
+                                const resolvedAvatar = resolveAvatarUrl(e.avatarUrl || summary?.avatar || summary?.avatarUrl);
                                 const isFunded = isProject && summary?.goalAmount != null && summary.goalAmount > 0 && (summary.currentAmount ?? summary.balance ?? 0) >= summary.goalAmount;
                                 const offersText = summary ? tn(summary.liveOffers || 0, '{n} live offer', '{n} live offers') : '';
                                 const line2 = summary
@@ -684,8 +685,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         <div>
                                             <div className="flex items-start gap-3">
                                                 <div className="w-11 h-11 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0 overflow-hidden text-xl">
-                                                    {e.avatarUrl || summary?.avatar || summary?.avatarUrl ? (
-                                                        <img src={resolveAvatarUrl(e.avatarUrl || summary?.avatar || summary?.avatarUrl) || ''} alt="" className="w-full h-full object-cover" />
+                                                    {resolvedAvatar ? (
+                                                        <img src={resolvedAvatar} alt="" className="w-full h-full object-cover" />
                                                     ) : (
                                                         <span>{e.badge || (isProject ? '🎯' : '🥖')}</span>
                                                     )}

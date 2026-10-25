@@ -6,6 +6,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, Group, YourChat } from '../lib/api';
 import { getTreasuries, getGroups, getYourGroups } from '../lib/api';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { resolveAvatarUrl } from '../lib/avatar';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -600,5 +601,37 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(card).toBeInTheDocument();
         expect(within(card).queryByText('Lead keeper')).toBeNull();
         expect(within(card).getByText('Keeper')).toBeInTheDocument();
+    });
+
+    it('falls back to emoji badge when resolveAvatarUrl returns null for an avatar string', async () => {
+        vi.mocked(resolveAvatarUrl).mockReturnValueOnce(null);
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-bad-avatar',
+                    conversationId: 'treasury-bad-avatar',
+                    name: 'Bad Avatar Org',
+                    role: 'keeper',
+                    lifecycle: 'ongoing',
+                    badge: '🥖',
+                    avatarUrl: 'javascript:alert(1)',
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+            ],
+        });
+
+        render(<ProjectsPage identity={me} />);
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        const card = within(yoursBlock).getByRole('button', {
+            name: 'Bad Avatar Org, Enterprise, Keeper',
+        });
+        expect(card).toBeInTheDocument();
+        // Fallback emoji is rendered
+        expect(within(card).getByText('🥖')).toBeInTheDocument();
+        // Broken img tag is not rendered (img has alt="" so query by selector or queryByRole)
+        expect(card.querySelector('img')).toBeNull();
     });
 });

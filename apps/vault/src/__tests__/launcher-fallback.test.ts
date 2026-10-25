@@ -35,16 +35,20 @@ if (process.argv.includes('--self-test')) {
     console.log(JSON.stringify({ ok: true, rootKeys: ${JSON.stringify(rootKeys)}, bundleSha256: own }));
     process.exit(0);
 }
+let readyAcked = false;
 process.on('message', m => {
     if (m && m.type === 'drain') process.exit(0);
+    if (m && m.type === 'ready-ack') readyAcked = true;
     if (m && m.type === 'switch-result') {
         writeFileSync(WORK + '/answer-' + m.id + '.part', JSON.stringify(m));
         renameSync(WORK + '/answer-' + m.id + '.part', WORK + '/answer-' + m.id + '.json');
     }
 });
 process.send({ type: 'ready' });
+// Flake cause: fakeApi exited on crash-VERSION before the launcher's waitReady processed the 'ready' IPC message,
+// rejecting the switch with 'exited before it was listening'. Waiting for 'ready-ack' ensures it only exits after listening.
 setInterval(() => {
-    if (existsSync(WORK + '/crash-' + VERSION)) process.exit(3);
+    if (readyAcked && existsSync(WORK + '/crash-' + VERSION)) process.exit(3);
     const ask = WORK + '/ask-from-' + VERSION + '.json';
     if (!existsSync(ask)) return;
     const { id, request } = JSON.parse(readFileSync(ask, 'utf8'));
@@ -55,7 +59,8 @@ setInterval(() => {
     return file;
 }
 
-async function until<T>(what: string, fn: () => T | null | undefined | false, ms = 15_000): Promise<T> {
+// Under heavy CPU starvation load, spawning multiple real node processes can take longer than 15s.
+async function until<T>(what: string, fn: () => T | null | undefined | false, ms = 45_000): Promise<T> {
     const end = Date.now() + ms;
     for (;;) {
         const v = fn();

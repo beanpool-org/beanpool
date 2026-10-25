@@ -119,10 +119,15 @@ function reportOfRow(r: any): GroupLineReport {
     };
 }
 
-/** The reporter's report of this message, whatever its status, or null: one report per reporter per message. */
+/**
+ * The reporter's report of this message, or null: their pending one, and only with none pending the first on file, closed.
+ * One report per reporter per message, save Child safety on a closed one, which is filed anew (routes/groups.ts): so a
+ * repeat after that finds the new one, not the closed one again.
+ */
 export function groupLineReportOnFile(reporter: string, messageId: string): GroupLineReport | null {
     const r = db.prepare(`SELECT id, reporter_pubkey, target_pubkey, target_message_id, reason, created_at, status FROM abuse_reports
-        WHERE reporter_pubkey = ? AND target_message_id = ? ORDER BY created_at ASC LIMIT 1`).get(reporter, messageId.toLowerCase());
+        WHERE reporter_pubkey = ? AND target_message_id = ?
+        ORDER BY (status = 'pending' OR status IS NULL) DESC, created_at ASC LIMIT 1`).get(reporter, messageId.toLowerCase());
     return r ? reportOfRow(r) : null;
 }
 

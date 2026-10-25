@@ -738,7 +738,8 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     // may read now, as its words and its photo are served (groupChatRole + groupLineForReader), and any other answers as an
     // id nobody has, a group they are not in included. The node keeps the key with the report and opens nothing here: the
     // moderators' view opens that one line (routes/admin.ts, engine/group-chat-report.ts). One report per reporter per
-    // message, repeats answered as /api/reports answers them: the one on file, changed only to Child safety.
+    // message, repeats answered as /api/reports answers them: the one on file, changed only to Child safety; and Child
+    // safety on one a moderator closed is a new report, as /api/reports files one once nothing is pending.
     router.post('/api/groups/:id/chat/report', async (ctx) => {
         const actor = requireAuth(ctx);
         if (!actor) return;
@@ -754,8 +755,13 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         // Every alert judges the 500 characters the queue keeps, as /api/reports does.
         const kept = checked.reason.slice(0, 500);
         const onFile = groupLineReportOnFile(actor, checked.messageId);
-        if (onFile) {
-            if (reportKind(kept) === 'child safety' && reportKind(onFile.reason) !== 'child safety') {
+        const child = reportKind(kept) === 'child safety';
+        // Child safety on a report a moderator dismissed or handled (the deciding review of #2470): filed below as a new
+        // one, with the key sent with it, and told. The closed one is never reopened or changed: an actioned report
+        // counts towards a suspension (member-wizards.ts reportMaySuspend). Any other repeat of a closed one is the one
+        // on file still.
+        if (onFile && !(child && onFile.status !== 'pending')) {
+            if (child && reportKind(onFile.reason) !== 'child safety') {
                 const changed = changeGroupLineReportReason(onFile.id, kept);
                 if (changed) {
                     noteNewReport(kept, actor).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));

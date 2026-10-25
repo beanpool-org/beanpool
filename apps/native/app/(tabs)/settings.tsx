@@ -21,6 +21,9 @@ import {
 } from '../../utils/event-extras';
 import { getCanonicalProfile } from '../../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
+import {
+    keepPendingProfileChange, nameRefusedForGood, pendingNameAccepted, pendingNameRefused, pendingProfileChange, takeNameRefusal,
+} from '../../utils/pending-profile-sync';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
@@ -717,13 +720,25 @@ export default function SettingsScreen() {
             // On open and on pull-to-refresh: ask the active community for this key's own record
             const targetUrl = await getAnchorUrl().catch(() => null);
             if (targetUrl) {
+                // A waiting name this community refused for good at a retry no one watched (db.ts pushProfileToServer):
+                // said here once, in the community's words, as a Save's refusal is.
+                const refusal = await takeNameRefusal(targetUrl, identity.publicKey);
+                if (refusal) {
+                    Alert.alert(
+                        refusal.status === 409 ? t('Name Taken') : t('Could Not Save'),
+                        refusal.message || t('The community node rejected this profile update. Please try again.')
+                    );
+                }
                 const remoteName = await fetchNodeCallsign(targetUrl, identity.publicKey, identity.privateKey);
                 if (remoteName) {
                     const activeAnchor = await getAnchorUrl().catch(() => null);
                     if (activeAnchor !== targetUrl) return;
-                    // An offline edit waiting to be sent wins until it is. The node still holds the old name, and
-                    // writing it into the row here is what pillar-sync's retry would then publish.
-                    if (await AsyncStorage.getItem('pending_profile_sync') === 'true') return;
+                    // An offline edit waiting to be sent to THIS community wins until it is. The node still holds the old
+                    // name, and writing it into the row here is what pillar-sync's retry would then publish. One waiting
+                    // for another community is that community's (utils/pending-profile-sync.ts). Once the community has
+                    // refused the waiting name for good, the name it holds is the one to show.
+                    const waiting = await pendingProfileChange(targetUrl, identity.publicKey);
+                    if (waiting && waiting.refusedCallsign === undefined) return;
                     // A newer load, or a Save, started while this one waited: its answer may predate the Save.
                     if (seq !== profileLoadSeqRef.current) return;
 
@@ -1177,10 +1192,21 @@ export default function SettingsScreen() {
             // falls through to the offline queue — an explicit rejection from the node aborts
             // the save, so local state can never drift from what the server accepted.
             let offline = false;
+            // Whether the payload carries a name: once the node accepts it, a name waiting there is sent.
+            let payloadCarriesName = false;
             // What this Save decided about the photo, kept in scope because the pending keys may
             // only be retired on the strength of what the payload actually carried.
             let avatarDecision: ProfilePublishAvatar | null = null;
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
+            // What waits for this community from an earlier offline Save (utils/pending-profile-sync.ts): only its own.
+            const pending = await pendingProfileChange(url, identity.publicKey);
+            // The name this Save stands for: one typed now, else a rename an earlier offline Save kept for this community.
+            // Not the field's: it starts from the row, which the members sync writes the node's old name over, and sending
+            // that would put the old name back on the node and retire the waiting one with it (#2461 review).
+            let savedCallsign = renames ? newCallsign : (pending?.callsign || newCallsign);
+            // A waiting name this community refused for good, still in the field (the row kept it): sent again only if the
+            // member types it (#2461 review r4368601839). The community keeps the name it holds, and the row takes it.
+            const refusedHere = !renames && pending?.refusedCallsign !== undefined && savedCallsign === pending.refusedCallsign;
             if (!url) {
                 offline = true;
             } else {
@@ -1191,18 +1217,17 @@ export default function SettingsScreen() {
                 };
                 // An offline rename still waiting for pillar-sync's retry is a rename too: this Save may retire that retry
                 // (retireParkedPickAfterPublish), so it carries the name the member chose, or the node keeps the old one
-                // and the next answer from the community writes it back (#2439 review). Only in the community the rename
-                // was made for: the flag is one for the phone, and another community's name is not this one's to send.
-                const pendingRename = (await AsyncStorage.getItem('pending_profile_sync')) === 'true'
-                    && (await AsyncStorage.getItem('pending_profile_sync_anchor')) === url
-                    && newCallsign.length >= 2;
-                if (renames || pendingRename) payloadObj.callsign = newCallsign;
+                // and the next answer from the community writes it back (#2439 review). `pending` is this community's
+                // own: another community's name is not this one's to send.
+                const pendingRename = !!pending && savedCallsign.length >= 2;
+                if ((renames || pendingRename) && !refusedHere) payloadObj.callsign = savedCallsign;
+                payloadCarriesName = payloadObj.callsign !== undefined;
                 // The one shared rule decides, so this Save cannot disagree with the wizard or
                 // with the pending-sync retry. It sends a photo picked in this session, else a
                 // pick an earlier offline save parked and nothing has managed to publish yet;
                 // for a plain bio/name/contact edit it sends nothing, which is how the node is
                 // told "avatar unchanged" (it reads an explicit null as "clear it").
-                avatarDecision = await resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession });
+                avatarDecision = await resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession, parked: pending?.avatar });
                 const publishAvatar = avatarDecision.avatar;
                 if (publishAvatar) payloadObj.avatar = publishAvatar;
                 if (archetypeRaw) {
@@ -1232,40 +1257,51 @@ export default function SettingsScreen() {
                 if (res && !res.ok) {
                     // The node answered and said no — surface its reason and abort rather
                     // than committing a value the server has already rejected.
-                    const serverMsg = await res.json().then((b: any) => b?.message).catch(() => null);
+                    const answer = await res.json().catch(() => null);
+                    const serverMsg = answer?.message;
+                    // The waiting name refused for good leaves the change, so neither this screen nor the retry sends it
+                    // again (utils/pending-profile-sync.ts). The member is told here.
+                    if (pending && payloadObj.callsign !== undefined && payloadObj.callsign === pending.callsign && nameRefusedForGood(res.status, answer?.error)) {
+                        await pendingNameRefused(url, pending, payloadObj.callsign);
+                    }
                     Alert.alert(
                         res.status === 409 ? t('Name Taken') : t('Could Not Save'),
                         serverMsg || t('The community node rejected this profile update. Please try again.')
                     );
                     return;
                 }
+                if (refusedHere && res) {
+                    const held = await res.json().then((b: any) => b?.profile?.callsign).catch(() => null);
+                    if (typeof held === 'string' && held) savedCallsign = held;
+                }
             }
 
             if (offline) {
-                await AsyncStorage.setItem('pending_profile_sync', 'true');
-                // Which community the rename waiting here is for (read by the next online Save, above).
-                if (url) await AsyncStorage.setItem('pending_profile_sync_anchor', url);
-                else await AsyncStorage.removeItem('pending_profile_sync_anchor');
-                // Park the session pick NEXT TO the flag, not only in the members row. The row
+                // Kept for THIS community (utils/pending-profile-sync.ts), never for the phone: its own sync sends it, and
+                // a switch to another community neither sends it there nor clears it. A new name goes in it as well as in
+                // the row, which the next members sync overwrites with the name the node still holds.
+                // Park the session pick in it too, not only in the members row. The row
                 // is the retry's only other source for it, and the first members sync to land
                 // before the retry succeeds replaces it with the node's own URL — after which
                 // the retry reads "the node has a photo" and publishes no avatar at all, so the
                 // pick never reaches the node and nothing ever resends it. A bio-only save
                 // stores nothing here and so still says nothing about the photo.
                 const offlinePick = explicitEditAvatar(avatarPickedThisSession);
-                if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
+                await keepPendingProfileChange(url, identity.publicKey, { callsign: renames ? newCallsign : undefined, avatar: offlinePick });
                 Alert.alert(t('Offline Mode'), t('Profile saved locally. It will be published automatically in the background when you reconnect to the network.'));
             } else if (avatarDecision) {
-                // The node has accepted. Retire the parked pick ONLY if this payload carried it
+                // The node has accepted. A name this payload carried is no longer waiting there.
+                if (payloadCarriesName) await pendingNameAccepted(url);
+                // Retire the parked pick ONLY if this payload carried it
                 // (or a newer pick that supersedes it): a bio-only Save publishes no photo, and
                 // clearing the keys here used to disarm the retry for a pick that had reached
                 // nothing — the member kept seeing it locally and it never left the phone.
-                await retireParkedPickAfterPublish(avatarDecision);
+                await retireParkedPickAfterPublish(avatarDecision, url);
             }
 
             // Commit locally now that the node has accepted (or we know we are offline)
             const localUpdate: any = {
-                callsign: newCallsign,
+                callsign: savedCallsign,
                 bio: bio.trim(),
                 contact_value: contact.trim(),
                 contact_visibility: contact.trim() ? contactVisibility : 'hidden',
@@ -1278,8 +1314,8 @@ export default function SettingsScreen() {
             await updateMemberProfile(identity.publicKey, localUpdate);
             // The card renders nodeCallsign, so it would keep showing the pre-edit name
             // until the screen remounted if we didn't move it here too.
-            setNodeCallsign(newCallsign);
-            knownCallsignRef.current = newCallsign;
+            setNodeCallsign(savedCallsign);
+            knownCallsignRef.current = savedCallsign;
             if (renames && newCallsign !== identity.callsign) {
                 const updated = await updateCallsign(newCallsign);
                 if (updated) setIdentity(updated);

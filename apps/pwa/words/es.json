@@ -1126,7 +1126,6 @@
   "REQUESTED\u0004deal status": "SOLICITADO",
   "REJECTED\u0004deal status": "RECHAZADO",
   "PAUSED\u0004listing status": "PAUSADO",
-  "Canvas not supported": "Canvas no compatible",
   "Could not load image": "No se pudo cargar la imagen",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "one": "{n} frijol retenido en custodia.",

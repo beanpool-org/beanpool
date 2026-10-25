@@ -22,7 +22,7 @@ Type in **Message everyone going…** and tap the send button. You can send up t
 
 ## Good to know
 
-- Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box.
+- Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box. Because the server can read the chat, photos cannot be sent in an event chat.
 - The host can remove any message. Tap it, then **Remove**. It then says "removed by the host".
 - An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.
 - When the event ends or is cancelled, the chat becomes read-only. A repeating event's chat stays open between dates: up to its last date if the host set an **Until**, and until the host cancels the event if not. Thirty days after the end it goes away.

@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearPendingProfileChange } from './pending-profile-sync';
 
 /**
  * Is an avatar value ours to publish, or is it something a node handed us?
@@ -157,7 +157,8 @@ export type ProfilePublishAvatar = {
  *
  * In order:
  *   1. a photo picked in THIS session — an explicit edit, and the newest copy that exists;
- *   2. otherwise the pick parked by an offline save, re-checked for portability;
+ *   2. otherwise the pick an offline save parked for THIS community (`parked`, from its
+ *      pending-profile-sync.ts entry), re-checked for portability;
  *   3. otherwise, and only for a CATCH-UP caller, what `catchUpAvatar` licenses: the canonical
  *      copy when the node is known to hold no photo for us;
  *   4. otherwise nothing, and the field is left out.
@@ -175,9 +176,14 @@ export type ProfilePublishAvatar = {
  * Setup, whose whole job is to satisfy the "finish your profile" gate without a re-pick. The
  * settings Save passes none: a Save the member did not make about their photo must never
  * republish a canonical copy that may be older than what the node holds.
+ *
+ * `parked` is the caller's to read, from the change waiting for the community it publishes to
+ * (pending-profile-sync.ts `pendingProfileChange`), never one for the phone: a photo parked in
+ * one community and read here for another was published there.
  */
 export async function resolveProfilePublishAvatar(input: {
     sessionPick?: string | null;
+    parked?: string | null;
     catchUp?: {
         localRow?: string | null;
         canonical?: string | null;
@@ -187,9 +193,9 @@ export async function resolveProfilePublishAvatar(input: {
     const sessionPick = explicitEditAvatar(input.sessionPick);
     if (sessionPick) return { avatar: sessionPick, clearsParkedPick: true };
 
-    // Read only once the session pick has come up empty: the parked key is consulted when this
-    // publish has nothing newer of its own to send.
-    const parked = await AsyncStorage.getItem('pending_profile_avatar');
+    // Only once the session pick has come up empty: the parked pick goes when this publish has
+    // nothing newer of its own to send.
+    const parked = input.parked;
     if (isPortableAvatarValue(parked)) return { avatar: parked.trim(), clearsParkedPick: true };
 
     if (input.catchUp) {
@@ -202,16 +208,16 @@ export async function resolveProfilePublishAvatar(input: {
 }
 
 /**
- * Drop the parked pick — and the pending flag that arms its retry — but ONLY after a 2xx whose
- * payload actually carried it (or something newer).
+ * Drop the parked pick — and the change it waits in, which arms its retry — but ONLY after a
+ * 2xx from `community` whose payload actually carried it (or something newer).
  *
- * Call this instead of removing either key by hand on a publish path. A publish that said
- * nothing about the photo must leave both alone, or it disarms the retry for a pick that has
+ * Call this instead of clearing the change by hand on a publish path. A publish that said
+ * nothing about the photo must leave it alone, or it disarms the retry for a pick that has
  * reached nothing: exactly the defect this round fixes. Callers must not call it until the node
- * has answered 2xx AND (where they check) the echo confirmed the avatar stored.
+ * has answered 2xx AND (where they check) the echo confirmed the avatar stored. Only
+ * `community`'s change goes (pending-profile-sync.ts): one waiting for another community waits.
  */
-export async function retireParkedPickAfterPublish(decision: ProfilePublishAvatar): Promise<void> {
+export async function retireParkedPickAfterPublish(decision: ProfilePublishAvatar, community: string | null): Promise<void> {
     if (!decision.clearsParkedPick) return;
-    await AsyncStorage.removeItem('pending_profile_avatar');
-    await AsyncStorage.removeItem('pending_profile_sync');
+    await clearPendingProfileChange(community);
 }

@@ -1,8 +1,7 @@
 /**
  * chat-photo — a chat photo as it leaves the phone (DESIGN-group-chat-photos-fable.md §2.5): fitted within 800 px on its
- * longest side, never enlarged, JPEG at quality 0.7, as a data URI. One helper for every chat: a group chat's photo goes
- * through it, and a DM's can too (the DM screen still fits a photo to 1000 px wide, app/chat/[id].tsx, until Marty says
- * whether DM photos move to 800 px; design question 2).
+ * longest side, never enlarged, JPEG at quality 0.7, as a data URI. One helper for every chat, groups and direct messages
+ * alike (Marty, 25 Oct, design question 2).
  */
 import * as ImageManipulator from 'expo-image-manipulator';
 import { t } from '@beanpool/core';

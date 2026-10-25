@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 155,
-  "hash": "f752a036113e9c88520ddc29b8f8413c1dfb62aedc21353ec8d771698cadb7da",
+  "version": 156,
+  "hash": "6bb05568539f15c223e6326173b4700e9ad19b285aeb7df836155d4c79159d78",
   "sections": [
     {
       "id": "about",
@@ -2063,13 +2063,13 @@
             "Change what you like:",
             "**Callsign** is the name people see.",
             "**Bio** is a few words about you, up to 200 characters.",
-            "Tap the photo to change it.",
+            "Tap the photo to change it: choose a photo or one of the ready-made pictures.",
             "Tap **Save Profile**."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app, tap **Edit Profile**, change the photo with **Camera** or **Gallery**, and tap **Save Profile Changes**."
+          "text": "In the web app, tap **Edit Profile**, change the photo with **Camera**, **Gallery**, or one of the ready-made pictures, and tap **Save Profile Changes**."
         },
         {
           "type": "p",
@@ -4039,7 +4039,7 @@
           "type": "ul",
           "items": [
             "Type in **Message...** and tap the send button.",
-            "To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. Photos can only be sent in chats between two people."
+            "To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button."
           ]
         },
         {
@@ -4117,9 +4117,8 @@
             "A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.",
             "The notices BeanPool adds to a chat about a deal are not encrypted: Beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.",
             "The server also knows who messaged whom, and when, which message each one answers, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.",
-            "A group's chat is **end-to-end encrypted** too, on the phone and in the web app: only the group's members can read it, and the people who run your community's server cannot. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions. You see a group's chat only from the day you joined: nothing written before is shown, and your phone never holds the key to it. A message that cannot be locked is not sent. A line that cannot be checked as written by a member reads **This message couldn't be verified.**, as nobody's. If your community's server is older and cannot lock group chats yet, the chat says so, and the server can read it. When the server is updated, those earlier messages are removed, and a line in the chat says so. See \"Groups\".",
-            "In the web app a group's chat works the same way, but you can't send photos in it.",
-            "Enterprise and event chats are not encrypted. The people who run your community's server can read them, and the server could write in them in anyone's name.",
+            "A group's chat is **end-to-end encrypted** too, on the phone and in the web app: only the group's members can read it, and the people who run your community's server cannot. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, the emoji reactions, and which lines are photos and how large each one is. You see a group's chat only from the day you joined: nothing written before is shown, and your phone never holds the key to it. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A message that cannot be locked is not sent. A line that cannot be checked as written by a member reads **This message couldn't be verified.**, as nobody's. If your community's server is older and cannot lock group chats yet, the chat says so, and the server can read it. When the server is updated, those earlier messages are removed, and a line in the chat says so. See \"Groups\".",
+            "Enterprise and event chats are not encrypted. The people who run your community's server can read them, and the server could write in them in anyone's name. Because the server can read them, photos cannot be sent in event chats or enterprise chats: they have no photo button, and in the web app a pasted or dropped picture shows **Photos can't be sent in this chat: the community's server can read it.**",
             "A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked. A phone or browser that has never seen the chat, and is given none of its encrypted messages, can't tell: to it, such a chat looks like any other group's chat, readable by the server. In the web app that also goes for a browser that has been signed out since, a private window, or one whose site data was cleared: the web app forgets which chats were between two people. The phone app keeps that list.",
             "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
             "Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See \"Leaving or deleting your account\".",
@@ -4248,12 +4247,12 @@
         },
         {
           "type": "p",
-          "text": "A group's chat is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions."
+          "text": "A group's chat is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, the emoji reactions, and which lines are photos and how large each one is."
         },
         {
           "type": "ul",
           "items": [
-            "You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words.",
+            "You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words or photos.",
             "When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.",
             "A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.",
             "A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**",
@@ -4277,7 +4276,7 @@
           "items": [
             "**Reply** quotes it above what you write next. Tap the quote to jump back to what it answers.",
             "**React** opens seven emojis. One each; tap it again to take it back. The reactions show as a badge under the message.",
-            "**Edit**, on your own messages, for 15 minutes. The message then shows **edited**.",
+            "**Edit**, on your own messages, for 15 minutes. The message then shows **edited**. Photos cannot be edited.",
             "**Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.",
             "**Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**."
           ]
@@ -4292,7 +4291,11 @@
         },
         {
           "type": "p",
-          "text": "Photos cannot be sent in a group's chat, and a deal cannot be started in one. Both belong in a chat between two people. See \"Messages\"."
+          "text": "In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. On the phone it can be deleted like any message (the author; a convenor can remove it)."
+        },
+        {
+          "type": "p",
+          "text": "A deal cannot be started in a group's chat: deals belong in a chat between two people. See \"Messages\"."
         },
         {
           "type": "p",
@@ -4675,7 +4678,7 @@
         {
           "type": "ul",
           "items": [
-            "Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box.",
+            "Event chats are not end-to-end encrypted. The host, everyone going (where the host lets people in, the ones the host has let in), and the people who run your community's server can read them. The chat says so above the message box. Because the server can read the chat, photos cannot be sent in an event chat.",
             "The host can remove any message. Tap it, then **Remove**. It then says \"removed by the host\".",
             "An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.",
             "When the event ends or is cancelled, the chat becomes read-only. A repeating event's chat stays open between dates: up to its last date if the host set an **Until**, and until the host cancels the event if not. Thirty days after the end it goes away."
@@ -5784,7 +5787,7 @@
           "type": "ul",
           "items": [
             "requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See \"Keepers\".",
-            "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its kind and **How we deal**. Any keeper can change the logo, the banner photo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, kind or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one, and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
+            "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its kind and **How we deal**. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, kind or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
             "**Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.",
             "**Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.",
             "**Decisions:** its keepers' votes.",
@@ -5820,7 +5823,7 @@
             "Choose **Project** or **Enterprise**.",
             "Give it a **Name** and a **Purpose statement**.",
             "For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.",
-            "Add its logo if you like: the round picture people see beside its name. Its banner photo, across the top of its page, is chosen later under **Manage**.",
+            "Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). Its banner photo, across the top of its page, is chosen later under **Manage**.",
             "Tap **Start Initiative** (**Propose Enterprise** in the web app; it still starts at once)."
           ]
         },

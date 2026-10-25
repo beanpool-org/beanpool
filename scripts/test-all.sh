@@ -249,7 +249,7 @@ if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ] || [ $HAS_ENGINE
 else
   skip_check "server_suites"
 fi
-run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
+run_check "test"          pnpm turbo run test --continue $TURBO_TEST_ARGS
 
 # e2e/fresh-proof.mjs (owner-delete S4a): an owner's fresh-proof box is on screen at the press, survives a second Manage
 # press, and never offers a spent code.
@@ -446,13 +446,17 @@ FAIL=0
 FAILED_NAMES=()
 
 for i in "${!PIDS[@]}"; do
-  wait "${PIDS[$i]}"
-  EXIT_CODE=$?
-  if [ $EXIT_CODE -eq 0 ]; then
+  wait "${PIDS[$i]}" 2>/dev/null || true
+  NAME="${NAMES[$i]}"
+  RC=1
+  if [ -f "$LOGDIR/$NAME.rc" ]; then
+    read -r RC < "$LOGDIR/$NAME.rc"
+  fi
+  if [ "$RC" = "0" ]; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
-    FAILED_NAMES+=("${NAMES[$i]}")
+    FAILED_NAMES+=("$NAME")
   fi
 done
 
@@ -465,12 +469,13 @@ echo "╠═══════════════════════�
 for i in "${!NAMES[@]}"; do
   NAME="${NAMES[$i]}"
   STATUS="✅ PASS"
-  for fn in "${FAILED_NAMES[@]}"; do
-    if [ "$fn" = "$NAME" ]; then
-      STATUS="❌ FAIL"
-      break
-    fi
-  done
+  RC=1
+  if [ -f "$LOGDIR/$NAME.rc" ]; then
+    read -r RC < "$LOGDIR/$NAME.rc"
+  fi
+  if [ "$RC" != "0" ]; then
+    STATUS="❌ FAIL"
+  fi
   # Wall clock, and the offset from the start of the run at which this check began. The pair is
   # what makes the load legible: which checks were actually running at the same time, and which
   # one is the long pole everything else is hiding behind. A check killed before it could write
@@ -512,7 +517,7 @@ FAILED_TASK_LINES=150
 
 turbo_failed_tasks() {
   # "Failed:    @beanpool/pwa#test, @beanpool/core#test"  ->  one pkg#task per line
-  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" "$1" | sed -n 's/^Failed:[[:space:]]*//p' | tr ', ' '\n\n' | grep '#'
+  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" "$1" | sed -n 's/^[[:space:]]*Failed:[[:space:]]*//p' | tr ', ' '\n\n' | grep '#'
 }
 
 turbo_task_output() {

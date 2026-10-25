@@ -96,6 +96,16 @@ describe('startRows by shape', () => {
 });
 
 describe('startTarget', () => {
+    it('decisions preview (the global showcase) → the Decision row has no standing line, even when the member cannot propose (deciding review 1)', () => {
+        // Decisions are off on that node: a tap opens the "lives in a local community" sheet, so "Node admins propose here." would be untrue.
+        for (const beans of [true, false]) {
+            const rows = startRows({ beans, enterprises: true, decisions: false }, { canPropose: false, decisionsPreview: true });
+            const decisionRow = rows.find((r) => r.key === 'decision');
+            expect(decisionRow).toBeTruthy();
+            expect(decisionRow?.standingLine).toBeUndefined();
+        }
+    });
+
     it('returns target route or action for each row', () => {
         expect(startTarget('chat')).toEqual({ modal: 'chat' });
         expect(startTarget('project')).toEqual({ pathname: '/propose-project', params: { kind: 'bounded' } });

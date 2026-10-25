@@ -45,6 +45,11 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
         expect(pledgeClosedLine('completed', 'bounded')).toBe('This project has closed, so it isn’t taking pledges.');
         expect(pledgeClosedLine('completed', 'ongoing')).toBe('This enterprise has closed, so it isn’t taking pledges.');
     });
+
+    it('says a project whose deadline has passed is no longer taking pledges', () => {
+        const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+        expect(pledgeClosedLine('active', 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
+    });
 });
 
 describe('The enterprise screen: a sentence, not a pledge box, when pledges are closed', () => {
@@ -92,6 +97,8 @@ describe('The Commons card says "Pledge Beans" only while the enterprise takes p
         expect(enterpriseCardStatus({ ...project, status: 'winding_up' }).takesPledges).toBe(false);
         expect(enterpriseCardStatus({ ...project, status: 'completed' }).takesPledges).toBe(false);
         expect(enterpriseCardStatus({ ...project, goalAmount: null }).takesPledges).toBe(false);
+        const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+        expect(enterpriseCardStatus({ ...project, deadlineAt: past }).takesPledges).toBe(false);
     });
 
     it('the card shows its Pledge Beans line from takesPledges', () => {

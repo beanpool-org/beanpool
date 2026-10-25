@@ -102,4 +102,17 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
         expect(screen.getByRole('button', { name: /Pledge Beans/ })).toBeInTheDocument();
         expect(screen.queryByText(/isn’t taking/)).not.toBeInTheDocument();
     });
+
+    it('an enterprise whose deadline has passed says its deadline has passed, with no box to pledge in', async () => {
+        const expiredWell = {
+            ...well('active', 5),
+            deadlineAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        };
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(expiredWell as any);
+        render(<TreasuryDetailPage identity={member} isMember={true} pubkey="enterprise-well-pubkey" onBack={() => {}} />);
+        await screen.findByRole('heading', { level: 1, name: 'Village Well' });
+        expect(screen.getByText("This project's deadline has passed: it takes no more pledges.")).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
+        expect(screen.queryByPlaceholderText('Amount (🫘)')).not.toBeInTheDocument();
+    });
 });

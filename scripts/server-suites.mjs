@@ -476,6 +476,7 @@ export const SUITES = [
     'test-online-events-nearby',
     'test-online-events-set-cap',
     'test-project-deadline-http',
+    'test-pledge-deadline-http',
     'test-enterprise-text',
     'test-event-chat',
     'test-event-chat-rsvp-fixes',

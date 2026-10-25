@@ -52,4 +52,19 @@ describe('EnterpriseCard Accessibility', () => {
         const seedlingSpan = Array.from(hiddenEmojis).find(span => span.textContent?.includes('🌱'));
         expect(seedlingSpan).toBeDefined();
     });
+
+    it('shows Pledge Beans when the project is active and deadline is in the future', () => {
+        render(<EnterpriseCard treasury={mockTreasury} />);
+        expect(screen.getByText('Pledge Beans')).toBeInTheDocument();
+    });
+
+    it('hides Pledge Beans when the project deadline has passed', () => {
+        const expiredTreasury: Treasury = {
+            ...mockTreasury,
+            deadlineAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+        };
+        render(<EnterpriseCard treasury={expiredTreasury} />);
+        expect(screen.getByText(/Expired/)).toBeInTheDocument();
+        expect(screen.queryByText('Pledge Beans')).not.toBeInTheDocument();
+    });
 });

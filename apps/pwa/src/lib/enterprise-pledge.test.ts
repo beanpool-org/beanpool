@@ -26,4 +26,10 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
         expect(pledgeClosedLine('completed', 'bounded')).toBe('This project has closed, so it isn’t taking pledges.');
         expect(pledgeClosedLine('completed', 'ongoing')).toBe('This enterprise has closed, so it isn’t taking pledges.');
     });
+
+    it('says a project whose deadline has passed is no longer taking pledges', () => {
+        const past = new Date(Date.now() - 2 * 86400000).toISOString();
+        expect(pledgeClosedLine('active', 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
+        expect(pledgeClosedLine(undefined, 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
+    });
 });

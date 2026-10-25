@@ -120,6 +120,14 @@ async function main() {
     const keeperSuspCheckEnt = (await signedFetch('GET', '/api/enterprises', proposer)).body;
     assert(keeperSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/enterprises');
 
+    // 0c2. An admin-rejected project (adminRejectProject sets status 'rejected') shows only to its keepers, as a suspended one
+    const rejProj = createProject(proposer.pubKeyHex, 'Rejected Project', 'Dismissed by an admin', 200);
+    assert(rejProj !== null, 'Rejected project created');
+    db.prepare("UPDATE members SET status = 'rejected' WHERE public_key = ?").run(rejProj!.id);
+    assert(!(await signedFetch('GET', '/api/treasuries', attacker)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Other member does not see a rejected project in /api/treasuries');
+    assert(!(await signedFetch('GET', '/api/enterprises', attacker)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Other member does not see a rejected project in /api/enterprises');
+    assert((await signedFetch('GET', '/api/treasuries', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/treasuries');
+
     // 0d. Pruned project stays absent for everyone
     db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(suspProj!.id);
     const attackerPrunedCheck = (await signedFetch('GET', '/api/treasuries', attacker)).body;

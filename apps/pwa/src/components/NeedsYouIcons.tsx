@@ -94,6 +94,7 @@ export function NeedsYouIcons({
     const [entries, setEntries] = useState<NeedsItem[]>([]);
     const [sheet, setSheet] = useState(false);
     const [containerWidth, setContainerWidth] = useState(0);
+    const [maxSlotWidth, setMaxSlotWidth] = useState<number | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Filter out 'admin' (which requires phone unlock and has no web equivalent)
@@ -155,9 +156,28 @@ export function NeedsYouIcons({
         const el = containerRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
 
+        const checkHeaderWidth = () => {
+            const header = el.closest('header');
+            const total = header?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0);
+            if (total > 0 && total <= 360) {
+                // At 320 px × 130%: allow 1 slot (38 px) so title and logo are never pushed or wrapped
+                setMaxSlotWidth(HEADER_ALERT_SLOT_PX + 2);
+            } else if (total > 0 && total <= 480) {
+                setMaxSlotWidth(HEADER_ALERT_SLOT_PX * 2 + 4);
+            } else if (total > 0 && total <= 640) {
+                setMaxSlotWidth(HEADER_ALERT_SLOT_PX * 3 + 4);
+            } else {
+                setMaxSlotWidth(undefined);
+            }
+        };
+
+        checkHeaderWidth();
+
         const observer = new ResizeObserver((entriesList) => {
             for (const entry of entriesList) {
-                setContainerWidth(entry.contentRect.width);
+                if (entry.target === el) {
+                    setContainerWidth(entry.contentRect.width);
+                }
             }
         });
 
@@ -174,7 +194,9 @@ export function NeedsYouIcons({
     if (!identityPubkey || entries.length === 0) return null;
 
     // In unmeasured/jsdom test environments, default width allows showing icons without collapsing
-    const effectiveWidth = containerWidth > 0 ? containerWidth : 240;
+    const effectiveWidth = maxSlotWidth
+        ? (containerWidth > 0 ? Math.min(containerWidth, maxSlotWidth) : maxSlotWidth)
+        : (containerWidth > 0 ? containerWidth : 240);
     const fit = fitNeedsYou(entries, effectiveWidth, HEADER_ALERT_SLOT_PX);
     const byKind = new Map(fit.shown.map(e => [e.kind, e]));
     const rowOrder = needsYouRowOrder(fit);
@@ -184,7 +206,10 @@ export function NeedsYouIcons({
             ref={containerRef}
             data-testid="header-needs-icons"
             className="flex items-center justify-end min-w-0 flex-shrink"
-            style={{ height: `${HEADER_ALERT_SLOT_PX}px` }}
+            style={{
+                height: `${HEADER_ALERT_SLOT_PX}px`,
+                maxWidth: maxSlotWidth ? `${maxSlotWidth}px` : undefined,
+            }}
         >
             {rowOrder.map(k => {
                 if (k === 'more') {

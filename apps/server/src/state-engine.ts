@@ -598,6 +598,13 @@ export interface AbuseReport {
     postHiddenByReports?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
+    /** The group chat message a report names, with its key (engine/group-chat-report.ts), or absent. */
+    targetMessageId?: string;
+    /**
+     * That message's chat and whether it is a photo line, never its words: the moderators' view opens it on its own
+     * (GET /api/local/admin/reports/:id/message). `removed` once it was deleted or removed, or is not on this server.
+     */
+    groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
 }
 
 export type { FriendEntry };
@@ -7217,7 +7224,8 @@ export const REPORTS_PER_REPORTER_PER_HOUR = 10;
 
 /**
  * The reporter's still-pending report on exactly this target (member, post and Pulse item alike),
- * or null. A second report on the same thing adds nothing an operator does not already have.
+ * or null. A second report on the same thing adds nothing an operator does not already have. A report of one group chat
+ * message keeps its own rule (engine/group-chat-report.ts groupLineReportOnFile) and is never this one.
  */
 export function findPendingReport(reporterPubkey: string, targetPubkey: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
     const row = db.prepare(
@@ -7225,6 +7233,8 @@ export function findPendingReport(reporterPubkey: string, targetPubkey: string, 
            FROM abuse_reports
           WHERE reporter_pubkey = ? AND target_pubkey = ?
             AND target_post_id IS ? AND target_pulse_item_id IS ?
+            -- A report of a member's group chat message is its own (engine/group-chat-report.ts), not one of the member.
+            AND target_message_id IS NULL
             AND (status = 'pending' OR status IS NULL)
           ORDER BY created_at ASC LIMIT 1`
     ).get(reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null) as any;
@@ -7334,7 +7344,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                p.hidden_by_reports_at as post_hidden_at,
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
-               pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign
+               pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
+               gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
@@ -7343,6 +7354,9 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         LEFT JOIN members mp ON p.author_pubkey = mp.public_key
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
+        -- A group chat message's report: its chat and kind only, never its words (openReportedGroupLine opens it on its own).
+        LEFT JOIN messages gm ON ar.target_message_id = gm.id
+        LEFT JOIN groups gg ON gm.conversation_id = gg.id
         ${whereClause}
         ORDER BY CASE WHEN (ar.status = 'pending' OR ar.status IS NULL) AND report_is_child_safety(ar.reason) = 1 THEN 1 ELSE 0 END DESC,
                  ar.created_at DESC
@@ -7398,6 +7412,15 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                 url: r.pulse_url ?? null,
                 // A missing row (never replicated here) counts as removed: there is nothing to act on.
                 removed: !r.pulse_platform || r.pulse_deleted_at !== null,
+            }
+            : null,
+        targetMessageId: r.target_message_id || undefined,
+        groupMessage: r.target_message_id
+            ? {
+                groupId: r.gm_group_id ?? null,
+                groupName: r.gm_group_name ?? null,
+                photo: r.gm_type === 'image',
+                removed: !r.gm_type || r.gm_type === 'removed',
             }
             : null,
     }));

@@ -228,10 +228,13 @@ async function main(): Promise<void> {
     try { disclosure = JSON.parse(row?.disclosure); } catch { /* stays null */ }
     assert(disclosure?.epoch === photo.epoch && disclosure?.mk === b64(mkOf(photo)) && Object.keys(disclosure ?? {}).length === 2,
         `and keeps the disclosure as it was handed over, its epoch and its key (got ${row?.disclosure})`);
-    const named = await call('POST', alice, reportPath(g), { messageId: t1.id, reason: 'Spam or scam', disclosure: disclosureOf(t1), reporterPubkey: carol.pk, targetPubkey: dave.pk });
+    const otherReporter = allReports();
+    const asCarol = await call('POST', alice, reportPath(g), { messageId: t1.id, reason: 'Spam or scam', disclosure: disclosureOf(t1), reporterPubkey: carol.pk });
+    assert(asCarol.status === 403 && allReports() === otherReporter, `a body naming another reporter is refused by the signature check, nothing filed (got ${show(asCarol)})`);
+    const named = await call('POST', alice, reportPath(g), { messageId: t1.id, reason: 'Spam or scam', disclosure: disclosureOf(t1), targetPubkey: dave.pk });
     const namedRow = db.prepare('SELECT reporter_pubkey, target_pubkey FROM abuse_reports WHERE id = ?').get(named.body?.report?.id ?? '') as any;
     assert(named.status === 200 && namedRow?.reporter_pubkey === alice.pk && namedRow?.target_pubkey === bob.pk,
-        `a body naming another reporter or target changes neither: the signer reports the line's author (got ${show(named)})`);
+        `a body naming another target changes nothing: the signer reports the line's author (got ${show(named)})`);
 
     const lines = db.prepare('SELECT id, ciphertext, nonce, metadata, author_pubkey FROM messages WHERE conversation_id = ? AND nonce LIKE ?').all(g, 'group-xc20p-v1:%') as any[];
     const photoRow = lines.find((l) => l.id === photo.id);
@@ -380,7 +383,7 @@ async function main(): Promise<void> {
     assert(asMember.status === 401 || asMember.status === 403, `a member's signature alone does not (got ${asMember.status})`);
     assert(!asMember.text.includes(photo.text), 'and is given nothing of it');
     const post = createPost('offer', 'other', 'Sentinel post', 'A post', 0, 'fixed', bob.pk);
-    const ofPost = await call('POST', alice, '/api/reports', { targetPubkey: bob.pk, targetPostId: post.id, reason: 'Spam or scam' });
+    const ofPost = await call('POST', alice, '/api/reports', { targetPubkey: bob.pk, targetPostId: post?.id, reason: 'Spam or scam' });
     const postView = await viewOf(ofPost.body?.report?.id ?? '');
     assert(ofPost.status === 200 && postView.status === 404, `a report of a post has no message to open: 404 (got ${show(postView)})`);
     const memberView = await viewOf(ofBob.body?.report?.id ?? '');
@@ -395,8 +398,14 @@ async function main(): Promise<void> {
     const del = await call('POST', bob, '/api/messages/delete', { messageId: deleted.id });
     assert(del.status === 200, `(Bob deletes it for everyone: ${show(del)})`);
     v = await viewOf(deletedRep.body?.report?.id ?? '');
-    assert(v.status === 200 && v.body?.message?.words?.state === 'gone' && !v.text.includes(deleted.text),
-        `the view says it is gone, and has nothing of it (got ${show(v)})`);
+    assert(v.status === 200 && v.body?.message?.words?.state === 'gone' && v.body?.message?.words?.by === 'author' && !v.text.includes(deleted.text),
+        `the view says its author deleted it, and has nothing of it (got ${show(v)})`);
+    const removed = await send(bob, g, 'Sentinel words a convenor removes');
+    const removedRep = await report(carol, removed);
+    const rem = await call('POST', alice, `/api/groups/${g}/chat/remove`, { messageId: removed.id });
+    v = await viewOf(removedRep.body?.report?.id ?? '');
+    assert(rem.status === 200 && v.body?.message?.words?.state === 'gone' && v.body?.message?.words?.by === 'convenor',
+        `a convenor's removal reads as theirs (got ${show(v)})`);
 
     // ── 8. A standby copy, and a take-over ───────────────────────────────────────────────────────────────────────
     console.log('\n--- 8. A standby copy carries the report and its key ---');

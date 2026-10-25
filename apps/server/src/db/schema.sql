@@ -651,7 +651,11 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- Whether actioning it suspended its member: 1 it did, 0 it didn't, NULL not actioned or actioned before this was kept
     -- (state-engine.ts actionReport; read by member-wizards.ts cancelRekeyCode for a code with no prior status).
-    suspended_member INTEGER
+    suspended_member INTEGER,
+    -- A report of one message of a locked group chat (engine/group-chat-report.ts): the message, and the key its reporter
+    -- handed over for it, JSON { epoch, mk } (core groupMessageKey), which opens that one message and nothing else.
+    target_message_id TEXT,
+    disclosure TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 -- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do

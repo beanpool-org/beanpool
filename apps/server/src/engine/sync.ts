@@ -2488,8 +2488,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
 
             if (remote.abuseReports) {
                 for (const ar of remote.abuseReports) {
-                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    // A message's report and its key come with the row, written once: the reporter's disclosure never changes.
+                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at,
+                                    target_message_id, disclosure)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     status = excluded.status,
                                     updated_at = excluded.updated_at
@@ -2503,7 +2505,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ar.reason,
                         ar.createdAt,
                         ar.status || 'pending',
-                        ar.updatedAt || ar.createdAt
+                        ar.updatedAt || ar.createdAt,
+                        ar.targetMessageId || null,
+                        ar.disclosure || null
                     );
                 }
             }

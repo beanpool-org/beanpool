@@ -289,7 +289,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     abuse_reports: {
         kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
-        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at'),
+        columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at target_message_id disclosure'),
         except: {
             suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
         },

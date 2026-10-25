@@ -104,6 +104,13 @@ export interface NeedsYouTransaction {
     status: string;
     buyerPublicKey: string;
     sellerPublicKey: string;
+    postAuthorPublicKey?: string | null;
+    postType?: string | null;
+    postRepeatable?: boolean;
+    postLendable?: boolean;
+    createdAt?: string | null;
+    ratedByBuyer?: boolean;
+    ratedBySeller?: boolean;
 }
 
 export interface NeedsYouConversation {

@@ -1233,6 +1233,10 @@ export interface MarketplaceTransaction {
     completedAt?: string;
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
+    postType?: string;
+    postAuthorPublicKey?: string;
+    postRepeatable?: boolean;
+    postLendable?: boolean;
 }
 
 export async function getMarketplacePosts(filter?: {

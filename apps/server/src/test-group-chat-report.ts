@@ -44,6 +44,7 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
+import { changeGroupLineReportReason } from './engine/group-chat-report.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -439,6 +440,23 @@ async function main(): Promise<void> {
         `on a server that took over, the words open, verified (got ${show(v)})`);
     assert(v.body?.message?.photo?.state === 'unavailable' && v.body?.message?.photo?.dataUri === undefined,
         `and the photo reads unavailable: chat photos are not copied to a standby (got ${JSON.stringify(v.body?.message?.photo)})`);
+    // A report changed to Child safety on the main server reaches a standby that holds it already (the review of #2470):
+    // the delta carries the new reason with its updated_at, and the copy takes both, so a server that took over lists it
+    // first. The change is made here as the main server makes it, then this copy is put back to the standby's.
+    const toChange = onStandby.find((r: any) => r.status === 'pending' && r.reason !== 'Child safety');
+    const sinceChange = new Date(Date.now() - 1000).toISOString();
+    const changedOnMain = toChange ? changeGroupLineReportReason(toChange.id, 'Child safety') : null;
+    const changeDelta: any = await exportSyncState(nodeId, sinceChange);
+    const changeCarried = (changeDelta.abuseReports ?? []).find((r: any) => r.id === toChange?.id);
+    assert(!!changedOnMain && changeCarried?.reason === 'Child safety' && changeCarried?.updatedAt > toChange.updated_at,
+        `(the main server changes a pending one to Child safety, and its delta carries it: ${JSON.stringify(changeCarried)?.slice(0, 160)})`);
+    if (toChange) db.prepare('UPDATE abuse_reports SET reason = ?, updated_at = ? WHERE id = ?').run(toChange.reason, toChange.updated_at, toChange.id);
+    setNodeRole('backup');
+    await importRemoteState(changeDelta);
+    setNodeRole('primary');
+    const changedOnStandby = toChange ? db.prepare('SELECT reason, updated_at FROM abuse_reports WHERE id = ?').get(toChange.id) as any : null;
+    assert(changedOnStandby?.reason === 'Child safety' && changedOnStandby?.updated_at === changeCarried?.updatedAt,
+        `a standby that holds the report takes the new reason with its updated_at (got ${JSON.stringify(changedOnStandby)})`);
 
     console.log(`\n${passed}/${run} passed`);
     try { await p2p.stop(); } catch { /* stopping only */ }

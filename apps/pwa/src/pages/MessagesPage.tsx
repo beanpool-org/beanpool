@@ -3425,9 +3425,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     targetName={reportTarget.name}
                 />
             )}
-
-            {/* A chat photo opened full screen (parity gap 4). */}
-            <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />
         </div>
     );
 }

@@ -223,7 +223,16 @@ describe('chat photo viewer parity (gap 4)', () => {
         await screen.findByRole('dialog');
 
         const backdrop = screen.getByRole('button', { name: 'Dismiss full-size photo' });
+        expect(backdrop).toHaveAttribute('tabindex', '-1');
         fireEvent.click(backdrop);
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(document.activeElement).toBe(photoButton);
+
+        // Reopen viewer and close via clicking the full-size photo
+        fireEvent.click(photoButton);
+        await screen.findByRole('dialog');
+        const photoInViewer = screen.getByRole('img', { name: 'Full-size photo' });
+        fireEvent.click(photoInViewer);
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(document.activeElement).toBe(photoButton);
     });

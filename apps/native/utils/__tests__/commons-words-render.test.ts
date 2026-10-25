@@ -404,18 +404,40 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         node.treasuries = [];
         await renderIn('xx');
         await toGroups();
-        expect(host.textContent).toContain(pseudoLocalise('No other groups yet'));
+        expect(host.textContent).toContain(pseudoLocalise('No others yet'));
         await click(button('🌱 Projects'), 'Projects chip');
         expect(host.textContent).toContain(pseudoLocalise('No projects to back yet'));
-        expect(host.textContent).toContain(pseudoLocalise('+ Start a project'));
+        expect(host.textContent).toContain(pseudoLocalise('Start a project'));
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
-        expect(host.textContent).toContain(pseudoLocalise('+ Start an enterprise'));
+        expect(host.textContent).toContain(pseudoLocalise('Start an enterprise'));
         store.map.delete('beanpool_anchor_url');
-        await click(button('+ Start an enterprise'), 'Start an enterprise button');
+        await click(button('Start an enterprise'), 'Start an enterprise button');
         expect(alerts.said).toContain(pseudoLocalise('Connect to a community first.'));
         await click(button('👥 Chat groups'), 'Chat groups chip');
         expect(host.textContent).toContain(pseudoLocalise('No other groups to join'));
-        expect(host.textContent).toContain(pseudoLocalise('+ Create a Group'));
+        expect(host.textContent).toContain(pseudoLocalise('Start a group'));
+        expect(bypassing()).toEqual([]);
+    });
+
+    it('the Start something sheet words in the member language', async () => {
+        await renderIn('xx');
+        await toGroups();
+        const fab = byLabel(pseudoLocalise('Start something'));
+        await click(fab, 'Start something FAB');
+        expect(host.textContent).toContain(pseudoLocalise('Start something'));
+        expect(host.textContent).toContain(pseudoLocalise('Chat group'));
+        expect(host.textContent).toContain(pseudoLocalise('A place to talk with some people. Holds no Beans.'));
+        expect(host.textContent).toContain(pseudoLocalise('Project'));
+        expect(host.textContent).toContain(pseudoLocalise('A goal in Beans, a leader, usually an end date.'));
+        expect(host.textContent).toContain(pseudoLocalise('Enterprise'));
+        expect(host.textContent).toContain(pseudoLocalise('Keeps going and trades. Its keepers run it.'));
+        expect(host.textContent).toContain(pseudoLocalise('Decision'));
+        expect(host.textContent).toContain(pseudoLocalise('A binding vote for the whole community.'));
+        expect(host.textContent).toContain(pseudoLocalise('IN THE MARKET'));
+        expect(host.textContent).toContain(pseudoLocalise('Poll'));
+        expect(host.textContent).toContain(pseudoLocalise('A quick question for everyone. Open vote.'));
+        expect(host.textContent).toContain(pseudoLocalise('Event'));
+        expect(host.textContent).toContain(pseudoLocalise("A time and a place. People say they're going."));
         expect(bypassing()).toEqual([]);
     });
 

@@ -204,79 +204,31 @@ const type = async (el: Element | null | undefined, text: string) => {
     });
 };
 
-describe('CreateGroupModal upfront kind choice', () => {
-    it('when Beans and enterprises are on: offers three clear choices up front (Chat group, Project, Enterprise)', async () => {
-        nodeProfileState.profile = { features: { beans: true, enterprises: true } };
+describe('CreateGroupModal is chat-group form with bridge', () => {
+    it('opens directly on the chat group form with bridge (no upfront kind step)', async () => {
         await mount(createElement(CreateGroupModal, { isOpen: true, onClose: vi.fn(), onCreated: vi.fn() }));
 
-        // Upfront choices exist
-        const buttons = Array.from(host!.querySelectorAll('button'));
-        const labels = buttons.map(b => b.getAttribute('aria-label') || b.textContent || '');
-        
-        const hasChatGroupChoice = labels.some(l => /chat group/i.test(l));
-        const hasProjectChoice = labels.some(l => /project/i.test(l));
-        const hasEnterpriseChoice = labels.some(l => /enterprise/i.test(l));
-
-        expect(hasChatGroupChoice, 'Offers Chat group up front').toBe(true);
-        expect(hasProjectChoice, 'Offers Project up front').toBe(true);
-        expect(hasEnterpriseChoice, 'Offers Enterprise up front').toBe(true);
+        // The group name input is visible immediately (no kind step)
+        expect(host!.querySelector('input[placeholder*="Bindarrabi"]')).not.toBeNull();
+        // The one-line bridge to start a project or an enterprise is present
+        const bridge = Array.from(host!.querySelectorAll('button')).find(b =>
+            /Start a project or an enterprise/i.test(b.getAttribute('aria-label') || b.textContent || '')
+        );
+        expect(bridge).toBeDefined();
     });
 
-    it('selecting Project up front navigates to /propose-project?kind=bounded and closes modal', async () => {
+    it('tapping the bridge closes the modal and navigates to /propose-project with no kind parameter', async () => {
         const onClose = vi.fn();
         await mount(createElement(CreateGroupModal, { isOpen: true, onClose, onCreated: vi.fn() }));
 
-        const buttons = Array.from(host!.querySelectorAll('button'));
-        const projectBtn = buttons.find(b => {
-            const l = b.getAttribute('aria-label') || b.textContent || '';
-            return /project/i.test(l) && !/enterprise/i.test(l);
-        });
-        expect(projectBtn).toBeDefined();
+        const bridge = Array.from(host!.querySelectorAll('button')).find(b =>
+            /Start a project or an enterprise/i.test(b.getAttribute('aria-label') || b.textContent || '')
+        );
+        expect(bridge).toBeDefined();
 
-        await act(async () => { projectBtn!.click(); });
+        await act(async () => { bridge!.click(); });
         expect(onClose).toHaveBeenCalled();
-        expect(nav.push).toHaveBeenCalledWith({ pathname: '/propose-project', params: { kind: 'bounded' } });
-    });
-
-    it('selecting Enterprise up front navigates to /propose-project?kind=ongoing and closes modal', async () => {
-        const onClose = vi.fn();
-        await mount(createElement(CreateGroupModal, { isOpen: true, onClose, onCreated: vi.fn() }));
-
-        const buttons = Array.from(host!.querySelectorAll('button'));
-        const enterpriseBtn = buttons.find(b => {
-            const l = b.getAttribute('aria-label') || b.textContent || '';
-            return /enterprise/i.test(l) && !/project/i.test(l);
-        });
-        expect(enterpriseBtn).toBeDefined();
-
-        await act(async () => { enterpriseBtn!.click(); });
-        expect(onClose).toHaveBeenCalled();
-        expect(nav.push).toHaveBeenCalledWith({ pathname: '/propose-project', params: { kind: 'ongoing' } });
-    });
-
-    it('selecting Chat group shows the chat group form', async () => {
-        await mount(createElement(CreateGroupModal, { isOpen: true, onClose: vi.fn(), onCreated: vi.fn() }));
-
-        const buttons = Array.from(host!.querySelectorAll('button'));
-        const chatBtn = buttons.find(b => /chat group/i.test(b.getAttribute('aria-label') || b.textContent || ''));
-        expect(chatBtn).toBeDefined();
-
-        await act(async () => { chatBtn!.click(); });
-        // The chat group form inputs are now visible
-        expect(host!.querySelector('input[placeholder*="Bindarrabi"]')).not.toBeNull();
-    });
-
-    it('when Beans or enterprises are off: only Chat group is available (no Project or Enterprise choices)', async () => {
-        nodeProfileState.profile = { features: { beans: false, enterprises: false } };
-        await mount(createElement(CreateGroupModal, { isOpen: true, onClose: vi.fn(), onCreated: vi.fn() }));
-
-        // Form opens directly on Chat group, no choices for Project or Enterprise
-        const buttons = Array.from(host!.querySelectorAll('button'));
-        const labels = buttons.map(b => b.getAttribute('aria-label') || b.textContent || '');
-        expect(labels.some(l => /start a project/i.test(l) || /^project$/i.test(l))).toBe(false);
-        expect(labels.some(l => /start an enterprise/i.test(l) || /^enterprise$/i.test(l))).toBe(false);
-        // And the group name input is visible immediately
-        expect(host!.querySelector('input[placeholder*="Bindarrabi"]')).not.toBeNull();
+        expect(nav.push).toHaveBeenCalledWith('/propose-project');
     });
 });
 
@@ -297,7 +249,7 @@ describe('propose-project modal kind handling', () => {
         await type(host!.querySelector('input[aria-label="Enterprise name or project title"]'), 'Mullum Food Co-op');
         await type(host!.querySelector('input[aria-label="Purpose statement"]'), 'Distribute fresh local produce');
 
-        const submitBtn = Array.from(host!.querySelectorAll('button')).find(b => /start initiative/i.test(b.getAttribute('aria-label') || ''));
+        const submitBtn = Array.from(host!.querySelectorAll('button')).find(b => /start initiative|start the enterprise/i.test(b.getAttribute('aria-label') || ''));
         expect(submitBtn).toBeDefined();
 
         await act(async () => { submitBtn!.click(); });
@@ -339,11 +291,10 @@ describe('propose-project modal kind handling', () => {
     });
 });
 
-describe('Commons "+" across every pill', () => {
-    it('on every pill under Groups, "+" opens CreateGroupModal rather than bypassing to propose-project directly', () => {
+describe('Commons "+" across every pill opens StartSomethingSheet', () => {
+    it('on every section and chip, "+" opens StartSomethingSheet rather than CreateGroupModal', () => {
         const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', '(tabs)', 'projects.tsx'), 'utf8');
-        // On origin/main, startsProject bypasses createGroup.open() on projects and enterprises pills.
-        // With the fix, on activeSection === 'groups', "+" opens createGroup.open() across every pill so user chooses what kind first.
-        expect(src).not.toMatch(/if\s*\(\s*startsProject\s*\)\s*\{\s*await\s+openProposeProject/);
+        expect(src).toContain('StartSomethingSheet');
+        expect(src).toContain('setShowStartSomething');
     });
 });

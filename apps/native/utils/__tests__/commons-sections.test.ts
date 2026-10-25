@@ -20,7 +20,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import {
     commonsSections, commonsSectionFor, commonsHeading, findGroupsInTalk, FIND_GROUPS_HREF,
     groupKindChips, commonsGroupRows, commonsGroupsEmpty, type GroupKind,
-    commonsPlusStartsProject, enterprisesOn,
+    enterprisesOn,
 } from '../commons-sections';
 import type { GroupItem } from '../db';
 import { decisionsOn, readNodeProfile, type NodeFeatures } from '../node-profile';
@@ -148,9 +148,9 @@ describe('Groups is one list, with a kind chip each (pick 7)', () => {
 
     it('the empty list offers the right start: a project or enterprise on those chips, otherwise a group', () => {
         expect(commonsGroupsEmpty('projects', LOCAL)).toMatchObject({ title: 'No projects to back yet', action: 'project' });
-        expect(commonsGroupsEmpty('enterprises', LOCAL)).toMatchObject({ title: 'No enterprises to join yet', action: 'project' });
+        expect(commonsGroupsEmpty('enterprises', LOCAL)).toMatchObject({ title: 'No enterprises yet', action: 'enterprise' });
         expect(commonsGroupsEmpty('chat', LOCAL)).toMatchObject({ title: 'No other groups to join', action: 'group' });
-        expect(commonsGroupsEmpty('all', LOCAL)).toMatchObject({ action: 'group' });
+        expect(commonsGroupsEmpty('all', LOCAL)).toMatchObject({ title: 'No others yet', action: null });
         for (const kind of ['all', 'projects', 'enterprises', 'chat'] as const) {
             expect(commonsGroupsEmpty(kind, GLOBAL)).toEqual({ title: 'No other groups to join', desc: 'Start one: a social circle, a working group, a guild.', action: 'group' });
         }
@@ -199,10 +199,6 @@ describe('the screens go through the helpers (source check)', () => {
             title: 'Commons',
             description: 'Community decisions and groups. Propose binding actions and vote on what matters.',
         });
-        expect(commonsPlusStartsProject('groups', 'projects', offDecide)).toBe(false);
-        expect(commonsPlusStartsProject('groups', 'enterprises', offDecide)).toBe(false);
-        expect(commonsPlusStartsProject('groups', 'chat', offDecide)).toBe(false);
-        expect(commonsPlusStartsProject('decide', 'all', offDecide)).toBe(false);
 
         // Even if enterprises are not explicitly false in features, beans: false drops them
         const beansOffOnly = { beans: false };
@@ -281,27 +277,5 @@ describe('the screens go through the helpers (source check)', () => {
         const src = read('components/NeedsYouIcons.tsx');
         expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,');
         expect(read('utils/needs-you.ts')).toContain('label: adminLabel(adminItems, { decisions: i.admin?.decisions }),');
-    });
-});
-
-describe('the Commons "+" starts a project or an enterprise only where the node lists them (#1940 follow-up)', () => {
-    const GLOBAL = { beans: false, enterprises: false, decisions: false };
-    it('on global a link that asked for Enterprises leaves its chip picked, and the "+" makes a group, not a Beans form', () => {
-        expect(commonsPlusStartsProject('groups', 'enterprises', GLOBAL)).toBe(false);
-        expect(commonsPlusStartsProject('groups', 'projects', GLOBAL)).toBe(false);
-        expect(groupKindChips(GLOBAL)).toEqual([]);
-    });
-    it('where they are listed, as before: on their chips only', () => {
-        for (const f of [null, {}, { enterprises: true }]) {
-            expect(commonsPlusStartsProject('groups', 'projects', f)).toBe(true);
-            expect(commonsPlusStartsProject('groups', 'enterprises', f)).toBe(true);
-            expect(commonsPlusStartsProject('groups', 'all', f)).toBe(false);
-            expect(commonsPlusStartsProject('groups', 'chat', f)).toBe(false);
-            expect(commonsPlusStartsProject('decide', 'projects', f)).toBe(false);
-        }
-    });
-    it('the screen opens CreateGroupModal across all pills so user chooses kind first', () => {
-        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', '(tabs)', 'projects.tsx'), 'utf8');
-        expect(src).toContain("if (activeSection === 'groups') {\n                        createGroup.open();\n                        return;\n                    }");
     });
 });

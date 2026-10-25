@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { useEffect, useRef } from 'react';
 import * as api from '../lib/api';
 import { HeaderControls } from './HeaderControls';
 import { HomePage } from '../pages/HomePage';
@@ -434,5 +435,143 @@ describe('HeaderControls needs-you alert icons', () => {
         } finally {
             globalThis.ResizeObserver = originalRO;
         }
+    });
+
+    it('collapses to a single count chip if even ••• does not fit beside title', async () => {
+        const inviteItem: NeedsItem = {
+            kind: 'invite',
+            count: 1,
+            accent: false,
+            label: "You're invited to join Garden Club",
+            target: { to: 'invite', id: 'group-garden' },
+        };
+        const dealItem: NeedsItem = {
+            kind: 'deal',
+            count: 1,
+            accent: true,
+            label: 'A deal is waiting for you',
+            target: { to: 'deal', postId: 'post-1', txId: 'tx-1' },
+        };
+
+        vi.spyOn(api, 'getHome').mockResolvedValue({
+            notModified: false,
+            etag: 'W/"home-chip"',
+            answer: makeHomeAnswer([dealItem, inviteItem]) as any,
+        });
+
+        // 320px header where "Commons" title leaves only 35px (< 44px)
+        const HeaderWithTitle = () => {
+            return (
+                <header
+                    ref={el => {
+                        if (el) {
+                            el.getBoundingClientRect = () => ({
+                                width: 320, height: 50, top: 0, left: 0, bottom: 50, right: 320, x: 0, y: 0, toJSON: () => {},
+                            });
+                        }
+                    }}
+                    style={{ display: 'flex', width: '320px' }}
+                >
+                    <div>
+                        <span
+                            data-testid="header-title"
+                            ref={el => {
+                                if (el) {
+                                    el.getBoundingClientRect = () => ({
+                                        width: 140, height: 30, top: 10, left: 40, bottom: 40, right: 180, x: 40, y: 10, toJSON: () => {},
+                                    });
+                                }
+                            }}
+                        >
+                            Commons
+                        </span>
+                    </div>
+                    <HeaderControls
+                        showSettings={false}
+                        setShowSettings={() => {}}
+                        identityPubkey={ME.publicKey}
+                        onOpenProfile={() => {}}
+                    />
+                </header>
+            );
+        };
+
+        render(<HeaderWithTitle />);
+
+        // When room is < 44px, it must collapse to a single count chip, not cut title
+        const chip = await screen.findByTestId('header-needs-chip');
+        expect(chip).toBeInTheDocument();
+        expect(screen.queryByTestId('header-needs-more')).toBeNull();
+        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+
+        // Clicking the count chip opens the dialog sheet
+        chip.focus();
+        fireEvent.click(chip);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('on Map tab: icons stay out of logo box, and HeaderControls has z-[5] below logo', async () => {
+        const inviteItem: NeedsItem = {
+            kind: 'invite',
+            count: 1,
+            accent: false,
+            label: "You're invited to join Garden Club",
+            target: { to: 'invite', id: 'group-garden' },
+        };
+
+        vi.spyOn(api, 'getHome').mockResolvedValue({
+            notModified: false,
+            etag: 'W/"home-map"',
+            answer: makeHomeAnswer([inviteItem]) as any,
+        });
+
+        // At 320px, Map tab logo right edge is at 247px, pill left is at 208px (overlap)
+        const HeaderWithMapLogo = () => {
+            return (
+                <header
+                    ref={el => {
+                        if (el) {
+                            el.getBoundingClientRect = () => ({
+                                width: 320, height: 50, top: 0, left: 0, bottom: 50, right: 320, x: 0, y: 0, toJSON: () => {},
+                            });
+                        }
+                    }}
+                    style={{ display: 'flex', width: '320px' }}
+                >
+                    <div
+                        data-testid="header-logo"
+                        className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10"
+                        ref={el => {
+                            if (el) {
+                                el.getBoundingClientRect = () => ({
+                                    width: 174, height: 40, top: 5, left: 73, bottom: 45, right: 247, x: 73, y: 5, toJSON: () => {},
+                                });
+                            }
+                        }}
+                    />
+                    <HeaderControls
+                        showSettings={false}
+                        setShowSettings={() => {}}
+                        identityPubkey={ME.publicKey}
+                        onOpenProfile={() => {}}
+                        activeTab="map"
+                    />
+                </header>
+            );
+        };
+
+        const { container } = render(<HeaderWithMapLogo />);
+
+        // Layering: HeaderControls container must have z-[5] and NOT z-10
+        const controlsWrapper = container.querySelector('[data-testid="header-pill"]')?.parentElement;
+        expect(controlsWrapper?.className).toContain('z-[5]');
+        expect(controlsWrapper?.className).not.toContain('z-10');
+
+        // At 320px on map tab, logo meets pill, so icons must be hidden (0 slots)
+        await act(async () => {
+            await new Promise(r => setTimeout(r, 60));
+        });
+        expect(screen.queryByTestId('header-needs-invite')).toBeNull();
+        expect(screen.queryByTestId('header-needs-chip')).toBeNull();
     });
 });

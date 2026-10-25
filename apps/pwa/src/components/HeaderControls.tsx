@@ -140,10 +140,11 @@ export function HeaderControls({
     activeTab?: string;
 }) {
     return (
-        <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+        <div className="relative z-[5] flex items-center gap-1.5 shrink-0">
             <NeedsYouIcons
                 identityPubkey={identityPubkey}
                 onNavigate={onNavigate}
+                activeTab={activeTab}
                 isHome={activeTab === 'home'}
             />
             <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{

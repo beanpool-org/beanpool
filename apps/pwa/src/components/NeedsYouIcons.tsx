@@ -87,14 +87,18 @@ export function NeedsYouIcons({
     identityPubkey,
     onNavigate,
     isHome = false,
+    activeTab,
+    variant = 'header',
 }: {
     identityPubkey?: string;
     onNavigate?: (tab: string, ctxId?: string) => void;
     isHome?: boolean;
+    activeTab?: string;
+    variant?: 'header' | 'sidebar';
 }) {
     const [entries, setEntries] = useState<NeedsItem[]>([]);
     const [sheet, setSheet] = useState(false);
-    const [maxSlotWidth, setMaxSlotWidth] = useState<number | undefined>(undefined);
+    const [availableRoom, setAvailableRoom] = useState<number | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Filter out 'admin' (which requires phone unlock and has no web equivalent)
@@ -153,61 +157,168 @@ export function NeedsYouIcons({
         };
     }, [identityPubkey, isHome, filterAndSort]);
 
-    // Measure available width for fitting
+    // Measure available room dynamically to keep tab titles unclipped and map logo uncovered
     useLayoutEffect(() => {
+        if (variant === 'sidebar') return;
+
         const el = containerRef.current;
         if (!el) return;
 
         const header = el.closest('header');
-        const checkHeaderWidth = () => {
-            const total = header?.getBoundingClientRect().width ?? (typeof window !== 'undefined' ? window.innerWidth : 0);
-            if (total > 0 && total <= 360) {
-                // At 320 px × 130%: allow 1 slot (38 px) so title and logo are never pushed or wrapped
-                setMaxSlotWidth(HEADER_ALERT_SLOT_PX + 2);
-            } else if (total > 0 && total <= 480) {
-                setMaxSlotWidth(HEADER_ALERT_SLOT_PX * 2 + 4);
-            } else if (total > 0 && total <= 640) {
-                setMaxSlotWidth(HEADER_ALERT_SLOT_PX * 3 + 4);
+        if (!header) return;
+
+        const measure = () => {
+            const headerRect = header.getBoundingClientRect();
+            if (headerRect.width <= 0) return;
+
+            const pill = header.querySelector<HTMLElement>('[data-testid="header-pill"]');
+            const pillRect = pill?.getBoundingClientRect();
+            const pillWidth = (pillRect && pillRect.width > 0) ? pillRect.width : 100;
+
+            const titleSpan = header.querySelector<HTMLElement>('[data-testid="header-title"]');
+            const logo = header.querySelector<HTMLElement>('.absolute.left-1\\/2') ?? header.querySelector<HTMLElement>('[data-testid="header-logo"]');
+
+            if (titleSpan) {
+                // Non-map tab: HeaderTitle must keep its full width
+                let titleNeeded = 0;
+                try {
+                    const range = document.createRange();
+                    range.selectNodeContents(titleSpan);
+                    const rect = range.getBoundingClientRect();
+                    titleNeeded = rect.width || titleSpan.getBoundingClientRect().width;
+                } catch {
+                    titleNeeded = titleSpan.getBoundingClientRect().width;
+                }
+                const cs = typeof window !== 'undefined' ? window.getComputedStyle(titleSpan) : null;
+                const titlePadding = cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0;
+
+                const chip = header.querySelector<HTMLElement>('[data-testid="sync-chip"]');
+                const chipBox = chip?.parentElement;
+                const chipWidth = chipBox ? chipBox.getBoundingClientRect().width : (chip?.getBoundingClientRect().width ?? 0);
+
+                const headerStyle = typeof window !== 'undefined' ? window.getComputedStyle(header) : null;
+                const padL = (headerStyle && parseFloat(headerStyle.paddingLeft)) || 12;
+                const padR = (headerStyle && parseFloat(headerStyle.paddingRight)) || 12;
+                const headerPadding = padL + padR;
+                const totalInnerWidth = headerRect.width - headerPadding;
+
+                // Title container has padding 0 6px (12px total)
+                const neededTitleSpace = titleNeeded + titlePadding + 12;
+                // Available for right controls (icons + gap + pill)
+                const maxRightSpace = totalInnerWidth - chipWidth - neededTitleSpace;
+                const room = Math.max(0, maxRightSpace - pillWidth - 6);
+                setAvailableRoom(room);
+            } else if (logo) {
+                // Map tab: logo is absolutely centred, nothing may overlap it
+                const logoRect = logo.getBoundingClientRect();
+                const pillLeft = (pillRect && pillRect.width > 0 && pillRect.left > 0) ? pillRect.left : (headerRect.width - 12 - pillWidth);
+                // Icons sit between logo.right and pill.left (leaving 4px margin from logo)
+                const room = Math.max(0, (pillLeft - 6) - (logoRect.right + 4));
+                setAvailableRoom(room);
             } else {
-                setMaxSlotWidth(undefined);
+                const total = headerRect.width;
+                if (total > 0 && total <= 360) {
+                    setAvailableRoom(HEADER_ALERT_SLOT_PX + 2);
+                } else if (total > 0 && total <= 480) {
+                    setAvailableRoom(HEADER_ALERT_SLOT_PX * 2 + 4);
+                } else if (total > 0 && total <= 640) {
+                    setAvailableRoom(HEADER_ALERT_SLOT_PX * 3 + 4);
+                } else {
+                    setAvailableRoom(undefined);
+                }
             }
         };
 
-        checkHeaderWidth();
+        measure();
+
+        const scheduleMeasure = () => {
+            measure();
+        };
 
         let observer: ResizeObserver | null = null;
-        if (typeof ResizeObserver !== 'undefined' && header) {
-            observer = new ResizeObserver((entriesList) => {
-                for (const entry of entriesList) {
-                    if (entry.target === header) {
-                        checkHeaderWidth();
-                    }
-                }
-            });
+        if (typeof ResizeObserver !== 'undefined') {
+            observer = new ResizeObserver(scheduleMeasure);
             observer.observe(header);
+            const titleSpan = header.querySelector('[data-testid="header-title"]');
+            if (titleSpan) observer.observe(titleSpan);
+            const logo = header.querySelector('.absolute.left-1\\/2');
+            if (logo) observer.observe(logo);
         }
 
         if (typeof window !== 'undefined') {
-            window.addEventListener('resize', checkHeaderWidth);
+            window.addEventListener('resize', scheduleMeasure);
         }
 
+        let live = true;
+        document.fonts?.ready?.then(() => {
+            if (live) measure();
+        });
+
         return () => {
-            if (observer) {
-                observer.disconnect();
-            }
+            live = false;
+            if (observer) observer.disconnect();
             if (typeof window !== 'undefined') {
-                window.removeEventListener('resize', checkHeaderWidth);
+                window.removeEventListener('resize', scheduleMeasure);
             }
         };
-    }, [entries.length]);
+    }, [entries.length, activeTab, variant]);
 
     if (!identityPubkey || entries.length === 0) return null;
 
-    // In unmeasured/jsdom test environments, default width allows showing icons without collapsing
-    const effectiveWidth = maxSlotWidth ?? 240;
-    const fit = fitNeedsYou(entries, effectiveWidth, HEADER_ALERT_SLOT_PX);
+    const slotPx = HEADER_ALERT_SLOT_PX;
+    const countChipPx = 28;
+
+    // In unmeasured/jsdom test environments, default allows showing icons without collapsing
+    const effectiveWidth = availableRoom !== undefined ? availableRoom : 240;
+
+    if (effectiveWidth < countChipPx) {
+        return null;
+    }
+
+    const isChipOnly = effectiveWidth < slotPx;
+    const hasAccent = entries.some(e => e.accent);
+
+    if (isChipOnly) {
+        const totalCount = entries.reduce((acc, e) => acc + (e.count || 1), 0);
+        const label = moreLabel(entries.length);
+        return (
+            <div
+                ref={containerRef}
+                data-testid="header-needs-icons"
+                className="flex items-center justify-end min-w-0 flex-shrink"
+                style={{ height: '38px', maxWidth: `${countChipPx}px` }}
+            >
+                <button
+                    onClick={() => setSheet(true)}
+                    aria-label={label}
+                    title={label}
+                    data-testid="header-needs-chip"
+                    className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px]`}
+                    style={{ width: `${countChipPx}px`, height: '44px' }}
+                >
+                    <span
+                        className={`min-w-[20px] h-[20px] px-1 rounded-full text-[11px] font-black flex items-center justify-center leading-none ${
+                            hasAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
+                        }`}
+                    >
+                        {totalCount > 9 ? '9+' : totalCount}
+                    </span>
+                </button>
+                {sheet && (
+                    <NeedsSheet
+                        entries={entries}
+                        onClose={() => setSheet(false)}
+                        onNavigate={onNavigate}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    const fit = fitNeedsYou(entries, effectiveWidth, slotPx);
     const byKind = new Map(fit.shown.map(e => [e.kind, e]));
     const rowOrder = needsYouRowOrder(fit);
+    const isSidebar = variant === 'sidebar';
 
     return (
         <div
@@ -215,8 +326,8 @@ export function NeedsYouIcons({
             data-testid="header-needs-icons"
             className="flex items-center justify-end min-w-0 flex-shrink"
             style={{
-                height: '38px',
-                maxWidth: maxSlotWidth ? `${maxSlotWidth}px` : undefined,
+                height: isSidebar ? undefined : '38px',
+                maxWidth: availableRoom !== undefined ? `${availableRoom}px` : undefined,
             }}
         >
             {rowOrder.map(k => {
@@ -229,7 +340,11 @@ export function NeedsYouIcons({
                             aria-label={label}
                             title={label}
                             data-testid="header-needs-more"
-                            className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill text-white shrink-0 h-[44px] min-h-[44px] -my-[3px]"
+                            className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px] ${
+                                isSidebar
+                                    ? 'rounded-lg text-nature-700 dark:text-nature-200 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                                    : 'rounded-full text-white hover:bg-white/15'
+                            }`}
                             style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
                         >
                             <NeedSvg kind="more" />
@@ -241,6 +356,10 @@ export function NeedsYouIcons({
                 if (!entry) return null;
                 const isAccent = entry.accent;
 
+                const iconColor = isSidebar
+                    ? (isAccent ? 'text-amber-600 dark:text-amber-400' : 'text-nature-700 dark:text-nature-200')
+                    : (isAccent ? 'text-amber-300' : 'text-white');
+
                 return (
                     <button
                         key={k}
@@ -249,8 +368,10 @@ export function NeedsYouIcons({
                         title={entry.label}
                         data-testid={`header-needs-${k}`}
                         data-kind={k}
-                        className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px] ${
-                            isAccent ? 'text-amber-300' : 'text-white'
+                        className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 h-[44px] min-h-[44px] -my-[3px] ${iconColor} ${
+                            isSidebar
+                                ? 'rounded-lg hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                                : 'rounded-full hover:bg-white/15'
                         }`}
                         style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: '44px' }}
                     >

@@ -965,7 +965,7 @@ export function App() {
                             {communityStatus}
                         </HeaderTitle>
                     ) : (
-                        <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
+                        <div data-testid="header-logo" className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
                             <div 
                                 className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}

@@ -193,10 +193,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // `adminSignIn`: the admin routes' own sign-in (the manager's password), which reads the keepers' backing as an admin.
     const listTreasuries = async (ctx: any, adminSignIn: boolean) => {
-        const includeBounded = ctx.query?.includeBounded === 'true';
-        const whereClause = includeBounded
-            ? "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
-            : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
+        // Keep accepting ?includeBounded=true for backward compatibility (harmless; test-group-rosters-photo-urls uses it).
+        // Live projects (lifecycle = 'bounded') are listed by default (#2475 / projects-listed).
+        const _includeBounded = ctx.query?.includeBounded === 'true';
+        void _includeBounded;
+        const whereClause = "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
         // A suspended or disabled enterprise is off the Commons list (#839 review finding) — neither client
         // badges those states, so it read as an ordinary live enterprise. Its own keepers and node admins still
         // see it: the list card is how a keeper reaches the enterprise's page, which explains the state. Detail

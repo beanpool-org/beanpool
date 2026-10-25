@@ -35,6 +35,7 @@ import { signedRequestWords } from '../components/signed-request-lines';
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
 import { readEnterpriseOffers, type ShopListing } from '../utils/shop';
+import { shopCategoryOf } from '../utils/shopfront';
 import { leadsIt, mayManage, notKeeperLine } from '../utils/enterprise-manage';
 import { decodeThreadMessage, removedLine } from '../utils/enterprise-thread';
 
@@ -365,6 +366,8 @@ export default function TreasuryManageScreen() {
     const mayStepDown = canStepDown(myPubkey, keeperList);
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
     const shopId: string | null = detail?.shop && typeof detail.shop.id === 'string' ? detail.shop.id : null;
+    // Its new Offers start in its shop's category (Marty, 25 Oct 2026); the keeper can change it on the form.
+    const shopCategory = shopCategoryOf(detail?.shop);
 
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;
@@ -876,7 +879,7 @@ export default function TreasuryManageScreen() {
                                     accessibilityRole="button"
                                     disabled={!!postingBlocked}
                                     accessibilityState={{ disabled: !!postingBlocked }}
-                                    onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: treasuryKey, mode: 'offer', name } })}
+                                    onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: treasuryKey, mode: 'offer', name, ...(shopCategory ? { category: shopCategory } : {}) } })}
                                 >
                                     <MaterialCommunityIcons name="tag-plus" size={16} color={colors.text.inverse} />
                                     <Text style={[styles.opBtnText, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{t('Post Offer')}</Text>

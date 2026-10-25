@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
-import { t, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
+import { t, type ShopCategory, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
 import { keepToolPhoto, toolPhotoDataUri } from './photos';
 import { communityKey } from './community';
 import { clearShopChoice, rememberShopChoice } from '../utils/shop-choice';
@@ -97,10 +97,13 @@ async function writeDraft(type: 'offer' | 'need', owner: string, tool: string, d
 /**
  * The List sheet's button: the draft written for the map's composer, which opens it. Nothing is posted here. "Put this in
  * your shop" (`inShop`) is kept beside the draft, known by the title, words and photos it hands the composer
- * (utils/shop-choice.ts), since the composer carries only its own fields; off, any earlier choice is forgotten.
+ * (utils/shop-choice.ts), since the composer carries only its own fields; off, any earlier choice is forgotten. In the
+ * shop, a draft with no category of its own starts in the shop's (`shopCategory`; Marty, 25 Oct 2026), which the member can
+ * change in the composer like any.
  */
-export async function openOfferComposer(owner: string, tool: string, draft: ToolOfferDraft, fee: ToolListFee, inShop = false): Promise<void> {
-    const { anchorUrl, photos } = await writeDraft('offer', owner, tool, draft, fee);
+export async function openOfferComposer(owner: string, tool: string, draft: ToolOfferDraft, fee: ToolListFee, inShop = false, shopCategory: ShopCategory | null = null): Promise<void> {
+    const listed = inShop && !draft.category && shopCategory ? { ...draft, category: shopCategory } : draft;
+    const { anchorUrl, photos } = await writeDraft('offer', owner, tool, listed, fee);
     await rememberShopChoice(anchorUrl, { title: draft.title, description: draft.description, photos }, inShop);
     router.push('/(tabs)/map?newPost=offer');
 }

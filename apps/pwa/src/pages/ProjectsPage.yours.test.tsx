@@ -169,8 +169,38 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             ],
         };
 
-        vi.mocked(getTreasuries).mockResolvedValue({
+        vi.mocked(getTreasuries).mockResolvedValueOnce({
             treasuries: [keptEnterprise, keptProjectLead, unkeptEnterprise],
+        });
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-shade',
+                    conversationId: 'treasury-shade',
+                    name: 'Shade House',
+                    role: 'lead',
+                    lifecycle: 'bounded',
+                    badge: '🌱',
+                    avatarUrl: null,
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+                {
+                    kind: 'enterprise',
+                    id: 'treasury-eggs',
+                    conversationId: 'treasury-eggs',
+                    name: 'Community Eggs',
+                    role: 'keeper',
+                    lifecycle: 'ongoing',
+                    badge: '🏛️',
+                    avatarUrl: null,
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+            ],
         });
 
         const onOpenTreasury = vi.fn();
@@ -232,7 +262,24 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             createdAt: '2026-01-01T00:00:00Z',
         };
 
-        vi.mocked(getGroups).mockResolvedValue([myGroup, otherGroup]);
+        vi.mocked(getGroups).mockResolvedValueOnce([myGroup, otherGroup]);
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [
+                {
+                    kind: 'group',
+                    id: 'group-garden',
+                    conversationId: 'group-garden',
+                    name: 'Garden Crew',
+                    role: 'convenor',
+                    badge: null,
+                    category: 'working_group',
+                    joinPolicy: 'open',
+                    readOnly: false,
+                    unreadCount: 0,
+                    lastActivityAt: '2026-01-01T00:00:00Z',
+                },
+            ],
+        });
 
         const onNavigate = vi.fn();
         render(<ProjectsPage identity={me} onNavigate={onNavigate} />);

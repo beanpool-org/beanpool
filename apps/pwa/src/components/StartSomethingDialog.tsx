@@ -9,7 +9,8 @@ import {
 interface Props {
     isOpen: boolean;
     onClose: () => void;
-    onPick: (key: StartRowKey) => void;
+    /** True when the pick opened a dialog that takes focus itself; otherwise focus goes back to the opener (dialog-focus.ts). */
+    onPick: (key: StartRowKey) => boolean | void;
     features?: StartNodeFeatures | null;
     canPropose?: boolean;
     decisionsPreview?: boolean;
@@ -91,9 +92,10 @@ export function StartSomethingDialog({
     const commonsRows = rows.filter((r) => r.section === 'commons');
     const marketRows = rows.filter((r) => r.section === 'market');
 
+    // Focus stays where the pick sent it only when it opened a dialog that takes focus; a refusal's alert, a form that takes
+    // none, or a hand-off elsewhere gets it back on the opener, never on <body> (deciding review of #2471, finding 3).
     const handlePick = (key: StartRowKey) => {
-        pickedRef.current = true;
-        onPick(key);
+        pickedRef.current = onPick(key) === true;
     };
 
     return (

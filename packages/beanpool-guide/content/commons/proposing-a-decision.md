@@ -24,7 +24,7 @@ related: decisions, rules, polls, enterprises
 - Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. To pay off a debt or replace a lead, tap the project or enterprise in the list, or type its key.
 - Tap **Submit Community Decision**.
 
-In the web app the buttons read **+ Propose Decision** (or **+ Propose** at the top of Commons, while **Decide** is open) and **Submit Decision**, and the box is **Description & Rationale**.
+In the web app the buttons read **+ Propose Decision** (or **＋ Start something** at the top of Commons, then **Decision**) and **Submit Decision**, and the box is **Description & Rationale**.
 
 Voting opens at once and runs for 7 days.
 

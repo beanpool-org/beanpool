@@ -175,6 +175,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
     const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat' || groupCategoryFilter === 'my_groups';
 
+    // "＋ Start something": where focus goes back when the sheet, or a sheet it opened, closes.
+    const startButtonRef = useRef<HTMLButtonElement>(null);
     // Start something dialog
     const [showStartSomething, setShowStartSomething] = useState(false);
     const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
@@ -248,7 +250,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         return effectiveDecisions.filter(d => d.status === 'open').length;
     }, [effectiveDecisions]);
 
-    const handlePickStartRow = (key: StartRowKey) => {
+    // True when the pick opens a dialog that takes focus itself (the showcase's decisions sheet); else the sheet gives focus
+    // back to "＋ Start something".
+    const handlePickStartRow = (key: StartRowKey): boolean => {
         setShowStartSomething(false);
         if (key === 'chat') {
             setShowCreateGroupModal(true);
@@ -264,17 +268,17 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             if (decisionsMode === 'preview') {
                 setActiveSection('decide');
                 setShowDecisionsSheet(true);
-                return;
+                return true;
             }
             if (!canProposeDecision) {
                 alert(beansOn
                     ? t('You can propose a Decision once you have completed a trade.')
                     : t('Node admins propose here.'));
-                return;
+                return false;
             }
             if (hasOpenDecision) {
                 alert(t('You already have an open decision (limit 1 open decision per author).'));
-                return;
+                return false;
             }
             setShowProposeDecision(true);
         } else if (key === 'poll') {
@@ -282,6 +286,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         } else if (key === 'event') {
             onNavigate?.('marketplace', 'new-event');
         }
+        return false;
     };
 
     useEffect(() => {
@@ -455,6 +460,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                     {identity && (
                         <button
+                            ref={startButtonRef}
                             onClick={() => setShowStartSomething(true)}
                             className="max-w-[50%] break-words leading-tight bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
@@ -962,6 +968,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             {decisionsMode === 'preview' && showDecisionsSheet && (
                 <LocalCommunitySheet
                     feature="decisions"
+                    returnFocus={() => startButtonRef.current}
                     onClose={() => setShowDecisionsSheet(false)}
                     onStart={() => {
                         setShowDecisionsSheet(false);
@@ -974,6 +981,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
             {showStartCommunity && (
                 <StartCommunityScreen
+                    returnFocus={() => startButtonRef.current}
                     onClose={() => setShowStartCommunity(false)}
                     onNearYou={onNavigate ? () => onNavigate('home') : undefined}
                 />

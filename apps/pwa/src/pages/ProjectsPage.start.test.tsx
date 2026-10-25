@@ -262,7 +262,9 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         expect(document.activeElement).toBe(closeBtn);
     });
 
-    it('dialog focus: picking an option does not steal focus back to opener', async () => {
+    // The deciding review of #2471 (finding 3): focus goes back to "＋ Start something" unless the pick hands off to a dialog that
+    // takes focus itself, never to <body> (dialog-focus.ts). Create a Group takes none, so focus is on the opener under it.
+    it('dialog focus: Chat group (a form that takes no focus) leaves focus on the opener, not on <body>', async () => {
         render(<ProjectsPage identity={mockIdentity} />);
         await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
 
@@ -271,14 +273,33 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         fireEvent.click(opener);
 
         const dialog = screen.getByRole('dialog', { name: /Start something/i });
-        const chatBtn = within(dialog).getByRole('button', { name: /^Chat group/i });
-
-        const focusSpy = vi.spyOn(opener, 'focus');
-
-        fireEvent.click(chatBtn);
+        // A real click focuses the row first (jsdom's click doesn't); the row then leaves the page with the sheet.
+        const chatRow = within(dialog).getByRole('button', { name: /^Chat group/i });
+        chatRow.focus();
+        fireEvent.click(chatRow);
 
         expect(screen.getByRole('dialog', { name: /Create a Group/i })).toBeInTheDocument();
-        expect(focusSpy).not.toHaveBeenCalled();
+        expect(document.activeElement).toBe(opener);
+    });
+
+    it('dialog focus: a refused Decision (no completed trade yet) sends focus back to the opener, not to <body>', async () => {
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.mocked(getDecisions).mockResolvedValue({ decisions: [], myPoolVoting: null, canPropose: false } as any);
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getDecisions).toHaveBeenCalled());
+
+        const opener = screen.getByRole('button', { name: /Start something/i });
+        opener.focus();
+        fireEvent.click(opener);
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        const decisionRow = within(dialog).getByRole('button', { name: /^Decision/i });
+        decisionRow.focus();
+        fireEvent.click(decisionRow);
+
+        expect(alertSpy).toHaveBeenCalled();
+        expect(screen.queryByRole('dialog', { name: /Start something/i })).toBeNull();
+        expect(document.activeElement).toBe(opener);
+        alertSpy.mockRestore();
     });
 
     it('empty-state "+ Propose a Project" button resets lifecycle to bounded even after bridge set it to empty', async () => {

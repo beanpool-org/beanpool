@@ -9,12 +9,17 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { fitNeedsYou, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } from '@beanpool/core';
+import { createRefreshGate, fitNeedsYou, isOwnInviteChange, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } from '@beanpool/core';
 import { t, tn } from '@beanpool/core';
 import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
-import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS } from '../lib/home-store';
+import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS, recordHomeAnswer, forgetHomeForHeader } from '../lib/home-store';
+import { onSyncActivity } from '../lib/sync';
 import { useDialogFocus } from './dialog-focus';
 import * as api from '../lib/api';
+
+const NODE_MIN_GAP_MS = 15_000;
+const SAFETY_POLL_MS = 120_000;
+const WS_SETTLE_MS = 3_000;
 
 export function moreLabel(hidden: number): string {
     return tn(hidden, '{n} more thing needs you', '{n} more things need you');
@@ -101,6 +106,13 @@ export function NeedsYouIcons({
     const [availableRoom, setAvailableRoom] = useState<number | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
+    const gate = useRef<ReturnType<typeof createRefreshGate> | null>(null);
+    const identityRef = useRef(identityPubkey);
+    identityRef.current = identityPubkey;
+    const activeTabRef = useRef(activeTab);
+    activeTabRef.current = activeTab;
+    const busyRef = useRef(false);
+
     // Filter out 'admin' (which requires phone unlock and has no web equivalent)
     const filterAndSort = useCallback((items: NeedsItem[]) => {
         const supported = items.filter(i => (i.kind as string) !== 'admin');
@@ -108,14 +120,60 @@ export function NeedsYouIcons({
         return [...supported].sort((a, b) => rank(a.kind) - rank(b.kind));
     }, []);
 
-    // Load initial data and subscribe to Home reads
+    const isHidden = useCallback(() => {
+        if (variant === 'sidebar') {
+            if (typeof window !== 'undefined') {
+                if (window.matchMedia?.('(max-width: 767px)').matches || window.innerWidth < 768) {
+                    return true;
+                }
+            }
+        } else {
+            const el = containerRef.current;
+            const header = el?.closest('header');
+            if (header?.classList.contains('md:hidden')) {
+                if (typeof window !== 'undefined') {
+                    if (window.matchMedia?.('(min-width: 768px)').matches || window.innerWidth >= 768) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }, [variant]);
+
+    const refresh = useCallback(async () => {
+        const pk = identityRef.current;
+        if (!pk || busyRef.current || isHidden()) return;
+        busyRef.current = true;
+        try {
+            const onHome = activeTabRef.current === 'home';
+            const ans = await homeForHeader(pk, onHome ? HOME_HEADER_WAIT_MS : 0);
+            if (ans?.cards?.needs?.items) {
+                setEntries(filterAndSort(ans.cards.needs.items));
+            } else if (!onHome) {
+                if ('getHome' in api && typeof api.getHome === 'function') {
+                    const read = await api.getHome({ cards: ['needs'] });
+                    if (read && !read.notModified && read.answer) {
+                        recordHomeAnswer(read.answer, pk);
+                        if (read.answer.cards?.needs?.items) {
+                            setEntries(filterAndSort(read.answer.cards.needs.items));
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Network errors keep whatever was drawn
+        } finally {
+            busyRef.current = false;
+        }
+    }, [filterAndSort, isHidden]);
+
+    // Load initial data and subscribe to Home reads and refresh gate
     useEffect(() => {
         if (!identityPubkey) {
             setEntries([]);
             return;
         }
-
-        let mounted = true;
 
         // Draw initial data if already fresh in store
         const fresh = freshHomeForHeader(identityPubkey);
@@ -123,39 +181,88 @@ export function NeedsYouIcons({
             setEntries(filterAndSort(fresh.cards.needs.items));
         }
 
-        // Home's answer or fetch if needed
-        homeForHeader(identityPubkey, isHome ? HOME_HEADER_WAIT_MS : 0).then((ans) => {
-            if (!mounted) return;
-            if (ans?.cards?.needs?.items) {
-                setEntries(filterAndSort(ans.cards.needs.items));
-            } else if (!isHome) {
-                // Not on Home and no fresh copy: fetch cards=needs
-                if ('getHome' in api && typeof api.getHome === 'function') {
-                    api.getHome({ cards: ['needs'] }).then((read) => {
-                        if (!mounted || read.notModified) return;
-                        if (read.answer?.cards?.needs?.items) {
-                            setEntries(filterAndSort(read.answer.cards.needs.items));
-                        }
-                    }).catch(() => {
-                        // Network errors keep whatever was drawn
-                    });
-                }
-            }
+        const g = createRefreshGate(NODE_MIN_GAP_MS, () => {
+            refresh();
         });
+        gate.current = g;
+
+        // Initial poke
+        g.request();
 
         // Listen for future Home reads settling
         const unsubscribe = onHomeRead((ans, pk) => {
-            if (!mounted) return;
-            if (pk === identityPubkey) {
-                setEntries(filterAndSort(ans.cards?.needs?.items ?? []));
+            if (pk === identityPubkey && ans?.cards?.needs?.items) {
+                setEntries(filterAndSort(ans.cards.needs.items));
             }
         });
 
         return () => {
-            mounted = false;
+            g.cancel();
+            if (gate.current === g) gate.current = null;
             unsubscribe();
         };
-    }, [identityPubkey, isHome, filterAndSort]);
+    }, [identityPubkey, filterAndSort, refresh]);
+
+    // Each tab change requests a refresh through the gate (copying phone's refresh rule)
+    useEffect(() => {
+        gate.current?.request();
+    }, [activeTab]);
+
+    // Returning to the tab, debounced WebSocket activity, and safety poll
+    useEffect(() => {
+        if (!identityPubkey) return;
+
+        let settleTimer: ReturnType<typeof setTimeout> | null = null;
+        let poll: ReturnType<typeof setInterval> | null = null;
+        const poke = () => gate.current?.request();
+
+        const startPoll = () => { if (!poll) poll = setInterval(poke, SAFETY_POLL_MS); };
+        const stopPoll = () => { if (poll) clearInterval(poll); poll = null; };
+
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+            startPoll();
+        }
+
+        const onVisibilityChange = () => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+                poke();
+                startPoll();
+            } else {
+                stopPoll();
+            }
+        };
+
+        const onFocus = () => {
+            poke();
+        };
+
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', onVisibilityChange);
+        }
+        if (typeof window !== 'undefined') {
+            window.addEventListener('focus', onFocus);
+        }
+
+        const unsubSync = onSyncActivity((data?: unknown) => {
+            if (isOwnInviteChange(data, identityPubkey)) {
+                forgetHomeForHeader();
+            }
+            if (settleTimer) clearTimeout(settleTimer);
+            settleTimer = setTimeout(poke, WS_SETTLE_MS);
+        });
+
+        return () => {
+            stopPoll();
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('visibilitychange', onVisibilityChange);
+            }
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('focus', onFocus);
+            }
+            unsubSync();
+            if (settleTimer) clearTimeout(settleTimer);
+        };
+    }, [identityPubkey]);
 
     // Measure available room dynamically to keep tab titles unclipped and map logo uncovered
     useLayoutEffect(() => {

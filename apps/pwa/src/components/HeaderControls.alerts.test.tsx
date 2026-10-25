@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useEffect, useRef } from 'react';
 import * as api from '../lib/api';
+import * as sync from '../lib/sync';
 import { HeaderControls } from './HeaderControls';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
@@ -573,5 +574,85 @@ describe('HeaderControls needs-you alert icons', () => {
         });
         expect(screen.queryByTestId('header-needs-invite')).toBeNull();
         expect(screen.queryByTestId('header-needs-chip')).toBeNull();
+    });
+
+    it('away from Home: refreshes on activeTab changes and sync activity, clearing dealt-with needs', async () => {
+        vi.useFakeTimers();
+        try {
+            let syncListener: ((data?: unknown) => void) | null = null;
+            vi.spyOn(sync, 'onSyncActivity').mockImplementation((cb) => {
+                syncListener = cb;
+                return () => { syncListener = null; };
+            });
+
+            const inviteItem: NeedsItem = {
+                kind: 'invite',
+                count: 1,
+                accent: false,
+                label: "You're invited to join Garden Club",
+                target: { to: 'invite', id: 'group-garden' },
+            };
+
+            const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({
+                notModified: false,
+                etag: 'W/"home-1"',
+                answer: makeHomeAnswer([inviteItem]) as any,
+            });
+
+            const { rerender } = render(
+                <HeaderControls
+                    showSettings={false}
+                    setShowSettings={() => {}}
+                    identityPubkey={ME.publicKey}
+                    onOpenProfile={() => {}}
+                    activeTab="messages"
+                />
+            );
+
+            // Wait for initial render and promise resolution
+            await act(async () => {
+                await Promise.resolve();
+            });
+
+            // Invite button shows initially away from Home
+            const inviteBtn = screen.getByTestId('header-needs-invite');
+            expect(inviteBtn).toBeInTheDocument();
+            expect(getHomeSpy).toHaveBeenCalledTimes(1);
+
+            // User accepted the invite or dealt with it, server now has empty needs
+            getHomeSpy.mockResolvedValue({
+                notModified: false,
+                etag: 'W/"home-empty"',
+                answer: makeHomeAnswer([]) as any,
+            });
+
+            // Simulating invite update event clears cache via forgetHomeForHeader
+            act(() => {
+                syncListener?.({
+                    type: 'group_member_updated',
+                    member: { memberPubkey: ME.publicKey },
+                });
+            });
+
+            // Tab change (e.g. going to commons) triggers refresh via gate
+            await act(async () => {
+                rerender(
+                    <HeaderControls
+                        showSettings={false}
+                        setShowSettings={() => {}}
+                        identityPubkey={ME.publicKey}
+                        onOpenProfile={() => {}}
+                        activeTab="commons"
+                    />
+                );
+                // Advance past NODE_MIN_GAP_MS
+                vi.advanceTimersByTime(16_000);
+            });
+
+            // Needs are refreshed: invite is cleared
+            expect(screen.queryByTestId('header-needs-invite')).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

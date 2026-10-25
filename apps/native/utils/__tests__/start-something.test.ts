@@ -113,4 +113,11 @@ describe('projects.tsx FAB opens StartSomethingSheet', () => {
         expect(src).not.toContain('startsProject');
         expect(src).not.toContain('commonsPlusStartsProject');
     });
+
+    it('defers secondary modal presentations with afterModal and reuses openProposeProject', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', '(tabs)', 'projects.tsx'), 'utf8');
+        expect(src).toContain('afterModal');
+        expect(src).toMatch(/handlePickStartRow[\s\S]*?afterModal\(/);
+        expect(src).toMatch(/handlePickStartRow[\s\S]*?openProposeProject\(target\.params\.kind\)/);
+    });
 });

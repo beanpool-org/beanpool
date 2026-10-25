@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, DeviceEventEmitter, RefreshControl, ScrollView, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem } from '../../utils/db';
@@ -44,6 +44,9 @@ const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
 };
 const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
 const named = (table: Readonly<Record<string, WordKey>>, name: string, asWritten: string) => (own(table, name) ? t(table[name]) : asWritten);
+
+/** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
+const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(fn, 350) : fn());
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -335,48 +338,6 @@ export default function ProjectsScreen() {
         enterprisesPreview,
     }), [reader.effective, canProposeDecision, decisionsPreview, enterprisesPreview]);
 
-    const handlePickStartRow = async (key: StartRowKey) => {
-        setShowStartSomething(false);
-        const target = startTarget(key);
-        if ('modal' in target && target.modal === 'chat') {
-            createGroup.open();
-            return;
-        }
-        if ('modal' in target && target.modal === 'decision') {
-            if (decisionsPreview) {
-                setShowDecisionsSheet(true);
-                return;
-            }
-            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-            if (!anchorUrl) {
-                Alert.alert(t('Not Connected'), t('Connect to a community before proposing a decision.'), [
-                    { text: t('Cancel'), style: 'cancel' },
-                    { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
-                ]);
-                return;
-            }
-            if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
-            setShowProposeDecision(true);
-            return;
-        }
-        if ('pathname' in target && target.pathname === '/propose-project') {
-            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-            if (!anchorUrl) {
-                Alert.alert(t('Not Connected'), t('Connect to a community first.'), [
-                    { text: t('Cancel'), style: 'cancel' },
-                    { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
-                ]);
-                return;
-            }
-            router.push(target as any);
-            return;
-        }
-        if ('pathname' in target && target.pathname === '/(tabs)/market') {
-            router.push(target as any);
-            return;
-        }
-    };
-
     const openProposeProject = async (kind?: 'bounded' | 'ongoing') => {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) {
@@ -387,6 +348,42 @@ export default function ProjectsScreen() {
             return;
         }
         router.push(kind ? { pathname: '/propose-project', params: { kind } } : '/propose-project');
+    };
+
+    const handlePickStartRow = async (key: StartRowKey) => {
+        setShowStartSomething(false);
+        const target = startTarget(key);
+        afterModal(async () => {
+            if ('modal' in target && target.modal === 'chat') {
+                createGroup.open();
+                return;
+            }
+            if ('modal' in target && target.modal === 'decision') {
+                if (decisionsPreview) {
+                    setShowDecisionsSheet(true);
+                    return;
+                }
+                const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+                if (!anchorUrl) {
+                    Alert.alert(t('Not Connected'), t('Connect to a community before proposing a decision.'), [
+                        { text: t('Cancel'), style: 'cancel' },
+                        { text: t('Connect'), onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+                    ]);
+                    return;
+                }
+                if (proposeRefusal(canProposeDecision, hasOpenDecision, showsBeans)) return;
+                setShowProposeDecision(true);
+                return;
+            }
+            if ('pathname' in target && target.pathname === '/propose-project') {
+                await openProposeProject(target.params.kind);
+                return;
+            }
+            if ('pathname' in target && target.pathname === '/(tabs)/market') {
+                router.push(target as any);
+                return;
+            }
+        });
     };
 
     const renderEnterpriseItem = ({ item }: { item: TreasurySummary }) => <EnterpriseCard item={item} />;

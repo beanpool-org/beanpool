@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "Kimlik oluşturulamadı. Lütfen tekrar deneyin.",
   "Failed to initialize device pairing on node relay": "Aktarma sunucusunda cihaz eşleştirme başlatılamadı",
   "Failed to load image.": "Resim yüklenemedi.",
-  "Failed to read file.": "Dosya okunamadı.",
   "Failed to submit report. Please try again.": "Bildirim gönderilemedi. Lütfen tekrar deneyin.",
   "Find people around a place or an interest, and talk together.": "Bir yer ya da ilgi alanı etrafında insanlar bulun ve birlikte konuşun.",
   "Find them any time under **Settings → Recovery Phrase**.": "Bunları istediğiniz zaman **Ayarlar → Kurtarma İfadesi** altında bulabilirsiniz.",

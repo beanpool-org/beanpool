@@ -5,7 +5,6 @@ import * as Clipboard from 'expo-clipboard';
 import { useIdentity } from '../IdentityContext';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
 import { updateCallsign, hasMnemonic } from '../../utils/identity';
 import { namesCopiesBeforeSignOut, signOutOfThisPhone } from '../../utils/account-leaves-phone';

@@ -38,7 +38,8 @@ const makeStyles = ({ colors }: { colors: AppColors }) => StyleSheet.create({
     more: { minHeight: TARGET_DP, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: 12 },
     moreText: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
 
-    banner: { height: 128, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.brand.tint, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center' },
+    // 3:1 across the page, the shape its keeper chose the strip in (core BANNER_PICTURE), so what they chose is what shows.
+    banner: { width: '100%', aspectRatio: 3, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.brand.tint, borderWidth: 1, borderColor: colors.border.default, alignItems: 'center', justifyContent: 'center' },
     bannerImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     bannerEmoji: { fontSize: 44 },
     logo: { marginTop: -32, marginLeft: 12, alignSelf: 'flex-start', borderRadius: 36, borderWidth: 4, borderColor: colors.surface.app, backgroundColor: colors.surface.app },
@@ -111,7 +112,7 @@ export function useNodeUri(url: string | null | undefined): string | null {
 }
 
 /**
- * The top of the shopfront: the banner (the shop's one photo, cropped to fill it, or a quiet block with its category's
+ * The top of the shopfront: the banner (the shop's one photo, 3:1 as its keeper chose it, or a quiet block with its category's
  * emoji, as its listings show it, when it has none or the photo won't load), the logo over its foot (the avatar the
  * account already has), the name, and the lines under it: its category and since when, and any other.
  */

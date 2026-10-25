@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "IDを作成できませんでした。もう一度お試しください。",
   "Failed to initialize device pairing on node relay": "サーバーの中継でデバイスのペアリングを開始できませんでした",
   "Failed to load image.": "画像を読み込めませんでした。",
-  "Failed to read file.": "ファイルを読み取れませんでした。",
   "Failed to submit report. Please try again.": "報告を送信できませんでした。もう一度お試しください。",
   "Find people around a place or an interest, and talk together.": "場所や興味でつながる人を見つけて、一緒に話しましょう。",
   "Find them any time under **Settings → Recovery Phrase**.": "いつでも**設定 → 復元フレーズ**で確認できます。",

@@ -469,13 +469,17 @@ describe('ProjectsPage: the viewer balance is a member-only request', () => {
     });
 });
 
-describe('ProjectsPage: an enterprise photo goes through the canvas resize, never as the raw file (G9a-3)', () => {
+describe('ProjectsPage: an enterprise photo goes through the crop step and a canvas, never as the raw file (G9a-3)', () => {
     // jsdom decodes no pictures and draws on no canvas: these stand in for both and record what was asked of them.
     let restore: Array<() => void> = [];
     afterEach(() => {
         restore.forEach((r) => r());
         restore = [];
     });
+    /** The crop step (components/PictureCropDialog.tsx), as the member finishes it: Done on the part shown. */
+    const chooseTheCrop = async () => {
+        fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Done' }));
+    };
 
     it("its one picture is the logo, said so; the banner photo is its shop's, chosen later in Manage (Marty, 24 Oct)", async () => {
         render(<ProjectsPage identity={backerIdentity} />);
@@ -490,7 +494,7 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
         expect(within(dialog).queryByText(/Cover Photo/i)).toBeNull();
     });
 
-    it('a 4032x3024 camera photo is sent as an 800px re-encoded JPEG, and the raw file is not', async () => {
+    it('a 4032x3024 camera photo is sent as the 512 px square the member chose, a re-encoded JPEG, and the raw file is not', async () => {
         vi.clearAllMocks();
         const originalImage = window.Image;
         class FakeImage {
@@ -530,10 +534,13 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
         const raw = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x08, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00])], 'IMG_0001.jpg', { type: 'image/jpeg' });
         const picker = dialog.querySelector('input[type="file"]') as HTMLInputElement;
         fireEvent.change(picker, { target: { files: [raw] } });
+        await chooseTheCrop();
 
         const preview = await within(dialog).findByAltText('Preview');
         expect(preview).toHaveAttribute('src', 'data:image/jpeg;base64,UkVTSVpFRA==');
-        expect(drawn).toEqual([{ width: 800, height: 600 }]);
+        // Its logo is a square shown in a circle, 512 px as the phone's (Marty, 25 Oct 2026); before the crop step it was
+        // the whole photo at 800 × 600.
+        expect(drawn).toEqual([{ width: 512, height: 512 }]);
         expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.7);
 
         fireEvent.click(within(dialog).getByRole('button', { name: /Start the enterprise/i }));
@@ -603,6 +610,9 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
         expect(createEnterprise).not.toHaveBeenCalled();
 
         act(() => pending[0]());
+        // Decoded, the crop step opens; the form still waits until the member is done with it.
+        expect(within(dialog).getByRole('button', { name: /Preparing photo/i })).toBeDisabled();
+        await chooseTheCrop();
         await within(dialog).findByAltText('Preview');
         const propose = within(dialog).getByRole('button', { name: /Start the enterprise/i });
         expect(propose).toBeEnabled();

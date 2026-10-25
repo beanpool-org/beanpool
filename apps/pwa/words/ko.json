@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "계정을 만들지 못했어요. 다시 시도해 주세요.",
   "Failed to initialize device pairing on node relay": "서버 릴레이에서 기기 연결을 시작하지 못했어요",
   "Failed to load image.": "이미지를 불러오지 못했어요.",
-  "Failed to read file.": "파일을 읽지 못했어요.",
   "Failed to submit report. Please try again.": "신고를 보내지 못했어요. 다시 시도해 주세요.",
   "Find people around a place or an interest, and talk together.": "장소나 관심사를 중심으로 사람들을 찾아 함께 이야기하세요.",
   "Find them any time under **Settings → Recovery Phrase**.": "언제든지 **설정 → 복구 문구**에서 찾을 수 있어요.",

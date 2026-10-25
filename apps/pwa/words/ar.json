@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "تعذّر إنشاء الهوية. يُرجى المحاولة مرة أخرى.",
   "Failed to initialize device pairing on node relay": "تعذّر بدء اقتران الجهاز على مرحّل الخادم",
   "Failed to load image.": "تعذّر تحميل الصورة.",
-  "Failed to read file.": "تعذّرت قراءة الملف.",
   "Failed to submit report. Please try again.": "تعذّر إرسال البلاغ. يرجى المحاولة مرة أخرى.",
   "Find people around a place or an interest, and talk together.": "ابحث عن أشخاص يجمعهم مكان أو اهتمام، وتحدّثوا معًا.",
   "Find them any time under **Settings → Recovery Phrase**.": "يمكنك العثور عليها في أي وقت ضمن **الإعدادات → عبارة الاسترداد**.",

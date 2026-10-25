@@ -58,7 +58,8 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), ActivityIndicator: el('div'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), ActivityIndicator: el('div'), Image: el('img'),
+        PanResponder: { create: () => ({ panHandlers: {} }) },
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: { alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => void }>) => { alerts.said.push(title); if (body) alerts.said.push(body); alerts.buttons = buttons ?? []; } },
@@ -93,14 +94,20 @@ vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s
 vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn(), launchCameraAsync: vi.fn(), requestCameraPermissionsAsync: vi.fn() }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'photo-ref' }));
-// The banner's picker: the photo the member chose, already the phone's 800 px copy; or none; or one it can't read.
-const bannerPick = vi.hoisted(() => ({ next: 'data:image/jpeg;base64,/9j/BBBB' as string | null | Error }));
-vi.mock('../banner-photo', () => ({
-    pickBannerPhoto: async () => {
-        if (bannerPick.next instanceof Error) throw bannerPick.next;
-        return bannerPick.next;
-    },
-}));
+// The banner's picker: the photo the member chose, already the phone's 800 px copy; or none; or one it can't read. `real`:
+// its own code, from the picker through the crop step (components/PictureCrop.tsx) to the image tools.
+const bannerPick = vi.hoisted(() => ({ next: 'data:image/jpeg;base64,/9j/BBBB' as string | null | Error, real: false }));
+vi.mock('../banner-photo', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../banner-photo')>();
+    return {
+        ...actual,
+        pickBannerPhoto: async (...args: Parameters<typeof actual.pickBannerPhoto>) => {
+            if (bannerPick.real) return actual.pickBannerPhoto(...args);
+            if (bannerPick.next instanceof Error) throw bannerPick.next;
+            return bannerPick.next;
+        },
+    };
+});
 vi.mock('expo-file-system/legacy', () => ({ documentDirectory: '/tmp/doc/', getInfoAsync: vi.fn(async () => ({ exists: false })), readAsStringAsync: vi.fn(), deleteAsync: vi.fn(), makeDirectoryAsync: vi.fn(), copyAsync: vi.fn(), moveAsync: vi.fn() }));
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -372,6 +379,46 @@ describe('Your shop (app/shop/mine.tsx)', () => {
         expect(node.log.filter((r) => r.method === 'PUT').length).toBe(puts);
         expect(byTestId('shop-banner-error')).not.toBeNull();
         bannerPick.next = 'data:image/jpeg;base64,/9j/BBBB';
+    });
+
+    it('its banner photo goes through the crop step at 3:1, at the floor in light and dark; the strip chosen is what goes; Cancel sends nothing', async () => {
+        const ImagePicker = await import('expo-image-picker');
+        const ImageManipulator = await import('expo-image-manipulator');
+        vi.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///DCIM/IMG_0001.jpg', width: 4000, height: 3000 }] } as any);
+        vi.mocked(ImageManipulator.manipulateAsync).mockImplementation(async (_uri: string, actions: any[] = []) => (actions.some((a) => a.crop)
+            ? { uri: 'file:///cut.jpg', width: 800, height: 267, base64: 'Q1VU' }
+            : { uri: 'file:///working.jpg', width: 1600, height: 1200 }) as any);
+        bannerPick.real = true;
+        try {
+            for (const dark of [false, true]) {
+                aShopWithThings();
+                theme.dark = dark;
+                node.log.length = 0;
+                await draw(createElement(YourShopScreen));
+                await click('shop-field-banner');
+                expect(vi.mocked(ImagePicker.launchImageLibraryAsync).mock.calls.at(-1)?.[0]).not.toMatchObject({ allowsEditing: true });
+                expect(byTestId('picture-crop')).not.toBeNull();
+                // The crop screen at 320 dp and 1.3× text, in the pseudo-locale: every word through t(), none too wide, every
+                // target 44 dp, every colour a token of the theme it is drawn in.
+                atTheFloor(dark ? darkColors : lightColors);
+                expect(node.log.filter((r) => r.method === 'PUT')).toEqual([]);
+                await click('picture-crop-cancel');
+                expect(byTestId('picture-crop')).toBeNull();
+                expect(node.log.filter((r) => r.method === 'PUT')).toEqual([]);
+                await click('shop-field-banner');
+                await click('picture-crop-done');
+                expect(vi.mocked(ImageManipulator.manipulateAsync).mock.calls.at(-1)).toEqual([
+                    'file:///working.jpg',
+                    [{ crop: { originX: 0, originY: 333, width: 1600, height: 533 } }, { resize: { width: 800, height: 267 } }],
+                    { compress: 0.7, format: 'jpeg', base64: true },
+                ]);
+                expect(node.log.filter((r) => r.method === 'PUT')).toEqual([{ method: 'PUT', path: '/api/shops/mine', body: { photo: 'data:image/jpeg;base64,Q1VU' } }]);
+                act(() => root.unmount());
+                root = createRoot(host);
+            }
+        } finally {
+            bannerPick.real = false;
+        }
     });
 
     it('in English: "<name>\'s shop" for a shop with no name of its own, and the counts in words', async () => {

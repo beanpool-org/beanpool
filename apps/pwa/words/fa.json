@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "ساخت هویت ناموفق بود. لطفاً دوباره تلاش کنید.",
   "Failed to initialize device pairing on node relay": "شروع جفت‌سازی دستگاه روی رلهٔ سرور ناموفق بود",
   "Failed to load image.": "بارگذاری تصویر ناموفق بود.",
-  "Failed to read file.": "خواندن فایل ناموفق بود.",
   "Failed to submit report. Please try again.": "ارسال گزارش ناموفق بود. لطفاً دوباره تلاش کنید.",
   "Find people around a place or an interest, and talk together.": "افرادی را حول یک مکان یا یک علاقه پیدا کنید و با هم گفت‌وگو کنید.",
   "Find them any time under **Settings → Recovery Phrase**.": "هر زمان می‌توانید آن‌ها را در **تنظیمات → عبارت بازیابی** ببینید.",

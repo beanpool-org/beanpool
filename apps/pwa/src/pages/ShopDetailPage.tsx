@@ -47,7 +47,7 @@ export function ShopDetailPage({
     const [logo, setLogo] = useState<string | null>(null);
     const activeReqRef = useRef(0);
 
-    const load = useCallback(async (afresh = false, isCallActive = () => true) => {
+    const load = useCallback(async (afresh = false, isCallActive: () => boolean = () => true) => {
         const reqId = ++activeReqRef.current;
         const isActive = () => activeReqRef.current === reqId && isCallActive();
 

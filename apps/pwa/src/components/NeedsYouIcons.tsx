@@ -93,7 +93,6 @@ export function NeedsYouIcons({
 }) {
     const [entries, setEntries] = useState<NeedsItem[]>([]);
     const [sheet, setSheet] = useState(false);
-    const [containerWidth, setContainerWidth] = useState(0);
     const [maxSlotWidth, setMaxSlotWidth] = useState<number | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -142,7 +141,7 @@ export function NeedsYouIcons({
         // Listen for future Home reads settling
         const unsubscribe = onHomeRead((ans, pk) => {
             if (!mounted) return;
-            if (!pk || pk === identityPubkey) {
+            if (pk === identityPubkey) {
                 setEntries(filterAndSort(ans.cards?.needs?.items ?? []));
             }
         });
@@ -156,7 +155,7 @@ export function NeedsYouIcons({
     // Measure available width for fitting
     useLayoutEffect(() => {
         const el = containerRef.current;
-        if (!el || typeof ResizeObserver === 'undefined') return;
+        if (!el) return;
 
         const header = el.closest('header');
         const checkHeaderWidth = () => {
@@ -175,27 +174,26 @@ export function NeedsYouIcons({
 
         checkHeaderWidth();
 
-        const observer = new ResizeObserver((entriesList) => {
-            for (const entry of entriesList) {
-                if (entry.target === header) {
-                    checkHeaderWidth();
-                } else if (entry.target === el) {
-                    setContainerWidth(entry.contentRect.width);
+        let observer: ResizeObserver | null = null;
+        if (typeof ResizeObserver !== 'undefined' && header) {
+            observer = new ResizeObserver((entriesList) => {
+                for (const entry of entriesList) {
+                    if (entry.target === header) {
+                        checkHeaderWidth();
+                    }
                 }
-            }
-        });
+            });
+            observer.observe(header);
+        }
 
-        observer.observe(el);
-        if (header) observer.observe(header);
         if (typeof window !== 'undefined') {
             window.addEventListener('resize', checkHeaderWidth);
         }
-        if (el.getBoundingClientRect().width > 0) {
-            setContainerWidth(el.getBoundingClientRect().width);
-        }
 
         return () => {
-            observer.disconnect();
+            if (observer) {
+                observer.disconnect();
+            }
             if (typeof window !== 'undefined') {
                 window.removeEventListener('resize', checkHeaderWidth);
             }
@@ -205,9 +203,7 @@ export function NeedsYouIcons({
     if (!identityPubkey || entries.length === 0) return null;
 
     // In unmeasured/jsdom test environments, default width allows showing icons without collapsing
-    const effectiveWidth = maxSlotWidth
-        ? (containerWidth > 0 ? Math.min(containerWidth, maxSlotWidth) : maxSlotWidth)
-        : (containerWidth > 0 ? containerWidth : 240);
+    const effectiveWidth = maxSlotWidth ?? 240;
     const fit = fitNeedsYou(entries, effectiveWidth, HEADER_ALERT_SLOT_PX);
     const byKind = new Map(fit.shown.map(e => [e.kind, e]));
     const rowOrder = needsYouRowOrder(fit);

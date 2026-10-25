@@ -90,7 +90,9 @@ describe('HeaderControls needs-you alert icons', () => {
         );
 
         // Allow any background loads to complete
-        await new Promise(r => setTimeout(r, 50));
+        await act(async () => {
+            await new Promise(r => setTimeout(r, 50));
+        });
 
         // Only the standard 3 pill buttons should be present (profile, help, settings)
         expect(screen.queryByTestId('header-needs-icons')).toBeNull();
@@ -245,13 +247,27 @@ describe('HeaderControls needs-you alert icons', () => {
             answer: makeHomeAnswer([dealItem, voteItem, msgItem, grpItem]) as any,
         });
 
-        // Mock ResizeObserver so the container gets a narrow width (80px -> holds 2 slots of 38px: 1 item + more)
+        // Provide header element with narrow width (400px -> maxSlotWidth = 80px -> holds 2 slots of 38px: 1 item + more)
+        const header = document.createElement('header');
+        document.body.appendChild(header);
+        header.getBoundingClientRect = () => ({
+            width: 400,
+            height: 50,
+            top: 0,
+            left: 0,
+            bottom: 50,
+            right: 400,
+            x: 0,
+            y: 0,
+            toJSON: () => {},
+        });
+
         const originalRO = globalThis.ResizeObserver;
         globalThis.ResizeObserver = class {
             callback: ResizeObserverCallback;
             constructor(cb: ResizeObserverCallback) { this.callback = cb; }
             observe(target: Element) {
-                this.callback([{ target, contentRect: { width: 80 } as any } as any], this as any);
+                this.callback([{ target, contentRect: { width: 400 } as any } as any], this as any);
             }
             unobserve() {}
             disconnect() {}
@@ -265,7 +281,8 @@ describe('HeaderControls needs-you alert icons', () => {
                     identityPubkey={ME.publicKey}
                     onOpenProfile={() => {}}
                     onNavigate={onNavigate}
-                />
+                />,
+                { container: header }
             );
 
             // With 80px room, 2 slots: highest priority (deal) + more (3 more things need you)
@@ -287,6 +304,9 @@ describe('HeaderControls needs-you alert icons', () => {
             expect(screen.queryByTestId('needs-sheet')).toBeNull();
         } finally {
             globalThis.ResizeObserver = originalRO;
+            if (header.parentNode) {
+                document.body.removeChild(header);
+            }
         }
     });
 
@@ -351,8 +371,11 @@ describe('HeaderControls needs-you alert icons', () => {
 
             const iconsContainer = await screen.findByTestId('header-needs-icons');
             expect(iconsContainer).toBeInTheDocument();
-            // Initially wide (800px) -> maxSlotWidth is undefined
+            // Initially wide (800px) -> maxSlotWidth is undefined, all items show
             expect(iconsContainer.style.maxWidth).toBe('');
+            expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+            expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
+            expect(screen.queryByTestId('header-needs-more')).toBeNull();
 
             // Resize header down to 320px
             headerWidth = 320;
@@ -361,6 +384,9 @@ describe('HeaderControls needs-you alert icons', () => {
                 roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
             });
             expect(iconsContainer.style.maxWidth).toBe('40px');
+            expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
+            expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+            expect(screen.queryByTestId('header-needs-vote')).toBeNull();
 
             // Resize back up to 800px via window resize event
             headerWidth = 800;
@@ -368,6 +394,26 @@ describe('HeaderControls needs-you alert icons', () => {
                 window.dispatchEvent(new Event('resize'));
             });
             expect(iconsContainer.style.maxWidth).toBe('');
+            expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+            expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
+            expect(screen.queryByTestId('header-needs-more')).toBeNull();
+
+            // Also verify ResizeObserver on header restores wide state without ratchet
+            headerWidth = 320;
+            act(() => {
+                roCallback?.([{ target: header, contentRect: { width: 320 } as any } as any], {} as any);
+            });
+            expect(iconsContainer.style.maxWidth).toBe('40px');
+            expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
+
+            headerWidth = 800;
+            act(() => {
+                roCallback?.([{ target: header, contentRect: { width: 800 } as any } as any], {} as any);
+            });
+            expect(iconsContainer.style.maxWidth).toBe('');
+            expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+            expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
+            expect(screen.queryByTestId('header-needs-more')).toBeNull();
 
             document.body.removeChild(header);
         } finally {

@@ -62,7 +62,7 @@ A group's chat is end-to-end encrypted: only the group's members can read it, no
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
 - If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**.
 
-In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, search the chat and report someone's message (**Report**, under it). Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
+In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, delete, remove, mute notifications, search the chat and report someone's message (**Report**, under it). Tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
 
 ## Talking in a group's chat
 
@@ -79,7 +79,7 @@ Two or more messages in a row that their authors deleted show as one line, such 
 
 Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
 
-In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. On the phone it can be deleted like any message (the author; a convenor can remove it).
+In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. It can be deleted like any message (the author; a convenor can remove it), on the phone and the web.
 
 A deal cannot be started in a group's chat: deals belong in a chat between two people. See "Messages".
 
@@ -150,7 +150,7 @@ Beside a name in the **Roster**, any convenor can:
 - change a member's or an observer's role (**Role** on the phone, a drop-down in the web app), including making them a convenor;
 - remove a member or an observer (**✕**).
 
-A convenor removes a post from the post itself, and on the phone a message in the chat. A group's name and description cannot be changed in the app yet.
+A convenor removes a post from the post itself, and a message in the chat. A group's name and description cannot be changed in the app yet.
 
 Only the **lead convenor** can remove a convenor, or take the convenor role off someone. Beside a row you cannot act on, no **Role** or **✕** is shown at all — that is the app telling you it is not yours to do.
 

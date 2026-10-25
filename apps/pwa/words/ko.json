@@ -3488,5 +3488,21 @@
   "🌍 Everyone (Public)": "🌍 모든 사람 (공개)",
   "👥 Group ({count})": "👥 그룹 ({count})",
   "🔒 This community's listings are for its members": "🔒 이 커뮤니티의 게시물은 멤버 전용이에요",
-  "🗳️ Poll": "🗳️ 설문"
+  "🗳️ Poll": "🗳️ 설문",
+  "Delete message": "메시지 삭제",
+  "Delete for everyone?": "모든 사람에게서 삭제할까요?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "대화방의 모든 사람에게 \"삭제된 메시지입니다\"라고 표시돼요.",
+  "Remove this message?": "이 메시지를 삭제할까요?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "대화방의 모든 사람에게 \"모임 주최자가 삭제함\"으로 표시돼요.",
+  "Mute notifications": "알림 끄기",
+  "Unmute": "알림 켜기",
+  "For 8 hours": "8시간 동안",
+  "For a week": "1주일 동안",
+  "Always\u0004mute for": "항상",
+  "@mentions still reach you.": "@멘션 알림은 계속 받을 수 있어요.",
+  "Chat menu": "대화 메뉴",
+  "Close menu": "메뉴 닫기",
+  "{n} member · muted|{n} members · muted": {
+    "other": "멤버 {n}명 · 알림 꺼짐"
+  }
 }

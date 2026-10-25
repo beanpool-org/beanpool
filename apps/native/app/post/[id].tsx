@@ -47,6 +47,7 @@ import { readListingShopId, readMyShop } from '../../utils/shop';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
 import { changedElsewhere } from '../../utils/changed-elsewhere';
+import { requestSync } from '../../services/pillar-sync';
 import { signedRequestWords } from '../../components/signed-request-lines';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
@@ -605,8 +606,8 @@ export default function PostDetailModal() {
                             FROM marketplace_transactions t 
                             LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
                             LEFT JOIN members s ON t.seller_pubkey = s.public_key 
-                            WHERE t.id = ?
-                        `, [singleTxId]).then(updateActiveTx);
+                            WHERE t.id = ? AND t.post_id = ?
+                        `, [singleTxId, singleId]).then(updateActiveTx);   // a deal shows only on ITS listing (a hand-made link pairs any)
                     } else if (activeIdentity) {
                         const currentPost = await getPost(singleId);
                         let isKeeper = false;
@@ -1356,7 +1357,6 @@ export default function PostDetailModal() {
                                         } catch(e:any) { 
                                             if (changedElsewhere(e, 'transaction_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
-                                                const { requestSync } = require('../../services/pillar-sync');
                                                 requestSync().catch(console.error);
                                                 if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
                                             } else {
@@ -1646,7 +1646,12 @@ export default function PostDetailModal() {
                                         } catch (e: any) {
                                             if (changedElsewhere(e, 'post_gone')) {
                                                 Alert.alert(t('Already Updated'), t('This post was already accepted or modified elsewhere. Refreshing your screen...'));
-                                                const { requestSync } = require('../../services/pillar-sync');
+                                                requestSync().catch(console.error);
+                                                setShowAcceptConfirm(false);
+                                            } else if (changedElsewhere(e, 'deal_open')) {
+                                                // The member's deal on this listing is under way already (made on another device, or before
+                                                // this screen knew): said, and the listing refreshed, which then shows that deal where Accept was.
+                                                Alert.alert(t('Already under way'), t('You already have a deal under way on this. Finish or cancel it first.'));
                                                 requestSync().catch(console.error);
                                                 setShowAcceptConfirm(false);
                                             } else {

@@ -221,6 +221,21 @@ function lendAskFirst(): Error {
     return Object.assign(new Error(LEND_ASK_FIRST_ERROR), { status: 409, statusCode: 409, code: LEND_ASK_FIRST_CODE });
 }
 
+// ONE OPEN DEAL PER MEMBER PER LISTING (scratch/fable-design/DESIGN-deals-fable.md §0.2 D, S2; Marty, 25 Oct: "I shouldn't be able
+// to buy twice — but it should let me know"). A recurring listing stays on the board while its deals run, so nothing else stopped
+// the same member taking it up again while their first deal was still asked for or held in trust. One open deal, not one deal
+// ever: once it is released, cancelled or declined, the member may take it up again at once. A one-off listing comes off the
+// board once its deal is held, so a second accept there is refused as gone (POST_GONE_CODE) before this is asked. The member's
+// deal is named beside the code, so an app can open it in place of the step it was refused.
+
+/** The refusal to a member who already has a deal under way on a listing: asked for, or held in trust. */
+export const DEAL_OPEN_ERROR = word('You already have a deal under way on this. Finish or cancel it first.');
+export const DEAL_OPEN_CODE = 'deal_open';
+
+function dealOpen(transactionId: string): Error {
+    return Object.assign(new Error(DEAL_OPEN_ERROR), { status: 409, statusCode: 409, code: DEAL_OPEN_CODE, transactionId });
+}
+
 /** A listing row that takes one deal at a time: a one-off Offer or Need, and a lendable Offer (which is repeatable too). */
 function oneDealAtATime(post: { repeatable?: unknown; lendable?: unknown }): boolean {
     return !post.repeatable || post.lendable === 1;
@@ -388,6 +403,12 @@ export function requestPost(
     }
 
     const isOffer = post.type === 'offer';
+    // One open deal per member per listing: a request while the requester's deal on it is held in trust (on a recurring Need,
+    // approved and not yet released) is refused, before the checks that would name another reason. A request still waiting
+    // is answered with itself, below.
+    const underWay = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND buyer_pubkey=? AND seller_pubkey=? AND status='pending' ORDER BY created_at DESC LIMIT 1`)
+        .get(post.id, isOffer ? requesterPublicKey : post.author_pubkey, isOffer ? post.author_pubkey : requesterPublicKey) as { id: string } | undefined;
+    if (underWay) throw dealOpen(underWay.id);
     if (isOffer) {
         if (!hasListedOffer(db, requesterPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     }
@@ -803,6 +824,13 @@ export function acceptPost(
     if (post.type !== 'offer') {
         throw new Error(word('Only Offers can be 1-step accepted'));
     }
+
+    // One open deal per member per listing: refused before the member's own checks below (a second deal's quantity, its
+    // balance), which would name the wrong reason, and before the keeper-pay branch, which records a deferred wage claim as
+    // it refuses. Outside conservingTransaction: a refusal is plain, never a rollback and ledger resync (and nothing between
+    // here and the hold yields, so no second accept can run in between).
+    const openDeal = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND buyer_pubkey=? AND status IN ('requested','pending') ORDER BY created_at DESC LIMIT 1`).get(post.id, buyerPublicKey) as { id: string } | undefined;
+    if (openDeal) throw dealOpen(openDeal.id);
 
     if (!hasListedOffer(db, buyerPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
 

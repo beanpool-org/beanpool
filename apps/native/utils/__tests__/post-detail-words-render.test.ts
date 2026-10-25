@@ -169,9 +169,9 @@ const OTHERS = [
     KOFI.callsign, 'Mia', ME.callsign, 'Garden club', 'Daily Pulse',
 ].sort((a, b) => b.length - a.length);
 
-function answers(post: Record<string, unknown>, db: { first?: (sql: string) => unknown; all?: (sql: string) => unknown[] } = {}) {
+function answers(post: Record<string, unknown>, db: { first?: (sql: string, params?: unknown[]) => unknown; all?: (sql: string) => unknown[] } = {}) {
     const database = {
-        getFirstAsync: async (sql: string) => db.first?.(sql) ?? null,
+        getFirstAsync: async (sql: string, params?: unknown[]) => db.first?.(sql, params) ?? null,
         getAllAsync: async (sql: string) => db.all?.(sql) ?? [],
     };
     const table: Record<string, unknown> = {
@@ -428,6 +428,20 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing(), 'release').toEqual([]);
         await press('❌ Cancel Trust Hold');
         expect(bypassing(), 'the cancel question').toEqual([]);
+    });
+
+    // Deals S2 confirmation: a hand-made link (post/<B>?txId=<a deal on A>) never puts that deal's Release on B.
+    it('a deal id from another listing in the link: no Release on this listing', async () => {
+        const OTHER = { ...HOURLY, id: 'p-other', status: 'active' };
+        // The read as the database answers it: the row only when every bound column matches.
+        const first = (sql: string, params?: unknown[]) => {
+            if (!sql.includes('marketplace_transactions')) return null;
+            if (params?.[0] !== HELD_TX.id) return null;
+            if (sql.includes('t.post_id = ?') && params?.[1] !== HELD_TX.post_id) return null;
+            return HELD_TX;
+        };
+        await open(OTHER, 'xx', { first }, 'tx-held');
+        expect(host.textContent).not.toContain(pseudoLocalise('✅ Release Credits'));
     });
 
     it('a deal held in trust: the one paid', async () => {

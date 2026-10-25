@@ -3860,5 +3860,24 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Повторюється — оголошення лишається чинним для нових бронювань",
   "🔒 This community's listings are for its members": "🔒 Оголошення цієї спільноти — для її учасників",
   "🗳️ Poll": "🗳️ Опитування",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Якщо це вдома в когось, скористайтеся «{approximate}», щоб округлити місце приблизно до 100 м, а точне місце вкажіть у примітці для тих, хто піде."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Якщо це вдома в когось, скористайтеся «{approximate}», щоб округлити місце приблизно до 100 м, а точне місце вкажіть у примітці для тих, хто піде.",
+  "Delete message": "Видалити повідомлення",
+  "Delete for everyone?": "Видалити для всіх?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Для всіх у чаті відображатиметься «Це повідомлення було видалено».",
+  "Remove this message?": "Вилучити це повідомлення?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Для всіх у чаті відображатиметься «Вилучено координатором».",
+  "Mute notifications": "Вимкнути сповіщення",
+  "Unmute": "Увімкнути сповіщення",
+  "For 8 hours": "На 8 годин",
+  "For a week": "На тиждень",
+  "Always\u0004mute for": "Завжди",
+  "@mentions still reach you.": "@згадки все одно надходитимуть.",
+  "Chat menu": "Меню чату",
+  "Close menu": "Закрити меню",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} учасник · без звуку",
+    "few": "{n} учасники · без звуку",
+    "many": "{n} учасників · без звуку",
+    "other": "{n} учасника · без звуку"
+  }
 }

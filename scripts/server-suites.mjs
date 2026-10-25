@@ -392,6 +392,7 @@ export const SUITES = [
     'test-post-pause-resume',
     'test-post-sight',
     'test-cancel-post-request',
+    'test-one-open-deal',
     'test-non-members-cant-act',
     'test-marketplace-auth',
     'test-listing-edit-numbers',

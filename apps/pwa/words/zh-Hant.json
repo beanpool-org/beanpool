@@ -3488,5 +3488,21 @@
   "💸 Cash also needed — for fuel or materials": "💸 另需現金——用於燃料或材料",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 可重複——讓刊登持續有效,以接受後續預約",
   "🔒 This community's listings are for its members": "🔒 這個社群的刊登只供其成員查看",
-  "🗳️ Poll": "🗳️ 投票"
+  "🗳️ Poll": "🗳️ 投票",
+  "Delete message": "刪除訊息",
+  "Delete for everyone?": "為所有人刪除？",
+  "It will read \"This message was deleted\" to everyone in the chat.": "聊天室中的所有人將會看到「此訊息已被刪除」。",
+  "Remove this message?": "要移除這則訊息嗎？",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "聊天室中的所有人將會看到「召集人已移除」。",
+  "Mute notifications": "將通知設為靜音",
+  "Unmute": "取消靜音",
+  "For 8 hours": "8 小時",
+  "For a week": "1 週",
+  "Always\u0004mute for": "永遠",
+  "@mentions still reach you.": "@提及仍會通知你。",
+  "Chat menu": "聊天選單",
+  "Close menu": "關閉選單",
+  "{n} member · muted|{n} members · muted": {
+    "other": "{n} 位成員 · 已設為靜音"
+  }
 }

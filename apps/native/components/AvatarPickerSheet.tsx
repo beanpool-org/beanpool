@@ -1,12 +1,13 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { processProfileImage } from '../utils/image-processing';
+import { pickPicture, type WorkingPicture } from '../utils/picture-crop';
 import { BUNDLED_AVATARS } from '../utils/bundled-avatars';
 import { colors as lightColors, palette, type AppColors } from '../constants/colors';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
-import { t } from '@beanpool/core';
+import { PictureCropView } from './PictureCrop';
+import { AVATAR_PICTURE, t } from '@beanpool/core';
 
 interface AvatarPickerSheetProps {
     visible: boolean;
@@ -53,54 +54,32 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
         setCanScrollRight(prev => (prev === right ? prev : right));
     };
 
-    const handleTakePhotos = async () => {
-        try {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (!perm.granted) {
-                Alert.alert(t('Permission required'), t('Camera access is needed.'));
-                return;
-            }
-            const result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: false
-            });
-            if (!result.canceled && result.assets[0].uri) {
-                setLoading(true);
-                const dataUri = await processProfileImage(result.assets[0].uri);
-                if (dataUri) {
-                    onSelectImage(dataUri);
-                    onClose();
-                } else {
-                    Alert.alert(t('Error'), t('Could not process photo.'));
-                }
-            }
-        } catch (e) {
-            Alert.alert(t('Error'), t('Could not take photo.'));
-        } finally {
-            setLoading(false);
-        }
-    };
+    // A photo, from the camera or the gallery, opens the crop screen in this sheet's place (components/PictureCrop.tsx): the
+    // member moves and zooms it under a circle, and the part in the circle is what is kept, 512 px (Marty, 25 Oct 2026). The
+    // picker never crops by itself. Cancel comes back here with nothing changed.
+    const [cropping, setCropping] = useState<WorkingPicture | null>(null);
+    useEffect(() => { if (!visible) setCropping(null); }, [visible]);
 
-    const handleGallery = async () => {
+    const pickFrom = async (from: 'camera' | 'library') => {
         try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: false
-            });
-            if (!result.canceled && result.assets[0].uri) {
-                setLoading(true);
-                const dataUri = await processProfileImage(result.assets[0].uri);
-                if (dataUri) {
-                    onSelectImage(dataUri);
-                    onClose();
-                } else {
-                    Alert.alert(t('Error'), t('Could not process photo.'));
+            if (from === 'camera') {
+                const perm = await ImagePicker.requestCameraPermissionsAsync();
+                if (!perm.granted) {
+                    Alert.alert(t('Permission required'), t('Camera access is needed.'));
+                    return;
                 }
             }
+            setLoading(true);
+            const picture = await pickPicture(from);
+            if (picture) setCropping(picture);
         } catch (e) {
-            Alert.alert(t('Error'), t('Could not pick image.'));
+            Alert.alert(t('Error'), from === 'camera' ? t('Could not take photo.') : t('Could not pick image.'));
         } finally {
             setLoading(false);
         }
     };
+    const handleTakePhotos = () => pickFrom('camera');
+    const handleGallery = () => pickFrom('library');
 
     const handleSelectBundled = () => {
         if (!selectedAvatarId) return;
@@ -114,8 +93,25 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
             visible={visible}
             animationType="slide"
             transparent={true}
-            onRequestClose={onClose}
+            onRequestClose={cropping ? () => setCropping(null) : onClose}
         >
+            {cropping ? (
+                <PictureCropView
+                    picture={cropping}
+                    shape={AVATAR_PICTURE}
+                    colors={colors}
+                    onCancel={() => setCropping(null)}
+                    onDone={(dataUri) => {
+                        setCropping(null);
+                        onSelectImage(dataUri);
+                        onClose();
+                    }}
+                    onFailed={() => {
+                        setCropping(null);
+                        Alert.alert(t('Error'), t('Could not process photo.'));
+                    }}
+                />
+            ) : (
             <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose}>
                 <Pressable style={[styles.sheet, { maxHeight: layout.maxHeight }]} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
                     {/* Header */}
@@ -232,6 +228,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
                     )}
                 </Pressable>
             </Pressable>
+            )}
         </Modal>
     );
 }

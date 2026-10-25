@@ -7,7 +7,7 @@
  * Tests first:
  * - Phone propose form opens AvatarPickerSheet with presets.
  * - Picking a preset sets the logo to that value (bundled://<id>) and creates enterprise with it.
- * - Picking a photo still works (800 px).
+ * - Picking a photo still works, through the crop step (512 px square; components/PictureCrop.tsx).
  * - Manage logo row opens AvatarPickerSheet with presets.
  * - Picking a preset sets draft.logo to bundled://<id> and saves it.
  * - Picking a photo still works.
@@ -72,6 +72,7 @@ vi.mock('react-native', () => {
         TouchableOpacity: el('div'), SafeAreaView: el('div'), ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
+        PanResponder: { create: () => ({ panHandlers: {} }) },
         Alert: { alert: (title: string, body?: string) => { alerts.said.push(title); if (body) alerts.said.push(body); } },
         Keyboard: { dismiss: vi.fn() },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
@@ -123,6 +124,7 @@ vi.mock('expo-image-manipulator', () => ({
         uri: 'file:///resized.jpg',
         base64: ' UkVTSVpFRF9QSFRPTw==',
         width: actions?.[0]?.resize?.width ?? 800,
+        height: actions?.[0]?.resize?.width ? actions[0].resize.width * 0.75 : 600,
     })),
     SaveFormat: { JPEG: 'jpeg', PNG: 'png' },
 }));
@@ -250,6 +252,12 @@ describe('enterprise logo presets (phone)', () => {
         const galleryBtn = host.querySelector('[aria-label="Choose photo from gallery"]');
         expect(galleryBtn).toBeTruthy();
         await click(galleryBtn, 'Choose photo from gallery');
+
+        // The crop step: the part of the photo that shows in the circle (components/PictureCrop.tsx), then Done.
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(host.querySelector('[data-testid="picture-crop"]'), 'the crop step opens on the photo').toBeTruthy();
+        await click(host.querySelector('[data-testid="picture-crop-done"]'), 'Done');
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 
         // Fill required fields
         const nameInput = host.querySelector('input[placeholder="e.g. Community Tool Shed"]');

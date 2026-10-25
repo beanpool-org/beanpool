@@ -255,3 +255,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `forgetStandby` and `passwordNeeds2faError` helper functions in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage.
 **Learning:** Testing `passwordNeeds2faError` required testing non-403 responses (returns `null`), `password_retired` code (attaches `PASSWORD_RETIRED_HINT`), `password_needs_2fa` code with custom vs default error messages (attaches `PASSWORD_NEEDS_2FA_HINT`), and unrelated 403 error codes.
 **Action:** Continue identifying remaining untested helper functions across `apps/manager/src/lib/`.
+
+## 2026-10-23 - [manager tests] community-shape helpers unit tests
+**Gap:** `hoursWording`, `readDoor`, `readJoinLock`, `doorChangeConsequence`, `unpauseConsequence`, `readKnownFloorSettings`, `readShapeKnownFloor`, `fetchCommunityShape`, `updateCommunityShape`, and `getConsequenceSentence` in `apps/manager/src/lib/community-shape.ts` lacked direct unit test coverage.
+**Learning:** Testing `updateCommunityShape` verified the single change enforcement constraint and error metadata attachment (code, setting, unlock) on HTTP non-ok responses.
+**Action:** Continue identifying utility files and helper functions in `apps/manager/src/lib/` for direct unit test coverage.

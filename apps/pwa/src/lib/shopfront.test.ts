@@ -33,6 +33,13 @@ describe('a listing as the shopfront draws it', () => {
         expect(listing({ photos: [] }).photo).toBeNull();
         expect(listing({ photos: undefined }).photo).toBeNull();
     });
+    it('reads authorTierCredit from authorEnergyCycled when numeric and finite', () => {
+        expect(listing({ authorEnergyCycled: 120 }).authorTierCredit).toBe(120);
+        expect(listing({ authorEnergyCycled: 0 }).authorTierCredit).toBe(0);
+        expect(listing({ authorEnergyCycled: null }).authorTierCredit).toBeNull();
+        expect(listing({ authorEnergyCycled: '100' }).authorTierCredit).toBeNull();
+        expect(listing({ authorEnergyCycled: NaN }).authorTierCredit).toBeNull();
+    });
     it('is none for an event, a poll, or anything that is no listing', () => {
         expect(readShopfrontListing(offer({ type: 'event' }))).toBeNull();
         expect(readShopfrontListing(offer({ type: 'poll' }))).toBeNull();

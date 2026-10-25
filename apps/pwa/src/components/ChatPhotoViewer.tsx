@@ -131,6 +131,8 @@ export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNo
                 className="absolute top-3 right-3 sm:top-6 sm:right-6 min-w-[44px] min-h-[44px] w-11 h-11 sm:w-12 sm:h-12 rounded-full border-0 flex items-center justify-center cursor-pointer text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white transition-opacity"
                 style={{
                     backgroundColor: 'var(--image-viewer-close-bg)',
+                    top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)',
+                    right: 'calc(env(safe-area-inset-right, 0px) + 0.75rem)',
                 }}
             >
                 <span aria-hidden="true" className="text-2xl leading-none font-bold">✕</span>

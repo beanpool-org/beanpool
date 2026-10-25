@@ -109,7 +109,8 @@ export function ChatPhotoViewer({ uri, onClose }: ChatPhotoViewerProps): ReactNo
                 <img
                     src={uri}
                     alt={t('Full-size photo')}
-                    className="pointer-events-auto select-none rounded-lg"
+                    onClick={onClose}
+                    className="pointer-events-auto select-none rounded-lg cursor-pointer"
                     style={{
                         maxWidth: 'min(100%, 800px)',
                         maxHeight: 'min(100%, 800px)',

@@ -216,35 +216,37 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
     const roleWord = rowRoleWord(item.chat);
 
     // Line 2 wording
-    let line2: string;
-    if (isProject) {
-        const raised = item.summary?.currentAmount != null
-            ? item.summary.currentAmount
-            : Math.max(0, item.summary?.balance ?? 0);
-        const goal = item.summary?.goalAmount ?? 0;
-        const daysRemaining = getDaysRemaining(item.summary?.deadlineAt);
-        if (goal > 0) {
-            line2 = daysRemaining
-                ? t('{raised} of {goal} 🫘 raised · {days}', {
-                    raised: formatNumber(raised),
-                    goal: formatNumber(goal),
-                    days: daysRemaining.text,
-                })
-                : t('{raised} of {goal} 🫘 raised', {
-                    raised: formatNumber(raised),
-                    goal: formatNumber(goal),
-                });
+    let line2: string | null = null;
+    if (item.summary) {
+        if (isProject) {
+            const raised = item.summary.currentAmount != null
+                ? item.summary.currentAmount
+                : Math.max(0, item.summary.balance ?? 0);
+            const goal = item.summary.goalAmount ?? 0;
+            const daysRemaining = getDaysRemaining(item.summary.deadlineAt);
+            if (goal > 0) {
+                line2 = daysRemaining
+                    ? t('{raised} of {goal} 🫘 raised · {days}', {
+                        raised: formatNumber(raised),
+                        goal: formatNumber(goal),
+                        days: daysRemaining.text,
+                    })
+                    : t('{raised} of {goal} 🫘 raised', {
+                        raised: formatNumber(raised),
+                        goal: formatNumber(goal),
+                    });
+            } else {
+                line2 = t('Balance {amount} 🫘', { amount: formatNumber(item.summary.balance ?? 0) });
+            }
         } else {
-            line2 = t('Balance {amount} 🫘', { amount: formatNumber(item.summary?.balance ?? 0) });
+            const balance = item.summary.balance ?? 0;
+            const liveOffers = item.summary.liveOffers ?? 0;
+            const offersText = tn(liveOffers, '{n} live offer', '{n} live offers');
+            line2 = t('Balance {amount} 🫘 · {offers}', {
+                amount: formatNumber(balance),
+                offers: offersText,
+            });
         }
-    } else {
-        const balance = item.summary?.balance ?? 0;
-        const liveOffers = item.summary?.liveOffers ?? 0;
-        const offersText = tn(liveOffers, '{n} live offer', '{n} live offers');
-        line2 = t('Balance {amount} 🫘 · {offers}', {
-            amount: formatNumber(balance),
-            offers: offersText,
-        });
     }
 
     const handleRowPress = () => {

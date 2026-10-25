@@ -361,4 +361,13 @@ describe('Commons S3 — Yours first, Find named, explainer gone (phone)', () =>
         const manageBtn = Array.from(host.querySelectorAll('button')).find(b => (b.textContent ?? '').includes('Manage'));
         expect(manageBtn).toBeTruthy();
     });
+
+    it('omits balance line until treasury summary is loaded', async () => {
+        node.treasuries = [];
+        await renderScreen();
+        await click(byLabel('Groups Section'), 'Groups');
+
+        expect(host.textContent).toContain('Community Eggs');
+        expect(host.textContent).not.toContain('Balance 0 🫘');
+    });
 });

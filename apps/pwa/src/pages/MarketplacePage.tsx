@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
@@ -1169,6 +1169,34 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             />
         );
     }
+    // The deals sheet, drawn by the list AND the listing page (its "All your deals ›" opens it there).
+    const dealsModal = (
+        <MyDealsModal
+            visible={showDealsModal}
+            preview={dealsMode === 'preview'}
+            identity={identity}
+            onClose={() => setShowDealsModal(false)}
+            posts={posts}
+            transactions={myTransactions}
+            initialTab={dealsInitialTab}
+            onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
+            onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
+            onNavigateToPost={async (postId, txId) => {
+                setShowDealsModal(false);
+                const found = posts.find(p => p.id === postId);
+                if (found) {
+                    setSelectedPost(found);
+                    if (txId) setSelectedTxId(txId);
+                }
+            }}
+            onPromptReview={(review) => {
+                setShowDealsModal(false);
+                setReviewStars(5);
+                setReviewComment('');
+                setPromptReviewForTx(review);
+            }}
+        />
+    );
     if (selectedPost) {
         if (selectedPost.type === 'event') {
             return (
@@ -1518,16 +1546,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                  {/* Action buttons */}
                  
                  {/* 1. Pending Trust Hold State (Applies to both Payer and Payee) */}
-                 {selectedPost.status === 'pending' && (isPayer || isPayee) && (
+                 {(selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                      <div className="flex flex-col gap-2 mt-4">
                          {isPayer ? (
                              <>
-                                 <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
-                                     {t('✅ Action Required: Release Credits')}
-                                 </p>
+                                 {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
+                                     deal's own date, never the post's while the deals are still loading. */}
+                                 {!isOwnPost && activeTx?.createdAt && (
+                                     <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
+                                         {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                             date: formatDate(new Date(activeTx.createdAt), 'day-month'),
+                                             n: formatNumber(activeTx.credits ?? selectedPost.credits),
+                                         })}
+                                     </p>
+                                 )}
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
-                                     {t('You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.', { name: targetPeerCallsign })}
+                                     {t("Release the Beans when it's done.")}
                                  </p>
+                                 {selectedPost.type === 'offer' && !!selectedPost.repeatable && (
+                                     <p className="text-xs text-nature-500 text-center -mt-1 mb-2 px-4">
+                                         {t('You can take it up again once this one is done.')}
+                                     </p>
+                                 )}
 
                                  {showCompleteConfirm ? (
                                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 shadow-inner mt-2">
@@ -1669,6 +1709,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              }`}
                          >
                              {t('❌ Cancel Hold')}
+                         </button>
+                         <button
+                             type="button"
+                             onClick={() => {
+                                 setDealsInitialTab('pending');
+                                 setShowDealsModal(true);
+                             }}
+                             className="text-xs text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white font-medium text-center mt-1 py-1 transition-colors"
+                         >
+                             {t('All your deals ›')}
                          </button>
                      </div>
                  )}
@@ -2674,6 +2724,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClose={() => setLightboxState(null)}
                     />
                 )}
+                {dealsModal}
             </div>
         );
     }
@@ -3641,30 +3692,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
-            <MyDealsModal
-                visible={showDealsModal}
-                preview={dealsMode === 'preview'}
-                identity={identity}
-                onClose={() => setShowDealsModal(false)}
-                posts={posts}
-                transactions={myTransactions}
-                initialTab={dealsInitialTab}
-                onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
-                onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
-                onNavigateToPost={async (postId, txId) => {
-                    const found = posts.find(p => p.id === postId);
-                    if (found) {
-                        setSelectedPost(found);
-                        if (txId) setSelectedTxId(txId);
-                    }
-                }}
-                onPromptReview={(review) => {
-                    setShowDealsModal(false);
-                    setReviewStars(5);
-                    setReviewComment('');
-                    setPromptReviewForTx(review);
-                }}
-            />
+            {dealsModal}
 
             <PricingGuideModal
                 isOpen={showPricingGuide}

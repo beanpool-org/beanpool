@@ -21,6 +21,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(),
+    getYourGroups: vi.fn(async () => ({ items: [] })),
 }));
 
 const ME: any = { publicKey: 'me-pk', privateKey: 'k', callsign: 'Me', createdAt: '2026-09-01T00:00:00Z' };

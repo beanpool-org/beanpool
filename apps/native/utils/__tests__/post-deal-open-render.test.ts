@@ -250,7 +250,8 @@ describe('a deal already under way on the listing (deal_open)', () => {
         expect(nav.to).toEqual([]);
 
         await syncLands(COURSE_DEAL);
-        expect(host.textContent).toContain('✅ Action Required: Release Credits');
+        // The payer's deal panel (S1's words, both apps): shown in place of Accept.
+        expect(host.textContent).toContain("Release the Beans when it's done.");
         expect(host.textContent).toContain('✅ Release Credits');
         expect(host.textContent).toContain('❌ Cancel Trust Hold');
         expect(host.textContent).not.toContain('🤝 Accept Offer');

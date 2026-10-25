@@ -194,17 +194,6 @@ export function MyDealsModal({
     }, [initialTab, visible]);
 
     // ── Data derivation hooks (placed unconditionally before early return) ──
-    // ⚡ Bolt: O(1) Set lookups for pending transaction post IDs to avoid O(P * T) nested scans in myPosts / pendingDeals filters
-    const pendingTxPostIds = useMemo(() => {
-        const set = new Set<string>();
-        for (const t of transactions) {
-            if (t.status === 'pending') {
-                set.add(t.postId);
-            }
-        }
-        return set;
-    }, [transactions]);
-
     const myPendingTxPostIds = useMemo(() => {
         const set = new Set<string>();
         if (!identity) return set;
@@ -232,16 +221,9 @@ export function MyDealsModal({
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
 
-    const pendingDeals = preview
-        ? []
-        : posts.filter(p => {
-            if (p.status === 'pending' && (p.authorPublicKey === identity?.publicKey || p.acceptedBy === identity?.publicKey)) return true;
-            return pendingTxPostIds.has(p.id);
-        });
-
     const pendingCount = preview
         ? effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested').length
-        : pendingDeals.length + transactions.filter(t => t.status === 'pending').length;
+        : transactions.filter(t => t.status === 'pending').length;
 
     const getData = (): any[] => {
         if (preview) {

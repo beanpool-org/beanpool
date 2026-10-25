@@ -17,6 +17,7 @@ import {
 } from '../lib/api';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
+import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
@@ -189,8 +190,8 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
  * (`bodyFormat`, from the thread check), so no other line's photo, and no old-format picture, can stand in for it.
  * Words that didn't open (`bodyFormat` null) leave the photo locked too.
  */
-function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex }:
-    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 2 | 3 | null; peerPubHex: string; myPrivHex: string }) {
+function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, onOpen }:
+    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 2 | 3 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
@@ -206,7 +207,7 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
         })();
         return () => { active = false; };
     }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex]);
-    return <ChatPhotoShown uri={uri} failed={failed} />;
+    return <ChatPhotoShown uri={uri} failed={failed} onOpen={onOpen} />;
 }
 
 /**
@@ -214,7 +215,7 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
  * (lib/group-chat-lines.ts getDecryptedGroupAttachment): only after its words opened, under the key and signer that opened
  * them, so no other line's, chat's or sender's picture can stand in for it. Drawn as a DM's photo is.
  */
-function GroupChatImageBubble({ photoKey, open }: { photoKey: string; open: () => Promise<string | null> }) {
+function GroupChatImageBubble({ photoKey, open, onOpen }: { photoKey: string; open: () => Promise<string | null>; onOpen?: (uri: string) => void }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
     const openRef = useRef(open);
@@ -228,14 +229,27 @@ function GroupChatImageBubble({ photoKey, open }: { photoKey: string; open: () =
             .catch(() => { if (active) setFailed(true); });
         return () => { active = false; };
     }, [photoKey]);
-    return <ChatPhotoShown uri={uri} failed={failed} />;
+    return <ChatPhotoShown uri={uri} failed={failed} onOpen={onOpen} />;
 }
 
 /** A chat photo in its bubble: the picture once opened, "Loading image…" until then, or "🔒 Image unavailable". */
-function ChatPhotoShown({ uri, failed }: { uri: string | null; failed: boolean }) {
+function ChatPhotoShown({ uri, failed, onOpen }: { uri: string | null; failed: boolean; onOpen?: (uri: string) => void }) {
     if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>{t('🔒 Image unavailable')}</span>;
     if (!uri) return <span style={{ opacity: 0.6 }}>{t('Loading image…')}</span>;
-    return <img src={uri} alt="" style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />;
+    return (
+        <button
+            type="button"
+            aria-label={t('View photo full screen')}
+            onClick={(e) => {
+                e.currentTarget.focus();
+                onOpen?.(uri);
+            }}
+            className="p-0 m-0 border-0 bg-transparent text-left cursor-pointer rounded-xl block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            style={{ maxWidth: '220px', lineHeight: 0 }}
+        >
+            <img src={uri} alt={t('Photo message')} style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />
+        </button>
+    );
 }
 
 export function MessagesPage({ identity, openConversationId, onConversationOpened, onNavigate, onOpenProfile }: Props) {
@@ -264,6 +278,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [groupChat, setGroupChat] = useState<GroupChatView | null>(null);
     // In-thread search (design §10): over the loaded thread only, in this browser.
     const [chatSearch, setChatSearch] = useState<string | null>(null);
+    // Full-screen photo viewer (parity gap 4): the photo tapped in the thread.
+    const [viewerUri, setViewerUri] = useState<string | null>(null);
+    useEffect(() => { setViewerUri(null); }, [activeConv?.id]);
     const activeConvRef = useRef<Conversation | null>(null);
     useLayoutEffect(() => { activeConvRef.current = activeConv; }, [activeConv]);
     // Keys handed to members who lack them, once per group per page (GroupKeyring.serveMissing).
@@ -2380,6 +2397,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                             open={() => getDecryptedGroupAttachment(groupKeysNet, identity, indexedDbGroupLockStore, {
                                                                 groupId: groupIdKey(activeConv.id), line: { ...msg, type: 'image' }, view,
                                                             })}
+                                                            onOpen={setViewerUri}
                                                         />
                                                         {groupLine.text && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -2421,6 +2439,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         bodyFormat={lineView?.format ?? null}
                                                         peerPubHex={ctx.peerEdPubHex}
                                                         myPrivHex={ctx.myEdPrivHex}
+                                                        onOpen={setViewerUri}
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -3087,6 +3106,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         onGroupInfo={() => onNavigate?.('group', groupIdKey(activeConv.id))}
                     />
                 )}
+                {/* A chat photo opened full screen (parity gap 4). */}
+                <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />
             </div>
         );
     }

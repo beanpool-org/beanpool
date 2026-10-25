@@ -14,11 +14,11 @@ On the global community there are no deals, so **My Deals** shows three example 
 
 ## Three tabs
 
-- **In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them).
+- **In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them). The number on the tab counts the cards listed underneath.
 - **My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.
 - **History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person.
 
-In the web app, **In Progress** lists only deals with beans held, so a request waiting for an answer is not there. **My Posts** shows only your live posts, each marked **Active**: paused posts are not listed.
+In the web app, **In Progress** lists only deals with beans held, so a request waiting for an answer is not there. The count matches what is listed, never adding the listing and the deal together. **My Posts** shows only your live posts, each marked **Active**: paused posts are not listed.
 
 Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days.
 

@@ -45,6 +45,8 @@ The price on the post cannot change while someone is asking for it or their bean
 
 A Repeatable post goes back up after each deal, and several people can be in a deal on it at once. Any other post is marked finished.
 
+If you open a Repeatable Offer that you have already taken up, it shows your own deal instead of the Accept button: the date you took it up, the beans held in trust, and the button to release them once it is done.
+
 Each person can be in one deal on a Repeatable post at a time. Taking it up again while yours is under way starts nothing new: the app says **You already have a deal under way on this. Finish or cancel it first.** Once yours is released, cancelled or declined, you can take it up again straight away.
 
 ## Reviews

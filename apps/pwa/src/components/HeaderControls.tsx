@@ -1,6 +1,9 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { t } from '@beanpool/core';
 import { openHelp } from '../lib/tour-store';
+import { NeedsYouIcons } from './NeedsYouIcons';
+
+export { NeedsYouIcons };
 
 /**
  * The pill's width: profile, the "?" and Settings, a third each. Kept at 100 px when the icons grew (14 Oct 2026): three
@@ -121,18 +124,38 @@ const PILL_ICON = 'w-[24px] h-[24px] shrink-0';
  * pill sat under it, dimmed with the photo), still under the map tab's logo where they meet. Settings open: a gold disc with a charcoal icon in it (the pair as the
  * library draws it), so the open state is a filled shape and not a change of colour alone.
  */
-export function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
+export function HeaderControls({
+    showSettings,
+    setShowSettings,
+    identityPubkey,
+    onOpenProfile,
+    onNavigate,
+    activeTab,
+}: {
+    showSettings: boolean;
+    setShowSettings: (v: boolean) => void;
+    identityPubkey?: string;
+    onOpenProfile: (pk: string) => void;
+    onNavigate?: (tab: string, ctxId?: string) => void;
+    activeTab?: string;
+}) {
     return (
-        <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{
-            display: 'flex',
-            alignItems: 'center',
-            borderRadius: '9999px',
-            border: '1px solid var(--border-secondary)',
-            height: '38px',
-            width: `${HEADER_PILL_PX}px`,
-            flexShrink: 0,
-            justifyContent: 'center',
-        }}>
+        <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+            <NeedsYouIcons
+                identityPubkey={identityPubkey}
+                onNavigate={onNavigate}
+                isHome={activeTab === 'home'}
+            />
+            <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{
+                display: 'flex',
+                alignItems: 'center',
+                borderRadius: '9999px',
+                border: '1px solid var(--border-secondary)',
+                height: '38px',
+                width: `${HEADER_PILL_PX}px`,
+                flexShrink: 0,
+                justifyContent: 'center',
+            }}>
             <button
                 onClick={() => identityPubkey && onOpenProfile(identityPubkey)}
                 aria-label={t('My profile')}
@@ -169,6 +192,7 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
                     </svg>
                 </span>
             </button>
+            </div>
         </div>
     );
 }

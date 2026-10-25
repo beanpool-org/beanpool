@@ -4,20 +4,20 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { capitalFirst, t, tn } from '@beanpool/core';
+import { capitalFirst, fitNeedsYou, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
 import { canManageNode, type AdminQueueItem, type SettingsSection } from './node-role';
 
-export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
+export {
+    fitNeedsYou, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder,
+    type NeedsYouKind,
+};
 
-/**
- * Highest first. The highest sits nearest the invite/Settings/avatar group and keeps its spot as others
- * come and go; the lowest are the first to fold into "•••". Admin work (🛡️, owners, admins and moderators only) comes
- * first: a report or an emergency suspension can be urgent.
- */
-export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'invite', 'message', 'group'];
+export function moreLabel(hidden: number): string {
+    return tn(hidden, '{n} more thing needs you', '{n} more things need you');
+}
 
 /** Where a tap lands: {@link needsTargetHref} names the screen, and the component navigates there. */
 export type NeedsYouTarget =
@@ -304,45 +304,4 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
 
     const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);
     return out.sort((a, b) => rank(a.kind) - rank(b.kind));
-}
-
-export const NEEDS_YOU_SLOT = 48;
-
-/**
- * What fits in a slot this wide, every target 48dp. When there are more kinds than slots, the last slot
- * becomes "•••" for the rest. Nothing shows until the slot has been measured.
- */
-export function fitNeedsYou(entries: NeedsYouEntry[], width: number, slot = NEEDS_YOU_SLOT): { shown: NeedsYouEntry[]; hidden: number } {
-    const slots = Math.floor(width / slot);
-    if (slots <= 0) return { shown: [], hidden: 0 };
-    if (entries.length <= slots) return { shown: entries, hidden: 0 };
-    const shown = entries.slice(0, slots - 1);
-    return { shown, hidden: entries.length - shown.length };
-}
-
-/**
- * Left to right, as drawn: the row is right-aligned against the invite/Settings/avatar group, so the
- * highest priority is last (rightmost) and "•••" is first (nearest the bean).
- */
-export function needsYouRowOrder(fit: { shown: NeedsYouEntry[]; hidden: number }): (NeedsYouKind | 'more')[] {
-    const kinds: (NeedsYouKind | 'more')[] = fit.shown.map(e => e.kind).reverse();
-    return fit.hidden > 0 ? ['more', ...kinds] : kinds;
-}
-
-export function moreLabel(hidden: number): string {
-    return tn(hidden, '{n} more thing needs you', '{n} more things need you');
-}
-
-/**
- * A socket event that changes one of this member's own invitations to a group: one made (`group_member_invited`, which
- * the node sends to the group's convenors and the member invited), or one taken up, declined or withdrawn (the row
- * updated or removed, which the member's own sockets get too). The header then reads the node itself rather than draw
- * Home's answer from before it (NeedsYouIcons), so the line comes and goes without a reload.
- */
-export function isOwnInviteChange(data: unknown, me: string | null | undefined): boolean {
-    if (!me || !data || typeof data !== 'object') return false;
-    const d = data as { type?: unknown; member?: { memberPubkey?: unknown } | null; memberPubkey?: unknown };
-    if (d.type === 'group_member_invited' || d.type === 'group_member_updated') return d.member?.memberPubkey === me;
-    if (d.type === 'group_member_removed') return d.memberPubkey === me;
-    return false;
 }

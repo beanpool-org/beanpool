@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import * as api from '../lib/api';
 import { HeaderControls } from './HeaderControls';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
+import { resetHomeStoreForTests } from '../lib/home-store';
+
+beforeEach(() => {
+    resetHomeStoreForTests();
+});
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    resetHomeStoreForTests();
 });
 
 const ME = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Zara' };
@@ -148,7 +154,7 @@ describe('HeaderControls needs-you alert icons', () => {
         const voteBtn = screen.getByRole('button', { name: 'Vote closes tomorrow' });
         expect(voteBtn).toBeInTheDocument();
         fireEvent.click(voteBtn);
-        expect(onNavigate).toHaveBeenCalledWith('projects', undefined);
+        expect(onNavigate).toHaveBeenCalledWith('projects');
 
         // 3. Message
         const msgBtn = screen.getByRole('button', { name: 'Unread message from Ana' });
@@ -193,10 +199,94 @@ describe('HeaderControls needs-you alert icons', () => {
         // Wait for Home page to load
         await screen.findByTestId('home-card-community');
 
-        // Expect envelope icon to show in header
-        await screen.findByRole('button', { name: "You're invited to join Garden Club" });
+        // Header controls alert icon shows the envelope!
+        const headerIcons = await screen.findByTestId('header-needs-icons');
+        const headerEnvelope = within(headerIcons).getByRole('button', { name: "You're invited to join Garden Club" });
+        expect(headerEnvelope).toBeInTheDocument();
 
         // Exactly one getHome fetch was made, shared between Home and HeaderControls!
         expect(getHomeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('collapses into ••• when width is narrow and opens Needs you sheet', async () => {
+        const onNavigate = vi.fn();
+        const dealItem: NeedsItem = {
+            kind: 'deal',
+            count: 1,
+            accent: true,
+            label: 'A deal is waiting for you',
+            target: { to: 'deal', postId: 'post-1', txId: 'tx-1' },
+        };
+        const voteItem: NeedsItem = {
+            kind: 'vote',
+            count: 1,
+            accent: true,
+            label: 'Vote closes tomorrow',
+            target: { to: 'decide' },
+        };
+        const msgItem: NeedsItem = {
+            kind: 'message',
+            count: 1,
+            accent: false,
+            label: 'Unread message from Ana',
+            target: { to: 'chat', conversationId: 'dm-ana' },
+        };
+        const grpItem: NeedsItem = {
+            kind: 'group',
+            count: 1,
+            accent: false,
+            label: '2 new lines in Choir',
+            target: { to: 'chat', conversationId: 'grp-choir' },
+        };
+
+        vi.spyOn(api, 'getHome').mockResolvedValue({
+            notModified: false,
+            etag: 'W/"home-all"',
+            answer: makeHomeAnswer([dealItem, voteItem, msgItem, grpItem]) as any,
+        });
+
+        // Mock ResizeObserver so the container gets a narrow width (80px -> holds 2 slots of 38px: 1 item + more)
+        const originalRO = globalThis.ResizeObserver;
+        globalThis.ResizeObserver = class {
+            callback: ResizeObserverCallback;
+            constructor(cb: ResizeObserverCallback) { this.callback = cb; }
+            observe(target: Element) {
+                this.callback([{ target, contentRect: { width: 80 } as any } as any], this as any);
+            }
+            unobserve() {}
+            disconnect() {}
+        } as any;
+
+        try {
+            render(
+                <HeaderControls
+                    showSettings={false}
+                    setShowSettings={() => {}}
+                    identityPubkey={ME.publicKey}
+                    onOpenProfile={() => {}}
+                    onNavigate={onNavigate}
+                />
+            );
+
+            // With 80px room, 2 slots: highest priority (deal) + more (3 more things need you)
+            const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
+            expect(dealBtn).toBeInTheDocument();
+
+            const moreBtn = screen.getByRole('button', { name: '3 more things need you' });
+            expect(moreBtn).toBeInTheDocument();
+
+            // Clicking more opens the sheet
+            fireEvent.click(moreBtn);
+            expect(screen.getByTestId('needs-sheet')).toBeInTheDocument();
+            expect(screen.getByText('Needs you')).toBeInTheDocument();
+
+            // Clicking an item in the sheet navigates and closes sheet
+            const sheetMsg = screen.getByRole('button', { name: 'Unread message from Ana' });
+            fireEvent.click(sheetMsg);
+            expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-ana');
+            expect(screen.queryByTestId('needs-sheet')).toBeNull();
+        } finally {
+            globalThis.ResizeObserver = originalRO;
+        }
     });
 });

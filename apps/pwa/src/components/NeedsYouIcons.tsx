@@ -1,0 +1,291 @@
+/**
+ * Small icons in the web header showing what needs you right now.
+ * Parity with the phone's apps/native/components/NeedsYouIcons.tsx.
+ *
+ * Shown to members only, between the title/logo and the pill.
+ * Stacks from the right: the highest-priority icon sits nearest the pill.
+ * When several needs show and width is constrained (e.g. 320 px × 130%),
+ * collapses into "•••" which opens the "Needs you" sheet.
+ */
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { fitNeedsYou, needsYouRowOrder, NEEDS_YOU_PRIORITY, type NeedsYouKind } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
+import type { NeedsItem, NeedsTarget } from '../lib/home-cards';
+import { freshHomeForHeader, homeForHeader, onHomeRead, HOME_HEADER_WAIT_MS } from '../lib/home-store';
+import { getHome } from '../lib/api';
+
+export function moreLabel(hidden: number): string {
+    return tn(hidden, '{n} more thing needs you', '{n} more things need you');
+}
+
+/** Where a tap on a need lands in the web app. Parity with HomePage.tsx:1802-1820. */
+export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string) => void): void {
+    if (!onNavigate) return;
+    switch (target.to) {
+        case 'deal': return onNavigate('marketplace', target.postId);
+        case 'my-deals': return onNavigate('marketplace');
+        case 'decide': return onNavigate('projects');
+        case 'chat': return onNavigate('messages', target.conversationId);
+        case 'unread-messages': case 'your-groups': return onNavigate('messages');
+        case 'enterprise': return onNavigate('enterprise', target.id);
+        case 'group': return onNavigate('group', target.id);
+        case 'invite': return onNavigate('group', target.id);
+        case 'invites': return onNavigate('projects');
+        default: return undefined;
+    }
+}
+
+/** Slot width in pixels for each header alert icon. */
+export const HEADER_ALERT_SLOT_PX = 38;
+
+function NeedSvg({ kind }: { kind: NeedsYouKind | 'more' }) {
+    switch (kind) {
+        case 'invite':
+            return (
+                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="invite">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+            );
+        case 'deal':
+            return (
+                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="deal">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m11 17 2 2a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4l-2-2m-2-2-2-2a1 1 0 0 0-1.4 0L4 13.6a1 1 0 0 0 0 1.4l2 2m12-7 2.3-2.3a1 1 0 0 0 0-1.4l-2.6-2.6a1 1 0 0 0-1.4 0L12 8m1 7 2.3 2.3a1 1 0 0 0 1.4 0l2.6-2.6a1 1 0 0 0 0-1.4L17 11" />
+                </svg>
+            );
+        case 'vote':
+            return (
+                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="vote">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" />
+                </svg>
+            );
+        case 'message':
+            return (
+                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="message">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a.75.75 0 0 1-.974-.974 5.96 5.96 0 0 1 1.057-4.035C4.54 14.654 4 13.38 4 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+                </svg>
+            );
+        case 'group':
+            return (
+                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="group">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                </svg>
+            );
+        case 'more':
+            return (
+                <svg className="w-[20px] h-[20px] shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true" data-kind="more">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+                </svg>
+            );
+        default:
+            return null;
+    }
+}
+
+export function NeedsYouIcons({
+    identityPubkey,
+    onNavigate,
+    isHome = false,
+}: {
+    identityPubkey?: string;
+    onNavigate?: (tab: string, ctxId?: string) => void;
+    isHome?: boolean;
+}) {
+    const [entries, setEntries] = useState<NeedsItem[]>([]);
+    const [sheet, setSheet] = useState(false);
+    const [containerWidth, setContainerWidth] = useState(0);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+
+    // Filter out 'admin' (which requires phone unlock and has no web equivalent)
+    const filterAndSort = useCallback((items: NeedsItem[]) => {
+        const supported = items.filter(i => (i.kind as string) !== 'admin');
+        const rank = (k: NeedsYouKind) => NEEDS_YOU_PRIORITY.indexOf(k);
+        return [...supported].sort((a, b) => rank(a.kind) - rank(b.kind));
+    }, []);
+
+    // Load initial data and subscribe to Home reads
+    useEffect(() => {
+        if (!identityPubkey) {
+            setEntries([]);
+            return;
+        }
+
+        let mounted = true;
+
+        // Draw initial data if already fresh in store
+        const fresh = freshHomeForHeader(identityPubkey);
+        if (fresh?.cards?.needs?.items) {
+            setEntries(filterAndSort(fresh.cards.needs.items));
+        }
+
+        // Home's answer or fetch if needed
+        homeForHeader(identityPubkey, isHome ? HOME_HEADER_WAIT_MS : 0).then((ans) => {
+            if (!mounted) return;
+            if (ans?.cards?.needs?.items) {
+                setEntries(filterAndSort(ans.cards.needs.items));
+            } else if (!isHome) {
+                // Not on Home and no fresh copy: fetch cards=needs
+                getHome({ cards: ['needs'] }).then((read) => {
+                    if (!mounted || read.notModified) return;
+                    if (read.answer?.cards?.needs?.items) {
+                        setEntries(filterAndSort(read.answer.cards.needs.items));
+                    }
+                }).catch(() => {
+                    // Network errors keep whatever was drawn
+                });
+            }
+        });
+
+        // Listen for future Home reads settling
+        const unsubscribe = onHomeRead((ans, pk) => {
+            if (!mounted) return;
+            if (!pk || pk === identityPubkey) {
+                setEntries(filterAndSort(ans.cards?.needs?.items ?? []));
+            }
+        });
+
+        return () => {
+            mounted = false;
+            unsubscribe();
+        };
+    }, [identityPubkey, isHome, filterAndSort]);
+
+    // Measure available width for fitting
+    useLayoutEffect(() => {
+        const el = containerRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+
+        const observer = new ResizeObserver((entriesList) => {
+            for (const entry of entriesList) {
+                setContainerWidth(entry.contentRect.width);
+            }
+        });
+
+        observer.observe(el);
+        if (el.getBoundingClientRect().width > 0) {
+            setContainerWidth(el.getBoundingClientRect().width);
+        }
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [entries.length]);
+
+    if (!identityPubkey || entries.length === 0) return null;
+
+    // In unmeasured/jsdom test environments, default width allows showing icons without collapsing
+    const effectiveWidth = containerWidth > 0 ? containerWidth : 240;
+    const fit = fitNeedsYou(entries, effectiveWidth, HEADER_ALERT_SLOT_PX);
+    const byKind = new Map(fit.shown.map(e => [e.kind, e]));
+    const rowOrder = needsYouRowOrder(fit);
+
+    return (
+        <div
+            ref={containerRef}
+            data-testid="header-needs-icons"
+            className="flex items-center justify-end min-w-0 flex-shrink"
+            style={{ height: `${HEADER_ALERT_SLOT_PX}px` }}
+        >
+            {rowOrder.map(k => {
+                if (k === 'more') {
+                    const label = moreLabel(fit.hidden);
+                    return (
+                        <button
+                            key="more"
+                            onClick={() => setSheet(true)}
+                            aria-label={label}
+                            title={label}
+                            data-testid="header-needs-more"
+                            className="relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill text-white shrink-0"
+                            style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: `${HEADER_ALERT_SLOT_PX}px` }}
+                        >
+                            <NeedSvg kind="more" />
+                        </button>
+                    );
+                }
+
+                const entry = byKind.get(k);
+                if (!entry) return null;
+                const isAccent = entry.accent;
+
+                return (
+                    <button
+                        key={k}
+                        onClick={() => goToWebNeedsTarget(entry.target, onNavigate)}
+                        aria-label={entry.label}
+                        title={entry.label}
+                        data-testid={`header-needs-${k}`}
+                        data-kind={k}
+                        className={`relative flex items-center justify-center p-0 border-0 bg-transparent cursor-pointer rounded-full transition-colors hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill shrink-0 ${
+                            isAccent ? 'text-amber-300' : 'text-white'
+                        }`}
+                        style={{ width: `${HEADER_ALERT_SLOT_PX}px`, height: `${HEADER_ALERT_SLOT_PX}px` }}
+                    >
+                        <NeedSvg kind={k} />
+                        {entry.count > 1 && (
+                            <span
+                                className={`absolute top-1 right-1 min-w-[15px] h-[15px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none pointer-events-none ${
+                                    isAccent ? 'bg-amber-300 text-stone-900' : 'bg-white/90 text-stone-900'
+                                }`}
+                            >
+                                {entry.count > 9 ? '9+' : entry.count}
+                            </span>
+                        )}
+                    </button>
+                );
+            })}
+
+            {sheet && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-16 px-4"
+                    onClick={() => setSheet(false)}
+                    data-testid="needs-sheet-backdrop"
+                >
+                    <div
+                        className="w-full max-w-sm bg-surface-card rounded-2xl shadow-xl overflow-hidden border border-border-secondary p-3 animate-fade-in"
+                        onClick={e => e.stopPropagation()}
+                        data-testid="needs-sheet"
+                    >
+                        <div className="flex items-center justify-between pb-2 border-b border-border-secondary px-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                                {t('Needs you')}
+                            </span>
+                            <button
+                                onClick={() => setSheet(false)}
+                                aria-label={t('Close')}
+                                className="text-text-muted hover:text-text-primary p-1 rounded-full"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="py-1 max-h-[60vh] overflow-y-auto">
+                            {entries.map((e) => (
+                                <button
+                                    key={e.kind}
+                                    onClick={() => {
+                                        setSheet(false);
+                                        goToWebNeedsTarget(e.target, onNavigate);
+                                    }}
+                                    aria-label={e.label}
+                                    className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer"
+                                >
+                                    <span className={e.accent ? 'text-amber-500 dark:text-amber-400' : 'text-text-secondary'}>
+                                        <NeedSvg kind={e.kind} />
+                                    </span>
+                                    <span className={`flex-1 text-sm text-text-heading ${e.accent ? 'font-bold' : 'font-medium'} line-clamp-2`}>
+                                        {e.label}
+                                    </span>
+                                    <svg className="w-4 h-4 text-text-muted shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                    </svg>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

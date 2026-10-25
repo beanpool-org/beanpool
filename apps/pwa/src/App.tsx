@@ -987,6 +987,8 @@ export function App() {
                         setShowSettings={setSettingsFromCog}
                         identityPubkey={identity?.publicKey}
                         onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                        activeTab={activeTab}
                     />
                 </header>
 

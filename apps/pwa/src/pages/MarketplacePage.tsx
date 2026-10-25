@@ -53,7 +53,7 @@ import {
     getNodeInfo, getRemotePosts, sendRemoteTransfer,
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
-    requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
+    requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -1955,7 +1955,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                                 setShowAcceptConfirm(false);
                                             } catch (err) {
-                                                alert(explainTradeError(err));
+                                                // The member's deal on this listing is under way already (made in another tab or on their
+                                                // phone): said, their deals refreshed, and the listing opened at the deal the node named, as
+                                                // My Deals' View deal opens one.
+                                                const open = openDealIn(err);
+                                                if (open) {
+                                                    alert(t('You already have a deal under way on this. Finish or cancel it first.'));
+                                                    setShowAcceptConfirm(false);
+                                                    if (open.transactionId) setSelectedTxId(open.transactionId);
+                                                    refresh();
+                                                    onRefreshTransactions?.();
+                                                } else {
+                                                    alert(explainTradeError(err));
+                                                }
                                             } finally {
                                                 setAccepting(false);
                                             }

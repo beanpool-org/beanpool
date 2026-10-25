@@ -226,6 +226,8 @@ async function refusalError(res: Response): Promise<Error> {
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
+    // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
+    if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
     return error;
 }
 
@@ -1679,6 +1681,20 @@ export async function requestMarketplacePost(
     postId: string, buyerPublicKey: string, hours?: number
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
     return request('POST', '/api/marketplace/posts/request', { postId, buyerPublicKey, hours });
+}
+
+/**
+ * The code beside an accept or a request refused because the member already has a deal under way on that listing, asked
+ * for or held in trust (the node's apps/server engine/escrow.ts DEAL_OPEN_CODE). Its sentence is the member's language and
+ * is never read.
+ */
+export const DEAL_OPEN_CODE = 'deal_open';
+
+/** The member's deal under way that a refused accept or request names (`{}` when the node named none), or null for any other refusal. */
+export function openDealIn(e: unknown): { transactionId?: string } | null {
+    const err = (e ?? {}) as { code?: unknown; transactionId?: unknown };
+    if (err.code !== DEAL_OPEN_CODE) return null;
+    return typeof err.transactionId === 'string' ? { transactionId: err.transactionId } : {};
 }
 
 export async function approveMarketplaceRequest(

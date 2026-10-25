@@ -11,6 +11,8 @@
  *      them; a `missing` list naming them gets them no top-up (top-ups only to the epoch's signed record's members);
  *   3. across clients: Ana's web line opens with the phone's own crypto module (apps/native/utils/group-chat-crypto.ts)
  *      under Ben's key in the phone's form, and a line the phone module seals as Ben is drawn under Ben on the web;
+ *   1b. a member reports someone else's line (group chat photos S6): Report under it, the report card at 320 px with 1.3x
+ *      text in light and dark, and the node holds one report naming that line with its key, which opens that line alone;
  *   4. the review of #1816's checks: R1 an unsealed row in a locked chat is "Unverified"; R2 a held group opened from
  *      Home's "Your groups", left out of the node's list while the node answers the event-chat route, opens as its group
  *      chat and sends sealed; R3 no request of either browser, in the whole run, carries a sent line's words; R4 what
@@ -24,7 +26,7 @@
  * GC_SHOTS a folder for screenshots; GC_REQLOG_DIR a folder for every request and each browser's storage.
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, Buffer, fetch, console, process, setTimeout, document, indexedDB, localStorage, sessionStorage -- Node, and the page's side of evaluate() */
+/* global URL, Buffer, fetch, console, process, setTimeout, document, indexedDB, localStorage, sessionStorage, getComputedStyle -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -107,17 +109,17 @@ async function startNode(root, members) {
 const REQS = [];
 const SHOTS = process.env.GC_SHOTS || '';
 async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }).catch((e) => console.error('shot', name, e?.message)); }
-async function openAs(browser, origin, identity) {
+async function openAs(browser, origin, identity, theme = 'light') {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
     context.on('request', (req) => REQS.push({ who: identity.callsign, method: req.method(), url: req.url(), body: req.postData() ?? '' }));
     const otherHosts = new Set();
-    await context.addInitScript(() => {
+    await context.addInitScript((mode) => {
         try {
-            localStorage.setItem('beanpool-theme-mode', 'light');
+            localStorage.setItem('beanpool-theme-mode', mode);
             localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
-    });
+    }, theme);
     await context.route((url) => url.hostname !== 'localhost', (route) => {
         otherHosts.add(new URL(route.request().url()).hostname);
         return route.abort();
@@ -243,6 +245,58 @@ async function main() {
         check(stored.length === 2 && stored.every((r) => String(r.nonce).startsWith(GROUP_NONCE_PREFIX)),
             `the messages table holds the members' 2 lines, both sealed group lines (${stored.map((r) => String(r.nonce).slice(0, 15)).join(', ')})`);
         check(readable.length === 0, `no readable words in the messages table (${readable.length} rows readable)`);
+
+        console.log('1b. Ana reports Ben\'s line, with its key (S6)');
+        const reportOn = a.page.getByRole('button', { name: 'Report message' });
+        check(await reportOn.count() === 1, `Report is offered under Ben's line, and not under Ana's own (${await reportOn.count()})`);
+        await reportOn.first().scrollIntoViewIfNeeded();
+        await shot(a.page, '1b-ana-report-under-bens-line');
+        await reportOn.first().click();
+        const card = a.page.getByRole('dialog');
+        await card.getByText('Report this message').waitFor({ timeout: 10_000 });
+        const note = await card.getByTestId('report-note').textContent();
+        check(note.includes('will see this one message and who sent it'), `the card says what the moderators get ("${note.trim()}")`);
+        await card.getByRole('button', { name: 'Offensive content' }).click();
+        await card.getByRole('textbox').fill('Not the first time this week.');
+        await noSidewaysScroll(a.page, "Ana's report card");
+        // The chips and Submit fade to their picked colours (transition-all): the picture is taken once they have.
+        await a.page.waitForTimeout(400);
+        const submitFill = await card.getByRole('button', { name: 'Submit Report' }).evaluate((b) => getComputedStyle(b).backgroundColor);
+        check(submitFill === 'rgb(185, 28, 28)', `with a reason picked, Submit is the danger fill (${submitFill})`);
+        await shot(a.page, '1b-ana-report-card');
+        await card.getByRole('button', { name: 'Submit Report' }).click();
+        await card.getByTestId('report-sent').waitFor({ timeout: 10_000 });
+        await shot(a.page, '1b-ana-report-sent');
+        const bens = stored.find((r) => r.author === ben.publicKey);
+        const reports = await node.ask({ op: 'sql', sql: 'SELECT reporter_pubkey AS reporter, target_pubkey AS target, target_message_id AS line, disclosure, reason FROM abuse_reports', all: true });
+        check(reports.length === 1 && reports[0].reporter === ana.publicKey && reports[0].target === ben.publicKey && reports[0].line === bens?.id
+            && reports[0].reason === 'Offensive content: Not the first time this week.',
+            `the node holds one report: Ana's, of Ben's line, with her reason (${JSON.stringify(reports.map((r) => [r.reporter.slice(0, 8), r.line, r.reason]))})`);
+        const { openGroupLineWithMessageKey } = await import('@beanpool/core');
+        const disclosure = JSON.parse(reports[0]?.disclosure ?? '{}');
+        const mk = new Uint8Array(Buffer.from(disclosure.mk ?? '', 'base64'));
+        const opensAs = (r) => {
+            try {
+                const meta = JSON.parse(r.metadata);
+                return openGroupLineWithMessageKey({ ciphertext: r.ciphertext, nonce: r.nonce },
+                    { groupId: G, epoch: meta.epoch, senderPubHex: meta.sender ?? r.author, messageId: r.id, part: 'body', replyToId: meta.replyToId ?? null }, mk).text;
+            } catch { return null; }
+        };
+        check(opensAs(bens) === 'I will bring the gloves' && stored.filter((r) => r.id !== bens?.id).every((r) => opensAs(r) === null),
+            'its key opens Ben\'s line, as his, and no other line in the chat');
+        // The same in the dark, in a browser of Ana's of its own (closed again: R5 counts her tabs).
+        const dark = await openAs(browser, node.origin, ana, 'dark');
+        await openGroupChat(dark.page, node, 'Garden group');
+        await dark.page.getByText('I will bring the gloves').waitFor({ timeout: 20_000 });
+        await dark.page.getByRole('button', { name: 'Report message' }).first().scrollIntoViewIfNeeded();
+        await shot(dark.page, '1b-ana-report-under-bens-line-dark');
+        await dark.page.getByRole('button', { name: 'Report message' }).first().click();
+        await dark.page.getByRole('dialog').getByText('Report this message').waitFor({ timeout: 10_000 });
+        await dark.page.getByRole('dialog').getByRole('button', { name: 'Spam or scam' }).click();
+        await noSidewaysScroll(dark.page, "Ana's report card, dark");
+        await dark.page.waitForTimeout(400);
+        await shot(dark.page, '1b-ana-report-card-dark');
+        await dark.context.close();
 
         console.log('2. A dishonest node');
         // The node now says the chat isn't locked, and still serves the keys: the line goes sealed.

@@ -49,6 +49,7 @@ import { getConnectors } from '../connector-manager.js';
 import { gatewayAllowlistRefusal, removedGatewaySwitchRefusal } from '../config/gateway.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
+import { openReportedGroupLine } from '../engine/group-chat-report.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
@@ -1993,6 +1994,24 @@ router.get('/api/local/admin/reports', async (ctx) => {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to fetch abuse reports' };
     }
+});
+
+/**
+ * GET /api/local/admin/reports/:id/message — the one group chat message a report names, opened with the key its reporter
+ * handed over (engine/group-chat-report.ts openReportedGroupLine): its words and its photo, each verified against the key
+ * that signed it or "could not be verified", and nothing else of the chat. 404 for a report of a post, a Pulse item or a
+ * member. Owners, admins and moderators (admin-auth.ts MODERATOR_ROUTES); no cache keeps it.
+ */
+router.get('/api/local/admin/reports/:id/message', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const message = await openReportedGroupLine(ctx.params.id);
+    if (!message) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'This report does not name a message' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { success: true, message };
 });
 
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {

@@ -17,6 +17,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
+import { ReportedGroupMessage } from './ReportedGroupMessage';
 import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
@@ -554,6 +555,16 @@ export function PeopleSafetySection({
                                                 <p className="text-xs text-white m-0">
                                                     {report.reason || report.description || 'No reason provided'}
                                                 </p>
+                                                {report.targetMessageId && report.id && (
+                                                    // A locked group chat's message, reported with its key (server: engine/group-chat-report.ts).
+                                                    <ReportedGroupMessage
+                                                        nodeUrl={activeNode.url}
+                                                        reportId={String(report.id)}
+                                                        groupName={report.groupMessage?.groupName}
+                                                        adminPassword={nodeCredential(activeNode)}
+                                                        tfaToken={getTfaSessionToken(activeNode.id)}
+                                                    />
+                                                )}
                                                 {Boolean(report.pulseItem) && report.pulseItem && (
                                                     <div className="text-xs text-nature-300 flex flex-wrap items-center gap-2" data-testid="pulse-report-item">
                                                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-200 border border-nature-700">

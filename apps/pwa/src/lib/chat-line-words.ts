@@ -34,6 +34,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment.": word("This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment."),
     "It isn't sealed, so nothing shows who wrote it.": word("It isn't sealed, so nothing shows who wrote it."),
     "This message's key isn't in this browser, so it can't be edited here.": word("This message's key isn't in this browser, so it can't be edited here."),
+    "This message's key isn't in this browser, so it can't be reported from here.": word("This message's key isn't in this browser, so it can't be reported from here."),
     'Failed to edit message.': word('Failed to edit message.'),
     'This message was deleted': word('This message was deleted'),
     'Removed by a convenor': word('Removed by a convenor'),

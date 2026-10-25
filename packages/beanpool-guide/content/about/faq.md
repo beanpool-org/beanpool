@@ -77,4 +77,4 @@ You can delete your account in Settings. First finish or cancel any open trades.
 
 ## Something is wrong or could be better. Who do I tell?
 
-For problems with a person or a trade, talk to the admins of your community. To report a post, an event or a Pulse post, tap its **🚩 Report** flag (on the phone, a post's button says **Report Post**). In the web app a chat with one person has a **Report** button too. Your community's admins are told. Pick **Child safety** if a child may be at risk. See "Reporting a problem". For ideas about the app itself, visit beanpool.org.
+For problems with a person or a trade, talk to the admins of your community. To report a post, an event or a Pulse post, tap its **🚩 Report** flag (on the phone, a post's button says **Report Post**). In a group's chat, tap a message and then the flag to report it (in the web app, **Report** under it). In the web app a chat with one person has a **Report** button too. Your community's admins are told. Pick **Child safety** if a child may be at risk. See "Reporting a problem". For ideas about the app itself, visit beanpool.org.

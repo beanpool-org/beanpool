@@ -52,7 +52,7 @@ import { oldKeySignedHere, rekeysToMe } from './key-succession';
 import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import {
-    sendSealedGroupLine, editSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
+    sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
     GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT,
 } from './group-chat-lines';
 import { groupPhotoCache, forgetGroupPhotos, forgetRemovedGroupPhotos } from './group-photo-cache';
@@ -8751,6 +8751,21 @@ export async function deleteMessageApi(messageId: string): Promise<any> {
 /** A convenor removes somebody else's message from a group chat. Unchanged endpoint, now reachable from the chat. */
 export async function removeGroupChatMessage(groupId: string, messageId: string): Promise<any> {
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/remove`, { messageId });
+}
+
+/**
+ * Report one line of a locked group chat to the community's moderators, with its key (group chat photos S6;
+ * utils/group-chat-lines.ts reportSealedGroupLine): the key opens that one message and nothing else. Its group keys are
+ * refused for an id this phone knows as a DM, as an edit's are. The member's words go as any report's do, unless the guard
+ * can't let them (reportReasonFor, case 14): then the picked reason goes alone, and `wordsLeftOut` says why for the
+ * "Reported" dialog (reportedAlertBody).
+ */
+export async function reportGroupChatLine(groupId: string, messageId: string, view: GroupLineView | null | undefined, reason: string): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    const sending = await reportReasonFor(groupId, reason);
+    const res = await reportSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, messageId, view, reason: sending.reason });
+    return sending.wordsLeftOut ? { ...res, wordsLeftOut: sending.wordsLeftOut } : res;
 }
 
 /**

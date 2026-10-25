@@ -52,7 +52,7 @@ import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, postGroupChatPhoto, getDecryptedGroupPhoto, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi,
     fetchGroupDetails, markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
-    groupScreenKeyringFor, noteLockedHistoryRow,
+    groupScreenKeyringFor, noteLockedHistoryRow, reportGroupChatLine,
     type GroupItem, type GroupMemberItem,
 } from '../utils/db';
 import * as ImagePicker from 'expo-image-picker';
@@ -89,6 +89,8 @@ import { ChatOwnerHeader } from './ChatOwnerHeader';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
 import { GroupDetailModal } from './GroupDetailModal';
 import { GroupDecisions } from './EnterpriseDecisions';
+import { ReportMessageSheet } from './ReportMessageSheet';
+import { reportedAlertBody } from '../utils/reportReasons';
 
 interface Props {
     kind: 'group' | 'enterprise';
@@ -182,6 +184,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [inviteSkipped, setInviteSkipped] = useState(false);
     const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
     const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+    // The line being reported (group chat photos S6): its report sheet is open while this is set.
+    const [reportingMessage, setReportingMessage] = useState<ChatMessage | null>(null);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top');
@@ -418,7 +422,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         canPost,
         // An enterprise thread's removals stay a keeper matter on its own page this round.
         isModerator: kind === 'group' && isConvenor,
-    }), [kind, me, canPost, isConvenor]);
+        // Only a locked chat's lines are reported with their key; an enterprise thread is node-readable.
+        reportsLines: kind === 'group' && locked,
+    }), [kind, me, canPost, isConvenor, locked]);
 
     const activeCount = group?.memberCount ?? null;
     const aloneInGroup = kind === 'group' && isConvenor && (activeCount ?? 0) <= 1;
@@ -621,6 +627,30 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 }
             } },
         ]);
+    };
+
+    const openReport = (item: ChatMessage) => {
+        setActiveMessageActionsId(null);
+        setActiveEmojiPickerId(null);
+        setReportingMessage(item);
+    };
+
+    // The DM report box's reasons and words (ReportReasonBox), and its "Reported" dialog (reportedAlertBody). The key that
+    // goes with it is the line's own, from the view that opened it here; the sheet stays open under the dialog until OK.
+    const submitReport = async (reason: string) => {
+        const item = reportingMessage;
+        if (!item) return;
+        try {
+            const sent = await reportGroupChatLine(id, String(item.id), thread?.views.get(item.id), reason);
+            await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+            hapticSuccess();
+            Alert.alert(t('Reported'), reportedAlertBody(sent?.wordsLeftOut, reason), [{ text: t('OK'), onPress: () => setReportingMessage(null) }]);
+        } catch (e: any) {
+            hapticWarning();
+            await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
+            Alert.alert(t('Not sent'), chatActionErrorMessage({ status: e?.status ?? null, message: e?.message, nodeAnswered: !!(e?.body?.code || e?.body?.error) }));
+            throw e; // the box keeps the choice and the words
+        }
     };
 
     const deleteMessage = async (item: ChatMessage) => {
@@ -851,6 +881,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 }}
                 onDelete={() => deleteMessage(item)}
                 onRemove={() => removeMessage(item)}
+                onReport={() => openReport(item)}
                 onPickEmoji={emoji => react(item.id, emoji)}
                 onPressUrl={openUrl}
                 // A name the line code wrote ("A former member") in the member's language; a member's own name as it is.
@@ -991,6 +1022,14 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 onPickMute={setMuteTo}
                 bottomInset={insets.bottom}
             />
+            {kind === 'group' && (
+                <ReportMessageSheet
+                    isOpen={!!reportingMessage}
+                    photo={reportingMessage?.type === 'image'}
+                    onSubmit={submitReport}
+                    onClose={() => setReportingMessage(null)}
+                />
+            )}
             <LockedHistorySheet
                 open={historyOpen}
                 bottomInset={insets.bottom}

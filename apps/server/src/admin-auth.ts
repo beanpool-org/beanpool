@@ -549,6 +549,8 @@ export type AdminRole = 'owner' | 'admin' | 'moderator';
  */
 export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: string }> = [
     { method: 'GET', path: '/api/local/admin/reports' },
+    // The one group chat message a report names, opened with its reporter's key (engine/group-chat-report.ts).
+    { method: 'GET', path: '/api/local/admin/reports/:id/message' },
     { method: 'POST', path: '/api/local/admin/reports/:id/dismiss' },
     { method: 'POST', path: '/api/local/admin/reports/:id/action' },
     { method: 'POST', path: '/api/local/admin/posts/:id/delete' },

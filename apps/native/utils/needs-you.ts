@@ -4,7 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { capitalFirst, t, tn } from '@beanpool/core';
+import { capitalFirst, dealsNeedingMe, t, tn } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
@@ -208,11 +208,9 @@ export function closesInWords(closesAt: string, now: number): string {
     return tn(days, 'closes in {n} day', 'closes in {n} days');
 }
 
-/** A step that is the member's to take: accept a request made to them, or finish a deal in progress. */
-function dealsWaiting(txns: NeedsYouTransaction[], me: string): NeedsYouTransaction[] {
-    return txns.filter(t =>
-        (t.status === 'requested' && t.sellerPublicKey === me)
-        || (t.status === 'pending' && (t.buyerPublicKey === me || t.sellerPublicKey === me)));
+/** A step that is the member's to take: accept a request made to them, or release Beans on a deal in progress. */
+function dealsWaiting(txns: NeedsYouTransaction[], me: string, now: number = Date.now()): NeedsYouTransaction[] {
+    return dealsNeedingMe(txns, me, now);
 }
 
 export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
@@ -231,7 +229,7 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         });
     }
 
-    const deals = dealsWaiting(i.transactions || [], i.me);
+    const deals = dealsWaiting(i.transactions || [], i.me, i.now);
     if (deals.length) {
         const [first] = deals;
         out.push({

@@ -44,12 +44,16 @@ describe('What needs you: which kinds show', () => {
         expect(allFour().map(e => e.kind)).toEqual(['deal', 'vote', 'message', 'group']);
     });
 
-    it('a deal waits on you when a request is made to you, or a deal of yours is in progress; not when you asked and wait on them', () => {
+    it('a deal waits on you when a request is made to you, or a deal of yours is in progress (as payer); not when you asked or are payee in pending', () => {
         const only = (t: ReturnType<typeof tx>[]) => buildNeedsYou(quiet({ transactions: t }));
         expect(only([tx('a', 'requested')])[0]?.count).toBe(1);
         expect(only([tx('a', 'pending', 'other', ME)])[0]?.count).toBe(1);
+        expect(only([tx('a', 'pending', ME, 'other')])).toEqual([]); // payee in pending is waiting on buyer to release
         expect(only([tx('a', 'requested', 'other', ME)])).toEqual([]);
         expect(only([tx('a', 'completed'), tx('b', 'cancelled')])).toEqual([]);
+        // Need request waits on buyer (author), not helper (seller)
+        expect(only([{ ...tx('a', 'requested', 'other', ME), postType: 'need' }])[0]?.count).toBe(1);
+        expect(only([{ ...tx('a', 'requested', ME, 'other'), postType: 'need' }])).toEqual([]);
     });
 
     it('votes: only open, not yet cast, and ones you can cast', () => {
@@ -133,7 +137,7 @@ describe('What needs you: accent (amber, never red)', () => {
 describe('What needs you: words for screen readers and the sheet', () => {
     it('deals', () => {
         expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested')] }))[0].label).toBe('A deal is waiting for you');
-        expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested'), tx('b', 'pending')] }))[0].label).toBe('2 deals waiting for you');
+        expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested'), tx('b', 'pending', 'other', ME)] }))[0].label).toBe('2 deals waiting for you');
     });
 
     it('votes say when the first one closes', () => {
@@ -174,7 +178,7 @@ describe('What needs you: words for screen readers and the sheet', () => {
 describe('What needs you: where a tap lands', () => {
     it('one item goes to the item, several to the list', () => {
         expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested')] }))[0].target).toEqual({ to: 'deal', postId: 'post-a', txId: 'a' });
-        expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested'), tx('b', 'pending')] }))[0].target).toEqual({ to: 'my-deals' });
+        expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested'), tx('b', 'pending', 'other', ME)] }))[0].target).toEqual({ to: 'my-deals' });
         expect(buildNeedsYou(quiet({ conversations: [dm('c1', 1)] }))[0].target).toEqual({ to: 'chat', conversationId: 'c1' });
         expect(buildNeedsYou(quiet({ conversations: [dm('c1', 1), dm('c2', 1)] }))[0].target).toEqual({ to: 'unread-messages' });
         // Several group chats land on Talk → Groups: since groups slice 2 they are not listed under Messages.

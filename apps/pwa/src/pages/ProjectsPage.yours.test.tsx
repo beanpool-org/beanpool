@@ -539,4 +539,20 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(projectsChip).toHaveAttribute('type', 'button');
         expect(projectsChip).toHaveAttribute('aria-pressed', 'false');
     });
+
+    it('never calls getYourGroups for a guest and shows clean empty state without error', async () => {
+        render(<ProjectsPage identity={me} isMember={false} />);
+        await screen.findByRole('heading', { level: 1, name: 'Commons' });
+        expect(getYourGroups).not.toHaveBeenCalled();
+        expect(screen.queryByText('Could not load your groups.')).toBeNull();
+    });
+
+    it('waits while membership is unknown, then calls getYourGroups once for confirmed member', async () => {
+        const view = render(<ProjectsPage identity={me} isMember={null} />);
+        await screen.findByRole('heading', { level: 1, name: 'Commons' });
+        expect(getYourGroups).not.toHaveBeenCalled();
+
+        view.rerender(<ProjectsPage identity={me} isMember={true} />);
+        await waitFor(() => expect(getYourGroups).toHaveBeenCalledTimes(1));
+    });
 });

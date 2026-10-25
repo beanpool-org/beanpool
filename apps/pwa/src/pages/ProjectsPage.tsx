@@ -164,7 +164,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [groups, setGroups] = useState<Group[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
     const [yourChats, setYourChats] = useState<YourChat[] | null>(null);
-    const [loadingYourChats, setLoadingYourChats] = useState<boolean>(!!identity?.publicKey);
+    const [loadingYourChats, setLoadingYourChats] = useState<boolean>(!!identity?.publicKey && isMember !== false);
     const [yourChatsError, setYourChatsError] = useState<string | null>(null);
     const [pickedGroupCategory, setGroupCategoryFilter] = useState<GroupKind>('all');
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
@@ -419,12 +419,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     }, []);
 
     const fetchYours = useCallback(async () => {
-        if (!identity?.publicKey) {
+        if (!identity?.publicKey || isMember === false) {
             setYourChats([]);
             setLoadingYourChats(false);
             setYourChatsError(null);
             return;
         }
+        if (isMember === null) return;
         setLoadingYourChats(true);
         setYourChatsError(null);
         try {
@@ -436,7 +437,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         } finally {
             setLoadingYourChats(false);
         }
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, isMember]);
 
     useEffect(() => {
         if (activeSection === 'groups') {
@@ -453,9 +454,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     };
 
     const { kept: yourKeptRows, groups: yourGroupRows } = useMemo(() => {
-        if (!identity?.publicKey) return { kept: [], groups: [] };
+        if (!identity?.publicKey || isMember === false || isMember === null) return { kept: [], groups: [] };
         return yoursRows(yourChats, treasuries, identity.publicKey, groups);
-    }, [yourChats, treasuries, identity?.publicKey, groups]);
+    }, [yourChats, treasuries, identity?.publicKey, groups, isMember]);
 
     const yourKeptPubkeys = useMemo(() => new Set(yourKeptRows.map(k => k.chat.id)), [yourKeptRows]);
     const yourGroupIds = useMemo(() => new Set(yourGroupRows.map(g => g.id)), [yourGroupRows]);

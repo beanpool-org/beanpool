@@ -26,7 +26,7 @@ process.env.ADMIN_PASSWORD = 'TierCreditHttp123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { tierForCredit, tierIndexForName, memberLevel } from '@beanpool/core';
-import { initStateEngine, seedGenesisMember, createPost, getMemberTrustProfile } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost, getMemberTrustProfile, getMembersVersion, getActivityVersion } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -171,6 +171,21 @@ async function main(): Promise<void> {
     await freeze(fay, false);
     const fayOpen = await ownRead(fay, 'Fay (unfrozen)', 600, -600);
     assert(fayOpen.creditFrozen === false, 'and unfrozen her answer says so');
+
+    // Freezing/unfreezing an unknown pubkey answers 404, does not broadcast, and creates no row
+    const unknownPk = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    const memVerBefore = getMembersVersion();
+    const actVerBefore = getActivityVersion();
+    const unkFreeze = await call('POST', ada, `/api/local/admin/users/${unknownPk}/freeze`, { freeze: true }, adaAdmin);
+    assert(unkFreeze.status === 404, `freezing an unknown pubkey answers 404 (${show(unkFreeze)})`);
+    const unkUnfreeze = await call('POST', ada, `/api/local/admin/users/${unknownPk}/freeze`, { freeze: false }, adaAdmin);
+    assert(unkUnfreeze.status === 404, `unfreezing an unknown pubkey answers 404 (${show(unkUnfreeze)})`);
+    assert(getMembersVersion() === memVerBefore && getActivityVersion() === actVerBefore,
+        `no profile_updated broadcast on 404: versions unchanged (${memVerBefore}, ${actVerBefore})`);
+    const memberRow = db.prepare('SELECT COUNT(*) as c FROM members WHERE public_key=?').get(unknownPk) as { c: number };
+    assert(memberRow.c === 0, 'no row created in members for unknown pubkey');
+    const accountRow = db.prepare('SELECT COUNT(*) as c FROM accounts WHERE public_key=?').get(unknownPk) as { c: number };
+    assert(accountRow.c === 0, 'no row created in accounts for unknown pubkey');
 
     // ── 4. the known floor ─────────────────────────────────────────────────────────────────────
     console.log('── 4. the known floor ──');

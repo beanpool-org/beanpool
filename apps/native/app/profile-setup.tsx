@@ -15,6 +15,7 @@ import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
+import { keepPendingProfileChange, pendingNameAccepted, pendingProfileChange } from '../utils/pending-profile-sync';
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
@@ -167,9 +168,12 @@ export default function ProfileSetupScreen() {
             // Kept in scope for the same reason as in settings Save: the pending keys may only be
             // retired on the strength of what the payload actually carried.
             let avatarDecision: ProfilePublishAvatar | null = null;
+            // The community this wizard publishes to, and keeps an unsent change for (utils/pending-profile-sync.ts).
+            let url: string | null = null;
             try {
-                const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url) {
+                    const pending = await pendingProfileChange(url, identity.publicKey);
                     // The one shared rule, as in settings Save. `avatar` goes when the member
                     // picked one here, or when an earlier offline save parked a pick that nothing
                     // has published yet, or — this screen being the "finish your profile" gate —
@@ -178,6 +182,7 @@ export default function ProfileSetupScreen() {
                     // sending what the wizard merely displayed is what put an older photo back.
                     avatarDecision = await resolveProfilePublishAvatar({
                         sessionPick: pendingAvatar,
+                        parked: pending?.avatar,
                         catchUp: { localRow: nodeAvatar, canonical: canonicalAvatar },
                     });
                     const publishAvatar = avatarDecision.avatar;
@@ -217,14 +222,15 @@ export default function ProfileSetupScreen() {
                 // photo — the node already holds one, so the rule correctly inferred nothing —
                 // used to clear a parked pick that had reached nothing, and the member's photo
                 // was then lost with no retry armed to resend it.
-                if (avatarDecision) await retireParkedPickAfterPublish(avatarDecision);
+                // The name this payload carried is no longer waiting there.
+                await pendingNameAccepted(url);
+                if (avatarDecision) await retireParkedPickAfterPublish(avatarDecision, url);
             } else {
-                await AsyncStorage.setItem('pending_profile_sync', 'true');
-                // As in the settings Save: the pick is parked beside the flag so a members sync
-                // overwriting the local row with the node's URL before the retry lands cannot
-                // silently drop the photo the member chose on this phone.
+                // As in the settings Save: kept for this community, never for the phone, with the
+                // name and the pick in it so a members sync overwriting the local row with the
+                // node's before the retry lands cannot silently drop what the member chose here.
                 const offlinePick = explicitEditAvatar(pendingAvatar);
-                if (offlinePick) await AsyncStorage.setItem('pending_profile_avatar', offlinePick);
+                await keepPendingProfileChange(url, identity.publicKey, { callsign: finalCallsign, avatar: offlinePick });
             }
 
             leaveWizard();

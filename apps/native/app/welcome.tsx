@@ -58,6 +58,8 @@ import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolm
 import { protectionFrom } from '../utils/protection-state';
 import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
+import { explicitEditAvatar } from '../utils/avatar-value';
+import { clearPendingProfileChange, keepPendingProfileChange } from '../utils/pending-profile-sync';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
@@ -1111,8 +1113,11 @@ export default function WelcomeScreen() {
 
             // Sync avatar to node if set
             if (pendingAvatar) {
+                // Not published: the photo waits for the community joined, never for the phone (utils/pending-profile-sync.ts).
+                let url: string | null = null;
+                const unsent = { avatar: explicitEditAvatar(pendingAvatar) };
                 try {
-                    const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                    url = await AsyncStorage.getItem('beanpool_anchor_url');
                     if (url) {
                         const payloadObj = {
                             publicKey: pendingIdentity.publicKey,
@@ -1127,14 +1132,14 @@ export default function WelcomeScreen() {
                             body: bodyString,
                         });
                         if (res.ok) {
-                            await AsyncStorage.removeItem('pending_profile_sync');
+                            await clearPendingProfileChange(url);
                         } else {
-                            await AsyncStorage.setItem('pending_profile_sync', 'true');
+                            await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                         }
                     }
                 } catch (publishErr) {
                     console.warn('[Welcome] Post-registration profile publish failed (will heal on next sync):', publishErr);
-                    await AsyncStorage.setItem('pending_profile_sync', 'true');
+                    await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                 }
             }
 
@@ -1943,8 +1948,11 @@ export default function WelcomeScreen() {
             });
 
             // 2. Publish avatar to the node since member was registered in Step 1
+            // Not published: the photo waits for the community joined, never for the phone (utils/pending-profile-sync.ts).
+            let url: string | null = null;
+            const unsent = { avatar: explicitEditAvatar(pendingAvatar) };
             try {
-                const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url) {
                     const payloadObj = {
                         publicKey: pendingIdentity.publicKey,
@@ -1959,13 +1967,13 @@ export default function WelcomeScreen() {
                         body: bodyString,
                     });
                     if (res.ok) {
-                        await AsyncStorage.removeItem('pending_profile_sync');
+                        await clearPendingProfileChange(url);
                     } else {
-                        await AsyncStorage.setItem('pending_profile_sync', 'true');
+                        await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                     }
                 }
             } catch {
-                await AsyncStorage.setItem('pending_profile_sync', 'true');
+                await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
             }
 
             await updatePendingOnboarding({ step: 'seedBackup', avatar: pendingAvatar });

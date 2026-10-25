@@ -1127,7 +1127,6 @@
   "REQUESTED\u0004deal status": "RICHIESTO",
   "REJECTED\u0004deal status": "RIFIUTATO",
   "PAUSED\u0004listing status": "IN PAUSA",
-  "Canvas not supported": "Canvas non supportato",
   "Could not load image": "Impossibile caricare l'immagine",
   "{n} Beans held in trust.|{n} Beans held in trust.": {
     "one": "{n} fagiolo vincolato in garanzia.",

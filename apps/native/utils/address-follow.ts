@@ -44,6 +44,7 @@ import { audienceOf, ed25519KeyOfPeerId, t } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { isPlainNodeAddress, plainOriginOf } from './node-url';
+import { carryPendingProfileChange } from './pending-profile-sync';
 import type { CopyCarry } from './community-copy-carry';
 import type { NodeProfile } from './node-profile';
 import type { SavedNode } from './nodes';
@@ -363,8 +364,9 @@ export type FollowResult =
  * it (else the app takes the guest for a mistyped address, utils/nodes.ts), the phone switches through switchPhoneTo
  * (which announces the switch), carrying the community's copy with its DM pins, DM guard list, group chats' highest epochs
  * and sync cursors to the new address's name before the address is written (utils/community-copy-carry.ts: else the
- * pins would be seeded again from what the node lists then, review of #2138), the saved list's row moves to the new
- * address with its name, and "Not now" is forgotten.
+ * pins would be seeded again from what the node lists then, review of #2138), a profile change waiting to reach the
+ * community moves with it (pending-profile-sync.ts: the old row's removal would otherwise clear it), the saved list's row
+ * moves to the new address with its name, and "Not now" is forgotten.
  */
 export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: Partial<AddressFollowDeps>): Promise<FollowResult> {
     const deps = await depsWith(injected);
@@ -379,6 +381,7 @@ export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: 
     const saved = (await deps.savedNodes().catch(() => [] as SavedNode[])).find(n => isPlainNodeAddress(n.url) && plainOriginOf(n.url) === offer.from);
     if (await deps.isGuestNode(anchor).catch(() => false)) await deps.markGuestNode(offer.to);
     const carried = await deps.switchTo(offer.to, offer.from);
+    await carryPendingProfileChange(offer.from, offer.to);
     await deps.addSavedNode(offer.to, saved?.alias, saved?.currencyType, saved?.currencyValue).catch(() => {});
     if (saved) await deps.removeSavedNode(saved.url).catch(() => {});
     await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, undefined);

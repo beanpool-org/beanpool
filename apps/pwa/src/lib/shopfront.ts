@@ -41,6 +41,8 @@ export interface ShopfrontListing {
     audienceScope: string | null;
     /** Its first photo, as the node sends it (its own 800 px copy, on this same origin), or null. */
     photo: string | null;
+    /** The least credit of its author's tier, as every member reads it on a listing; null when not sent. */
+    authorTierCredit: number | null;
 }
 
 const LIVE = new Set(['active', 'pending']);
@@ -66,6 +68,7 @@ export function readShopfrontListing(raw: unknown): ShopfrontListing | null {
         shopId: text(p.shopId),
         audienceScope: text(p.audienceScope),
         photo: typeof first === 'string' && first.trim() ? first : null,
+        authorTierCredit: typeof p.authorEnergyCycled === 'number' && Number.isFinite(p.authorEnergyCycled) ? p.authorEnergyCycled : null,
     };
 }
 

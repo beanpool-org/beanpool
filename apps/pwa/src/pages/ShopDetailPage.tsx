@@ -61,8 +61,8 @@ export function ShopDetailPage({
         if (r.state !== 'shop') return;
         getMemberProfile(r.shop.ownerPublicKey)
             .then((m) => {
-                const url = (m as any)?.avatar_url ?? (m as any)?.avatarUrl;
-                setLogo(typeof url === 'string' ? url : null);
+                const url = m?.avatar ?? (m as any)?.avatar_url ?? (m as any)?.avatarUrl;
+                setLogo(typeof url === 'string' && url.trim() ? url : null);
             })
             .catch(() => {});
         setListings(await readShopListingsForReader(r.shop.id));
@@ -75,7 +75,7 @@ export function ShopDetailPage({
     const shop = read?.state === 'shop' ? read.shop : null;
     const mine = !!shop && !!identity?.publicKey && shop.ownerPublicKey === identity.publicKey;
     const title = shop ? shopTitle(shop) : t('Shop');
-    const tier = ((listings as any[]) ?? []).find((l: any) => l.authorTierCredit !== null && l.authorTierCredit !== undefined)?.authorTierCredit ?? null;
+    const tier = (listings ?? []).find((l) => l.authorTierCredit !== null && l.authorTierCredit !== undefined)?.authorTierCredit ?? null;
 
     return (
         <div className="page-overlay z-[110] overflow-y-auto bg-nature-50 dark:bg-nature-950" data-testid="shop-page">

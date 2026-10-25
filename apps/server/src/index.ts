@@ -108,7 +108,7 @@ import { secureDataDirAtBoot } from './boot-file-safety.js';
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
 const PORT_P2P = Number(process.env.PORT_P2P ?? 4001);
-const PORT_P2P_WS = PORT_P2P + 1; // 4002
+const PORT_P2P_WS = process.env.PORT_P2P_WS !== undefined ? Number(process.env.PORT_P2P_WS) : (PORT_P2P === 0 ? 0 : PORT_P2P + 1);
 
 async function main() {
     console.log('\n🫘  BeanPool Node starting...\n');

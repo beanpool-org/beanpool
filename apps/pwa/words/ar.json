@@ -4129,5 +4129,6 @@
     "few": "{n} أعضاء · مكتومة",
     "many": "{n} عضوًا · مكتومة",
     "other": "{n} عضو · مكتومة"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "ستظهر عبارة \"تم حذف هذه الرسالة\" لكليكما."
 }

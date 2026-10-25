@@ -3504,5 +3504,6 @@
   "Close menu": "Đóng menu",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} thành viên · đã tắt tiếng"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Cả hai bạn sẽ thấy thông báo «Tin nhắn này đã bị xóa»."
 }

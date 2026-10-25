@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} عضو · بی‌صدا",
     "other": "{n} عضو · بی‌صدا"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "برای هر دوی شما عبارت «این پیام حذف شد» نمایش داده خواهد شد."
 }

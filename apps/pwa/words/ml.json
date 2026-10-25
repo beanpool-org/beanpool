@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} അംഗം · മ്യൂട്ട് ചെയ്‌തു",
     "other": "{n} അംഗങ്ങൾ · മ്യൂട്ട് ചെയ്‌തു"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "ഇത് രണ്ടുപേർക്കും \"ഈ സന്ദേശം ഇല്ലാതാക്കി\" എന്ന് കാണിക്കും."
 }

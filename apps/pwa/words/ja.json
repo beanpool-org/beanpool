@@ -3504,5 +3504,6 @@
   "Close menu": "メニューを閉じる",
   "{n} member · muted|{n} members · muted": {
     "other": "{n}人のメンバー · ミュート中"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "お互いの画面に「このメッセージは削除されました」と表示されます。"
 }

@@ -3504,5 +3504,6 @@
   "Close menu": "Tutup menu",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} anggota · dibisukan"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Pesan akan tertulis \"Pesan ini telah dihapus\" untuk kalian berdua."
 }

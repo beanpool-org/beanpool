@@ -3504,5 +3504,6 @@
   "Close menu": "关闭菜单",
   "{n} member · muted|{n} members · muted": {
     "other": "{n} 位成员 · 已静音"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "双方都将看到“此消息已删除”。"
 }

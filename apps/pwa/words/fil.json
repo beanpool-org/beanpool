@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} miyembro · naka-mute",
     "other": "{n} miyembro · naka-mute"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Mababasa itong \"Binura ang mensaheng ito\" para sa inyong dalawa."
 }

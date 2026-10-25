@@ -3504,5 +3504,6 @@
   "Close menu": "메뉴 닫기",
   "{n} member · muted|{n} members · muted": {
     "other": "멤버 {n}명 · 알림 꺼짐"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "두 사람 모두에게 \"삭제된 메시지입니다\"라고 표시돼요."
 }

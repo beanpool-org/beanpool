@@ -3630,5 +3630,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} miembro · silenciado",
     "other": "{n} miembros · silenciado"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Aparecerá como \"Este mensaje fue eliminado\" para ambos."
 }

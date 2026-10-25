@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "mwanachama {n} · limezimwa sauti",
     "other": "wanachama {n} · limezimwa sauti"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Itaonyesha \"Ujumbe huu ulifutwa\" kwa nyote wawili."
 }

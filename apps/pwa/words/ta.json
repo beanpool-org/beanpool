@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} உறுப்பினர் · ஒலியடக்கம்",
     "other": "{n} உறுப்பினர்கள் · ஒலியடக்கம்"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "உங்கள் இருவருக்கும் இது \"இந்தச் செய்தி நீக்கப்பட்டது\" என்று தோன்றும்."
 }

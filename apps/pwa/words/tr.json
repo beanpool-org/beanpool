@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} üye · sessize alındı",
     "other": "{n} üye · sessize alındı"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Her ikinizde de \"Bu mesaj silindi\" olarak görünecektir."
 }

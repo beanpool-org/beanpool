@@ -3629,5 +3629,6 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} μέλος · σε σίγαση",
     "other": "{n} μέλη · σε σίγαση"
-  }
+  },
+  "It will read \"This message was deleted\" for both of you.": "Θα εμφανίζεται ως «Αυτό το μήνυμα διαγράφηκε» και στους δυο σας."
 }

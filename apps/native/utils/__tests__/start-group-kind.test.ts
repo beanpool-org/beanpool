@@ -34,9 +34,11 @@ vi.mock('expo-modules-core', () => ({
 }));
 
 vi.mock('expo-haptics', () => ({
-    selectionAsync: vi.fn(),
-    notificationAsync: vi.fn(),
-    impactAsync: vi.fn(),
+    selectionAsync: vi.fn(async () => {}),
+    notificationAsync: vi.fn(async () => {}),
+    impactAsync: vi.fn(async () => {}),
+    ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+    NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 }));
 
 vi.mock('@react-native-community/datetimepicker', () => ({
@@ -141,7 +143,11 @@ vi.mock('react-native', () => {
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = () => onPress();
-        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (onChangeText) {
+            attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value);
+            attrs.onInput = (e: { target: { value: string } }) => onChangeText(e.target.value);
+            attrs.value = value ?? '';
+        }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityState?.selected !== undefined) attrs['aria-selected'] = String(accessibilityState.selected);
         if (placeholder) attrs.placeholder = placeholder;
@@ -187,6 +193,16 @@ async function mount(element: ReactNode) {
     await act(async () => { root!.render(element as any); });
     for (let i = 0; i < 5; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 }
+
+const type = async (el: Element | null | undefined, text: string) => {
+    expect(el).toBeTruthy();
+    const input = el as HTMLInputElement;
+    await act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(input, text);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+};
 
 describe('CreateGroupModal upfront kind choice', () => {
     it('when Beans and enterprises are on: offers three clear choices up front (Chat group, Project, Enterprise)', async () => {
@@ -278,14 +294,8 @@ describe('propose-project modal kind handling', () => {
         expect(host!.querySelector('input[aria-label="Funding goal amount"]')).toBeNull();
 
         // Fill in required fields: Title and Purpose
-        const titleInput = host!.querySelector('input[aria-label="Enterprise name or project title"]') as HTMLInputElement;
-        const purposeInput = host!.querySelector('input[aria-label="Purpose statement"]') as HTMLInputElement;
-        await act(async () => {
-            titleInput.value = 'Mullum Food Co-op';
-            titleInput.dispatchEvent(new Event('change', { bubbles: true }));
-            purposeInput.value = 'Distribute fresh local produce';
-            purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
-        });
+        await type(host!.querySelector('input[aria-label="Enterprise name or project title"]'), 'Mullum Food Co-op');
+        await type(host!.querySelector('input[aria-label="Purpose statement"]'), 'Distribute fresh local produce');
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b => /start initiative/i.test(b.getAttribute('aria-label') || ''));
         expect(submitBtn).toBeDefined();

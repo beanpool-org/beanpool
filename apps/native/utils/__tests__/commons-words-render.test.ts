@@ -411,7 +411,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
         expect(host.textContent).toContain(pseudoLocalise('+ Start an enterprise'));
         store.map.delete('beanpool_anchor_url');
-        await click(byLabel(pseudoLocalise('Start a project or an enterprise')), 'the +');
+        await click(button('+ Start an enterprise'), 'Start an enterprise button');
         expect(alerts.said).toContain(pseudoLocalise('Connect to a community first.'));
         await click(button('👥 Chat groups'), 'Chat groups chip');
         expect(host.textContent).toContain(pseudoLocalise('No other groups to join'));
@@ -574,6 +574,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
 
 describe('the start-a-project form and the new-poll form in the pseudo-locale', () => {
     it('Start an Enterprise / Project: every field, the missing-fields line, a deadline picked, the answer', async () => {
+        params.now = { kind: 'bounded' };
         await renderIn('xx', createElement(ProposeProjectScreen));
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start an Enterprise / Project')));
         expect(host.textContent).toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
@@ -604,6 +605,7 @@ describe('the start-a-project form and the new-poll form in the pseudo-locale', 
     });
 
     it('in English, the deadline reads as a day ("30 Nov 2026"), not its UTC date', async () => {
+        params.now = { kind: 'bounded' };
         picked.date = new Date(2026, 10, 30, 0, 30);
         await renderIn('en', createElement(ProposeProjectScreen));
         await click(byLabel('Select funding deadline date'), 'the deadline');

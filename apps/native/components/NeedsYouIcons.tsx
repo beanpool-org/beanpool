@@ -33,7 +33,7 @@ const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIc
     admin: 'shield-account-outline',
     deal: 'handshake-outline',
     vote: 'vote-outline',
-    invite: 'account-multiple-plus-outline',
+    invite: 'email-outline',
     message: 'message-text-outline',
     group: 'account-group-outline',
 };

@@ -300,8 +300,8 @@ describe('the Commons "+" starts a project or an enterprise only where the node 
             expect(commonsPlusStartsProject('decide', 'projects', f)).toBe(false);
         }
     });
-    it('the screen asks this rule', () => {
+    it('the screen opens CreateGroupModal across all pills so user chooses kind first', () => {
         const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', '(tabs)', 'projects.tsx'), 'utf8');
-        expect(src).toContain('const startsProject = commonsPlusStartsProject(activeSection, groupKind, reader.effective);');
+        expect(src).toContain("if (activeSection === 'groups') {\n                        createGroup.open();\n                        return;\n                    }");
     });
 });

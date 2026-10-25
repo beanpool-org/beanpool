@@ -8,7 +8,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
-import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, commonsPlusStartsProject, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
+import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, enterprisesOn, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
@@ -325,9 +325,8 @@ export default function ProjectsScreen() {
         return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);
     }, [groups, enterprises, yourGroups, groupKind, reader.effective]);
     const groupsEmpty = commonsGroupsEmpty(groupKind, reader.effective);
-    // The + on Groups: a project or enterprise on those chips, otherwise the create form (which offers both, with Beans).
-    const startsProject = commonsPlusStartsProject(activeSection, groupKind, reader.effective);
-    const openProposeProject = async () => {
+    // The + on Groups opens CreateGroupModal on all pills; kind is asked first where Beans and enterprises are on.
+    const openProposeProject = async (kind?: 'bounded' | 'ongoing') => {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) {
             Alert.alert(t('Not Connected'), t('Connect to a community first.'), [
@@ -336,7 +335,7 @@ export default function ProjectsScreen() {
             ]);
             return;
         }
-        router.push('/propose-project');
+        router.push(kind ? { pathname: '/propose-project', params: { kind } } : '/propose-project');
     };
 
     const renderEnterpriseItem = ({ item }: { item: TreasurySummary }) => <EnterpriseCard item={item} />;
@@ -643,7 +642,13 @@ export default function ProjectsScreen() {
                             <Pressable
                                 accessibilityRole="button"
                                 style={styles.emptyBtn}
-                                onPress={groupsEmpty.action === 'project' ? openProposeProject : createGroup.open}
+                                onPress={() => {
+                                    if (groupsEmpty.action === 'project') {
+                                        void openProposeProject(groupKind === 'enterprises' ? 'ongoing' : 'bounded');
+                                    } else {
+                                        createGroup.open();
+                                    }
+                                }}
                             >
                                 <Text style={styles.emptyBtnText}>
                                     {groupsEmpty.action === 'project' ? (groupKind === 'enterprises' ? t('+ Start an enterprise') : t('+ Start a project')) : t('+ Create a Group')}
@@ -655,13 +660,9 @@ export default function ProjectsScreen() {
             />
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={activeSection === 'decide' ? t('Propose a decision') : startsProject ? t('Start a project or an enterprise') : t('Create a group')}
+                accessibilityLabel={activeSection === 'decide' ? t('Propose a decision') : t('Create a group')}
                 style={styles.fab}
                 onPress={async () => {
-                    if (startsProject) {
-                        await openProposeProject();
-                        return;
-                    }
                     if (activeSection === 'groups') {
                         createGroup.open();
                         return;

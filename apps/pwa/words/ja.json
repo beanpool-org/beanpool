@@ -915,8 +915,6 @@
   "Posted by": "投稿者",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "評価はまだありません",
-  "✅ Action Required: Release Credits": "✅ アクションが必要: クレジットを支払う",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "あなたは支払者です。{name}が条件を満たしたら、保託された資金を解除して取引を完了してください。",
   "Finalize Transaction": "取引を完了する",
   "e.g. {amount}": "例: {amount}",
   "Transferring {n} B to {name}": "{name}へ{n} Bを送金中",

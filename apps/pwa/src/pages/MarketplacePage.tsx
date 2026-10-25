@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
@@ -1515,16 +1515,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                  {/* Action buttons */}
                  
                  {/* 1. Pending Trust Hold State (Applies to both Payer and Payee) */}
-                 {selectedPost.status === 'pending' && (isPayer || isPayee) && (
+                 {(selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                      <div className="flex flex-col gap-2 mt-4">
                          {isPayer ? (
                              <>
                                  <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
-                                     {t('✅ Action Required: Release Credits')}
+                                     {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                         date: formatDate(new Date(activeTx?.createdAt || selectedPost.createdAt), 'day-month'),
+                                         n: formatNumber(activeTx?.credits ?? selectedPost.credits),
+                                     })}
                                  </p>
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
-                                     {t('You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.', { name: targetPeerCallsign })}
+                                     {t("Release the Beans when it's done.")}
                                  </p>
+                                 {selectedPost.type === 'offer' && !!selectedPost.repeatable && (
+                                     <p className="text-xs text-nature-500 text-center -mt-1 mb-2 px-4">
+                                         {t('You can take it up again once this one is done.')}
+                                     </p>
+                                 )}
 
                                  {showCompleteConfirm ? (
                                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 shadow-inner mt-2">
@@ -1666,6 +1674,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              }`}
                          >
                              {t('❌ Cancel Hold')}
+                         </button>
+                         <button
+                             type="button"
+                             onClick={() => {
+                                 setDealsInitialTab('pending');
+                                 setShowDealsModal(true);
+                             }}
+                             className="text-xs text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white font-medium text-center mt-1 py-1 transition-colors"
+                         >
+                             {t('All your deals ›')}
                          </button>
                      </div>
                  )}

@@ -18,7 +18,7 @@ An enterprise has its own daily limits, ten times a member's: 1,000 payments, 30
 
 ## Finding them
 
-Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each shows its status, purpose and balance. On the phone, the ones you keep are under **Your groups**. Tap one to open it.
+Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each shows its status, purpose and balance. On the phone, the ones you keep are first under **Yours** (lead first, each with its role and a **Manage** button to run it). Tap one to open it.
 
 ## What an enterprise page shows
 

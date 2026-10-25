@@ -4,7 +4,7 @@ import {
     ownerHeader, previewLine, rowTime, unreadLabel, isMuted, groupsYouCouldJoin, inviteLandingAction, chatHref,
     threadMessageText, chatEmoji, groupsUnreadTotal, rowBadge, yourGroupsPaneState, markChatRead, showInvitePrompt,
     inviteLandingPhase, inviteLandingFacts, inviteLandingHref, inviteLandingPreviewFromParams,
-    ownerKindWord, chatLifecycleFromRows, rowRoleWord,
+    ownerKindWord, chatLifecycleFromRows, rowRoleWord, rowSpokenName,
 } from '../your-groups';
 
 const g = (over: any) => ({
@@ -141,12 +141,14 @@ describe('a project is a project, an enterprise an enterprise (group decisions �
         expect(chatEmoji('event', null, 'bounded')).toBe('📅');
     });
 
-    it('the row role words: Leader / Collaborator on a project, Lead keeper / Keeper on an enterprise, none on a group', () => {
+    it('the row role words: Leader / Collaborator on a project, Lead keeper / Keeper on an enterprise, Convenor on a group', () => {
         expect(rowRoleWord({ kind: 'enterprise', role: 'lead', lifecycle: 'bounded' })).toBe('Leader');
         expect(rowRoleWord({ kind: 'enterprise', role: 'keeper', lifecycle: 'bounded' })).toBe('Collaborator');
         expect(rowRoleWord({ kind: 'enterprise', role: 'lead', lifecycle: 'ongoing' })).toBe('Lead keeper');
         expect(rowRoleWord({ kind: 'enterprise', role: 'keeper' })).toBe('Keeper');
-        expect(rowRoleWord({ kind: 'group', role: 'convenor' })).toBeNull();
+        expect(rowRoleWord({ kind: 'group', role: 'convenor' })).toBe('Convenor');
+        expect(rowRoleWord({ kind: 'group', role: 'member' })).toBeNull();
+        expect(rowRoleWord({ kind: 'group', role: 'observer' })).toBeNull();
         expect(rowRoleWord({ kind: 'event', role: 'host' })).toBeNull();
     });
 
@@ -290,5 +292,12 @@ describe('enterprise chat notice (PR #963 review round 1, B1)', () => {
     it('says every member of the community can read it — never that it is the keepers\' own', () => {
         expect(ENTERPRISE_CHAT_NOTICE).toBe("Any member of this community can read this, and so can the node's operator.");
         expect(ENTERPRISE_CHAT_NOTICE).not.toMatch(/keeper/i);
+    });
+});
+
+describe('rowSpokenName spoken row label (S3)', () => {
+    it('the group row spoken name contains "convenor" for a convenor', () => {
+        expect(rowSpokenName({ kind: 'group', role: 'convenor', name: 'Garden Crew' })).toBe('Garden Crew, group, convenor');
+        expect(rowSpokenName({ kind: 'group', role: 'member', name: 'Garden Crew' })).toBe('Garden Crew, group');
     });
 });

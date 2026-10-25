@@ -2361,11 +2361,6 @@
   "Decide": "決定",
   "Groups Section": "グループセクション",
   "Groups": "グループ",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} グループは全員ではなく一部の人たちのための場所です。プロジェクトや事業体は豆を保有できますが、チャットグループは保有しません。グループに参加しても、信頼や投票権は変わりません。",
-  "👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.": "👥 {label} グループは全員ではなく一部の人たちのための場所です。グループに参加しても、信頼や投票権は変わりません。",
-  "Groups:": "グループ:",
-  "Your groups": "参加中のグループ",
-  "You're not in any groups yet. Join one below, or start one with +.": "まだどのグループにも参加していません。下の一覧から参加するか、+ で新しく作成してください。",
   "Groups you could join": "参加できるグループ",
   "{n} live offer|{n} live offers": {
     "other": "公開中の出品{n}件"
@@ -3035,11 +3030,7 @@
   "Stargate\u0004avatar": "スターゲート",
   "Cyber Eye\u0004avatar": "サイバーアイ",
   "Commons": "コモンズ",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.": "コミュニティの決定、コモンズ、そして参加グループ（プロジェクトや事業体など）。拘束力のある行動を提案し、大切なことに投票しましょう。",
-  "Community decisions and groups. Propose binding actions and vote on what matters.": "コミュニティの決定とグループ。拘束力のある行動を提案し、大切なことに投票しましょう。",
-  "Projects, enterprises, and groups to join or start.": "参加または立ち上げができるプロジェクト、事業体、グループ。",
   "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.": "サンプルのローカルコミュニティのコモンズ：共有プール、事業体、拘束力のある決定。その下には、参加できるグループや、「+」から新しく立ち上げられるグループが並びます。",
-  "Find a group to join, or start your own with +.": "参加するグループを探すか、「+」で自分のグループを立ち上げましょう。",
   "🌱 Projects": "🌱 プロジェクト",
   "🏛️ Enterprises": "🏛️ 事業体",
   "👥 Chat groups": "👥 チャットグループ",

@@ -2361,11 +2361,6 @@
   "Decide": "Quyết định",
   "Groups Section": "Phần Nhóm",
   "Groups": "Nhóm",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} Nhóm là không gian dành cho một số người thay vì tất cả mọi người. Dự án và doanh nghiệp cộng đồng có thể giữ Đậu; nhóm trò chuyện thì không. Việc ở trong một nhóm không làm thay đổi mức tin cậy hay phiếu bầu của bạn.",
-  "👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.": "👥 {label} Nhóm là không gian dành cho một số người thay vì tất cả mọi người. Việc ở trong một nhóm không làm thay đổi mức tin cậy hay phiếu bầu của bạn.",
-  "Groups:": "Nhóm:",
-  "Your groups": "Nhóm của bạn",
-  "You're not in any groups yet. Join one below, or start one with +.": "Bạn chưa tham gia nhóm nào. Hãy tham gia một nhóm bên dưới, hoặc bắt đầu với dấu +.",
   "Groups you could join": "Các nhóm bạn có thể tham gia",
   "{n} live offer|{n} live offers": {
     "other": "{n} bài chia sẻ đang mở"
@@ -3035,11 +3030,7 @@
   "Stargate\u0004avatar": "Cổng sao",
   "Cyber Eye\u0004avatar": "Mắt điện tử",
   "Commons": "Commons",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.": "Các quyết định cộng đồng, Commons và các nhóm của bạn: dự án, doanh nghiệp và hơn thế nữa. Đề xuất hành động có tính ràng buộc và bỏ phiếu cho những điều quan trọng.",
-  "Community decisions and groups. Propose binding actions and vote on what matters.": "Các quyết định cộng đồng và các nhóm. Đề xuất hành động có tính ràng buộc và bỏ phiếu cho những điều quan trọng.",
-  "Projects, enterprises, and groups to join or start.": "Các dự án, doanh nghiệp và nhóm để tham gia hoặc khởi xướng.",
   "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.": "Commons của một cộng đồng địa phương, từ một ví dụ mẫu: quỹ chung, các doanh nghiệp và quyết định có tính ràng buộc. Bên dưới là các nhóm để bạn tham gia, hoặc tạo nhóm riêng với dấu +.",
-  "Find a group to join, or start your own with +.": "Tìm một nhóm để tham gia, hoặc bắt đầu nhóm riêng với dấu +.",
   "🌱 Projects": "🌱 Dự án",
   "🏛️ Enterprises": "🏛️ Doanh nghiệp",
   "👥 Chat groups": "👥 Nhóm chat",

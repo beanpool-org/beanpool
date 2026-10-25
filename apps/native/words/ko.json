@@ -2361,11 +2361,6 @@
   "Decide": "결정",
   "Groups Section": "모임 섹션",
   "Groups": "모임",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} 모임은 전체가 아닌 일부 사람들을 위한 공간이에요. 프로젝트와 기업은 콩을 보유하지만, 대화 모임은 보유하지 않아요. 모임에 참여해도 신뢰도나 투표권은 바뀌지 않아요.",
-  "👥 {label} A group is a place for some people rather than everyone. Being in a group does not change your trust or your vote.": "👥 {label} 모임은 전체가 아닌 일부 사람들을 위한 공간이에요. 모임에 참여해도 신뢰도나 투표권은 바뀌지 않아요.",
-  "Groups:": "모임:",
-  "Your groups": "내 모임",
-  "You're not in any groups yet. Join one below, or start one with +.": "아직 참여 중인 모임이 없어요. 아래에서 찾아 가입하거나 + 버튼으로 시작해 보세요.",
   "Groups you could join": "가입 가능한 모임",
   "{n} live offer|{n} live offers": {
     "other": "등록된 제안 {n}개"
@@ -3035,11 +3030,7 @@
   "Stargate\u0004avatar": "스타게이트",
   "Cyber Eye\u0004avatar": "사이버 눈",
   "Commons": "공유지",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.": "커뮤니티 결정, 공유지, 그리고 모임: 프로젝트, 기업 등. 구속력 있는 조치를 제안하고 중요한 일에 투표하세요.",
-  "Community decisions and groups. Propose binding actions and vote on what matters.": "커뮤니티 결정 및 모임. 구속력 있는 조치를 제안하고 중요한 일에 투표하세요.",
-  "Projects, enterprises, and groups to join or start.": "참여하거나 새로 시작할 수 있는 프로젝트, 기업, 모임.",
   "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +.": "지역 커뮤니티 공유지의 예시: 공유 풀, 기업, 구속력 있는 결정. 그 아래에는 가입하거나 + 버튼으로 시작할 수 있는 모임이 있어요.",
-  "Find a group to join, or start your own with +.": "가입할 모임을 찾거나 + 버튼으로 직접 모임을 시작해 보세요.",
   "🌱 Projects": "🌱 프로젝트",
   "🏛️ Enterprises": "🏛️ 기업",
   "👥 Chat groups": "👥 대화 모임",

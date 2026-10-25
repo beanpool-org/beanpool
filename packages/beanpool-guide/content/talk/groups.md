@@ -20,7 +20,7 @@ Tap **Talk**, then **Groups**. Every group you are in is listed there, newest me
 - Tap a group to open its chat. That marks it read.
 - Pull the list down to refresh it.
 
-On the phone, the same list is in **Commons**, under **Groups**, as **Your groups**, without the unread numbers. It opens the same chats.
+On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterprises and projects you keep first (with a **Manage** button to run them), then the groups you are in, opening the same chats.
 
 ## Starting a group
 
@@ -103,7 +103,7 @@ At the end your phone says what happened: **Done** only when it handed every key
 
 ## Joining a group
 
-In **Commons**, under **Groups**, the groups you are in are under **Yours**. Below them, the list shows groups you could join; filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:
+In **Commons**, under **Groups**, the groups you are in are first under **Yours**. Below them, the list shows what you could join, with a heading that names what is shown (such as **Groups, projects and enterprises here**, changing with the chips **All**, **Projects**, **Enterprises** and **Chat groups**). Each one shows the start of its description. Open a group to read all of it, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do.
@@ -130,7 +130,7 @@ A group you are invited to also shows in **Commons**, under **Groups**, marked *
 - If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.
 - If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**.
 
-The web app does not mark invitations in **Commons** yet. Tap the line in **Needs you** on Home, or open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it.
+In the web app, tap the line in **Needs you** on Home, or the group marked **INVITED** in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it.
 
 ## Posting to a group
 

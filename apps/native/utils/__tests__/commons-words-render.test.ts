@@ -375,11 +375,13 @@ const bracketed = () => Array.from(host.querySelectorAll('span')).filter((s) => 
 describe('the Commons in the pseudo-locale: every word on it came through t() (words S3g)', () => {
     it('Groups: the heading, the pool and voice credits, the switch, Your groups, the chips, a group\'s card, the enterprises\' cards', async () => {
         await renderIn('xx');
-        expect(host.textContent).toContain(pseudoLocalise('Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.'));
+        expect(host.textContent).toContain(pseudoLocalise('What this community runs together: its pool, decisions, enterprises and groups.'));
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Voice credits')));
         await toGroups();
-        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Groups you could join')));
-        expect(host.textContent).toContain(pseudoLocalise("You're not in any groups yet. Join one below, or start one with +."));
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Yours')));
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Groups, projects and enterprises here')));
+        expect(host.textContent).toContain(pseudoLocalise('Nothing of yours yet. Start something with +, or find one below.'));
+        expect(host.textContent).not.toContain(pseudoLocalise('A group is a place for some people rather than everyone'));
         // A group's card: its kind and join policy in the member's language, an unknown one as the node wrote it.
         expect(host.textContent).toContain(pseudoLocalise('🏷️ {category} · {n} members · {policy}').replace('{category}', pseudoLocalise('working group')).replace('{n}', '4').replace('{policy}', pseudoLocalise('request to join')));
         expect(host.textContent).toContain(pseudoLocalise('🏷️ {category} · {n} member · {policy}').replace('{category}', pseudoLocalise('social')).replace('{n}', '1').replace('{policy}', pseudoLocalise('invite only')));
@@ -396,8 +398,11 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(bracketed()).toBeGreaterThan(30);
         expect(bypassing()).toEqual([]);
         await click(button('🌱 Projects'), 'Projects chip');
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Projects to back')));
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Enterprises here')));
         await click(button('👥 Chat groups'), 'Chat groups chip');
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Groups you could join')));
         expect(bypassing(), 'chips').toEqual([]);
     });
 
@@ -406,6 +411,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         node.treasuries = [];
         await renderIn('xx');
         await toGroups();
+        expect(host.textContent).toContain(pseudoLocalise('Nothing of yours yet. Start something with +, or find one below.'));
         expect(host.textContent).toContain(pseudoLocalise('No others yet'));
         await click(button('🌱 Projects'), 'Projects chip');
         expect(host.textContent).toContain(pseudoLocalise('No projects to back yet'));
@@ -566,8 +572,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         await renderIn('en');
         expect(bracketed()).toBe(0);
         await toGroups('en');
-        for (const english of ['Commons', 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.',
-            'COMMONS POOL', 'VOICE CREDITS', 'For money votes · from completed trades · N votes cost N×N', 'Decide', 'Groups', 'YOUR GROUPS', 'GROUPS YOU COULD JOIN',
+        for (const english of ['Commons', 'What this community runs together: its pool, decisions, enterprises and groups.',
+            'COMMONS POOL', 'VOICE CREDITS', 'For money votes · from completed trades · N votes cost N×N', 'Decide', 'Groups', 'YOURS', 'GROUPS, PROJECTS AND ENTERPRISES HERE',
             '🏷️ working group · 4 members · request to join', 'Join policy: request to join', 'View Details →', 'INVITED', 'OBSERVER', '1 keeper',
             'Paused for season · 2 keepers', '10 days left', 'Expired', 'Goal: 300 🫘', 'No description provided.']) {
             expect(host.textContent, english).toContain(english);

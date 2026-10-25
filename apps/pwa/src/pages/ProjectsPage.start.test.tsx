@@ -26,6 +26,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(),
+    getCommunityMe: vi.fn(async () => ({ tier: 'member', features: null })),
 }));
 
 vi.mock('../lib/visitor-lobby-gate', () => ({
@@ -39,6 +40,7 @@ vi.mock('../lib/visitor-lobby-gate', () => ({
     })),
 }));
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { resetReaderFeaturesOnce } from '../lib/features';
 
 const mockIdentity: BeanPoolIdentity = {
     publicKey: 'pk-test',
@@ -64,6 +66,7 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+    resetReaderFeaturesOnce();
 });
 
 describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', () => {
@@ -307,5 +310,60 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         proposeModal = screen.getByRole('dialog', { name: /Start a project/i });
         expect(proposeModal).toBeInTheDocument();
         expect(within(proposeModal).getByRole('button', { name: /Start the project 🌱/i })).toBeInTheDocument();
+    });
+
+    it('decision refusal alert: indicates trade when beans on', async () => {
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.mocked(getDecisions).mockResolvedValue({ decisions: [], myPoolVoting: null, canPropose: false } as any);
+
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getDecisions).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Decision/i }));
+
+        expect(alertSpy).toHaveBeenCalledWith('You can propose a Decision once you have completed a trade.');
+        alertSpy.mockRestore();
+    });
+
+    it('decision refusal alert: indicates node admins when beans off', async () => {
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.mocked(communityInfoOnce).mockResolvedValue({
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local',
+            features: { beans: false, decisions: true },
+        } as any);
+        vi.mocked(getDecisions).mockResolvedValue({ decisions: [], myPoolVoting: null, canPropose: false } as any);
+
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        await waitFor(() => expect(within(dialog).getByText(/Node admins propose here/i)).toBeInTheDocument());
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Decision/i }));
+
+        expect(alertSpy).toHaveBeenCalledWith('Node admins propose here.');
+        alertSpy.mockRestore();
+    });
+
+    it('decision row in preview mode opens LocalCommunitySheet and switches to Decide section', async () => {
+        const info = {
+            memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+            features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
+        };
+        vi.mocked(communityInfoOnce).mockResolvedValue(info as any);
+
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(screen.getByTestId('commons-section-tabs')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Decision/i }));
+
+        // LocalCommunitySheet is open explaining where decisions live
+        expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
+        // Section switched to Decide preview
+        expect(screen.getByTestId('decide-preview')).toBeInTheDocument();
     });
 });

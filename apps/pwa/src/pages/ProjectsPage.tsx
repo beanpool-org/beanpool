@@ -26,6 +26,8 @@ import { TOOL_APPS } from '../tools';
 import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
 import { EnterpriseCard } from '../components/EnterpriseCard';
+import { LocalCommunitySheet } from '../components/LocalCommunityMark';
+import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { Sentence } from '../components/Sentence';
 
 interface Props {
@@ -175,6 +177,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     // Start something dialog
     const [showStartSomething, setShowStartSomething] = useState(false);
+    const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
+    const [showStartCommunity, setShowStartCommunity] = useState(false);
 
     // Propose / New Enterprise modal
     const [showNewModal, setShowNewModal] = useState(false);
@@ -258,10 +262,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setCreateError(null);
         } else if (key === 'decision') {
             if (decisionsMode === 'preview') {
+                setActiveSection('decide');
+                setShowDecisionsSheet(true);
                 return;
             }
             if (!canProposeDecision) {
-                alert(t('You can propose a Decision once you have completed a trade.'));
+                alert(beansOn
+                    ? t('You can propose a Decision once you have completed a trade.')
+                    : t('Node admins propose here.'));
                 return;
             }
             if (hasOpenDecision) {
@@ -565,7 +573,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         onRefresh={fetchEnterprises}
                         onOpenPropose={() => {
                             if (!canProposeDecision) {
-                                alert(t('You can propose a Decision once you have completed a trade.'));
+                                alert(beansOn
+                                    ? t('You can propose a Decision once you have completed a trade.')
+                                    : t('Node admins propose here.'));
                                 return;
                             }
                             if (hasOpenDecision) {
@@ -948,6 +958,26 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 decisionsPreview={decisionsMode === 'preview'}
                 enterprisesPreview={enterprisesMode === 'preview'}
             />
+
+            {decisionsMode === 'preview' && showDecisionsSheet && (
+                <LocalCommunitySheet
+                    feature="decisions"
+                    onClose={() => setShowDecisionsSheet(false)}
+                    onStart={() => {
+                        setShowDecisionsSheet(false);
+                        setShowStartCommunity(true);
+                    }}
+                    onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                    onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined}
+                />
+            )}
+
+            {showStartCommunity && (
+                <StartCommunityScreen
+                    onClose={() => setShowStartCommunity(false)}
+                    onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                />
+            )}
 
             <GroupDetailModal
                 group={selectedGroupForDetail}

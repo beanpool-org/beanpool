@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "पहचान नहीं बन सकी। कृपया फिर कोशिश करें।",
   "Failed to initialize device pairing on node relay": "सर्वर रिले पर डिवाइस जोड़ना शुरू नहीं हो सका",
   "Failed to load image.": "इमेज लोड नहीं हो सकी।",
-  "Failed to read file.": "फ़ाइल पढ़ी नहीं जा सकी।",
   "Failed to submit report. Please try again.": "रिपोर्ट नहीं भेजी जा सकी। कृपया फिर कोशिश करें।",
   "Find people around a place or an interest, and talk together.": "किसी जगह या रुचि के आस-पास लोगों को खोजें, और साथ मिलकर बात करें।",
   "Find them any time under **Settings → Recovery Phrase**.": "इन्हें कभी भी **सेटिंग्स → रिकवरी फ़्रेज़** में देखें।",

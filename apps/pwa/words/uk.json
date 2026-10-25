@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "Не вдалося створити обліковий запис. Спробуйте ще раз.",
   "Failed to initialize device pairing on node relay": "Не вдалося почати сполучення пристроїв через ретрансляційний сервер",
   "Failed to load image.": "Не вдалося завантажити зображення.",
-  "Failed to read file.": "Не вдалося прочитати файл.",
   "Failed to submit report. Please try again.": "Не вдалося надіслати скаргу. Спробуйте ще раз.",
   "Find people around a place or an interest, and talk together.": "Знаходьте людей за місцем або інтересами й спілкуйтеся разом.",
   "Find them any time under **Settings → Recovery Phrase**.": "Знайдете їх будь-коли в розділі **Налаштування → Фраза відновлення**.",

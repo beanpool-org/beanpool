@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "Falha ao gerar a identidade. Tente de novo.",
   "Failed to initialize device pairing on node relay": "Falha ao iniciar a vinculação do dispositivo no relé do nó",
   "Failed to load image.": "Falha ao carregar a imagem.",
-  "Failed to read file.": "Falha ao ler o arquivo.",
   "Failed to submit report. Please try again.": "Não foi possível enviar a denúncia. Tente de novo.",
   "Find people around a place or an interest, and talk together.": "Encontre pessoas em torno de um lugar ou de um interesse e converse em grupo.",
   "Find them any time under **Settings → Recovery Phrase**.": "Encontre-as a qualquer momento em **Configurações → Frase de recuperação**.",

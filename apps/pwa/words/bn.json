@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "পরিচয় তৈরি করা যায়নি। আবার চেষ্টা করুন।",
   "Failed to initialize device pairing on node relay": "সার্ভার রিলে ডিভাইস যুক্ত করা শুরু করা যায়নি",
   "Failed to load image.": "ছবি লোড করা যায়নি।",
-  "Failed to read file.": "ফাইল পড়া যায়নি।",
   "Failed to submit report. Please try again.": "রিপোর্ট পাঠানো যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
   "Find people around a place or an interest, and talk together.": "কোনো জায়গা বা আগ্রহকে ঘিরে মানুষ খুঁজুন, আর একসাথে কথা বলুন।",
   "Find them any time under **Settings → Recovery Phrase**.": "যেকোনো সময় **সেটিংস → রিকভারি ফ্রেজ**-এ এগুলো পাবেন।",

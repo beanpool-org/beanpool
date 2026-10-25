@@ -45,7 +45,8 @@ import { nodeNameFor, withNodeName } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
+import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
+import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
 import { formatInviteCode, normaliseInviteCode } from '../lib/invite-code';
@@ -820,6 +821,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         recordOnboardingEvent('protection_shown');
     }, [pendingIdentity, showAvatarSetup, showAreaStep, showOnboardingGuide]);
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
+    const avatarCropper = usePictureCrop();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -1137,44 +1139,17 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         setRenaming(false);
     }
 
+    // A photo from the camera or the files opens the crop dialog: the part the newcomer chooses in the circle is their
+    // avatar, 512 px as the phone's (components/PictureCropDialog.tsx; Marty, 25 Oct 2026). Cancel there keeps none.
     const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        e.target.value = '';
         if (!file) return;
 
-        setLoading(true);
         setError(null);
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = 128;
-                canvas.height = 128;
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    // Crop to center square
-                    const minDim = Math.min(img.width, img.height);
-                    const sx = (img.width - minDim) / 2;
-                    const sy = (img.height - minDim) / 2;
-                    ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 128, 128);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-                    setPendingAvatar(dataUrl);
-                }
-                setLoading(false);
-            };
-            img.onerror = () => {
-                setError(t('Failed to load image.'));
-                setLoading(false);
-            };
-            img.src = event.target?.result as string;
-        };
-        reader.onerror = () => {
-            setError(t('Failed to read file.'));
-            setLoading(false);
-        };
-        reader.readAsDataURL(file);
-        e.target.value = '';
+        avatarCropper.crop(file, AVATAR_PICTURE)
+            .then((cropped) => { if (cropped) setPendingAvatar(cropped); })
+            .catch(() => setError(t('Failed to load image.')));
     };
 
     async function handleSeedConfirmed() {
@@ -1777,6 +1752,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 style={{ display: 'none' }}
                                 onChange={handleAvatarFileChange}
                             />
+                            {avatarCropper.dialog}
 
                             <h4 style={{
                                 fontSize: '0.85rem',
@@ -1806,7 +1782,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     return (
                                         <button
                                             key={avatar.id}
-                                            onClick={() => setPendingAvatar(`bundled://${avatar.id}`)}
+                                            onClick={() => { avatarCropper.cancel(); setPendingAvatar(`bundled://${avatar.id}`); }}
                                             style={{
                                                 flexShrink: 0,
                                                 width: '56px',

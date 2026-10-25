@@ -8,8 +8,8 @@
  *   kind, how it deals and its banner photo (PUT /api/treasury/:t/shop, which opens the shop if need be; Marty, 24 Oct:
  *   the logo and the banner are two pictures, each labelled, each with its own choice). Only what changed is sent, each to
  *   its own route, the profile first; a refusal is the node's own sentence and nothing after it is sent. The logo and the
- *   banner are the pictures the keeper chose, made 800 px here before they go (lib/photo-resize.ts; memory: photos stay
- *   800px).
+ *   banner are the parts of their photos the keeper chose in the crop dialog (components/PictureCropDialog.tsx; Marty,
+ *   25 Oct 2026): the logo a 512 px square shown in a circle, the banner 3:1 at 800 px (memory: photos stay 800px).
  * - Featured: its live Offers in its shop, each on the shelf or off it (PUT /api/marketplace/posts/:id/feature), six at
  *   most, said once; its live Offers for everyone not in its shop yet go in with one tap; no shop yet, one tap opens it.
  *
@@ -17,13 +17,13 @@
  */
 import { useId, useRef, useState } from 'react';
 import {
-    ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, SHOP_KINDS, t, tn,
+    AVATAR_PICTURE, BANNER_PICTURE, ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, SHOP_KINDS, t, tn,
     type ShopKind,
 } from '@beanpool/core';
 import { addEnterpriseShopOffers, changeEnterpriseFace, changeEnterpriseShop, featureOffer } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { resizePhotoFile } from '../lib/photo-resize';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
+import { usePictureCrop } from './PictureCropDialog';
 import {
     faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, shopPhotoOf, type Face, type ShopfrontListing,
 } from '../lib/shopfront';
@@ -93,15 +93,17 @@ export function EnterpriseFace({
     const heldBanner = shopPhotoOf(detail?.shop);
     const banner = form.banner === null ? null : form.banner ?? resolveAvatarUrl(heldBanner);
 
-    // Both pictures are made 800 px here before they go (lib/photo-resize.ts; memory: photos stay 800px).
+    // Each picture is the part of its photo the keeper chooses in the crop dialog: the logo square, the banner 3:1, as its
+    // page draws them. Cancel there changes nothing.
+    const cropper = usePictureCrop();
     const pick = async (file: File | undefined, which: 'avatar' | 'banner') => {
         if (!file) return;
         const n = ++pickSeq.current[which];
         setPickingWhich((p) => ({ ...p, [which]: true }));
         setError(null);
         try {
-            const picture = await resizePhotoFile(file);
-            if (n !== pickSeq.current[which]) return;
+            const picture = await cropper.crop(file, which === 'avatar' ? AVATAR_PICTURE : BANNER_PICTURE);
+            if (n !== pickSeq.current[which] || !picture) return;
             set(which === 'avatar' ? { avatar: picture } : { banner: picture });
         } catch {
             if (n === pickSeq.current[which]) setError(t("That picture couldn't be read. Try another."));
@@ -111,6 +113,7 @@ export function EnterpriseFace({
     };
     const pickPreset = (uri: string) => {
         pickSeq.current.avatar++;
+        cropper.cancel();
         setPickingWhich((p) => ({ ...p, avatar: false }));
         set({ avatar: uri });
     };
@@ -190,7 +193,7 @@ export function EnterpriseFace({
                 <div>
                     <p data-testid="manage-face-banner-label" className={label}>{t('Banner photo')}</p>
                     {banner && (
-                        <img data-testid="manage-face-banner-image" src={banner} alt={t('Its banner photo')} className="w-full h-24 rounded-xl object-cover border border-nature-200 dark:border-nature-700" />
+                        <img data-testid="manage-face-banner-image" src={banner} alt={t('Its banner photo')} className="w-full max-w-[720px] aspect-[3/1] rounded-xl object-cover border border-nature-200 dark:border-nature-700" />
                     )}
                     <div className={`flex flex-wrap items-center gap-2 ${banner ? 'mt-2' : ''}`}>
                         <label data-testid="manage-face-banner" htmlFor={`${id}-banner`} className={`${secondary} inline-flex items-center cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500`}>
@@ -277,6 +280,7 @@ export function EnterpriseFace({
             <button type="submit" data-testid="manage-face-save" disabled={!dirty || saving || picking} className={primary}>
                 {saving ? t('Saving…') : t('Save')}
             </button>
+            {cropper.dialog}
         </form>
     );
 }

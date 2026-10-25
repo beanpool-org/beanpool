@@ -77,7 +77,6 @@
   "Failed to generate identity. Please try again.": "產生身分失敗。請再試一次。",
   "Failed to initialize device pairing on node relay": "無法在伺服器中繼上初始化裝置配對",
   "Failed to load image.": "圖片載入失敗。",
-  "Failed to read file.": "讀取檔案失敗。",
   "Failed to submit report. Please try again.": "檢舉送出失敗。請再試一次。",
   "Find people around a place or an interest, and talk together.": "圍繞一個地方或一個興趣找到人，一起交流。",
   "Find them any time under **Settings → Recovery Phrase**.": "隨時可在**設定 → 復原詞組**中找到它們。",

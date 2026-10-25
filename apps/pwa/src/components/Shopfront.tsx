@@ -36,9 +36,10 @@ function MoreLess({ open, onClick, testID }: { open: boolean; onClick: () => voi
 }
 
 /**
- * The top of the shopfront: the banner (its shop's one photo, across the top and cropped to fill it; none, or one that
- * won't load, a quiet block with its kind's emoji), the logo over its foot (the avatar the account already has), the
- * name, and the lines under it: its kind and since when, and any other.
+ * The top of the shopfront: the banner (its shop's one photo, across the top at 3:1, the shape its keeper chose the strip
+ * in, so what they chose is what shows; never taller than 240 px, its width stopping at 720; none, or one that won't load,
+ * a quiet block with its kind's emoji), the logo over its foot (the avatar the account already has), the name, and the
+ * lines under it: its kind and since when, and any other.
  */
 export function ShopfrontHeader({ name, logoUrl, bannerUrl, kind, fallbackEmoji, lines }: {
     name: string;
@@ -62,7 +63,7 @@ export function ShopfrontHeader({ name, logoUrl, bannerUrl, kind, fallbackEmoji,
             <div
                 data-testid="shopfront-banner"
                 aria-hidden="true"
-                className="h-32 rounded-2xl bg-bp-chip-ok-tint border border-nature-200 dark:border-nature-800 flex items-center justify-center text-5xl overflow-hidden"
+                className="w-full max-w-[720px] aspect-[3/1] rounded-2xl bg-bp-chip-ok-tint border border-nature-200 dark:border-nature-800 flex items-center justify-center text-5xl overflow-hidden"
             >
                 {showBanner ? (
                     <img data-testid="shopfront-banner-photo" src={banner!} alt="" onError={() => setBannerFailed(banner)} className="w-full h-full object-cover" />

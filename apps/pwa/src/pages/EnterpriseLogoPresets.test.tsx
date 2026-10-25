@@ -5,7 +5,8 @@
  * - Enterprise logo edit in EnterpriseManage offers the presets.
  * - Selecting a preset sends bundled://<id> to changeEnterpriseFace.
  * - Member's own avatar in ProfilePage & ProfileSetup offers the same presets and sends bundled://<id> to updateMemberProfile.
- * - Picking a photo file still works across all forms (800 px).
+ * - Picking a photo file still works across all forms, through the crop step (the part chosen, 512 px square;
+ *   components/PictureCropDialog.tsx).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
@@ -14,7 +15,15 @@ import { EnterpriseManage } from '../components/EnterpriseManage';
 import { ProfilePage } from './ProfilePage';
 import { ProfileSetup } from '../components/ProfileSetup';
 import * as api from '../lib/api';
-import * as photoResize from '../lib/photo-resize';
+import * as pictureCrop from '../lib/picture-crop';
+
+/** A photo as the crop step reads it (jsdom decodes none): its drawn crop is the stub's fixed JPEG. */
+const PHOTO_READ: pictureCrop.LoadedPicture = { src: 'data:image/jpeg;base64,UkFX', width: 1600, height: 1200, image: {} as HTMLImageElement };
+
+/** The crop step, as the member finishes it: Done on the part shown. */
+async function chooseTheCrop() {
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Done' }));
+}
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url: string | null | undefined) => {
@@ -70,7 +79,8 @@ describe('enterprise logo presets (web)', () => {
         vi.spyOn(api, 'updateMemberProfile').mockResolvedValue({ success: true, profile: {} as any });
         vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 10, floor: -50, earnedCredit: 50, canVouch: true, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 1 } } as any);
         vi.spyOn(api, 'getMemberPreferences').mockResolvedValue({} as any);
-        vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue('data:image/jpeg;base64, UkVTSVpFRF9XRUI=');
+        vi.spyOn(pictureCrop, 'readPictureFile').mockResolvedValue(PHOTO_READ);
+        vi.spyOn(pictureCrop, 'drawPictureCrop').mockReturnValue('data:image/jpeg;base64, UkVTSVpFRF9XRUI=');
     });
 
     afterEach(() => {
@@ -108,7 +118,7 @@ describe('enterprise logo presets (web)', () => {
             expect(sent.photos).toEqual(['bundled://leaf']);
         });
 
-        it('picking a photo file still works and sends resized 800px data URI', async () => {
+        it('picking a photo file still works and sends the part chosen in the crop step', async () => {
             render(<ProjectsPage identity={mockIdentity} />);
 
             fireEvent.click(await screen.findByRole('button', { name: '+ Create Group' }));
@@ -123,6 +133,7 @@ describe('enterprise logo presets (web)', () => {
             expect(fileInput).toBeTruthy();
             const file = new File(['dummy'], 'photo.jpg', { type: 'image/jpeg' });
             fireEvent.change(fileInput, { target: { files: [file] } });
+            await chooseTheCrop();
 
             await waitFor(() => expect(within(dialog).getByAltText('Preview')).toBeInTheDocument());
 
@@ -149,9 +160,9 @@ describe('enterprise logo presets (web)', () => {
             expect(heading.className).not.toContain('text-nature-600');
         });
 
-        it('a preset chosen while a photo is still resizing stays, and the form stops waiting', async () => {
-            let finish!: (v: string) => void;
-            vi.spyOn(photoResize, 'resizePhotoFile').mockImplementation(() => new Promise((r) => { finish = r; }));
+        it('a preset chosen while a photo is still being read stays, opens no crop for the photo, and the form stops waiting', async () => {
+            let finish!: (v: pictureCrop.LoadedPicture) => void;
+            vi.spyOn(pictureCrop, 'readPictureFile').mockImplementation(() => new Promise((r) => { finish = r; }));
             const dialog = await openPropose();
             fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
             fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Seed Hub' } });
@@ -159,7 +170,8 @@ describe('enterprise logo presets (web)', () => {
             const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
             fireEvent.change(fileInput, { target: { files: [new File(['x'], 'slow.jpg', { type: 'image/jpeg' })] } });
             fireEvent.click(within(dialog).getByRole('button', { name: 'Select Leaf avatar' }));
-            await act(async () => { finish('data:image/jpeg;base64, U0xPVw=='); });
+            await act(async () => { finish(PHOTO_READ); });
+            expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull();
             const submit = within(dialog).getByRole('button', { name: /Propose Enterprise/i });
             expect(submit).not.toBeDisabled();
             fireEvent.click(submit);
@@ -189,14 +201,15 @@ describe('enterprise logo presets (web)', () => {
             expect(vi.mocked(api.changeEnterpriseFace)).toHaveBeenCalledWith('t-key', expect.objectContaining({ avatar: 'bundled://sun' }));
         });
 
-        it('a preset chosen while a logo photo is still resizing stays (the deciding review of 1e784a87)', async () => {
-            let finish!: (v: string) => void;
-            vi.spyOn(photoResize, 'resizePhotoFile').mockImplementation(() => new Promise((r) => { finish = r; }));
+        it('a preset chosen while a logo photo is still being read stays, and opens no crop for the photo (the deciding review of 1e784a87)', async () => {
+            let finish!: (v: pictureCrop.LoadedPicture) => void;
+            vi.spyOn(pictureCrop, 'readPictureFile').mockImplementation(() => new Promise((r) => { finish = r; }));
             render(<EnterpriseManage treasury="t-key" detail={sampleTreasuryDetail} onSaved={vi.fn()} />);
             const manageForm = screen.getByTestId('manage-face');
             fireEvent.change(within(manageForm).getByTestId('manage-face-logo-input'), { target: { files: [new File(['x'], 'slow.jpg', { type: 'image/jpeg' })] } });
             fireEvent.click(within(manageForm).getByRole('button', { name: 'Select Sun avatar' }));
-            await act(async () => { finish('data:image/jpeg;base64, U0xPVw=='); });
+            await act(async () => { finish(PHOTO_READ); });
+            expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull();
             const save = within(manageForm).getByRole('button', { name: 'Save' });
             expect(save).not.toBeDisabled();
             fireEvent.click(save);
@@ -204,13 +217,14 @@ describe('enterprise logo presets (web)', () => {
             expect(vi.mocked(api.changeEnterpriseFace)).toHaveBeenCalledWith('t-key', expect.objectContaining({ avatar: 'bundled://sun' }));
         });
 
-        it('picking a photo file still works and sends resized 800px data URI', async () => {
+        it('picking a photo file still works and sends the part chosen in the crop step', async () => {
             render(<EnterpriseManage treasury="t-key" detail={sampleTreasuryDetail} onSaved={vi.fn()} />);
 
             const manageForm = screen.getByTestId('manage-face');
             const fileInput = within(manageForm).getByTestId('manage-face-logo-input');
             const file = new File(['dummy'], 'logo.jpg', { type: 'image/jpeg' });
             fireEvent.change(fileInput, { target: { files: [file] } });
+            await chooseTheCrop();
 
             await waitFor(() => expect(within(manageForm).getByTestId('manage-face-logo-image')).toBeInTheDocument());
 

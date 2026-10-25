@@ -66,6 +66,7 @@ describe('sharing to the Pulse in the pseudo-locale', () => {
         // "Share to Pulse" throws "Unable to find an accessible element". Waiting with findByRole
         // waits for resolution to finish and the button to return to "Share to Pulse".
         const shareBtn = await screen.findByRole('button', { name: xx('Share to Pulse') });
+        expect(previewPulsePost).toHaveBeenCalledTimes(2);
         await act(async () => { fireEvent.click(shareBtn); });
         expect(await screen.findByText(xx('Post shared to The Pulse!'))).toBeInTheDocument();
         expect(submitPulsePost).toHaveBeenCalledWith(expect.objectContaining({ url: LINK, channelId: 'ch-ig', category: 'food' }));

@@ -34,7 +34,7 @@ In the web app, use **Message** on their profile, 💬 on their row under **Peop
 ## Sending
 
 - Type in **Message...** and tap the send button.
-- To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button.
+- To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. Tap a photo to open it full screen: both apps can open a photo full screen. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button.
 
 The ticks under your message:
 

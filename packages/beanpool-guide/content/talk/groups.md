@@ -20,7 +20,7 @@ Tap **Talk**, then **Groups**. Every group you are in is listed there, newest me
 - Tap a group to open its chat. That marks it read.
 - Pull the list down to refresh it.
 
-On the phone, the same list is in **Commons**, under **Groups**, as **Your groups**, without the unread numbers. It opens the same chats.
+On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterprises and projects you keep first (with a **Manage** button to run them), then the groups you are in, opening the same chats.
 
 ## Starting a group
 
@@ -102,7 +102,7 @@ At the end your phone says what happened: **Done** only when it handed every key
 
 ## Joining a group
 
-On the phone, in **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. In the web app, **Groups** lists every group you can see, yours marked with your role; **My groups** shows only yours. Each one shows the start of its description. Open a group to read all of it, then:
+On the phone, in **Commons**, under **Groups**, the list below **Yours** shows what you could join, with a heading that names what is shown (such as **Groups, projects and enterprises here**, changing with the chips for **All**, **Projects**, **Enterprises** or **Groups**). In the web app, **Groups** lists every group you can see, yours marked with your role; **My groups** shows only yours. Each one shows the start of its description. Open a group to read all of it, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do.

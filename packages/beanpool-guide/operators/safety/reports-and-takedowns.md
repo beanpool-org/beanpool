@@ -1,17 +1,18 @@
 ---
 slug: reports-and-takedowns
 title: Reports and takedowns
-summary: How members report posts, people and Pulse items, where the reports land, what moderators can do with them, and what each action really does.
+summary: How members report posts, people, Pulse items and group chat messages, where the reports land, what moderators can do with them, and what each action really does.
 related: pulse-and-announcements, members-and-invites, decisions-and-emergencies, roles
 ---
 
 ## How members report
 
-In the app, members report a post, an event, a Pulse item, a project or an enterprise (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
+In the app, members report a post, an event, a Pulse item, a project, an enterprise, a message in a group's chat (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
 
 - A member can file at most **10 reports an hour**.
 - Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.
-- Nobody can report themselves.
+- Nobody can report themselves, or their own message.
+- A message in a group's chat can be reported once by each member, whatever became of their first report, and only by a member who can read it: someone who joined after it was written can't.
 
 The report form tells members their note goes to moderators. It goes to everyone who looks after reports: the owners, the admins, and any moderators you have made (see Owners, admins and moderators).
 
@@ -24,6 +25,7 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
 - A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.
 - Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.
+- A report of a group chat message shows the message itself (see "A message from a group's chat" below). It is about the message's author.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
@@ -39,17 +41,27 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate" and your community's name), or on a computer by scanning the code with the app ("Moderate this community from a computer"). Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there.
 
 - **Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.
-- Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.
+- Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, a member, or a message from a group's chat (below); then the reporter's words, who reported it and when.
 - A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind; once handled it stays marked, and under **All** it takes its place by date. That covers a member who picked **Child safety**, and one whose words say it (from an older app). The owners' alert asks you to look at these first.
 - **Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.
 - **Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.
 - **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.
-- **Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
+- **Mark handled** (for a report about a member, a group chat message, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
 - **Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See "On the global community: accounts that joined together" below.
 
 The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that.
 
-## Taking a post down
+## A message from a group's chat
+
+A group's chat is end-to-end encrypted: your server stores it but cannot read it, and neither can you. So a member who reports a message there sends that one message's own key with the report. Your server keeps the key with the report and opens nothing when the report comes in; a standby copies both. When a report is shown in **Reports** or **Triage & Moderation**, Settings asks the server to open that one message with that key, and shows:
+
+- **Verified**, the message's words, its photo if it has one, and whose key signed it: the message is exactly what its author sent.
+- **Could not be verified**, with no words: the key does not open the message, or the message is not signed by the member it names. A reporter can't make up a message, or change one, and have it read as someone else's. Judge the report on the reporter's words alone.
+- **Photo could not be verified**: the words check out, but the photo stored with them is not the one their author sent.
+- **Image unavailable**: the words check out, but this server holds no copy of the photo. Photos in chats are not copied to a standby, so a server that took over from another has none of them.
+- That its author deleted it, or a convenor removed it, after it was reported: then there is nothing left to open.
+
+The key opens that message and nothing else: no other message in the chat, and no other photo. Nobody in the group is told who reported it. Settings has no button to take a group chat message down: a convenor removes it in the chat, and the owners and admins can suspend its author.
 
 In **Triage & Moderation**, find the post in the posts list and delete it.
 

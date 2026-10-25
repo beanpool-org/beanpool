@@ -62,7 +62,7 @@ A group's chat is end-to-end encrypted: only the group's members can read it, no
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
 - If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**.
 
-In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
+In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, search the chat and report someone's message (**Report**, under it). Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
 
 ## Talking in a group's chat
 
@@ -73,6 +73,7 @@ A group's chat works exactly like a chat with one person. Tap a message and smal
 - **Edit**, on your own messages, for 15 minutes. The message then shows **edited**.
 - **Delete**, on your own messages, at any time. It asks **Delete for everyone?** once, and the message then reads **This message was deleted** to everyone in the group.
 - **Remove**, for convenors, on anybody else's message. It asks once, and the message then reads **Removed by a convenor**. Your own message is a **Delete**, not a **Remove**.
+- **Report** (a flag), on anybody else's message. Choose a reason, add a few words if you like, and tap **Submit report**. Your community's moderators get that one message, with its photo if it has one, and who sent it, and nothing else in the chat. See "Reporting a problem".
 
 Two or more messages in a row that their authors deleted show as one line, such as **3 messages were deleted**. Two or more that a convenor removed show as **3 messages removed by a convenor**.
 
@@ -80,7 +81,7 @@ Under your own message: a clock while it is sending, a tick once the group's ser
 
 Photos cannot be sent in a group's chat, and a deal cannot be started in one. Both belong in a chat between two people. See "Messages".
 
-An **observer** can read the chat but not write in it, react or reply.
+An **observer** can read the chat but not write in it, react or reply. They can report a message.
 
 Your community's server needs to be up to date for reply, reactions, edit and delete. Only if yours is not does the app say **Not available on this community yet** — that one is worth taking to whoever looks after the server.
 

@@ -1,7 +1,7 @@
 ---
 slug: reporting
 title: Reporting a problem
-summary: Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.
+summary: Tell your community's moderators about a post, an event, a Pulse post, a project, an enterprise or a message in a group's chat.
 related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 ---
 
@@ -11,6 +11,7 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 - **An event:** open it and tap **Report event**.
 - **A Pulse post:** tap the flag on it.
 - **A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom.
+- **A message in a group's chat:** on the phone, tap the message, then the flag (**Report message**). In the web app, tap **Report** under it. You can report anybody's message but your own.
 
 Then:
 
@@ -20,7 +21,9 @@ Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, *
 
 ## A person or a message
 
-There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See "Blocking someone".
+A group's chat is end-to-end encrypted, so your community's moderators can't read it. When you report a message there, your app sends that one message's own key with the report. With it the moderators can open that message, its photo if it has one, and see who sent it, and check that it really is theirs: a message someone changed, or one made up, shows them **Could not be verified**. The key opens nothing else in the chat. The report box tells you what goes. You can report each message once.
+
+There is no separate button to report a person, or a message in a chat with one person, in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See "Blocking someone".
 
 In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen. A member's profile in the web app has one too: the flag at the top, or **Report Member** lower down. Both use the same reasons.
 
@@ -29,7 +32,7 @@ In the web app, a chat with one person has a report button at the top: a flag, w
 Your report goes to your community's moderators: the owners and admins who run its server, and any members they have made moderators. They decide what to do. A moderator can remove a post or a Pulse post. Only the owners and admins can suspend a member, and where the community votes, it then votes on removing them.
 
 - **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.
-- **A Pulse post, a project, an enterprise or a person:** you are not told the outcome in the app.
+- **A Pulse post, a project, an enterprise, a person or a message in a group's chat:** you are not told the outcome in the app.
 - The moderators see who sent each report. Nobody else is told who reported: not the person you reported, and not anyone else who reported the same thing.
 
 These alerts come under **Marketplace Activity** in your notification settings. On your phone's lock screen each one says only "Your community has a notice for you."; open BeanPool to read it. See "Notifications". The web app has no notifications: it shows each alert while it is open, or the next time you open it.

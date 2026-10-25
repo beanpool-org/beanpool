@@ -2226,8 +2226,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
                         const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
                         const editClosed = isTextEditable && elapsedMs > MESSAGE_EDIT_WINDOW_MS;
-                        const canDelete = isMe && !isTombstone && msg.type !== 'system' && !msg.systemType &&
-                            (!isGroupChat || openGroup?.answer?.canPost !== false);
+                        // Group chats only, as the phone: an enterprise chat refuses it (403), and a DM's Delete ("for both of you")
+                        // is its own slice.
+                        const canDelete = isGroupChat && isMe && !isTombstone && msg.type !== 'system' && !msg.systemType &&
+                            openGroup?.answer?.canPost !== false;
                         const canRemove = isGroupChat && isConvenor && !isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
 
                         const reactions: { emoji: string; author: string }[] = Array.isArray(metaObj?.reactions)

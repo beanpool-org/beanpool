@@ -37,7 +37,7 @@ export function isMutedNow(mute: ConversationMute | null | undefined, now: Date 
 
 /**
  * The Groups chip's count, the phone's Groups switch total (decision 12, WhatsApp's rule): every unread line in the
- * group-like chats, except in a chat muted (on the phone: the web has no mute of its own yet).
+ * group-like chats, except in a chat muted (on either app; the mute is the account's, kept by the node).
  */
 export function groupsUnreadCount(
     convs: ReadonlyArray<Pick<Conversation, 'type' | 'unreadCount'> & { mute?: ConversationMute | null }>,

@@ -39,7 +39,13 @@ vi.mock('./lib/api', () => ({
     getMemberProfile: vi.fn(async () => ({ publicKey: 'my-user-pubkey', avatar: null, bio: '', contact: null })),
 }));
 
-vi.mock('./pages/HomePage', () => ({ HomePage: () => <div data-testid="home-page" /> }));
+vi.mock('./pages/HomePage', () => ({
+    HomePage: ({ onNavigate }: any) => (
+        <div data-testid="home-page">
+            <button data-testid="home-open-shop" onClick={() => onNavigate('shop', 'shop-456')}>Open shop</button>
+        </div>
+    ),
+}));
 vi.mock('./pages/MarketplacePage', () => ({ MarketplacePage: () => <div data-testid="marketplace-page" /> }));
 vi.mock('./pages/MessagesPage', () => ({ MessagesPage: () => <div data-testid="messages-page" /> }));
 vi.mock('./pages/PeoplePage', () => ({ PeoplePage: () => <div data-testid="people-page" /> }));
@@ -53,11 +59,22 @@ vi.mock('./pages/YourShopPage', () => ({
     ),
 }));
 
+vi.mock('./pages/PublicProfilePage', () => ({
+    PublicProfilePage: ({ onBack }: any) => (
+        <div data-testid="profile-page">
+            <button data-testid="profile-back" onClick={onBack}>Back</button>
+        </div>
+    ),
+}));
+
 vi.mock('./pages/ShopDetailPage', () => ({
-    ShopDetailPage: ({ onBack, onOpenYourShop }: any) => (
+    ShopDetailPage: ({ id, onBack, onOpenYourShop, onOpenProfile, onOpenEnterprise }: any) => (
         <div data-testid="shop-page">
+            <span data-testid="shop-id">{id}</span>
             <button data-testid="shop-page-back" onClick={onBack}>Back</button>
             <button data-testid="shop-page-change" onClick={onOpenYourShop}>Change your shop</button>
+            <button data-testid="shop-page-profile" onClick={() => onOpenProfile?.('owner-pubkey')}>Owner profile</button>
+            <button data-testid="shop-page-enterprise" onClick={() => onOpenEnterprise?.('enterprise-pubkey')}>Enterprise</button>
         </div>
     ),
 }));
@@ -96,5 +113,33 @@ describe('App shop navigation', () => {
         // Should return to Your shop
         expect(await screen.findByTestId('shop-screen')).toBeInTheDocument();
         expect(screen.queryByTestId('shop-page')).not.toBeInTheDocument();
+    });
+
+    it('leaving shopfront to profile resets shopFromYourShop flag so viewing another shop does not return to YourShopPage on back', async () => {
+        render(<App />);
+
+        expect(await screen.findByTestId('shop-screen')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('shop-see-front'));
+
+        expect(await screen.findByTestId('shop-page')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('shop-page-profile'));
+
+        expect(await screen.findByTestId('profile-page')).toBeInTheDocument();
+        expect(screen.queryByTestId('shop-page')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('shop-screen')).not.toBeInTheDocument();
+
+        // Close profile page (Back)
+        fireEvent.click(screen.getByTestId('profile-back'));
+        expect(screen.queryByTestId('profile-page')).not.toBeInTheDocument();
+
+        // Open another shop from home
+        fireEvent.click(screen.getByTestId('home-open-shop'));
+        expect(await screen.findByTestId('shop-page')).toBeInTheDocument();
+        expect(screen.getByTestId('shop-id')).toHaveTextContent('shop-456');
+
+        // Back should simply close the shop page, NOT open shop-screen
+        fireEvent.click(screen.getByTestId('shop-page-back'));
+        expect(screen.queryByTestId('shop-page')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('shop-screen')).not.toBeInTheDocument();
     });
 });

@@ -1306,10 +1306,12 @@ export function App() {
                             }}
                             onOpenEnterprise={(pubkey) => {
                                 setOpenShopId(null);
+                                setShopFromYourShop(false);
                                 setOpenTreasuryPubkey(pubkey);
                             }}
                             onOpenProfile={(pubkey) => {
                                 setOpenShopId(null);
+                                setShopFromYourShop(false);
                                 setOpenProfilePubkey(pubkey);
                             }}
                             onOpenPost={(postId) => {

@@ -3606,5 +3606,22 @@
   "+ Add friend": "+ Ongeza rafiki",
   "Unblock {name}": "Ondoa kizuizi kwa {name}",
   "By continuing, you agree to our {terms} and {privacy}.": "Ukiendelea, unakubali {terms} na {privacy} zetu.",
-  "Terms of Service": "Masharti ya Huduma"
+  "Terms of Service": "Masharti ya Huduma",
+  "Delete message": "Futa ujumbe",
+  "Delete for everyone?": "Futa kwa kila mtu?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Itaonyesha \"Ujumbe huu ulifutwa\" kwa kila mtu katika gumzo.",
+  "Remove this message?": "Ondoa ujumbe huu?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Itaonyesha \"Imeondolewa na mratibu\" kwa kila mtu katika gumzo.",
+  "Mute notifications": "Nyamazisha arifa",
+  "Unmute": "Acha kunyamazisha",
+  "For 8 hours": "Kwa saa 8",
+  "For a week": "Kwa wiki 1",
+  "Always\u0004mute for": "Daima",
+  "@mentions still reach you.": "Kutajwa kwa @ bado kutakufikia.",
+  "Chat menu": "Menyu ya gumzo",
+  "Close menu": "Funga menyu",
+  "{n} member · muted|{n} members · muted": {
+    "one": "mwanachama {n} · limezimwa sauti",
+    "other": "wanachama {n} · limezimwa sauti"
+  }
 }

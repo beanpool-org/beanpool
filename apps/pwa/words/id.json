@@ -3482,5 +3482,21 @@
   "💸 Cash also needed — for fuel or materials": "💸 Perlu uang tunai juga — untuk bahan bakar atau bahan",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Dapat diulang — biarkan iklan tetap aktif untuk pemesanan berkelanjutan",
   "🔒 This community's listings are for its members": "🔒 Iklan di komunitas ini hanya untuk anggotanya",
-  "🗳️ Poll": "🗳️ Jajak Pendapat"
+  "🗳️ Poll": "🗳️ Jajak Pendapat",
+  "Delete message": "Hapus pesan",
+  "Delete for everyone?": "Hapus untuk semua orang?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Pesan akan tertulis \"Pesan ini telah dihapus\" bagi semua orang di obrolan.",
+  "Remove this message?": "Hapus pesan ini?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Pesan akan tertulis \"Dihapus oleh pengelola\" bagi semua orang di obrolan.",
+  "Mute notifications": "Bisukan pemberitahuan",
+  "Unmute": "Bunyikan",
+  "For 8 hours": "Selama 8 jam",
+  "For a week": "Selama seminggu",
+  "Always\u0004mute for": "Selalu",
+  "@mentions still reach you.": "@sebutan tetap akan sampai kepadamu.",
+  "Chat menu": "Menu obrolan",
+  "Close menu": "Tutup menu",
+  "{n} member · muted|{n} members · muted": {
+    "other": "{n} anggota · dibisukan"
+  }
 }

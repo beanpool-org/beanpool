@@ -3606,5 +3606,22 @@
   "💸 Cash also needed — for fuel or materials": "💸 نقد رقم بھی درکار ہے — ایندھن یا سامان کے لیے",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 قابل تکرار — مسلسل بکنگ کے لیے لسٹنگ کو فعال رکھیں",
   "🔒 This community's listings are for its members": "🔒 اس کمیونٹی کی لسٹنگز اس کے اراکین کے لیے ہیں",
-  "🗳️ Poll": "🗳️ پول"
+  "🗳️ Poll": "🗳️ پول",
+  "Delete message": "پیغام حذف کریں",
+  "Delete for everyone?": "سب کے لیے حذف کریں؟",
+  "It will read \"This message was deleted\" to everyone in the chat.": "چیٹ میں سب کے لیے \"یہ پیغام حذف کر دیا گیا تھا\" لکھا آئے گا۔",
+  "Remove this message?": "یہ پیغام ہٹائیں؟",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "چیٹ میں سب کے لیے \"کنوینر کی طرف سے ہٹایا گیا\" لکھا آئے گا۔",
+  "Mute notifications": "نوٹیفکیشنز خاموش کریں",
+  "Unmute": "خاموشی ختم کریں",
+  "For 8 hours": "8 گھنٹے کے لیے",
+  "For a week": "ایک ہفتے کے لیے",
+  "Always\u0004mute for": "ہمیشہ",
+  "@mentions still reach you.": "@mentions اب بھی آپ تک پہنچیں گے۔",
+  "Chat menu": "چیٹ مینو",
+  "Close menu": "مینو بند کریں",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} رکن · خاموش",
+    "other": "{n} اراکین · خاموش"
+  }
 }

@@ -36,7 +36,7 @@ import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
-import { LEND_ASK_FIRST_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
+import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
@@ -1223,6 +1223,17 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
+/**
+ * The member already has a deal under way on this listing (engine/escrow.ts DEAL_OPEN_CODE): 409, its code, and the deal's id,
+ * so an app says so and opens that deal. The deal is the caller's own (the buyer or requester this route was entitled to).
+ */
+function respondDealOpen(ctx: any, err: any): boolean {
+    if (err?.code !== DEAL_OPEN_CODE) return false;
+    ctx.status = 409;
+    ctx.body = { error: err.message, code: DEAL_OPEN_CODE, transactionId: err.transactionId };
+    return true;
+}
+
 router.post('/api/marketplace/posts/accept', async (ctx) => {
     try {
         const { postId, buyerPublicKey, hours } = (ctx as any).requestBody || {};
@@ -1252,6 +1263,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             ctx.body = { error: err.message, code: POST_GONE_CODE };
             return;
         }
+        if (respondDealOpen(ctx, err)) return;
         // #102: the escrow engine refuses a visitor's draw — surface it as 503 + code, not a 400.
         respondSettlementAware(ctx, err, 'Failed to accept post');
     }
@@ -1276,6 +1288,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
             ctx.body = { error: err.message, code: POST_GONE_CODE };
             return;
         }
+        if (respondDealOpen(ctx, err)) return;
         respondSettlementAware(ctx, err, 'Failed to request post');
     }
 });

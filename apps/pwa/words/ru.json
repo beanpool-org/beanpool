@@ -3854,5 +3854,24 @@
   "🌍 Everyone (Public)": "🌍 Все (публично)",
   "👥 Group ({count})": "👥 Группа ({count})",
   "🔒 This community's listings are for its members": "🔒 Объявления этого сообщества — для его участников",
-  "🗳️ Poll": "🗳️ Опрос"
+  "🗳️ Poll": "🗳️ Опрос",
+  "Delete message": "Удалить сообщение",
+  "Delete for everyone?": "Удалить для всех?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "У всех в чате отобразится «Это сообщение удалено».",
+  "Remove this message?": "Удалить это сообщение?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "У всех в чате отобразится «Удалено координатором».",
+  "Mute notifications": "Отключить уведомления",
+  "Unmute": "Включить звук",
+  "For 8 hours": "На 8 часов",
+  "For a week": "На неделю",
+  "Always\u0004mute for": "Всегда",
+  "@mentions still reach you.": "Упоминания через @ по-прежнему приходят вам.",
+  "Chat menu": "Меню чата",
+  "Close menu": "Закрыть меню",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} участник · без звука",
+    "few": "{n} участника · без звука",
+    "many": "{n} участников · без звука",
+    "other": "{n} участника · без звука"
+  }
 }

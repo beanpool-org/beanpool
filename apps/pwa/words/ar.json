@@ -4102,5 +4102,26 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 متكرر — أبقِ القائمة فعّالة للحجوزات المستمرة",
   "🔒 This community's listings are for its members": "🔒 قوائم هذا المجتمع لأعضائه",
   "🗳️ Poll": "🗳️ استطلاع",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "إن كانت في بيت أحدهم، فاستخدم {approximate} لتقريب الموقع إلى نحو 100 م، وضع المكان الدقيق في الملاحظة للحاضرين."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "إن كانت في بيت أحدهم، فاستخدم {approximate} لتقريب الموقع إلى نحو 100 م، وضع المكان الدقيق في الملاحظة للحاضرين.",
+  "Delete message": "حذف الرسالة",
+  "Delete for everyone?": "حذف لدى الجميع؟",
+  "It will read \"This message was deleted\" to everyone in the chat.": "ستظهر عبارة \"تم حذف هذه الرسالة\" للجميع في المحادثة.",
+  "Remove this message?": "إزالة هذه الرسالة؟",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "ستظهر عبارة \"أزالها المنسق\" للجميع في المحادثة.",
+  "Mute notifications": "كتم الإشعارات",
+  "Unmute": "إلغاء الكتم",
+  "For 8 hours": "لمدة 8 ساعات",
+  "For a week": "لمدة أسبوع",
+  "Always\u0004mute for": "دائمًا",
+  "@mentions still reach you.": "الإشارات (@) ستصلك دائمًا.",
+  "Chat menu": "قائمة المحادثة",
+  "Close menu": "إغلاق القائمة",
+  "{n} member · muted|{n} members · muted": {
+    "zero": "{n} عضو · مكتومة",
+    "one": "عضو واحد · مكتومة",
+    "two": "عضوان · مكتومة",
+    "few": "{n} أعضاء · مكتومة",
+    "many": "{n} عضوًا · مكتومة",
+    "other": "{n} عضو · مكتومة"
+  }
 }

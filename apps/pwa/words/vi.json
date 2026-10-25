@@ -3482,5 +3482,21 @@
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Lặp lại — giữ tin đăng hoạt động cho các lượt đặt liên tục",
   "🔒 This community's listings are for its members": "🔒 Tin đăng của cộng đồng này dành cho thành viên của nó",
   "🗳️ Poll": "🗳️ Thăm dò",
-  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Nếu diễn ra ở nhà ai đó, hãy dùng {approximate} để làm tròn vị trí khoảng 100 m, và ghi địa điểm chính xác vào ghi chú cho những người sẽ đến."
+  "If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.": "Nếu diễn ra ở nhà ai đó, hãy dùng {approximate} để làm tròn vị trí khoảng 100 m, và ghi địa điểm chính xác vào ghi chú cho những người sẽ đến.",
+  "Delete message": "Xóa tin nhắn",
+  "Delete for everyone?": "Xóa cho mọi người?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Mọi người trong đoạn chat sẽ thấy thông báo «Tin nhắn này đã bị xóa».",
+  "Remove this message?": "Gỡ tin nhắn này?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Mọi người trong đoạn chat sẽ thấy thông báo «Đã bị điều hành viên gỡ».",
+  "Mute notifications": "Tắt thông báo",
+  "Unmute": "Bật thông báo",
+  "For 8 hours": "Trong 8 giờ",
+  "For a week": "Trong 1 tuần",
+  "Always\u0004mute for": "Luôn luôn",
+  "@mentions still reach you.": "Lượt nhắc @ vẫn sẽ thông báo đến bạn.",
+  "Chat menu": "Menu cuộc trò chuyện",
+  "Close menu": "Đóng menu",
+  "{n} member · muted|{n} members · muted": {
+    "other": "{n} thành viên · đã tắt tiếng"
+  }
 }

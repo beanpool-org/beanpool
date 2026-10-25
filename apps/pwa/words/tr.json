@@ -3606,5 +3606,22 @@
   "💸 Cash also needed — for fuel or materials": "💸 Nakit de gerekli — yakıt veya malzemeler için",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Tekrarlanabilir — süregelen rezervasyonlar için ilanı etkin tut",
   "🔒 This community's listings are for its members": "🔒 Bu topluluğun ilanları üyeleri içindir",
-  "🗳️ Poll": "🗳️ Anket"
+  "🗳️ Poll": "🗳️ Anket",
+  "Delete message": "Mesajı sil",
+  "Delete for everyone?": "Herkesten silinsin mi?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Sohbetteki herkese \"Bu mesaj silindi\" olarak görünecektir.",
+  "Remove this message?": "Bu mesaj kaldırılsın mı?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Sohbetteki herkese \"Bir koordinatör tarafından kaldırıldı\" olarak görünecektir.",
+  "Mute notifications": "Bildirimleri sessize al",
+  "Unmute": "Sesi aç",
+  "For 8 hours": "8 saatliğine",
+  "For a week": "1 haftalığına",
+  "Always\u0004mute for": "Her zaman",
+  "@mentions still reach you.": "@bahsetmeler size yine de ulaşır.",
+  "Chat menu": "Sohbet menüsü",
+  "Close menu": "Menüyü kapat",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} üye · sessize alındı",
+    "other": "{n} üye · sessize alındı"
+  }
 }

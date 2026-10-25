@@ -3606,5 +3606,22 @@
   "💸 Cash also needed — for fuel or materials": "💸 Απαιτούνται και μετρητά — για καύσιμα ή υλικά",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 Επαναλαμβανόμενη — διατήρηση αγγελίας ενεργής για συνεχείς κρατήσεις",
   "🔒 This community's listings are for its members": "🔒 Οι καταχωρίσεις αυτής της κοινότητας είναι για τα μέλη της",
-  "🗳️ Poll": "🗳️ Ψηφοφορία"
+  "🗳️ Poll": "🗳️ Ψηφοφορία",
+  "Delete message": "Διαγραφή μηνύματος",
+  "Delete for everyone?": "Διαγραφή για όλους;",
+  "It will read \"This message was deleted\" to everyone in the chat.": "Θα εμφανίζεται ως «Αυτό το μήνυμα διαγράφηκε» σε όλους στη συνομιλία.",
+  "Remove this message?": "Αφαίρεση αυτού του μηνύματος;",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "Θα εμφανίζεται ως «Αφαιρέθηκε από συντονιστή» σε όλους στη συνομιλία.",
+  "Mute notifications": "Σίγαση ειδοποιήσεων",
+  "Unmute": "Κατάργηση σίγασης",
+  "For 8 hours": "Για 8 ώρες",
+  "For a week": "Για 1 εβδομάδα",
+  "Always\u0004mute for": "Πάντα",
+  "@mentions still reach you.": "Οι @αναφορές εξακολουθούν να φτάνουν σε εσάς.",
+  "Chat menu": "Μενού συνομιλίας",
+  "Close menu": "Κλείσιμο μενού",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} μέλος · σε σίγαση",
+    "other": "{n} μέλη · σε σίγαση"
+  }
 }

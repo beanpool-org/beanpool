@@ -141,6 +141,14 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
         expect(screen.getAllByText('I will pay you 50 Beans')).toHaveLength(1);
     });
 
+    // #2477 deciding review: Delete is a group chat's (the phone's GroupChatView); a DM's own line offers none on the web.
+    it('Ana\'s own line in a DM has no Delete', async () => {
+        thread.messages = [sent(ana, 'See you at the hall')];
+        await openChat();
+        const line = (await screen.findByText('See you at the hall')).closest('[id^="msg-"]') as HTMLElement;
+        expect(within(line).queryByRole('button', { name: 'Delete message' })).toBeNull();
+    });
+
     it('Ben\'s answer shown before Ana\'s question is marked', async () => {
         const question = sent(ana, 'Shall I cancel the order?');
         const answer = sent(ben, 'No', question.id);

@@ -3606,5 +3606,22 @@
   "💸 Cash also needed — for fuel or materials": "💸 പണവും ആവശ്യമുണ്ട് — ഇന്ധനത്തിനോ സാമഗ്രികൾക്കോ",
   "🔁 Repeatable — keep listing active for ongoing bookings": "🔁 ആവർത്തിക്കാവുന്നത് — തുടർച്ചയായ ബുക്കിംഗുകൾക്കായി ലിസ്റ്റിംഗ് സജീവമായി നിലനിർത്തുക",
   "🔒 This community's listings are for its members": "🔒 ഈ കമ്മ്യൂണിറ്റിയുടെ ലിസ്റ്റിംഗുകൾ അതിലെ അംഗങ്ങൾക്കുള്ളതാണ്",
-  "🗳️ Poll": "🗳️ പോൾ"
+  "🗳️ Poll": "🗳️ പോൾ",
+  "Delete message": "സന്ദേശം ഇല്ലാതാക്കുക",
+  "Delete for everyone?": "എല്ലാവർക്കുമായി ഇല്ലാതാക്കണോ?",
+  "It will read \"This message was deleted\" to everyone in the chat.": "ഇത് ചാറ്റിലുള്ള എല്ലാവർക്കും \"ഈ സന്ദേശം ഇല്ലാതാക്കി\" എന്ന് കാണിക്കും.",
+  "Remove this message?": "ഈ സന്ദേശം മാറ്റണോ?",
+  "It will read \"Removed by a convenor\" to everyone in the chat.": "ഇത് ചാറ്റിലുള്ള എല്ലാവർക്കും \"കൺവീനർ നീക്കം ചെയ്തത്\" എന്ന് കാണിക്കും.",
+  "Mute notifications": "അറിയിപ്പുകൾ നിശബ്ദമാക്കുക",
+  "Unmute": "നിശബ്ദത മാറ്റുക",
+  "For 8 hours": "8 മണിക്കൂർ നേരത്തേക്ക്",
+  "For a week": "ഒരു ആഴ്ചത്തേക്ക്",
+  "Always\u0004mute for": "എപ്പോഴും",
+  "@mentions still reach you.": "@mentions ഇപ്പോഴും നിങ്ങളിലേക്ക് എത്തും.",
+  "Chat menu": "ചാറ്റ് മെനു",
+  "Close menu": "മെനു അടയ്ക്കുക",
+  "{n} member · muted|{n} members · muted": {
+    "one": "{n} അംഗം · മ്യൂട്ട് ചെയ്‌തു",
+    "other": "{n} അംഗങ്ങൾ · മ്യൂട്ട് ചെയ്‌തു"
+  }
 }

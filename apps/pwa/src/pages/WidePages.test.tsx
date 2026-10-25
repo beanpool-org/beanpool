@@ -13,7 +13,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { ToolsPage } from './ToolsPage';
 import { ChannelsPage } from './ChannelsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getPulseFeed, getConversationMessages, getConversations, getTreasuries, type PulseFeedItem, type Treasury } from '../lib/api';
+import { getPulseFeed, getConversationMessages, getConversations, getTreasuries, getYourGroups, type PulseFeedItem, type Treasury } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 
@@ -258,6 +258,21 @@ describe('Wide screen layout: Commons, Tools, and Channels container pins', () =
             keepers: [{ publicKey: testIdentity.publicKey, callsign: testIdentity.callsign, role: 'lead' }],
         };
         vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [kept] });
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [{
+                kind: 'enterprise',
+                id: kept.publicKey,
+                conversationId: kept.publicKey,
+                name: kept.name,
+                role: 'lead',
+                lifecycle: 'ongoing',
+                badge: '🏛️',
+                avatarUrl: null,
+                readOnly: false,
+                unreadCount: 0,
+                lastActivityAt: '2026-01-01T00:00:00Z',
+            }],
+        });
         render(<ProjectsPage identity={testIdentity} onOpenTreasury={vi.fn()} />);
 
         const yoursBlock = await screen.findByTestId('commons-yours');

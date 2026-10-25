@@ -44,6 +44,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
+import { NeedsYouIcons } from './components/NeedsYouIcons';
 import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
@@ -880,7 +881,16 @@ export function App() {
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
                     <div className="flex items-center justify-between px-2 py-1">
                         <SyncStatus isMember={!isGuest} />
-                        <SidebarControls showSettings={settingsSeen} setShowSettings={setSettingsFromCog} />
+                        <div className="flex items-center gap-1">
+                            <NeedsYouIcons
+                                identityPubkey={identity?.publicKey}
+                                onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                activeTab={activeTab}
+                                isHome={activeTab === 'home'}
+                                variant="sidebar"
+                            />
+                            <SidebarControls showSettings={settingsSeen} setShowSettings={setSettingsFromCog} />
+                        </div>
                     </div>
 
                     {identity && (

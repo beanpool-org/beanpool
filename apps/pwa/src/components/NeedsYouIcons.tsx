@@ -88,6 +88,16 @@ function NeedSvg({ kind }: { kind: NeedsYouKind | 'more' }) {
     }
 }
 
+let needsReadPromise: Promise<any> | null = null;
+function fetchNeedsDeduped(): Promise<any> {
+    if (!needsReadPromise && 'getHome' in api && typeof api.getHome === 'function') {
+        needsReadPromise = Promise.resolve(api.getHome({ cards: ['needs'] })).finally(() => {
+            needsReadPromise = null;
+        });
+    }
+    return needsReadPromise || Promise.resolve({ notModified: true });
+}
+
 export function NeedsYouIcons({
     identityPubkey,
     onNavigate,
@@ -151,13 +161,11 @@ export function NeedsYouIcons({
             if (ans?.cards?.needs?.items) {
                 setEntries(filterAndSort(ans.cards.needs.items));
             } else if (!onHome) {
-                if ('getHome' in api && typeof api.getHome === 'function') {
-                    const read = await api.getHome({ cards: ['needs'] });
-                    if (read && !read.notModified && read.answer) {
-                        recordHomeAnswer(read.answer, pk);
-                        if (read.answer.cards?.needs?.items) {
-                            setEntries(filterAndSort(read.answer.cards.needs.items));
-                        }
+                const read = await fetchNeedsDeduped();
+                if (read && !read.notModified && read.answer) {
+                    recordHomeAnswer(read.answer, pk);
+                    if (read.answer.cards?.needs?.items) {
+                        setEntries(filterAndSort(read.answer.cards.needs.items));
                     }
                 }
             }
@@ -370,7 +378,11 @@ export function NeedsYouIcons({
         };
     }, [entries.length, activeTab, variant]);
 
-    if (!identityPubkey || entries.length === 0) return null;
+    if (!identityPubkey) return null;
+
+    if (isHidden() || entries.length === 0) {
+        return <div ref={containerRef} style={{ display: 'none' }} />;
+    }
 
     const slotPx = HEADER_ALERT_SLOT_PX;
     const countChipPx = 28;

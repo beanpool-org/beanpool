@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import * as api from '../lib/api';
 import * as sync from '../lib/sync';
 import { HeaderControls } from './HeaderControls';
+import { NeedsYouIcons } from './NeedsYouIcons';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
 import { resetHomeStoreForTests } from '../lib/home-store';
@@ -653,6 +654,60 @@ describe('HeaderControls needs-you alert icons', () => {
             expect(screen.queryByTestId('header-needs-invite')).toBeNull();
         } finally {
             vi.useRealTimers();
+        }
+    });
+
+    it('wide screens: shows icons in sidebar with rounded-lg styling, and hidden header sends no duplicate read', async () => {
+        const inviteItem: NeedsItem = {
+            kind: 'invite',
+            count: 1,
+            accent: false,
+            label: "You're invited to join Garden Club",
+            target: { to: 'invite', id: 'group-garden' },
+        };
+
+        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({
+            notModified: false,
+            etag: 'W/"home-wide"',
+            answer: makeHomeAnswer([inviteItem]) as any,
+        });
+
+        const originalWidth = window.innerWidth;
+        window.innerWidth = 1024;
+        try {
+            render(
+                <div>
+                    {/* Wide sidebar footer */}
+                    <div data-testid="sidebar-footer">
+                        <NeedsYouIcons
+                            identityPubkey={ME.publicKey}
+                            activeTab="messages"
+                            variant="sidebar"
+                        />
+                    </div>
+                    {/* Mobile header (md:hidden) */}
+                    <header className="md:hidden">
+                        <HeaderControls
+                            showSettings={false}
+                            setShowSettings={() => {}}
+                            identityPubkey={ME.publicKey}
+                            onOpenProfile={() => {}}
+                            activeTab="messages"
+                        />
+                    </header>
+                </div>
+            );
+
+            // Wait for items to settle
+            const sidebarEnvelope = await screen.findByTestId('header-needs-invite');
+            expect(sidebarEnvelope).toBeInTheDocument();
+            // Sidebar buttons have rounded-lg matching SidebarControls
+            expect(sidebarEnvelope.className).toContain('rounded-lg');
+
+            // Exactly ONE getHome read was sent across both components
+            expect(getHomeSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            window.innerWidth = originalWidth;
         }
     });
 });

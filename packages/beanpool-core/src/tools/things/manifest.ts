@@ -136,7 +136,8 @@ export const THINGS: ToolManifest<ThingsDoc> = {
     line: word('Things you own and might lend, and who has them.'),
     icon: '🧰',
     shelf: 'stock',
-    shopKinds: ['tools', 'seeds', 'rooms'],
+    // The kinds it was for (tools, seeds, rooms) became Tools, Garden and Housing; General's nearest kind is tools.
+    categories: ['tools', 'garden', 'housing', 'general'],
     owner: 'both',
     permissions: THINGS_PERMISSIONS,
     doc: {

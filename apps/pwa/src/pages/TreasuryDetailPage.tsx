@@ -41,8 +41,8 @@ import {
 } from '../components/Shopfront';
 import { EnterpriseFace, EnterpriseFeatured } from '../components/EnterpriseManage';
 import {
-    featuredOf, hasShopfront, kindSinceLine, leadKeeperOf, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings,
-    readsAsMember, shopKindOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
+    categorySinceLine, featuredOf, hasShopfront, leadKeeperOf, listingsFromDetailPosts, messageLabel, moneyLine, readKeepers, readOwnerListings,
+    readsAsMember, shopCategoryOf, shopPhotoOf, shopSectionsOf, sinceLine, type ShopfrontListing,
 } from '../lib/shopfront';
 import { LocalCommunityStrip, LocalCommunityAction, LocalCommunityLine, type LocalCommunityWays } from '../components/LocalCommunityMark';
 
@@ -1276,6 +1276,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
                                                         onClick={() => {
                                                             setPostModalMode('offer');
+                                                            // Its new Offer starts in its shop's category (Marty, 25 Oct 2026); the keeper can change it.
+                                                            const shopCategory = shopCategoryOf(detail?.shop);
+                                                            if (shopCategory) setPostCategory(shopCategory);
                                                             setPostRepeatable(true);
                                                             setPostError(null);
                                                         }}
@@ -1943,15 +1946,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {manageWordsOnPage && feedbackAlert}
 
                                 {/* The shopfront (DESIGN-shops-round3-enterprise-shopfront-fable.md §3, S8; the phone's S5 order): its banner (its
-                                    shop's photo, or a quiet block in its kind's emoji), its logo (its avatar), its name, its kind and since when, and
+                                    shop's photo, or a quiet block in its category's emoji), its logo (its avatar), its name, its category and since when, and
                                     what kind of group it is. */}
                                 <ShopfrontHeader
                                     name={name}
                                     logoUrl={detail?.avatar}
                                     bannerUrl={shopPhotoOf(detail?.shop)}
-                                    kind={shopKindOf(detail?.shop)}
+                                    category={shopCategoryOf(detail?.shop)}
                                     fallbackEmoji={detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
-                                    lines={[kindSinceLine(shopKindOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
+                                    lines={[categorySinceLine(shopCategoryOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
                                 />
 
                                 {/* State banners everyone can see */}

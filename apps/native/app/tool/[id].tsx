@@ -415,7 +415,9 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 onList={(fee: ToolListFee, inShop: boolean) => {
                     const draft = listDraft;
                     setListDraft(null);
-                    if (draft) void openOfferComposer(owner, manifest.id, draft, fee, inShop);
+                    const shop = listChecks.shop;
+                    const shopCategory = shop.kind === 'open' || shop.kind === 'paused' ? shop.category ?? null : null;
+                    if (draft) void openOfferComposer(owner, manifest.id, draft, fee, inShop, shopCategory);
                 }}
             />
         </>

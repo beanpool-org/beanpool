@@ -143,7 +143,7 @@ function membersView(over: Record<string, unknown> = {}) {
         balance: 12, creditLine: 50, liveOffers: 3, earnedSurplus: 4, workingCapitalCeiling: null,
         isLeadOrSoleKeeperOrAdmin: false, availableToBack: 0,
         about: ABOUT, since: '2026-09-03T10:00:00.000Z', offerCategories: ['food', 'repairs'],
-        shop: { id: SHOP_ID, kind: 'repairs', counts: { things: 3 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(Date.now()) },
+        shop: { id: SHOP_ID, category: 'tech', counts: { things: 3 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(Date.now()) },
         keepers,
         keeperRequests: [], keeperChanges: [], deferredClaims: [],
         posts: [{ id: 'old-1', type: 'offer', category: 'repairs', title: 'Text-only listing', credits: 5, price_type: 'fixed', status: 'active' }],
@@ -230,13 +230,13 @@ for (const dark of [false, true]) {
             await renderIn();
             // The banner, a quiet block in its kind's emoji (no shop photo yet), the logo over its foot, then the name.
             const banner = byId('shopfront-banner');
-            expect(banner?.textContent).toBe('🔧');
+            expect(banner?.textContent).toBe('💻');
             expect(styleOf(banner).backgroundColor).toBe(colors().brand.tint);
             expect(styleOf(banner).aspectRatio).toBe(3); // 3:1, the shape its keeper chose the strip in (choose-the-part)
             expect(styleOf(banner).width).toBe('100%');
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
             expect(byId('shopfront-name')?.textContent).toBe(NAME);
-            expect(host.textContent).toContain('🔧 Repairs · since Sep 2026');
+            expect(host.textContent).toContain('💻 Tech · since Sep 2026');
             // Who keeps it: the lead first, each with their badges, and once that the badges gate nothing.
             const keepersBlock = byId('shopfront-keepers');
             expect(keepersBlock?.textContent).toContain('Kept by');
@@ -306,7 +306,7 @@ for (const dark of [false, true]) {
         it("a visitor's cut-off: names and roles, About and How we deal, then a sentence; nothing past it", async () => {
             const visitorKeepers = keepers.map(({ publicKey, callsign, role }) => ({ publicKey, callsign, role }));
             net.answer = community({
-                getTreasuryDetail: membersView({ offerCategories: undefined, keepers: visitorKeepers, posts: [], shop: { id: SHOP_ID, kind: 'repairs', counts: { things: 3 } } }),
+                getTreasuryDetail: membersView({ offerCategories: undefined, keepers: visitorKeepers, posts: [], shop: { id: SHOP_ID, category: 'tech', counts: { things: 3 } } }),
             }, []);
             await renderIn();
             expect(byId(`shopfront-keeper-${DAMO}`)?.textContent).toContain('Damo · Lead keeper');

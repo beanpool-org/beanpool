@@ -4,7 +4,7 @@
  * shop is a front window on their own account: the Offers they put in it, under one name, and all its Beans are theirs.
  *
  * - None yet: what a shop is, and Open my shop (a PUT with nothing in it: named "<their name>'s shop" until they name it).
- * - Open: its title, kind and counts; its fields (Name · Kind · About · How I deal · Banner photo), each tappable, in any
+ * - Open: its title, category and counts; its fields (Name · Category · About · How I deal · Banner photo), each tappable, in any
  *   order, none required; what is in it now, each opening its listing; "Add my live Offers"; the way to the tools. The
  *   banner photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4) goes up as the 3:1 strip the member chooses
  *   on the crop screen, 800 px (utils/banner-photo.ts, components/PictureCrop.tsx), and comes down with Remove.
@@ -22,22 +22,22 @@ import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, tn, type ShopKind } from '@beanpool/core';
+import { t, tn, type ShopCategory } from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { HOME_TARGET_DP, homeStyles } from '../../components/home/HomeParts';
 import { ToolButton, ToolButtons, ToolEmpty, ToolNote, ToolRow, ToolSection } from '../../tools/ui';
 import {
-    ShopAddOffersSheet, ShopCloseSheet, ShopKindSheet, ShopPauseSheet, ShopTextSheet, type ShopSheetRefusal, type ShopTextField,
+    ShopAddOffersSheet, ShopCategorySheet, ShopCloseSheet, ShopPauseSheet, ShopTextSheet, type ShopSheetRefusal, type ShopTextField,
 } from '../../components/shop/ShopSheets';
 import {
-    addOffersToMyShop, changeMyShop, closeMyShop, offersToAdd, readMyLiveOffers, readMyShop, readShopListings, shopKindLabel, shopStateLine,
+    addOffersToMyShop, changeMyShop, closeMyShop, offersToAdd, readMyLiveOffers, readMyShop, readShopListings, shopCategoryLabel, shopStateLine,
     shopTitle, type MyShop, type MyShopChanges, type MyShopRead, type ShopListing,
 } from '../../utils/shop';
 import { pickBannerPhoto } from '../../utils/banner-photo';
 import { usePictureCrop } from '../../components/PictureCrop';
 
-type Where = 'screen' | 'text' | 'kind' | 'banner' | 'pause' | 'close' | 'add';
+type Where = 'screen' | 'text' | 'category' | 'banner' | 'pause' | 'close' | 'add';
 
 /**
  * A refusal as the screen shows it: the node's own sentence when it answered, else ours. An answer without the node's
@@ -70,7 +70,7 @@ export default function YourShopScreen() {
     /** Its Offers: undefined while read, null when they couldn't be. */
     const [listings, setListings] = useState<ShopListing[] | null | undefined>(undefined);
     const [editing, setEditing] = useState<ShopTextField | null>(null);
-    const [sheet, setSheet] = useState<'kind' | 'pause' | 'close' | 'add' | null>(null);
+    const [sheet, setSheet] = useState<'category' | 'pause' | 'close' | 'add' | null>(null);
     const [offers, setOffers] = useState<ShopListing[] | null | undefined>(undefined);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<{ where: Where } & ShopSheetRefusal | null>(null);
@@ -132,8 +132,8 @@ export default function YourShopScreen() {
         }
         if (photo) await change({ photo }, 'banner');
     };
-    const pickKind = async (kind: ShopKind | null) => {
-        if (await change({ kind }, 'kind')) setSheet(null);
+    const pickCategory = async (category: ShopCategory | null) => {
+        if (await change({ category }, 'category')) setSheet(null);
     };
     const pause = async (backOn: string | null) => {
         if (await change(backOn ? { paused: true, backOn } : { paused: true }, 'pause')) setSheet(null);
@@ -180,7 +180,7 @@ export default function YourShopScreen() {
     const closeSheet = () => { setSheet(null); setRefusal(null); };
 
     const notSet = t('Not written yet');
-    const kindWords = shop?.kind ? shopKindLabel(shop.kind) : null;
+    const categoryWords = shop?.category ? shopCategoryLabel(shop.category) : null;
     const shown = (listings ?? []).filter((l) => LIVE.has(l.status));
 
     return (
@@ -229,7 +229,7 @@ export default function YourShopScreen() {
                     <>
                         <ToolSection testID="shop-front">
                             <Text style={[styles.shopTitle, { color: colors.text.heading }]} numberOfLines={2} testID="shop-title">{shopTitle(shop)}</Text>
-                            <Text style={[styles.line, { color: colors.text.body }]} testID="shop-kind-line">{kindWords ?? t('No kind chosen yet')}</Text>
+                            <Text style={[styles.line, { color: colors.text.body }]} testID="shop-category-line">{categoryWords ?? t('No category chosen yet')}</Text>
                             <Text style={[styles.line, { color: colors.text.secondary }]} testID="shop-state">{shopStateLine(shop)}</Text>
                             {shop.blurb ? <Text style={[styles.blurb, { color: colors.text.body }]}>{shop.blurb}</Text> : null}
                         </ToolSection>
@@ -251,7 +251,7 @@ export default function YourShopScreen() {
 
                         <ToolSection title={t('About your shop')} testID="shop-fields">
                             <ToolRow title={t('Name')} state={shop.name ?? t('Not named yet')} onPress={() => { setRefusal(null); setEditing('name'); }} testID="shop-field-name" />
-                            <ToolRow title={t('Kind')} state={kindWords ?? t('Not chosen yet')} onPress={() => { setRefusal(null); setSheet('kind'); }} testID="shop-field-kind" />
+                            <ToolRow title={t('Category')} state={categoryWords ?? t('Not chosen yet')} onPress={() => { setRefusal(null); setSheet('category'); }} testID="shop-field-category" />
                             <ToolRow title={t('About')} state={shop.blurb ?? notSet} onPress={() => { setRefusal(null); setEditing('blurb'); }} testID="shop-field-blurb" />
                             <ToolRow title={t('How I deal')} state={shop.howToDeal ?? notSet} onPress={() => { setRefusal(null); setEditing('howToDeal'); }} testID="shop-field-howToDeal" />
                             {/* Its banner: one photo across the top of its shopfront, put up or changed with a tap, on its own. */}
@@ -304,8 +304,8 @@ export default function YourShopScreen() {
                 onSave={(text) => { void saveText(text); }}
                 onClose={() => { setEditing(null); setRefusal(null); }}
             />
-            <ShopKindSheet visible={sheet === 'kind'} kind={shop?.kind ?? null} busy={busy} refusal={refusedAt('kind')} colors={colors}
-                onPick={(k) => { void pickKind(k); }} onClose={closeSheet} />
+            <ShopCategorySheet visible={sheet === 'category'} category={shop?.category ?? null} busy={busy} refusal={refusedAt('category')} colors={colors}
+                onPick={(c) => { void pickCategory(c); }} onClose={closeSheet} />
             <ShopPauseSheet visible={sheet === 'pause'} busy={busy} refusal={refusedAt('pause')} colors={colors}
                 onPause={(day) => { void pause(day); }} onClose={closeSheet} onDeals={openDeals} />
             <ShopCloseSheet visible={sheet === 'close'} busy={busy} refusal={refusedAt('close')} colors={colors}

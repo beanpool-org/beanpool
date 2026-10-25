@@ -3,9 +3,9 @@
  * answers of 23 Oct 2026), drawn by app/treasury-manage.tsx: the enterprise's face as one form with one Save, and its
  * Featured shelf. Their rules are utils/enterprise-manage.ts; the node's routes utils/shop.ts.
  *
- * - The face: any keeper its About, logo, banner photo, kind and how we deal; its lead its name and what it is for, which
+ * - The face: any keeper its About, logo, banner photo, category and how we deal; its lead its name and what it is for, which
  *   every other keeper reads with the sentence why (never hidden without saying). A node admin who keeps none of it gets
- *   no banner photo, kind or how we deal (its shop's routes take its keepers only), and no Featured (drawn by the console for keepers). One Save sends what changed; the node's refusal
+ *   no banner photo, category or how we deal (its shop's routes take its keepers only), and no Featured (drawn by the console for keepers). One Save sends what changed; the node's refusal
  *   shows in its own words, and no answer says so, keeping what was typed. The console reads the enterprise again after
  *   any action on it, and what was typed and not saved stays through that (faceOnRead).
  * - Featured: each of its live Offers in its shop, on the shelf or off it with one tap (six at most, said once when
@@ -25,8 +25,8 @@ import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
 import { MemberAvatar } from '../MemberAvatar';
 import { AvatarPickerSheet } from '../AvatarPickerSheet';
 import { ToolButton, ToolButtons, ToolField, ToolInput, ToolNote, ToolRow, ToolSection } from '../../tools/ui';
-import { ShopKindSheet } from '../shop/ShopSheets';
-import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, featureOffer, shopKindLabel, type ShopListing } from '../../utils/shop';
+import { ShopCategorySheet } from '../shop/ShopSheets';
+import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, featureOffer, shopCategoryLabel, type ShopListing } from '../../utils/shop';
 import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm, type FaceSave, type FaceState } from '../../utils/enterprise-manage';
 import { shopPhotoOf } from '../../utils/shopfront';
 import { pickBannerPhoto } from '../../utils/banner-photo';
@@ -38,7 +38,7 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
     treasury: string;
     detail: unknown;
     lead: boolean;
-    /** A keeper of it: its kind and how we deal are its shop's, which only its keepers change (not a node admin's). */
+    /** A keeper of it: its category and how we deal are its shop's, which only its keepers change (not a node admin's). */
     keeper: boolean;
     project: boolean;
     /** Its logo now (its avatar's address). */
@@ -58,7 +58,7 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
     const [error, setError] = useState<string | null>(null);
     const [partly, setPartly] = useState(false);
     const [picking, setPicking] = useState(false);
-    const [choosingKind, setChoosingKind] = useState(false);
+    const [choosingCategory, setChoosingCategory] = useState(false);
     const plan = faceSaveOf(before, draft, lead, keeper);
     const name = typeof (detail as Record<string, unknown> | null)?.name === 'string' ? (detail as Record<string, string>).name : '';
     const logoShown = draft.logo ?? (sentLogo && sentLogo.over === logoUrl ? sentLogo.uri : null) ?? logoUrl ?? null;
@@ -174,11 +174,11 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
                 </View>
             ) : null}
             <ToolInput label={t('About')} value={draft.about} onChange={(v) => edit({ about: v })} max={ENTERPRISE_ABOUT_LIMIT.chars} lines={4} testID="manage-face-about" />
-            {/* Its kind in a row, the fourteen in the sheet Your shop uses: picked here, sent with the one Save. Its shop's, so
-                its keepers' only. */}
+            {/* Its category in a row, the Market's in the sheet Your shop uses: picked here, sent with the one Save. Its shop's,
+                so its keepers' only. */}
             {keeper ? (
                 <>
-                    <ToolRow title={t('Kind')} state={draft.kind ? shopKindLabel(draft.kind) : t('Not chosen yet')} onPress={() => setChoosingKind(true)} testID="manage-face-kind" />
+                    <ToolRow title={t('Category')} state={draft.category ? shopCategoryLabel(draft.category) : t('Not chosen yet')} onPress={() => setChoosingCategory(true)} testID="manage-face-category" />
                     <ToolInput label={t('How we deal')} value={draft.howToDeal} onChange={(v) => edit({ howToDeal: v })} max={SHOP_HOW_TO_DEAL_LIMIT.chars} lines={3}
                         hint={t('Where to pick up, and when things come back.')} testID="manage-face-how" />
                 </>
@@ -189,8 +189,8 @@ export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, o
             {saved ? <ToolNote text={t('Saved.')} testID="manage-face-saved" /> : null}
             {error ? <ToolNote tone="danger" text={error} testID="manage-face-error" /> : null}
             {partly ? <ToolNote text={t('Its other changes were saved.')} testID="manage-face-partly" /> : null}
-            <ShopKindSheet visible={choosingKind} kind={draft.kind} busy={false} refusal={null} colors={colors}
-                onPick={(k) => { edit({ kind: k }); setChoosingKind(false); }} onClose={() => setChoosingKind(false)} />
+            <ShopCategorySheet visible={choosingCategory} category={draft.category} busy={false} refusal={null} colors={colors}
+                onPick={(c) => { edit({ category: c }); setChoosingCategory(false); }} onClose={() => setChoosingCategory(false)} />
             <AvatarPickerSheet visible={picking} title={t('Its logo')} colors={colors} onClose={() => setPicking(false)} onSelectImage={(uri) => edit({ logo: uri })} />
             {cropper.element}
         </ToolSection>

@@ -5,7 +5,7 @@
  *
  * - The face, with one Save: any keeper (or a node admin) its About and logo (PUT /api/treasury/:t/profile); only the lead
  *   (its sole keeper, or an admin) its name and what it is for, the others shown them and told why; a keeper its shop's
- *   kind, how it deals and its banner photo (PUT /api/treasury/:t/shop, which opens the shop if need be; Marty, 24 Oct:
+ *   category, how it deals and its banner photo (PUT /api/treasury/:t/shop, which opens the shop if need be; Marty, 24 Oct:
  *   the logo and the banner are two pictures, each labelled, each with its own choice). Only what changed is sent, each to
  *   its own route, the profile first; a refusal is the node's own sentence and nothing after it is sent. The logo and the
  *   banner are the parts of their photos the keeper chose in the crop dialog (components/PictureCropDialog.tsx; Marty,
@@ -17,15 +17,15 @@
  */
 import { useId, useRef, useState } from 'react';
 import {
-    AVATAR_PICTURE, BANNER_PICTURE, ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, SHOP_KINDS, t, tn,
-    type ShopKind,
+    AVATAR_PICTURE, BANNER_PICTURE, ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_CATEGORIES, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, t, tn,
+    type ShopCategory,
 } from '@beanpool/core';
 import { addEnterpriseShopOffers, changeEnterpriseFace, changeEnterpriseShop, featureOffer } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { usePictureCrop } from './PictureCropDialog';
 import {
-    faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, shopPhotoOf, type Face, type ShopfrontListing,
+    faceChanges, listingPriceLine, shelfLine, shelfOf, shopCategoryLabel, shopCategoryOf, shopPhotoOf, type Face, type ShopfrontListing,
 } from '../lib/shopfront';
 
 const card = 'bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4';
@@ -50,7 +50,7 @@ export function faceOf(detail: any): Face {
         name: typeof detail?.name === 'string' ? detail.name : '',
         purpose: typeof detail?.purpose === 'string' ? detail.purpose : '',
         about: typeof detail?.about === 'string' ? detail.about : '',
-        kind: SHOP_KINDS.includes(detail?.shop?.kind) ? detail.shop.kind as ShopKind : null,
+        category: shopCategoryOf(detail?.shop),
         howToDeal: typeof detail?.shop?.howToDeal === 'string' ? detail.shop.howToDeal : '',
     };
 }
@@ -137,7 +137,7 @@ export function EnterpriseFace({
             }
             if (Object.keys(changes.shop).length > 0) {
                 await changeEnterpriseShop(treasury, changes.shop);
-                setWas((w) => ({ ...w, kind: form.kind, howToDeal: form.howToDeal }));
+                setWas((w) => ({ ...w, category: form.category, howToDeal: form.howToDeal }));
                 // The banner is the node's now: its page and this form read it again (onSaved).
                 setForm((f) => ({ ...f, banner: undefined }));
             }
@@ -158,8 +158,8 @@ export function EnterpriseFace({
                 <h2 id={`${id}-heading`} className={heading}>{project ? t('Its page: what members see') : t('Its shopfront: what members see')}</h2>
                 <p className={`${muted} mt-1`}>
                     {project
-                        ? t('Any collaborator can change the logo, the banner photo, About, the kind of shop and how you deal.')
-                        : t('Any keeper can change the logo, the banner photo, About, the kind of shop and how you deal.')}
+                        ? t('Any collaborator can change the logo, the banner photo, About, the category and how you deal.')
+                        : t('Any keeper can change the logo, the banner photo, About, the category and how you deal.')}
                 </p>
             </div>
 
@@ -260,10 +260,10 @@ export function EnterpriseFace({
             {shopEditable && (
                 <>
                     <div>
-                        <label htmlFor={`${id}-kind`} className={label}>{t('Kind of shop')}</label>
-                        <select id={`${id}-kind`} data-testid="manage-face-kind" value={form.kind ?? ''} onChange={(e) => set({ kind: (e.target.value || null) as ShopKind | null })} className={`${field} min-h-[44px]`}>
-                            <option value="">{t('None', undefined, 'no kind of shop')}</option>
-                            {SHOP_KINDS.map((k) => <option key={k} value={k}>{shopKindLabel(k)}</option>)}
+                        <label htmlFor={`${id}-category`} className={label}>{t('Category')}</label>
+                        <select id={`${id}-category`} data-testid="manage-face-category" value={form.category ?? ''} onChange={(e) => set({ category: (e.target.value || null) as ShopCategory | null })} className={`${field} min-h-[44px]`}>
+                            <option value="">{t('None', undefined, 'no category for a shop')}</option>
+                            {SHOP_CATEGORIES.map((c) => <option key={c} value={c}>{shopCategoryLabel(c)}</option>)}
                         </select>
                     </div>
                     <div>

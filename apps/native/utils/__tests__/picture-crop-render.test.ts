@@ -336,7 +336,7 @@ describe("a shop's banner: 3:1, chosen and drawn the same", () => {
     it("the shopfront draws its banner 3:1 across the page, and Manage's preview the same", async () => {
         await act(async () => {
             root.render(createElement('div', null,
-                createElement(ShopfrontHeader, { name: 'Hill Bakery', ownerKey: 'k', logoUrl: null, kind: null, fallbackEmoji: '🏛️', bannerPhoto: 'data:image/jpeg;base64,QQ==', lines: [] }),
+                createElement(ShopfrontHeader, { name: 'Hill Bakery', ownerKey: 'k', logoUrl: null, category: null, fallbackEmoji: '🏛️', bannerPhoto: 'data:image/jpeg;base64,QQ==', lines: [] }),
             ) as any);
         });
         const banner = styleOf('shopfront-banner');

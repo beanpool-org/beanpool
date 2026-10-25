@@ -51,15 +51,15 @@ vi.mock('../db', () => ({
 }));
 
 import {
-    SHOP_KIND_WORDS, addOffersToMyShop, backOnChoices, changeMyShop, closeMyShop, localDay, movedCount, offersToAdd, readListingShopId,
-    SHOP_TOGGLE_READ_MS, readEnterpriseOffers, readMyLiveOffers, readMyShop, readShop, readShopListings, shopCountsLine, shopStateLine, shopTitle,
+    addOffersToMyShop, backOnChoices, changeMyShop, closeMyShop, localDay, movedCount, offersToAdd, readListingShopId,
+    SHOP_TOGGLE_READ_MS, readEnterpriseOffers, readMyLiveOffers, readMyShop, readShop, readShopListings, shopCategoryLabel, shopCountsLine, shopStateLine, shopTitle,
 } from '../shop';
 import { SHOP_CHOICE_HOLDS_MS, SHOP_CHOICE_KEY, SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, rememberShopChoice, shopChoiceFor } from '../shop-choice';
-import { SHOP_KINDS } from '@beanpool/core';
+import { SHOP_CATEGORIES } from '@beanpool/core';
 
 const COUNTS = { things: 3, available: 2, toBorrow: 1, toBuy: 2, out: 1, newThisWeek: 1 };
 const SHOP = {
-    id: 'shop-1', kind: 'tools', counts: COUNTS, name: "Dave's Tool Shed", ownerPublicKey: 'dave', ownerName: 'Dave', enterprise: false,
+    id: 'shop-1', category: 'tools', counts: COUNTS, name: "Dave's Tool Shed", ownerPublicKey: 'dave', ownerName: 'Dave', enterprise: false,
     blurb: 'Drills and ladders.', howToDeal: 'Front gate.', paused: false, backOn: null, openedAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z',
 };
 
@@ -78,26 +78,25 @@ afterEach(() => setLanguage('en'));
 describe('a shop as the node sends it, read tolerantly', () => {
     it('keeps what the phone draws, and nothing it can\'t trust', () => {
         expect(readShop(SHOP)).toEqual({
-            id: 'shop-1', name: "Dave's Tool Shed", ownerName: 'Dave', kind: 'tools', blurb: 'Drills and ladders.', howToDeal: 'Front gate.',
+            id: 'shop-1', name: "Dave's Tool Shed", ownerName: 'Dave', category: 'tools', blurb: 'Drills and ladders.', howToDeal: 'Front gate.',
             counts: COUNTS, paused: false, backOn: null, photoUrl: null,
         });
         // Its banner photo's address, as the node gave it (keyed); none sent, or empty, is none.
         expect(readShop({ ...SHOP, photoUrl: '/api/shops/shop-1/photo?v=ab&k=K' })?.photoUrl).toBe('/api/shops/shop-1/photo?v=ab&k=K');
         expect(readShop({ ...SHOP, photoUrl: '' })?.photoUrl).toBeNull();
-        // A kind no build knows is none; counts missing or odd are 0; a back-on day that is no day is none.
-        expect(readShop({ ...SHOP, kind: 'weapons', counts: { things: 'many' }, backOn: 'soon' })).toMatchObject({
-            kind: null, counts: { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 }, backOn: null,
+        // A category this build doesn't know is none, and so is an old node's kind; counts missing or odd are 0; a back-on day
+        // that is no day is none.
+        expect(readShop({ ...SHOP, category: 'weapons', kind: 'tools', counts: { things: 'many' }, backOn: 'soon' })).toMatchObject({
+            category: null, counts: { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 }, backOn: null,
         });
         expect(readShop({ ...SHOP, name: '   ' })?.name).toBeNull();
         for (const bad of [null, 'shop', {}, { id: '' }, { id: 12 }]) expect(readShop(bad)).toBeNull();
     });
 
-    it('every one of the fourteen kinds has an emoji and its words', () => {
-        expect(Object.keys(SHOP_KIND_WORDS).sort()).toEqual([...SHOP_KINDS].sort());
-        for (const k of SHOP_KINDS) {
-            expect(SHOP_KIND_WORDS[k].emoji.length).toBeGreaterThan(0);
-            expect(SHOP_KIND_WORDS[k].name).toMatch(/^[A-Z]/);
-        }
+    it("every one of the Market's categories reads as its listings show it: their emoji and their words", () => {
+        for (const c of SHOP_CATEGORIES) expect(shopCategoryLabel(c), c).toMatch(/^\S+ \p{Lu}/u);
+        expect(shopCategoryLabel('tech')).toBe('💻 Tech');
+        expect(shopCategoryLabel('transport')).toBe('🚲 Transport');
     });
 });
 

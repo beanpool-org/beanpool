@@ -64,7 +64,7 @@ const ENTERPRISE = {
     publicKey: 't'.repeat(64), name: 'Tool Library', purpose: 'Share communal tools', about: 'Weekly lending', avatar: null,
     lifecycle: 'ongoing', status: 'active', isLeadOrSoleKeeperOrAdmin: true,
     keepers: [{ publicKey: identity.publicKey, callsign: 'Alice', role: 'lead' }],
-    shop: { id: 'shop-1', kind: 'tools', howToDeal: 'Pick up on weekends' },
+    shop: { id: 'shop-1', category: 'tools', howToDeal: 'Pick up on weekends' },
 } as any;
 
 beforeEach(() => {
@@ -269,7 +269,7 @@ describe("an enterprise's logo and banner (Manage)", () => {
 
 describe('the shopfront draws its banner 3:1', () => {
     it('full width of its column, height a third of it, never a fixed height', () => {
-        render(<ShopfrontHeader name="Tool Library" logoUrl={null} bannerUrl={CROPPED} kind={null} fallbackEmoji="🏛️" lines={[]} />);
+        render(<ShopfrontHeader name="Tool Library" logoUrl={null} bannerUrl={CROPPED} category={null} fallbackEmoji="🏛️" lines={[]} />);
         const banner = screen.getByTestId('shopfront-banner');
         expect(banner.className).toContain('aspect-[3/1]');
         expect(banner.className).toContain('w-full');

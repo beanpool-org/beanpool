@@ -13,13 +13,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { formatCount, listPhotoUrl, t, type ShopKind } from '@beanpool/core';
+import { formatCount, listPhotoUrl, t, type ShopCategory } from '@beanpool/core';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { MemberAvatar } from '../MemberAvatar';
 import { Sentence } from '../Sentence';
 import { categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
-import { SHOP_KIND_WORDS, shopKindLabel } from '../../utils/shop';
+import { shopCategoryLabel } from '../../utils/shop';
 import { anchorUrl } from '../../utils/node-post';
 import {
     keeperBadgeLine, listingPriceLine, listingStateLine, type ShopfrontKeeper, type ShopfrontListing, type ShopSection,
@@ -112,16 +112,16 @@ export function useNodeUri(url: string | null | undefined): string | null {
 }
 
 /**
- * The top of the shopfront: the banner (the shop's one photo, 3:1 as its keeper chose it, or a quiet block with its kind's emoji
- * when it has none or the photo won't load), the logo over its foot (the avatar the account already has), the name, and
- * the lines under it: its kind and since when, and any other.
+ * The top of the shopfront: the banner (the shop's one photo, 3:1 as its keeper chose it, or a quiet block with its category's
+ * emoji, as its listings show it, when it has none or the photo won't load), the logo over its foot (the avatar the
+ * account already has), the name, and the lines under it: its category and since when, and any other.
  */
-export function ShopfrontHeader({ name, ownerKey, logoUrl, kind, fallbackEmoji, bannerPhoto, lines, testID }: {
+export function ShopfrontHeader({ name, ownerKey, logoUrl, category, fallbackEmoji, bannerPhoto, lines, testID }: {
     name: string;
     ownerKey: string;
     logoUrl: string | null | undefined;
-    kind: ShopKind | null;
-    /** The banner's emoji when the shop has no kind. */
+    category: ShopCategory | null;
+    /** The banner's emoji when the shop has no category. */
     fallbackEmoji: string;
     /** Its shop's photo as the node gives it (its `photoUrl`, keyed), or none. */
     bannerPhoto?: string | null;
@@ -138,7 +138,7 @@ export function ShopfrontHeader({ name, ownerKey, logoUrl, kind, fallbackEmoji, 
                 {photo && photo !== failed ? (
                     <Image source={{ uri: photo }} style={s.bannerImage} contentFit="cover" cachePolicy="memory-disk" onError={() => setFailed(photo)} />
                 ) : (
-                    <Text style={s.bannerEmoji}>{kind ? SHOP_KIND_WORDS[kind].emoji : fallbackEmoji}</Text>
+                    <Text style={s.bannerEmoji}>{category ? categoryEmoji(category) : fallbackEmoji}</Text>
                 )}
             </View>
             <View style={s.logo} testID="shopfront-logo">
@@ -152,9 +152,9 @@ export function ShopfrontHeader({ name, ownerKey, logoUrl, kind, fallbackEmoji, 
     );
 }
 
-/** Its kind and since when, in one line: "🔧 Repairs · since Sep 2026". */
-export function kindSinceLine(kind: ShopKind | null, since: string | null): string | null {
-    const parts = [kind ? shopKindLabel(kind) : null, since].filter((p): p is string => !!p);
+/** Its category and since when, in one line: "💻 Tech · since Sep 2026". */
+export function categorySinceLine(category: ShopCategory | null, since: string | null): string | null {
+    const parts = [category ? shopCategoryLabel(category) : null, since].filter((p): p is string => !!p);
     return parts.length ? parts.join(' · ') : null;
 }
 

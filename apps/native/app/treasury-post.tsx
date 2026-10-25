@@ -11,7 +11,7 @@ import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
-import { amountRefusalWords, ANY_DECIMALS, formatNumber, inCapitalsOf, isAmbiguousAmount, parseAmount, t, word, type WordKey } from '@beanpool/core';
+import { amountRefusalWords, ANY_DECIMALS, formatNumber, inCapitalsOf, isAmbiguousAmount, isShopCategory, parseAmount, t, word, type WordKey } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 // Operator form to post a treasury's Offer (what the enterprise sells, e.g. a dozen eggs) or a
@@ -29,10 +29,12 @@ const PRICE_TYPE_SPOKEN: Record<string, WordKey> = {
 };
 
 export default function TreasuryPostScreen() {
-    const params = useLocalSearchParams<{ treasury?: string | string[]; mode?: string | string[]; name?: string | string[] }>();
+    const params = useLocalSearchParams<{ treasury?: string | string[]; mode?: string | string[]; name?: string | string[]; category?: string | string[] }>();
     const treasuryKey = Array.isArray(params.treasury) ? params.treasury[0] : params.treasury;
     const modeStr = Array.isArray(params.mode) ? params.mode[0] : params.mode;
     const nameStr = Array.isArray(params.name) ? params.name[0] : params.name;
+    // An Offer starts in its shop's category when the console says one (treasury-manage.tsx); a Need starts in none.
+    const shopCategory = Array.isArray(params.category) ? params.category[0] : params.category;
     const isNeed = modeStr === 'need';
     // The name its members gave it, as written; with none, each sentence says "this enterprise" itself.
     const treasuryName = nameStr || null;
@@ -71,7 +73,7 @@ export default function TreasuryPostScreen() {
     }));
 
     const [title, setTitle] = useState('');
-    const [category, setCategory] = useState('');
+    const [category, setCategory] = useState(!isNeed && isShopCategory(shopCategory) ? shopCategory : '');
     const [credits, setCredits] = useState('');
     const [priceType, setPriceType] = useState<string>('fixed');
     const [footerHeight, setFooterHeight] = useState(0);

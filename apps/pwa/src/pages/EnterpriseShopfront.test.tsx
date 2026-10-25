@@ -53,7 +53,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const now = Date.now();
 const iso = (ms: number) => new Date(ms).toISOString();
 const b64 = (s: string) => btoa(s);
-const SHOP = { id: SHOP_ID, kind: 'baking', counts: { things: 2 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(now - 30 * DAY) };
+const SHOP = { id: SHOP_ID, category: 'arts', counts: { things: 2 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(now - 30 * DAY) };
 
 /** The enterprise as its lead keeper reads it (GET /api/treasury/:t, E2 + S5's fields): a request and a change waiting, a bid, two deals. */
 function leadsView(over: Record<string, unknown> = {}) {
@@ -98,7 +98,7 @@ function membersView(over: Record<string, unknown> = {}) {
 function visitorsView() {
     const { offerCategories: _gone, ...rest } = membersView({
         keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: MIA, callsign: 'Mia', role: 'keeper' }],
-        shop: { id: SHOP_ID, kind: 'baking', counts: { things: 2 } }, posts: [],
+        shop: { id: SHOP_ID, category: 'arts', counts: { things: 2 } }, posts: [],
     });
     return rest;
 }
@@ -218,7 +218,7 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         await screen.findByTestId('shopfront-featured');
         expect(byId('shopfront-name')?.textContent).toBe(NAME);
         expect(byId('shopfront-name')?.tagName).toBe('H1');
-        expect(byId('shopfront-line-0')?.textContent).toBe('🍞 Cooked food and baking · since Sep 2026');
+        expect(byId('shopfront-line-0')?.textContent).toBe('🎨 Arts · since Sep 2026');
         const order = ['shopfront-banner', 'shopfront-logo', 'shopfront-name', 'shopfront-line-0', 'shopfront-purpose', 'shopfront-keepers', 'shopfront-about',
             'shopfront-featured', 'shopfront-together', 'shopfront-sections', 'shopfront-how', 'shopfront-message', 'shopfront-money', 'enterprise-thread', 'enterprise-report'];
         for (let i = 1; i < order.length; i++) before(byId(order[i - 1]), byId(order[i]), `${order[i - 1]} before ${order[i]}`);
@@ -300,11 +300,11 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(byId('shopfront-banner')?.textContent).toBe('');
         fireEvent.error(photo);
         expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(byId('shopfront-banner')?.textContent).toBe('🍞');
+        expect(byId('shopfront-banner')?.textContent).toBe('🎨');
         cleanup();
         await open({ detail: membersView(), keeperOf: [] });
         expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(byId('shopfront-banner')?.textContent).toBe('🍞');
+        expect(byId('shopfront-banner')?.textContent).toBe('🎨');
     });
 
     it("a project's goal card sits above About", async () => {
@@ -317,7 +317,7 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
     it("a visitor's page ends after How we deal, with a sentence; no listings are asked for", async () => {
         await open({ detail: visitorsView(), keeperOf: [] }, { isMember: false });
         // The node sends a visitor its shop's kind and counts only (engine/shops.ts visitorShop): no How we deal to show.
-        expect(byId('shopfront-line-0')?.textContent).toBe('🍞 Cooked food and baking · since Sep 2026');
+        expect(byId('shopfront-line-0')?.textContent).toBe('🎨 Arts · since Sep 2026');
         expect(byId('shopfront-how')).toBeNull();
         before(byId('shopfront-about'), byId('shopfront-visitor'), 'the note where the page ends');
         expect(byId('shopfront-visitor')?.textContent).toBe("Members of this community see what it offers, its keepers' badges and its accounts.");
@@ -512,6 +512,26 @@ describe("the keepers' Manage tab", () => {
         }
     });
 
+    it("its new Offer starts in its shop's category, which the keeper can still change", async () => {
+        await open();
+        const panel = await manage();
+        const postOffer = await waitFor(() => {
+            const b = found(ACTIONS.find((a) => a.what === 'post its Offer')!, panel);
+            expect(b).not.toBeNull();
+            return b as HTMLElement;
+        });
+        fireEvent.click(postOffer);
+        // The Offer form's category: the one select that lists the Market's categories and is not the shop's own.
+        const category = await waitFor(() => {
+            const s = Array.from(document.querySelectorAll('select')).find((el) => !el.dataset.testid && Array.from(el.options).some((o) => o.value === 'mindset'));
+            expect(s).toBeTruthy();
+            return s as HTMLSelectElement;
+        });
+        expect(category.value).toBe('arts');
+        fireEvent.change(category, { target: { value: 'tech' } });
+        expect(category.value).toBe('tech');
+    });
+
     it('a member who keeps none of it still sees the discussion, Report and the money; what every member does stays on the page', async () => {
         await open({ detail: membersView(), keeperOf: [] });
         expect(byId('enterprise-thread')).not.toBeNull();
@@ -585,16 +605,16 @@ describe("the keepers' Manage tab", () => {
             expect((within(face).getByTestId('manage-face-purpose') as HTMLTextAreaElement).value).toBe(PURPOSE);
             expect((within(face).getByTestId('manage-face-about') as HTMLTextAreaElement).value).toBe(ABOUT);
             expect((within(face).getByTestId('manage-face-how') as HTMLTextAreaElement).value).toBe(HOW);
-            expect((within(face).getByTestId('manage-face-kind') as HTMLSelectElement).value).toBe('baking');
+            expect((within(face).getByTestId('manage-face-category') as HTMLSelectElement).value).toBe('arts');
             expect(byId('manage-face-lead-only')).toBeNull();
             expect(byId('manage-face-save')).toBeDisabled();
             fireEvent.change(byId('manage-face-name')!, { target: { value: 'Hill Bakery and Mill' } });
-            fireEvent.change(byId('manage-face-kind')!, { target: { value: 'food' } });
+            fireEvent.change(byId('manage-face-category')!, { target: { value: 'goods' } });
             fireEvent.click(byId('manage-face-save')!);
             await waitFor(() => expect(byId('manage-face-saved')?.textContent).toBe('Saved.'));
             expect(writes()).toEqual([
                 { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { name: 'Hill Bakery and Mill' } },
-                { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { kind: 'food' } },
+                { method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { category: 'goods' } },
             ]);
         });
 
@@ -658,7 +678,7 @@ describe("the keepers' Manage tab", () => {
             await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
             expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
             fireEvent.click(screen.getByRole('tab', { name: 'Page' }));
-            await waitFor(() => expect(byId('shopfront-banner')?.textContent).toBe('🍞'));
+            await waitFor(() => expect(byId('shopfront-banner')?.textContent).toBe('🎨'));
             expect(byId('shopfront-banner-photo')).toBeNull();
         });
 
@@ -777,7 +797,7 @@ describe("the keepers' Manage tab", () => {
             const panel = await manage();
             expect(within(panel).getByTestId('manage-face-about')).toHaveAttribute('maxLength', '600');
             expect(within(panel).getByTestId('manage-face-name')).toBeInTheDocument();
-            expect(within(panel).queryByTestId('manage-face-kind')).toBeNull();
+            expect(within(panel).queryByTestId('manage-face-category')).toBeNull();
             expect(within(panel).queryByTestId('manage-face-how')).toBeNull();
             expect(within(panel).queryByTestId('manage-face-banner')).toBeNull();
             expect(within(panel).queryByTestId('manage-featured')).toBeNull();

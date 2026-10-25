@@ -6,11 +6,11 @@
  *
  * - Who may open it: a keeper of it (not suspended), or whoever the node says leads it or is a node admin
  *   (`isLeadOrSoleKeeperOrAdmin`), whose keeper requests and season controls they are.
- * - Its face as one form with one Save: any keeper its About, logo, kind, how we deal and banner photo; the lead (its sole
+ * - Its face as one form with one Save: any keeper its About, logo, category, how we deal and banner photo; the lead (its sole
  *   keeper, or a node admin) its name and purpose, which the others read with the sentence why. Only what changed is
- *   sent, each to its own route (the face to PUT /api/treasury/:t/profile, its kind, how we deal and banner photo to its
+ *   sent, each to its own route (the face to PUT /api/treasury/:t/profile, its category, how we deal and banner photo to its
  *   shop), the face first. A node admin who keeps none of it gets its name, purpose, About and logo only: its shop's
- *   routes take its keepers only (apps/server routes/shops.ts enterpriseOwner), so its kind, how we deal and banner
+ *   routes take its keepers only (apps/server routes/shops.ts enterpriseOwner), so its category, how we deal and banner
  *   photo aren't theirs to change.
  * - Featured: its live Offers in its shop, six at most on the shelf (core SHOP_FEATURED_MAX), as the node counts them;
  *   and its live Offers not in its shop yet, which can't be featured until they are put in. Its keepers' only, as the
@@ -18,7 +18,7 @@
  *
  * Not here: the tool shelves (the phone opens a tool as the member only), said in the PR that built this.
  */
-import { SHOP_FEATURED_MAX, isShopKind, t, type ShopKind } from '@beanpool/core';
+import { SHOP_FEATURED_MAX, isShopCategory, t, type ShopCategory } from '@beanpool/core';
 import { offersToAdd, type EnterpriseFaceChanges, type MyShopChanges, type ShopListing } from './shop';
 
 /** Whether this reader may open the console: a keeper of it, or whom the node says leads it or administers the node. */
@@ -44,12 +44,12 @@ export function notKeeperLine(project: boolean): string {
     return project ? t('Only its collaborators manage this project.') : t('Only its keepers manage this enterprise.');
 }
 
-/** Its face as the form holds it: the words as typed, its kind, and a new logo or banner photo once one is picked. */
+/** Its face as the form holds it: the words as typed, its category, and a new logo or banner photo once one is picked. */
 export interface FaceForm {
     name: string;
     purpose: string;
     about: string;
-    kind: ShopKind | null;
+    category: ShopCategory | null;
     howToDeal: string;
     /** A new picture (the phone's small copy), or null: its logo stays. */
     logo: string | null;
@@ -67,7 +67,7 @@ export function faceFormOf(detail: unknown): FaceForm {
         name: words(d.name),
         purpose: words(d.purpose),
         about: words(d.about),
-        kind: isShopKind(shop.kind) ? shop.kind : null,
+        category: isShopCategory(shop.category) ? shop.category : null,
         howToDeal: words(shop.howToDeal),
         logo: null,
     };
@@ -81,7 +81,7 @@ export interface FaceSave {
 
 /**
  * What changed between the form as read and as typed, trimmed as the node stores it. Its name and purpose only when
- * `lead` (the node refuses anyone else them); its kind, how we deal and its banner photo only when `keeper` (its shop's
+ * `lead` (the node refuses anyone else them); its category, how we deal and its banner photo only when `keeper` (its shop's
  * routes take its keepers only, never a node admin who keeps none of it); an empty How we deal clears it; a new logo goes
  * as the picture picked; a banner photo picked goes as the photo, and one taken down as none.
  */
@@ -93,7 +93,7 @@ export function faceSaveOf(before: FaceForm, draft: FaceForm, lead: boolean, kee
     if (lead && changed(draft.purpose, before.purpose)) face.purpose = draft.purpose.trim();
     if (changed(draft.about, before.about)) face.about = draft.about.trim();
     if (draft.logo) face.avatar = draft.logo;
-    if (keeper && draft.kind !== before.kind) shop.kind = draft.kind;
+    if (keeper && draft.category !== before.category) shop.category = draft.category;
     if (keeper && changed(draft.howToDeal, before.howToDeal)) shop.howToDeal = draft.howToDeal.trim() || null;
     if (keeper && draft.banner !== undefined) shop.photo = draft.banner;
     return { face, shop };
@@ -110,7 +110,7 @@ export interface FaceState {
     draft: FaceForm;
 }
 
-const FACE_WORDS = ['name', 'purpose', 'about', 'kind', 'howToDeal'] as const;
+const FACE_WORDS = ['name', 'purpose', 'about', 'category', 'howToDeal'] as const;
 
 /**
  * The form when its enterprise is read again: the console reads it on every focus and after every action on it
@@ -133,7 +133,7 @@ export function faceAfterSave(form: FaceState, typed: FaceForm, sent: FaceSave):
     if (sent.face.name !== undefined) stored.name = sent.face.name;
     if (sent.face.purpose !== undefined) stored.purpose = sent.face.purpose;
     if (sent.face.about !== undefined) stored.about = sent.face.about;
-    if (sent.shop.kind !== undefined) stored.kind = sent.shop.kind;
+    if (sent.shop.category !== undefined) stored.category = sent.shop.category;
     if (sent.shop.howToDeal !== undefined) stored.howToDeal = sent.shop.howToDeal ?? '';
     const draft = { ...form.draft };
     for (const k of FACE_WORDS) if (k in stored && form.draft[k] === typed[k]) (draft as Record<string, unknown>)[k] = stored[k];

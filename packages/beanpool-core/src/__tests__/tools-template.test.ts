@@ -111,7 +111,7 @@ describe('the checks bite', () => {
         return { ...r, v: r.v, items: Array.isArray(r.items) ? r.items.filter((i) => typeof i === 'string') : [] } as Doc;
     };
     const good: ToolManifest<Doc> = {
-        id: 'sample', name: word('Sample tool'), line: word('A tool for the tests.'), icon: '🧪', shelf: 'stock', shopKinds: ['tools'],
+        id: 'sample', name: word('Sample tool'), line: word('A tool for the tests.'), icon: '🧪', shelf: 'stock', categories: ['tools'],
         owner: 'member', permissions: [], doc: { version: 1, empty: () => ({ v: 1, items: [] }), read }, screens: ['main'],
         row: (d) => ({ key: word('Kept here: {count}'), values: { count: d.items.length } }), examples: [word('An example')],
         homeCard: { line: word('A line for the picker.'), lines: (d) => d.items.slice(0, 2).map(() => ({ key: word('One more') })) },
@@ -141,7 +141,8 @@ describe('the checks bite', () => {
         delete noId.id;
         one(toolManifestProblems(noId as never), /id/);
         one(toolManifestProblems({ ...good, icon: 'S' }), /emoji/);
-        one(toolManifestProblems({ ...good, shopKinds: ['tools', 'spaceships' as never] }), /spaceships is not a shop kind/);
+        one(toolManifestProblems({ ...good, categories: ['tools', 'spaceships' as never] }), /spaceships is not one of the Market's categories/);
+        one(toolManifestProblems({ ...good, categories: ['tools', 'baking' as never] }), /baking is not one of the Market's categories/);
         one(toolManifestProblems({ ...good, permissions: ['contacts' as never] }), /contacts is not a permission/);
         one(toolManifestProblems({ ...good, permissions: ['reminders'] }), /asks for 'reminders' but has none/);
         one(toolManifestProblems({ ...good, reminders: { list: [{ id: 'r', name: word('A reminder'), defaultOn: true }], due: () => [] } }), /does not ask for the 'reminders'/);
@@ -190,9 +191,9 @@ describe('the checks bite', () => {
             const items = (Array.isArray(r.items) ? r.items : []).filter((i) => typeof i?.id === 'string');
             return { ...r, v: r.v, items: items.map((i) => (keep ? { ...i, id: i.id } : { id: i.id })) };
         };
-        const { id, name, line, icon, shelf, shopKinds, owner, permissions, screens, examples } = good;
+        const { id, name, line, icon, shelf, categories, owner, permissions, screens, examples } = good;
         const tool = (keep: boolean): ToolManifest<RecDoc> => ({
-            id, name, line, icon, shelf, shopKinds, owner, permissions, screens, examples, row: () => null,
+            id, name, line, icon, shelf, categories, owner, permissions, screens, examples, row: () => null,
             doc: { version: 1, empty: () => ({ v: 1, items: [] }), read: (raw) => records(raw, keep) },
         });
         const recFixtures: ToolFixtures<RecDoc> = {

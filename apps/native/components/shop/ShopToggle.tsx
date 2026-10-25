@@ -9,16 +9,19 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { t } from '@beanpool/core';
+import { t, type ShopCategory } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
 import { changeMyShop, shopTitle, type MyShopRead } from '../../utils/shop';
 import { SHOP_COMPOSER_WAIT_MS } from '../../utils/shop-choice';
 
-/** Where an Offer could go: the member's shop (open, or closed for now), none yet, or nothing to offer. */
+/**
+ * Where an Offer could go: the member's shop (open, or closed for now, with its category: a new Offer put in it with none of
+ * its own starts there), none yet, or nothing to offer.
+ */
 export type ShopToggleState =
-    | { kind: 'open'; shopId: string; title: string; inShop: boolean }
-    | { kind: 'paused'; shopId: string; title: string; inShop: boolean }
+    | { kind: 'open'; shopId: string; title: string; inShop: boolean; category?: ShopCategory | null }
+    | { kind: 'paused'; shopId: string; title: string; inShop: boolean; category?: ShopCategory | null }
     | { kind: 'none' }
     | { kind: 'hidden' };
 
@@ -27,7 +30,7 @@ export function shopToggleState(read: MyShopRead | null, opts: { inShop?: boolea
     if (!read) return { kind: 'hidden' };
     if (read.state === 'none') return { kind: 'none' };
     if (read.state !== 'open') return { kind: 'hidden' };
-    const base = { shopId: read.shop.id, title: shopTitle(read.shop), inShop: !!opts.inShop };
+    const base = { shopId: read.shop.id, title: shopTitle(read.shop), inShop: !!opts.inShop, category: read.shop.category };
     return read.shop.paused ? { kind: 'paused', ...base } : { kind: 'open', ...base };
 }
 

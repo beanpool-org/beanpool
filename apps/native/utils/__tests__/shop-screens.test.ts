@@ -307,7 +307,7 @@ function atTheFloor(colors: Record<string, unknown> = lightColors) {
 }
 const text = () => host.textContent ?? '';
 
-const DAVE_SHOP = { id: 'shop-1', name: "Ana's Tool Shed", ownerName: ME.callsign, kind: 'tools', blurb: 'Drills and ladders.', howToDeal: 'Front gate, back in a week.', paused: false, backOn: null };
+const DAVE_SHOP = { id: 'shop-1', name: "Ana's Tool Shed", ownerName: ME.callsign, category: 'tools', blurb: 'Drills and ladders.', howToDeal: 'Front gate, back in a week.', paused: false, backOn: null };
 function aShopWithThings() {
     node.shop = { ...DAVE_SHOP };
     node.listings = [
@@ -340,9 +340,9 @@ describe('Your shop (app/shop/mine.tsx)', () => {
             theme.dark = dark;
             await draw(createElement(YourShopScreen));
             expect(byTestId('shop-title')?.textContent).toBe("Ana's Tool Shed");
-            expect(byTestId('shop-kind-line')?.textContent).toContain('🛠️');
+            expect(byTestId('shop-category-line')?.textContent).toContain('🛠️');
             expect(byTestId('shop-state')).not.toBeNull();
-            for (const f of ['name', 'kind', 'blurb', 'howToDeal']) expect(byTestId(`shop-field-${f}`), f).not.toBeNull();
+            for (const f of ['name', 'category', 'blurb', 'howToDeal']) expect(byTestId(`shop-field-${f}`), f).not.toBeNull();
             expect(byTestId('shop-listing-p-drill')).not.toBeNull();
             expect(byTestId('shop-listing-p-ladder')).not.toBeNull();
             expect(byTestId('shop-listing-p-couch')).toBeNull();
@@ -427,10 +427,10 @@ describe('Your shop (app/shop/mine.tsx)', () => {
         await draw(createElement(YourShopScreen), 'en');
         expect(byTestId('shop-title')?.textContent).toBe("Ana's shop");
         expect(byTestId('shop-state')?.textContent).toBe('2 things · 1 out');
-        expect(byTestId('shop-kind-line')?.textContent).toBe('🛠️ Tools and equipment');
+        expect(byTestId('shop-category-line')?.textContent).toBe('🛠️ Tools');
     });
 
-    it('each field on its own: the name, emptied to clear it; a kind picked from the fourteen, or none', async () => {
+    it("each field on its own: the name, emptied to clear it; a category picked from the Market's, or none", async () => {
         aShopWithThings();
         await draw(createElement(YourShopScreen));
         await click('shop-field-name');
@@ -450,15 +450,17 @@ describe('Your shop (app/shop/mine.tsx)', () => {
         await click('shop-field-howToDeal');
         expect(byTestId('shop-text-input')?.getAttribute('data-max')).toBe('300');
         await click('shop-text-cancel');
-        await click('shop-field-kind');
-        expect(byTestId('shop-kind-sheet')).not.toBeNull();
-        expect(host.querySelectorAll('[data-testid^="shop-kind-pick-"]').length).toBe(15);
+        await click('shop-field-category');
+        expect(byTestId('shop-category-sheet')).not.toBeNull();
+        // The Market's seventeen, as its listings show them, and None.
+        expect(host.querySelectorAll('[data-testid^="shop-category-pick-"]').length).toBe(18);
+        expect(byTestId('shop-category-pick-tech')?.textContent).toContain('💻');
         atTheFloor();
-        await click('shop-kind-pick-repairs');
-        expect(node.log.filter((r) => r.method === 'PUT').at(-1)?.body).toEqual({ kind: 'repairs' });
-        await click('shop-field-kind');
-        await click('shop-kind-pick-none');
-        expect(node.log.filter((r) => r.method === 'PUT').at(-1)?.body).toEqual({ kind: null });
+        await click('shop-category-pick-tech');
+        expect(node.log.filter((r) => r.method === 'PUT').at(-1)?.body).toEqual({ category: 'tech' });
+        await click('shop-field-category');
+        await click('shop-category-pick-none');
+        expect(node.log.filter((r) => r.method === 'PUT').at(-1)?.body).toEqual({ category: null });
     });
 
     it('a field the node refuses: its sentence in the sheet, and the sheet stays', async () => {
@@ -599,7 +601,7 @@ describe('"Put this in your shop"', () => {
 
     it('the state from the member\'s shop: open, none yet, closed for now, or nothing to offer', async () => {
         node.shop = { ...DAVE_SHOP };
-        expect(shopToggleState(await readMyShop())).toEqual({ kind: 'open', shopId: 'shop-1', title: "Ana's Tool Shed", inShop: false });
+        expect(shopToggleState(await readMyShop())).toEqual({ kind: 'open', shopId: 'shop-1', title: "Ana's Tool Shed", inShop: false, category: 'tools' });
         expect(shopToggleState(await readMyShop(), { inShop: true })).toMatchObject({ kind: 'open', inShop: true });
         node.shop.paused = true;
         expect(shopToggleState(await readMyShop())).toMatchObject({ kind: 'paused', shopId: 'shop-1', inShop: false });
@@ -662,6 +664,15 @@ describe('"Put this in your shop"', () => {
         expect(nav.pushed.at(-1)).toBe('/(tabs)/map?newPost=offer');
         await openOfferComposer('me-key', 'fixture-kit', DRAFT, { kind: 'free', beans: 0 }, false);
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
+    });
+
+    it("in the shop, a draft with no category of its own starts in the shop's; one with its own keeps it; outside the shop, none is added", async () => {
+        await openOfferComposer('me-key', 'fixture-kit', DRAFT, { kind: 'free', beans: 0 }, true, 'tech');
+        expect(JSON.parse(store.map.get('beanpool_offer_draft')!).postCategory).toBe('tech');
+        await openOfferComposer('me-key', 'fixture-kit', { ...DRAFT, category: 'tools' }, { kind: 'free', beans: 0 }, true, 'tech');
+        expect(JSON.parse(store.map.get('beanpool_offer_draft')!).postCategory).toBe('tools');
+        await openOfferComposer('me-key', 'fixture-kit', DRAFT, { kind: 'free', beans: 0 }, false, 'tech');
+        expect(JSON.parse(store.map.get('beanpool_offer_draft')!).postCategory).toBe('');
     });
 
     it("the choice knows its Offer by the tool's words and the photos the composer was handed, so a changed title keeps it", async () => {
@@ -783,7 +794,7 @@ describe('Home\'s "Your shop and tools" body', () => {
             theme.dark = dark;
             // The theme hands either set as the app's one colour type (ThemeContext); so does this.
             const colors = (dark ? darkColors : lightColors) as unknown as AppColors;
-            await draw(createElement(ShopHomeBody, { card: { shop: { id: 'shop-1', name: "Ana's Tool Shed", ownerName: 'Ana', kind: 'tools', counts: COUNTS, paused, backOn: paused ? '2026-11-03' : null } }, colors }));
+            await draw(createElement(ShopHomeBody, { card: { shop: { id: 'shop-1', name: "Ana's Tool Shed", ownerName: 'Ana', category: 'tools', counts: COUNTS, paused, backOn: paused ? '2026-11-03' : null } }, colors }));
             expect(byTestId('home-shop-line')?.textContent).toContain("Ana's Tool Shed");
             atTheFloor(colors);
             await click('home-shop-line');
@@ -791,7 +802,7 @@ describe('Home\'s "Your shop and tools" body', () => {
             act(() => root.unmount());
             root = createRoot(host);
         }
-        await draw(createElement(ShopHomeBody, { card: { shop: { id: 'shop-1', name: null, ownerName: 'Ana', kind: null, counts: COUNTS, paused: true, backOn: '2026-11-03' } }, colors: lightColors }), 'en');
+        await draw(createElement(ShopHomeBody, { card: { shop: { id: 'shop-1', name: null, ownerName: 'Ana', category: null, counts: COUNTS, paused: true, backOn: '2026-11-03' } }, colors: lightColors }), 'en');
         expect(byTestId('home-shop-line')?.textContent).toBe("Ana's shopClosed for now · back Tue 3 Nov");
     });
 });

@@ -38,7 +38,7 @@
  *      community shows in the body (the public directory's), and from nothing else
  *  7e. the shops near a place (/api/shops, S1): from 50 points, each with two radii, the visitors' list is the shops of the
  *      listings' own visitors' read at that point (section 7), in its order, each once at its nearest listing's distance,
- *      and each shop its id, kind, counts and that distance, and nobody
+ *      and each shop its id, category, counts and that distance, and nobody
  *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset), which
  *      runs section 2's sweep too (nothing public there names a member to a guest), and then its own: the listings and
  *      every other read that names people (the Commons decisions, the Pulse feed, the enterprises, crowdfunds and
@@ -409,7 +409,7 @@ async function main(): Promise<void> {
     // Shops (S1, engine/shops.ts): Alice's, in words that would name her, with two of her Offers; Bob's with his, the one
     // hidden by reports among them; the grid's with every other grid post, so the shops near a place (7e) span the world.
     const shopsEngine = await import('./engine/shops.js');
-    const aliceShop = shopsEngine.changeShop(alice.pk, { name: SHOP_WORDS[0], kind: 'tools', blurb: SHOP_WORDS[1], howToDeal: SHOP_WORDS[2] }, { enterprise: false }).shop.id;
+    const aliceShop = shopsEngine.changeShop(alice.pk, { name: SHOP_WORDS[0], category: 'tools', blurb: SHOP_WORDS[1], howToDeal: SHOP_WORDS[2] }, { enterprise: false }).shop.id;
     const bobShop = shopsEngine.openShop(bob.pk).id;
     const gridShop = shopsEngine.openShop(grid.pk).id;
     const inShop = db.prepare('UPDATE posts SET shop_id = ? WHERE id = ?');
@@ -489,7 +489,7 @@ async function main(): Promise<void> {
         { path: `/api/avatar/${alice.pk}`, echoes: [alice.pk] },
         // A group's own picture, without the key only a group read hands out (#1486): 404 to anyone (section 9).
         { path: `/api/groups/${club.id}/picture` },
-        // One shop: a visitor's is its id, kind and counts (routes/shops.ts), never its name, owner or words.
+        // One shop: a visitor's is its id, category and counts (routes/shops.ts), never its name, owner or words.
         { path: `/api/shops/${aliceShop}` },
         // A shop's banner, without the key only a member's shop read hands out: 404 to anyone (routes/shops.ts).
         { path: `/api/shops/${aliceShop}/photo` },
@@ -1819,12 +1819,12 @@ async function main(): Promise<void> {
                     shopsOff.push(`#${i} ${km} km: ${JSON.stringify(shops.map(s => [s.id.slice(0, 6), s.distanceKm]))}, the listings' read ${JSON.stringify(expected.map(([s, d]) => [s.slice(0, 6), d]))}`);
                 }
                 for (const s of shops) {
-                    if (JSON.stringify(Object.keys(s).sort()) !== '["counts","distanceKm","id","kind"]') shopsOff.push(`#${i}: ${s.id} carries ${Object.keys(s).join(',')}`);
+                    if (JSON.stringify(Object.keys(s).sort()) !== '["category","counts","distanceKm","id"]') shopsOff.push(`#${i}: ${s.id} carries ${Object.keys(s).join(',')}`);
                 }
             }
         }
         assert(shopsOff.length === 0 && shopsListed > 0, `50 points × 2 radii, ${shopsListed} shops: each the listings' visitors' read's, in its order, `
-            + `at its distance, and each its id, kind, counts and distance alone${shopsOff.length ? ` — ${shopsOff.slice(0, 5).join(' | ')}` : ''}`);
+            + `at its distance, and each its id, category, counts and distance alone${shopsOff.length ? ` — ${shopsOff.slice(0, 5).join(' | ')}` : ''}`);
     }
 
     async function localChecks(): Promise<void> {

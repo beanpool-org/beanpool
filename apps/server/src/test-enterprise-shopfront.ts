@@ -22,7 +22,7 @@
  *      (POST /api/crowdfund/projects/update, /api/commons/projects/update) leave the keepers' About as written, and
  *      their chat follows the rename those edits make
  *   4. the detail (GET /api/treasury/:t): `since` and `about`; its shop as a member reads it at GET /api/shops/:id (its
- *      kind and how it deals: S5's kind chip and "How we deal"), and to anyone else its kind and counts only; each keeper's tier, rating, trades and the categories of
+ *      category and how it deals: S5's category chip and "How we deal"), and to anyone else its category and counts only; each keeper's tier, rating, trades and the categories of
  *      their own live Offers for everyone here (never a paused one, a Need, one for one person, an ended one); the
  *      enterprise's categories, the union with its own; every figure as the engine has it. Members only: unsigned, a key
  *      that is no member and a visitor's row get none of it (refused by the read gate with read auth on; with it off, the
@@ -415,14 +415,14 @@ async function main(): Promise<void> {
     assert(JSON.stringify(keeperOf(ownRead, rae.pk)?.offerCategories) === JSON.stringify(['food', 'tools']),
         'a keeper reading their own row gets the same live ones, not the one they paused');
 
-    // Its shop on its page (S5, round 3 §3: the kind chip and "How we deal"): what a member reads of it at GET /api/shops/:id.
-    const dressed = await call('PUT', kit, `/api/treasury/${ent}/shop`, { kind: 'repairs', howToDeal: 'Bring it by on a Saturday; pay in Beans when it works.' });
+    // Its shop on its page (S5, round 3 §3: the category chip and "How we deal"): what a member reads of it at GET /api/shops/:id.
+    const dressed = await call('PUT', kit, `/api/treasury/${ent}/shop`, { category: 'services', howToDeal: 'Bring it by on a Saturday; pay in Beans when it works.' });
     const withShop = await call('GET', max, `/api/treasury/${ent}`);
     const shopAsRead = await call('GET', max, `/api/shops/${entShop}`);
-    assert(dressed.status === 200 && withShop.body?.shop?.id === entShop && withShop.body?.shop?.kind === 'repairs'
+    assert(dressed.status === 200 && withShop.body?.shop?.id === entShop && withShop.body?.shop?.category === 'services'
         && withShop.body?.shop?.howToDeal === 'Bring it by on a Saturday; pay in Beans when it works.' && withShop.body?.shop?.enterprise === true
         && JSON.stringify(withShop.body?.shop) === JSON.stringify(shopAsRead.body),
-        `the detail carries its shop as a member reads it at GET /api/shops/:id: its kind and how it deals (${show(dressed)} | ${JSON.stringify(withShop.body?.shop)?.slice(0, 200)})`);
+        `the detail carries its shop as a member reads it at GET /api/shops/:id: its category and how it deals (${show(dressed)} | ${JSON.stringify(withShop.body?.shop)?.slice(0, 200)})`);
 
     const badges = ['tier', 'rating', 'trades', 'offerCategories'];
     const strangers: Array<[string, Id | null]> = [['unsigned', null], ['a key that is no member', nemo], ["a visitor's row", vic]];
@@ -435,8 +435,8 @@ async function main(): Promise<void> {
             assert(r.status === 200 && Array.isArray(r.body?.keepers) && r.body.keepers.length === 4 && !('offerCategories' in r.body)
                 && r.body.keepers.every((k: any) => badges.every(f => !(f in k)) && typeof k.callsign === 'string' && typeof k.role === 'string') && !leaked,
                 `read auth off, ${who} gets the page with the keepers' names and roles and none of their badges or categories (${r.status}${leaked ? `; leaked ${leaked.join(',')}` : ''})`);
-            assert(JSON.stringify(Object.keys(r.body?.shop ?? {}).sort()) === JSON.stringify(['counts', 'id', 'kind']) && r.body.shop.kind === 'repairs',
-                `and of its shop the kind and counts only, as GET /api/shops/:id answers a visitor (${JSON.stringify(r.body?.shop)})`);
+            assert(JSON.stringify(Object.keys(r.body?.shop ?? {}).sort()) === JSON.stringify(['category', 'counts', 'id']) && r.body.shop.category === 'services',
+                `and of its shop the category and counts only, as GET /api/shops/:id answers a visitor (${JSON.stringify(r.body?.shop)})`);
         } else {
             assert((r.status === 401 || r.status === 403) && !leaked && !Array.isArray(r.body?.keepers),
                 `${who} is refused the detail and gets none of it (${show(r)})`);

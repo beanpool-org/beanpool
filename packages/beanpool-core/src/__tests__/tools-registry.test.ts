@@ -16,15 +16,15 @@ const global: HomeNodeFacts = { profile: 'global', features: { beans: false } };
 
 function tool(id: string, over: Partial<ToolManifest> = {}): ToolManifest {
     return {
-        id, name: word('Sample tool'), line: word('A tool for the tests.'), icon: '🧪', shelf: 'stock', shopKinds: 'all', owner: 'member',
+        id, name: word('Sample tool'), line: word('A tool for the tests.'), icon: '🧪', shelf: 'stock', categories: 'all', owner: 'member',
         permissions: [], doc: { version: 1, empty: () => ({ v: 1 }), read: () => ({ v: 1 }) }, screens: ['main'], row: () => null,
         examples: [word('An example')], ...over,
     };
 }
 
 describe('the shelves (toolsOnShelf, toolsMore)', () => {
-    const shed = tool('shed', { shopKinds: ['tools', 'seeds'], owner: 'both' });
-    const garden = tool('garden', { shopKinds: ['food', 'seeds'] });
+    const shed = tool('shed', { categories: ['tools', 'garden'], owner: 'both' });
+    const garden = tool('garden', { categories: ['food', 'garden'] });
     const takings = tool('takings', { shelf: 'books', owner: 'enterprise' });
     const prices = tool('prices', { shelf: 'trade', onNode: (f) => f.profile !== 'global' });
     const all = [shed, garden, takings, prices];
@@ -42,11 +42,11 @@ describe('the shelves (toolsOnShelf, toolsMore)', () => {
         expect(ids(toolsOnShelf('books', null, 'enterprise', local, all))).toEqual(['takings']);
     });
 
-    it('for a shop of a kind, the tools for that kind; the rest under More tools', () => {
+    it('for a shop in a category, the tools for that category; the rest under More tools', () => {
         expect(ids(toolsOnShelf('stock', 'food', 'member', local, all))).toEqual(['garden']);
-        expect(ids(toolsOnShelf('stock', 'seeds', 'member', local, all))).toEqual(['shed', 'garden']);
+        expect(ids(toolsOnShelf('stock', 'garden', 'member', local, all))).toEqual(['shed', 'garden']);
         expect(ids(toolsMore('food', 'member', local, all))).toEqual(['shed']);
-        expect(ids(toolsMore('food', 'member', local, all.map((t) => (t.id === 'prices' ? { ...t, shopKinds: ['tools'] as const } : t))))).toEqual(['shed', 'prices']);
+        expect(ids(toolsMore('food', 'member', local, all.map((t) => (t.id === 'prices' ? { ...t, categories: ['tools'] as const } : t))))).toEqual(['shed', 'prices']);
     });
 
     it("a tool the node can't have is not listed anywhere, never shown locked", () => {

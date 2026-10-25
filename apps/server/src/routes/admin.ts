@@ -1835,7 +1835,12 @@ router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const freeze = body.freeze === true;
     try {
-        adminSetCreditFrozen(ctx.params.pubkey, freeze);
+        const ok = adminSetCreditFrozen(ctx.params.pubkey, freeze);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { error: 'Member not found' };
+            return;
+        }
         logger.info('ADMIN', `${freeze ? 'Froze' : 'Unfroze'} credit floor for ${ctx.params.pubkey.substring(0, 12)}`);
         ctx.body = { success: true, frozen: freeze };
     } catch (e: any) {

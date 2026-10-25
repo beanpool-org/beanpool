@@ -115,7 +115,7 @@ function ToolsList({ identity, onOpen, onClose, onShop, tools = TOOLS, apps = TO
                     {t('Things you can do on your own, that make your community stronger.')}
                 </p>
                 {onShop && (
-                    <div className="mb-4" data-testid="tools-shop-card">
+                    <div className="mb-4">
                         <ToolSection testId="tools-shop-card">
                             <ToolRow
                                 icon="🏪"

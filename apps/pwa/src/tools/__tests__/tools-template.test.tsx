@@ -283,6 +283,16 @@ describe('a tool this build does not have', () => {
         render(<ToolsPage identity={identity} open={{ id: 'scaffold', screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
     });
+
+    it('Your shop card on the tools screen has exactly one tools-shop-card testid and triggers onShop', async () => {
+        const onShop = vi.fn();
+        const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onShop={onShop} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
+        const cards = await list.findAllByTestId('tools-shop-card');
+        expect(cards).toHaveLength(1);
+        const shopRow = list.getByTestId('tools-shop');
+        fireEvent.click(shopRow);
+        expect(onShop).toHaveBeenCalledTimes(1);
+    });
 });
 
 /** A tool whose one screen hands the test the host it was given (and can press its doors). */

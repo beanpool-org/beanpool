@@ -30,7 +30,7 @@ export interface MyShop {
 
 /** Home's "Your shop and tools" as the node sends it (`cards.shop`). */
 export interface ShopHomeCard {
-    shop: { id: string; name: string | null; ownerName: string; category: string | null; counts: ShopCounts; paused: boolean; backOn: string | null } | null;
+    shop: { id: string; name: string | null; ownerName: string; category: string | null; counts?: ShopCounts | null; paused: boolean; backOn: string | null } | null;
 }
 
 /** What a change names: each field optional, null or empty text clears one. */
@@ -208,10 +208,12 @@ export function shopTitle(shop: { name: string | null; ownerName: string }): str
 }
 
 /** "3 things · 1 out", or "Nothing in it yet". */
-export function shopCountsLine(counts: ShopCounts): string {
-    if (counts.things === 0) return t('Nothing in it yet');
-    const parts = [tn(counts.things, '{n} thing', '{n} things', { n: formatCount(counts.things) })];
-    if (counts.out > 0) parts.push(t('{n} out', { n: formatCount(counts.out) }, 'things lent out now'));
+export function shopCountsLine(counts?: ShopCounts | null): string {
+    const things = counts?.things ?? 0;
+    const out = counts?.out ?? 0;
+    if (things === 0) return t('Nothing in it yet');
+    const parts = [tn(things, '{n} thing', '{n} things', { n: formatCount(things) })];
+    if (out > 0) parts.push(t('{n} out', { n: formatCount(out) }, 'things lent out now'));
     return parts.join(' · ');
 }
 
@@ -222,7 +224,7 @@ export function dayOf(day: string): Date {
 }
 
 /** Closed for now (and when it is back), else the counts. */
-export function shopStateLine(shop: { paused: boolean; backOn: string | null; counts: ShopCounts }): string {
+export function shopStateLine(shop: { paused: boolean; backOn: string | null; counts?: ShopCounts | null }): string {
     if (!shop.paused) return shopCountsLine(shop.counts);
     if (!shop.backOn) return t('Closed for now');
     return t('Closed for now · back {date}', { date: formatDate(dayOf(shop.backOn), 'weekday-day-month') });

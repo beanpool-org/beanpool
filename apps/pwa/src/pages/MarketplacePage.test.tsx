@@ -792,4 +792,40 @@ describe('MarketplacePage: shop parity for editing offers', () => {
             expect(shopClosed).toBe(true);
         }
     });
+
+    it('keeps shop toggle hidden when listing shop id cannot be read', async () => {
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        shop: {
+                            id: 'shop-1',
+                            name: "Author's Shop",
+                            ownerName: 'Author',
+                            ownerPublicKey: 'author-pubkey',
+                            category: 'goods',
+                            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+                            paused: false,
+                            backOn: null,
+                            photoUrl: null,
+                        },
+                    }),
+                };
+            }
+            if (path.startsWith('/api/marketplace/posts')) {
+                return { ok: false, status: 500, json: async () => ({ error: 'timeout' }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        render(<MarketplacePage identity={authorIdentity} openPostId="post-public" />);
+        const editBtn = await screen.findByRole('button', { name: /Edit Post/i });
+        fireEvent.click(editBtn);
+
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('edit-post-shop')).not.toBeInTheDocument();
+    });
 });

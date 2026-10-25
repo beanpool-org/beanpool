@@ -2416,6 +2416,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         readListingShopId(targetPostId),
                                                     ]);
                                                     if (selectedPostRef.current?.id !== targetPostId) return;
+                                                    if (inShopId === undefined) return;
                                                     const inShop = mine.state === 'open' && inShopId === mine.shop.id;
                                                     setEditShop(shopToggleState(mine, { inShop }));
                                                     setEditInShop(inShop);

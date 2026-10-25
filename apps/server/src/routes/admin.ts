@@ -1839,8 +1839,9 @@ router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {
         logger.info('ADMIN', `${freeze ? 'Froze' : 'Unfroze'} credit floor for ${ctx.params.pubkey.substring(0, 12)}`);
         ctx.body = { success: true, frozen: freeze };
     } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update credit freeze status' };
+        const msg = e?.message || 'Failed to update credit freeze status';
+        ctx.status = msg.includes('not found') ? 404 : 400;
+        ctx.body = { error: msg };
     }
 });
 

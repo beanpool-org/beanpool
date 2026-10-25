@@ -8209,6 +8209,7 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
 }
 
 export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
+    if (!getMember(publicKey)) throw new Error('Member not found');
     db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
     clearEnterpriseFloorCache(publicKey);
     clearEnterpriseFloorCache();

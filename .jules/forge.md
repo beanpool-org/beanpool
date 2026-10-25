@@ -167,3 +167,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
 **Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.
+
+## 2026-10-25 - [Missing 404 status code when freezing non-existent member credit]
+**Issue:** `POST /api/local/admin/users/:pubkey/freeze` in `apps/server/src/routes/admin.ts` returned `400 Bad Request` or silently succeeded when attempting to freeze/unfreeze credit for a non-existent member.
+**Learning:** `adminSetCreditFrozen` lacked member presence validation, and the route catch block defaulted to 400 Bad Request instead of checking if the requested member existed.
+**Pattern:** Ensure state mutation functions validate resource existence with `if (!getMember(pubkey)) throw new Error('Member not found');` and route catch blocks inspect error messages for `'not found'` to return HTTP 404.

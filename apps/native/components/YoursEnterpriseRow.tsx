@@ -47,8 +47,7 @@ interface Props {
 export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
     const styles = useStyles(({ colors, theme }) => StyleSheet.create({
         row: {
-            flexDirection: 'row',
-            alignItems: 'center',
+            flexDirection: 'column',
             minHeight: 64,
             paddingVertical: 10,
             paddingHorizontal: 12,
@@ -60,16 +59,16 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
             borderColor: colors.border.default,
         },
         mainCol: {
-            flex: 1,
             flexDirection: 'row',
-            alignItems: 'center',
-            minWidth: 0,
+            alignItems: 'flex-start',
+            width: '100%',
         },
         avatarCol: {
             width: 46,
             height: 46,
             borderRadius: 14,
             marginRight: 12,
+            marginTop: 2,
             flexShrink: 0,
             overflow: 'hidden',
         },
@@ -86,7 +85,6 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
         body: {
             flex: 1,
             minWidth: 0,
-            marginRight: 8,
         },
         name: {
             fontSize: 15,
@@ -181,6 +179,7 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
             fontSize: 12,
             color: colors.text.secondary,
             marginTop: 4,
+            lineHeight: 17,
         },
         manageBtn: {
             minHeight: 44,
@@ -194,7 +193,8 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            alignSelf: 'center',
+            alignSelf: 'flex-end',
+            marginTop: 6,
         },
         manageBtnText: {
             fontSize: 13,
@@ -249,6 +249,17 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
         }
     }
 
+    const spokenStatus = stateBadge === 'paused'
+        ? t('paused')
+        : stateBadge === 'winding_up'
+            ? t('winding up')
+            : stateBadge === 'closed'
+                ? t('closed')
+                : isFunded
+                    ? t('funded')
+                    : null;
+    const spokenLabel = [rowSpokenName(item.chat), spokenStatus, line2].filter(Boolean).join('. ');
+
     const handleRowPress = () => {
         if (onPress) {
             onPress(item.chat, item.summary);
@@ -282,7 +293,7 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
         <View style={[styles.row, flush && { marginHorizontal: 0 }]}>
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={rowSpokenName(item.chat)}
+                accessibilityLabel={spokenLabel}
                 style={styles.mainCol}
                 onPress={handleRowPress}
             >
@@ -335,7 +346,7 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
                     </View>
 
                     {!!line2 && (
-                        <Text style={styles.metaLine} numberOfLines={1}>
+                        <Text style={styles.metaLine} numberOfLines={2}>
                             {line2}
                         </Text>
                     )}

@@ -293,7 +293,11 @@ export function rowRoleWord(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle'>)
 export function rowSpokenName(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle' | 'name'>): string {
     const name = item.name;
     if (item.kind === 'event') return t('{name}, event', { name });
-    if (item.kind !== 'enterprise') return t('{name}, group', { name });
+    if (item.kind !== 'enterprise') {
+        return item.role === 'convenor'
+            ? t('{name}, group, convenor', { name })
+            : t('{name}, group', { name });
+    }
     const lead = item.role === 'lead';
     if (item.lifecycle === 'bounded') return lead ? t('{name}, project, leader', { name }) : t('{name}, project, collaborator', { name });
     return lead ? t('{name}, enterprise, lead keeper', { name }) : t('{name}, enterprise, keeper', { name });

@@ -62,7 +62,7 @@ export function isHomeInflight(): boolean {
 /** Fresh Home answer for the header if fresher than HOME_FRESH_FOR_HEADER_MS. */
 export function freshHomeForHeader(publicKey?: string | null, now: number = Date.now()): HomeAnswer | null {
     if (!latest) return null;
-    if (publicKey && latest.publicKey && latest.publicKey !== publicKey) return null;
+    if ((publicKey ?? null) !== latest.publicKey) return null;
     return (now - latest.at >= 0 && now - latest.at < HOME_FRESH_FOR_HEADER_MS) ? latest.answer : null;
 }
 
@@ -92,7 +92,7 @@ export function homeForHeader(publicKey: string | null | undefined, waitMs: numb
         };
 
         unsubscribe = onHomeRead((ans, pk) => {
-            if (!pk || !publicKey || pk === publicKey) finish(ans);
+            if (pk === publicKey) finish(ans);
         });
 
         const timeout = Math.max(waitMs, waiting ? HOME_HEADER_WAIT_MS : 0);

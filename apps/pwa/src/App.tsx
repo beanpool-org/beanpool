@@ -223,6 +223,8 @@ export function App() {
     const clearSaveSearch = useCallback(() => setSaveSearchToHome(null), []);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
+    // Commons' Start something → Poll / Event: the composer opens on that kind ('map-post-poll' / 'map-post-event').
+    const [openNewPostType, setOpenNewPostType] = useState<'poll' | 'event' | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
     const [focusMapPostId, setFocusMapPostId] = useState<string | null>(null);
     const clearFocusMapPost = useCallback(() => setFocusMapPostId(null), []);
@@ -372,6 +374,13 @@ export function App() {
             setActiveTab('map');
             setOpenNewPost(true);
             setOpenNewPostGroupId(contextId);
+            return;
+        }
+        if (tab === 'map-post-poll' || tab === 'map-post-event') {
+            setActiveTab('map');
+            setOpenNewPost(true);
+            setOpenNewPostGroupId(undefined);
+            setOpenNewPostType(tab === 'map-post-poll' ? 'poll' : 'event');
             return;
         }
         if (tab === 'map-event') {
@@ -1052,7 +1061,8 @@ export function App() {
                                         identity={identity}
                                         openNewPost={openNewPost}
                                         initialGroupId={openNewPostGroupId}
-                                        onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); }}
+                                        initialPostType={openNewPostType}
+                                        onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); setOpenNewPostType(undefined); }}
                                         openDraft={openDraft}
                                         onDraftOpened={clearOpenDraft}
                                         onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}

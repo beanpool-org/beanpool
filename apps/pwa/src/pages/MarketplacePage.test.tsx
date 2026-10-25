@@ -253,6 +253,15 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(onPostOpened).toHaveBeenCalled();
     });
 
+    it.each([['new-poll', 'map-post-poll'], ['new-event', 'map-post-event']])('Commons\' Start something → %s opens the composer on that kind (%s), not on Need (#2471)', async (openPostId, tab) => {
+        const onNavigate = vi.fn();
+        const onPostOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openPostId={openPostId} onPostOpened={onPostOpened} onNavigate={onNavigate} />);
+        await waitFor(() => expect(onNavigate).toHaveBeenCalledWith(tab));
+        expect(onNavigate).not.toHaveBeenCalledWith('map-post');
+        expect(onPostOpened).toHaveBeenCalled();
+    });
+
     it('opens the event detail from the card, with the host line', async () => {
         render(<MarketplacePage identity={identity} />);
         const open = await screen.findByRole('button', { name: 'Open event: Working bee' });

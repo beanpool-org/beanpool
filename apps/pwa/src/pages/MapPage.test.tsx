@@ -413,6 +413,16 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         }
     });
 
+
+    // Commons' Start something → Poll / Event (#2471, deciding review 2): the composer opens on the kind picked, not on Need.
+    it.each([['poll', '🗳️ Poll', '🗳️ Create Poll'], ['event', 'Event', null]] as const)('opened for a %s, the composer has that kind pressed', async (kind, button, submit) => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost initialPostType={kind} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await waitFor(() => expect(within(panel).getByRole('button', { name: button })).toHaveAttribute('aria-pressed', 'true'));
+        expect(within(panel).getByRole('button', { name: '🟠 Need' })).toHaveAttribute('aria-pressed', 'false');
+        if (submit) expect(panel.textContent).toContain(submit);
+    });
 });
 
 describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {

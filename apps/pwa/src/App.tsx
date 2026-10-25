@@ -242,6 +242,7 @@ export function App() {
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     const [openYourShop, setOpenYourShop] = useState(false);
     const [openShopId, setOpenShopId] = useState<string | null>(null);
+    const [shopFromYourShop, setShopFromYourShop] = useState(false);
     // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
     // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
@@ -271,6 +272,7 @@ export function App() {
         setOpenTool(null);
         setOpenYourShop(false);
         setOpenShopId(null);
+        setShopFromYourShop(false);
     };
     // The cog's, the sidebar's and the pill's: Settings as the member sees it. Opened, it closes a page over the tabs as a
     // tab does, or it opened under that page and nothing seemed to happen (tester, 23 Oct: from My profile the cog didn't
@@ -1266,6 +1268,7 @@ export function App() {
                             onBack={() => setOpenYourShop(false)}
                             onOpenShop={(shopId: string) => {
                                 setOpenYourShop(false);
+                                setShopFromYourShop(true);
                                 setOpenShopId(shopId);
                             }}
                             onOpenPost={(postId) => {
@@ -1289,9 +1292,16 @@ export function App() {
                             id={openShopId}
                             identity={identity}
                             showsBeans={beansMode === 'live'}
-                            onBack={() => setOpenShopId(null)}
+                            onBack={() => {
+                                setOpenShopId(null);
+                                if (shopFromYourShop) {
+                                    setShopFromYourShop(false);
+                                    setOpenYourShop(true);
+                                }
+                            }}
                             onOpenYourShop={() => {
                                 setOpenShopId(null);
+                                setShopFromYourShop(false);
                                 setOpenYourShop(true);
                             }}
                             onOpenEnterprise={(pubkey) => {

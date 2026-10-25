@@ -1034,3 +1034,38 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** DELIBERATE DECISION
 - **Claim:** take `[0]` of a repeated parameter on the tool screen.
 - **Why not to re-file:** a repeated parameter is refused on purpose. Re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-25 — Forge: try/catch on GET /api/events/mine (#2450) — CLOSED, RE-FILE OF #1502/#1685/#2070
+- **Category:** CLAIM FALSE (see #1502, #1685, #2070)
+- **Claim:** `GET /api/events/mine` in `apps/server/src/routes/events.ts` needs a catch around `listMyEvents`.
+- **Why not to re-file:** Koa already turns a throw into a 500. The catch put the raw `e.message` into the answer (against the generic-error rule), with no reproduced failure and no test. Forge: this is the fourth catch-around-a-route filing; show a reproduced failure first and never echo `e.message`.
+
+### 2026-10-25 — Flow: any→unknown in CommunityShapeSection (#2451) — CLOSED, REGRESSION (see #2006)
+- **Category:** REGRESSION
+- **Claim:** replace `any` with `unknown` in `apps/manager/src/components/modules/CommunityShapeSection.tsx`.
+- **Why not to re-file as is:** `err instanceof Error ? err.message : '…'` drops the `||` fallback, so an Error with an empty message shows a blank (the #2006 shape), and the knownFloor row was wrapped in an IIFE and re-indented (+85/-76) to avoid one cast. Flow: re-file only `catch (err: unknown)` with `err instanceof Error && err.message ? err.message : '…'` and a test that throws `new Error('')`; no restructuring.
+
+### 2026-10-25 — Palette: focus rings and touch targets on StartCommunityScreen (#2452) — CLOSED, CLAIM FALSE (#1369)
+- **Category:** CLAIM FALSE (see #1369, #2423)
+- **Claim:** the controls on `apps/pwa/src/components/StartCommunityScreen.tsx` need focus-visible rings.
+- **Why not to re-file:** the global `:focus-visible` outline in `index.css` already applies and none of these elements removes it; the PR's rings replaced the dark-mode pale outline. Palette: the only open item is the Back button's size (about 36x32): re-file just `min-w-[44px] min-h-[44px]` on it, with nothing else.
+
+### 2026-10-25 — Pixel: English accessibilityLabel/Hint on treasury-post's submit button (#2453) — CLOSED, BREAKS THE WORDS LAYER (#2009)
+- **Category:** BREAKS THE WORDS LAYER (see #2009, #2117, #1036)
+- **Claim:** `apps/native/app/treasury-post.tsx`'s submit button needs a dynamic label, a hint and a busy state.
+- **Why not to re-file as is:** the visible text already names the button (#1036); the four new strings ('Posting need...', 'Posting offer...', and two hints) are in none of the 76 native catalogs, so they read in English in 24 of 25 languages. Pixel: re-file only `accessibilityState={{ busy: submitting, disabled: submitting }}`, which needs no words.
+
+### 2026-10-25 — Expo: string|string[] params in join-open-door.tsx (#2454) — CLOSED, DECIDED (#1753, #2073, #2118, #2425)
+- **Category:** DELIBERATE DECISION
+- **Claim:** `useLocalSearchParams` in `apps/native/app/join-open-door.tsx` can return `string[]`; widen the types and take `[0]` for `from`.
+- **Why not to re-file:** same decision as #2118. A door link that repeats a param is ambiguous; on main an array `from` is not the link marker, so it fails closed, and taking `[0]` makes `from=link&from=x` start the link-opened flow. `node` is already array-safe via `doorNodeFromParam`. Expo: re-file only with a real link that produces the array and Marty's decision.
+
+### 2026-10-25 — Bolt: Map lookup in GroupDecisions (#2455) — CLOSED, NO BENEFIT (re-file of #1968)
+- **Category:** NO BENEFIT (see #1968, #2011)
+- **Claim:** O(1) member lookups in `apps/pwa/src/components/EnterpriseDecisions.tsx` GroupDecisions.
+- **Why not to re-file:** the same swap as #1968: a Map keeps the LAST repeated key where `.find()` keeps the first, with no profile of a real screen and no duplicate test. Bolt: no Map-for-find swaps without a profile showing a perceptible cost.
+
+### 2026-10-25 — Scout: event-post suite with a fetch retry and a 503-tolerant SSRF check (#2449) — SPLIT
+- **Category:** BUNDLE (see #1729)
+- **What landed:** only the new `apps/server/src/test-event-post.ts` and its registration line (director PR).
+- **Why the rest must not be re-filed:** `keepalive-test-fetch.ts` got a blind ECONNRESET retry that replays POSTs which may already have been applied, and hides the reset its header's measured fix prevents; `test-pulse-resolver.ts`'s "ssrfSafeFetch succeeds on a public domain" was made to pass on a 503. Scout: never weaken an assertion or add a retry to dodge a flake; one suite per PR.

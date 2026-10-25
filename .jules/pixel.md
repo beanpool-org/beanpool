@@ -54,6 +54,7 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-25 #2453: English label/hint on treasury-post submit breaks the words layer; only accessibilityState busy is wanted. See POLICY.md.
 - 2026-10-19 #2172: group invite action already labelled + busy, third filing (#2117, #1036). Stop re-filing.
 - 2026-10-18 #2117: group invite action already labelled + busy (#1036); new spoken strings go through t().
 

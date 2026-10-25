@@ -1278,7 +1278,7 @@ export function App() {
                             }}
                             onOpenDeals={() => {
                                 closePagesOver();
-                                navigateToTab('marketplace');
+                                navigateToTab('marketplace', 'deals_active');
                             }}
                         />
                     )}

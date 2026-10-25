@@ -153,6 +153,7 @@ const cases = [
     { id: 'shop-page-owner', view: 'shop-owner', isCloseRefusal: false },
     { id: 'shop-page-visitor', view: 'shop-visitor', isCloseRefusal: false },
     { id: 'close-refusal', view: 'close-refusal', isCloseRefusal: true },
+    { id: 'composer-tick', view: 'composer-tick', isCloseRefusal: false },
 ];
 
 const viewports = [

@@ -175,16 +175,22 @@ async function main(): Promise<void> {
 
     // ── 7. Actor from auth, not body ────────────────────────────────────────────────────────
     const stranger = makeMember();
-    // stranger signs, but body claims backer's pubkey: must use stranger (who has 0 balance)
+    // stranger signs, but body claims backer's pubkey: signature middleware enforces identity match (403)
     const spoofAttempt = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
         fromPubkey: backer.pubKeyHex,
         amount: 10,
         memo: 'Spoof attempt',
     }, stranger);
-    // Even if deadline was open, stranger has insufficient balance: actor is stranger, not backer.
-    // And here deadline is past anyway, so it refuses with 409 project_closed.
-    assert(spoofAttempt.status === 409 && spoofAttempt.body?.code === REFUSAL_CODE,
-        `spoof attempt refused with 409 project_closed (got ${spoofAttempt.status})`);
+    assert(spoofAttempt.status === 403,
+        `identity mismatch in body refused with 403 by auth middleware (got ${spoofAttempt.status})`);
+
+    // stranger signs with valid signature: deadline check still refuses with 409 project_closed
+    const strangerPledgeClosed = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
+        amount: 10,
+        memo: 'Stranger pledge to closed project',
+    }, stranger);
+    assert(strangerPledgeClosed.status === 409 && strangerPledgeClosed.body?.code === REFUSAL_CODE,
+        `stranger pledge to closed project refused with 409 project_closed (got ${strangerPledgeClosed.status})`);
 
     // ── 8. Project without deadline continues to take pledges ──────────────────────────────
     const createdNoDeadline = await signedPost('/api/enterprise', {

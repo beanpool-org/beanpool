@@ -731,5 +731,20 @@
   },
   "{n} thing · {out} out|{n} things · {out} out": {
     "other": "{n} 件物品 · {out} 件借出"
-  }
+  },
+  "Friends, neighbours, shared interests": "朋友、鄰居、共同興趣",
+  "Open discussion space": "開放討論空間",
+  "Getting a practical job done together": "一起完成實際的工作",
+  "People who share a skill or craft": "擁有相同技能或手藝的人",
+  "Open\u0004join policy": "公開",
+  "Anyone can join immediately": "任何人皆可立即加入",
+  "Request to Join\u0004join policy": "申請加入",
+  "Convenor approval required to join": "需經協調人核准方可加入",
+  "Invite Only\u0004join policy": "僅限邀請",
+  "Convenor must invite new members": "新成員必須由協調人邀請",
+  "🥖 With Beans involved?": "🥖 涉及豆子交易嗎？",
+  "Start a project or an enterprise →": "發起專案或在地事業 →",
+  "Social Circle": "社交圈",
+  "Working Group": "工作小組",
+  "Guild": "公會"
 }

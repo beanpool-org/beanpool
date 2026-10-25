@@ -731,5 +731,20 @@
   },
   "{n} thing · {out} out|{n} things · {out} out": {
     "other": "{n}点 · 貸出中{out}点"
-  }
+  },
+  "Friends, neighbours, shared interests": "友達、ご近所、共通の趣味",
+  "Open discussion space": "オープンな議論スペース",
+  "Getting a practical job done together": "実践的な活動を一緒に行う",
+  "People who share a skill or craft": "スキルや技術を共有する仲間",
+  "Open\u0004join policy": "自由参加",
+  "Anyone can join immediately": "誰でもすぐに参加できます",
+  "Request to Join\u0004join policy": "参加リクエスト",
+  "Convenor approval required to join": "参加には進行役の承認が必要です",
+  "Invite Only\u0004join policy": "招待のみ",
+  "Convenor must invite new members": "進行役が新しいメンバーを招待する必要があります",
+  "🥖 With Beans involved?": "🥖 豆が関わりますか？",
+  "Start a project or an enterprise →": "プロジェクトまたは事業体を始める →",
+  "Social Circle": "サークル",
+  "Working Group": "ワーキンググループ",
+  "Guild": "ギルド"
 }

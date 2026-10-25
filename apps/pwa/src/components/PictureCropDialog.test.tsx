@@ -185,6 +185,42 @@ describe("an enterprise's logo and banner (Manage)", () => {
         expect(lastDraw().from).toEqual([512, 120, 960, 960]);
     });
 
+    it('Escape and Tab reach the dialog wherever focus is, and a page\'s own Escape never sees them (deciding review 1)', async () => {
+        // TreasuryDetailPage leaves Manage on a window Escape; a click on the heading (or Safari after a button) leaves focus on <body>.
+        const pageEscape = vi.fn();
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') pageEscape(); };
+        window.addEventListener('keydown', onKey);
+        restore.push(() => window.removeEventListener('keydown', onKey));
+        renderFace();
+        fireEvent.change(screen.getByTestId('manage-face-logo-input'), { target: { files: [photo()] } });
+        const dialog = await cropDialog();
+        (document.activeElement as HTMLElement | null)?.blur();
+        expect(document.activeElement).toBe(document.body);
+        fireEvent.keyDown(document.body, { key: 'Tab' });
+        expect(dialog.contains(document.activeElement)).toBe(true);
+        (document.activeElement as HTMLElement).blur();
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(pageEscape).not.toHaveBeenCalled();
+        expect(drawn).toEqual([]);
+    });
+
+    it('a ready-made logo leaves a banner photo still being read alone, and a banner photo leaves a logo photo alone (deciding review 2)', async () => {
+        renderFace();
+        fireEvent.change(screen.getByTestId('manage-face-banner-input'), { target: { files: [photo()] } });
+        fireEvent.click(screen.getByRole('button', { name: 'Select Leaf avatar' }));
+        let dialog = await cropDialog();
+        expect(dialog).toHaveAttribute('data-aspect', '3');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        // Both photos chosen at once: each gets its own crop, one after the other.
+        fireEvent.change(screen.getByTestId('manage-face-logo-input'), { target: { files: [photo()] } });
+        fireEvent.change(screen.getByTestId('manage-face-banner-input'), { target: { files: [photo()] } });
+        await waitFor(() => expect(screen.getAllByRole('dialog', { name: 'Choose the part that shows' }).length).toBeGreaterThanOrEqual(1));
+        const aspects = () => screen.queryAllByRole('dialog', { name: 'Choose the part that shows' }).map((d) => d.getAttribute('data-aspect'));
+        await waitFor(() => expect(aspects().sort()).toEqual(['1', '3']));
+    });
+
     it('is a labelled modal dialog axe finds nothing wrong with; focus starts on the picture, stays in, and goes back on close', async () => {
         renderFace();
         const input = screen.getByTestId('manage-face-banner-input');

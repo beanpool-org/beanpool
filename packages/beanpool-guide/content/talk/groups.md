@@ -24,7 +24,7 @@ On the phone, the same list is in **Commons**, under **Groups**, as **Your group
 
 ## Starting a group
 
-- On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)
+- On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. In a community with Beans, both ask what kind first: **Chat group**, **Project** or **Enterprise**. Picking **Chat group** opens the group form.
 - In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
 - Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.
@@ -33,7 +33,7 @@ On the phone, the same list is in **Commons**, under **Groups**, as **Your group
 
 You can start up to 5 groups in any 24 hours.
 
-With Beans involved? Start a project or an enterprise instead, from the bottom of the categories: on the phone **Start a project or an enterprise**, on the web **Start a project** or **Start an enterprise**. See "Projects and enterprises".
+With Beans involved? Start a project or an enterprise instead: pick **Project** or **Enterprise** when you tap **+** or **New group** (or from the link at the bottom of the group form, **Start a project or an enterprise →**; on the web **Start a project** or **Start an enterprise**). See "Projects and enterprises".
 
 ## Inviting people
 
@@ -117,7 +117,7 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (two people with a plus). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
+When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
 
 A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 

@@ -468,6 +468,7 @@ export const SUITES = [
     'test-visitors-cant-act',
     'test-doors-key-case',
     'test-events',
+    'test-event-post',
     'test-enterprise-event-http',
     'test-event-times-http',
     'test-event-series-http',

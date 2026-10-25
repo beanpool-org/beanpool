@@ -12,7 +12,7 @@ import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, com
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
-import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
 import { chatEmoji, chatHref, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
@@ -27,7 +27,6 @@ import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sam
 import { LocalCommunitySheet } from '../../components/showcase/LocalCommunityMark';
 import { StartSomethingSheet } from '../../components/StartSomethingSheet';
 import { startRows, startTarget, type StartRowKey } from '../../utils/start-something';
-import { Sentence } from '../../components/Sentence';
 import { formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import { memberShelves, phoneTools } from '../../tools/index';
 import { ToolRow } from '../../tools/ui';

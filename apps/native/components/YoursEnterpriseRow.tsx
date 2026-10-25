@@ -15,8 +15,8 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { formatNumber, inCapitalsOf, t, tn } from '@beanpool/core';
-import { useTheme, useStyles } from '../app/ThemeContext';
+import { formatNumber, t, tn } from '@beanpool/core';
+import { useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { MemberAvatar } from './MemberAvatar';
 import { enterpriseCardStatus } from '../utils/enterprise-card';
@@ -45,7 +45,6 @@ interface Props {
 }
 
 export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
-    const { colors, theme } = useTheme();
     const styles = useStyles(({ colors, theme }) => StyleSheet.create({
         row: {
             flexDirection: 'row',
@@ -217,7 +216,7 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
     const roleWord = rowRoleWord(item.chat);
 
     // Line 2 wording
-    let line2 = '';
+    let line2: string;
     if (isProject) {
         const raised = item.summary?.currentAmount != null
             ? item.summary.currentAmount

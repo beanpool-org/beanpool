@@ -283,7 +283,6 @@ const click = async (el: Element | null | undefined, what: string) => {
     await settle(6);
 };
 const byLabel = (label: string) => host.querySelector(`[aria-label="${label}"]`);
-const button = (text: string) => Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(text)) ?? null;
 
 describe('Commons S3 — Yours first, Find named, explainer gone (phone)', () => {
     it('shows kept enterprises/projects lead first with role word, balance line, Manage pill, and group row pushing chat; drops events; explainer gone', async () => {

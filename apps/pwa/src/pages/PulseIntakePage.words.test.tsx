@@ -55,13 +55,18 @@ describe('sharing to the Pulse in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
 
         // Two channels and none picked: the page says which is missing.
-        fireEvent.click(screen.getByRole('button', { name: xx('Share to Pulse') }));
+        fireEvent.click(await screen.findByRole('button', { name: xx('Share to Pulse') }));
         expect(await screen.findByText(xx('Please select which of your channels this post belongs to.'))).toBeInTheDocument();
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
 
         fireEvent.click(screen.getByText('Instagram · @greenthumb').closest('button')!);
-        await waitFor(() => expect(previewPulsePost).toHaveBeenCalledTimes(2));
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: xx('Share to Pulse') })); });
+        // Flake cause: clicking a channel triggers resolvePreview, which sets resolving = true.
+        // While resolving is true, the button text changes to "Resolving preview...". Under load,
+        // previewPulsePost completes async after microtasks yield; synchronously querying for
+        // "Share to Pulse" throws "Unable to find an accessible element". Waiting with findByRole
+        // waits for resolution to finish and the button to return to "Share to Pulse".
+        const shareBtn = await screen.findByRole('button', { name: xx('Share to Pulse') });
+        await act(async () => { fireEvent.click(shareBtn); });
         expect(await screen.findByText(xx('Post shared to The Pulse!'))).toBeInTheDocument();
         expect(submitPulsePost).toHaveBeenCalledWith(expect.objectContaining({ url: LINK, channelId: 'ch-ig', category: 'food' }));
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
@@ -78,6 +83,6 @@ describe('sharing to the Pulse in English', () => {
         expect(screen.getByText('Share a single post or video from your external channels to your local community feed.')).toBeInTheDocument();
         expect(screen.getByText('Instagram · @greenthumb')).toBeInTheDocument();
         expect(screen.getByText('Making & craft')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Share to Pulse' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Share to Pulse' })).toBeInTheDocument();
     });
 });

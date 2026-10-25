@@ -8,9 +8,11 @@ import path from 'node:path';
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(PWA_DIR);
 const OUT_DIR_REPO = path.join(PWA_DIR, 'e2e', 'screenshots', 'shop');
-const OUT_DIR_SCRATCH = '/Users/marty/.gemini/antigravity-cli/brain/88c834b2-86b9-4243-9589-1ec2cc34a114/scratch/shots';
+const OUT_DIR_SCRATCH = process.env.OUT_DIR_SCRATCH || null;
 fs.mkdirSync(OUT_DIR_REPO, { recursive: true });
-fs.mkdirSync(OUT_DIR_SCRATCH, { recursive: true });
+if (OUT_DIR_SCRATCH) {
+    fs.mkdirSync(OUT_DIR_SCRATCH, { recursive: true });
+}
 
 const MY_PUBKEY = 'me-pubkey-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 const KOFI_PUBKEY = 'kofi-pubkey-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
@@ -333,11 +335,12 @@ try {
 
                 const filename = `${c.id}-${vp.name}-${theme}.png`;
                 const shotPathRepo = path.join(OUT_DIR_REPO, filename);
-                const shotPathScratch = path.join(OUT_DIR_SCRATCH, filename);
-
                 // <= 900 px crop
                 await page.screenshot({ path: shotPathRepo, clip: { x: 0, y: 0, width: vp.width, height: Math.min(vp.height, 900) } });
-                fs.copyFileSync(shotPathRepo, shotPathScratch);
+                if (OUT_DIR_SCRATCH) {
+                    const shotPathScratch = path.join(OUT_DIR_SCRATCH, filename);
+                    fs.copyFileSync(shotPathRepo, shotPathScratch);
+                }
                 console.log(`Saved screenshot: ${filename}`);
 
                 await context.close();

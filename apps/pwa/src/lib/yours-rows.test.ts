@@ -111,7 +111,7 @@ describe('yoursRows', () => {
                 liveOffers: 0,
                 lifecycle: 'ongoing',
                 status: 'active',
-                keepers: [{ publicKey: 'my-key', role: 'lead' }],
+                keepers: [{ publicKey: 'my-key', role: 'lead', callsign: 'lead' }],
             },
             {
                 publicKey: 'ent-1',
@@ -122,7 +122,7 @@ describe('yoursRows', () => {
                 liveOffers: 0,
                 lifecycle: 'ongoing',
                 status: 'active',
-                keepers: [{ publicKey: 'other-key', role: 'lead' }],
+                keepers: [{ publicKey: 'other-key', role: 'lead', callsign: 'lead' }],
             },
         ];
 

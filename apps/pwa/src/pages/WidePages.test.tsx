@@ -82,6 +82,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getGroups: vi.fn().mockResolvedValue({ groups: [] }),
     markConversationReadApi: vi.fn().mockResolvedValue({ success: true }),
     getGroupChat: vi.fn().mockResolvedValue({ chat: null }),
+    getYourGroups: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
 const testIdentity: BeanPoolIdentity = {

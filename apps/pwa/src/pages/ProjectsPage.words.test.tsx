@@ -23,6 +23,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(),
+    getYourGroups: vi.fn(async () => ({ items: [] })),
 }));
 
 import { getDecisions, getGroups, getTreasuries } from '../lib/api';

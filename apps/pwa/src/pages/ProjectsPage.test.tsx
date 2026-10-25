@@ -126,6 +126,7 @@ vi.mock('../lib/api', () => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(async () => []),
+    getYourGroups: vi.fn(async () => ({ items: [] })),
     createDecision: vi.fn(async () => ({ success: true, decision: { id: 'dec-1' } })),
     proposeDecision: vi.fn(async () => ({ success: true })),
     castDecisionVote: vi.fn(async () => ({ success: true })),

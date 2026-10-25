@@ -630,22 +630,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     <h2 className="text-xs font-black uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-3">
                         {t('Yours')}
                     </h2>
-                    {loadingYourChats || (loading && !treasuries.length && !yourKeptRows.length && !yourChatsError) ? (
-                        <div className="py-8 text-center text-sm text-nature-600 dark:text-nature-400" role="status">
-                            {t('Loading groups...')}
-                        </div>
-                    ) : yourChatsError ? (
-                        <div className="py-6 text-center text-sm text-nature-600 dark:text-nature-400 space-y-2">
-                            <p role="alert">{yourChatsError}</p>
-                            <button
-                                type="button"
-                                onClick={handleRetryYours}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px]"
-                            >
-                                {t('Retry')}
-                            </button>
-                        </div>
-                    ) : yourKeptRows.length > 0 || yourGroupRows.length > 0 ? (
+                    {yourKeptRows.length > 0 || yourGroupRows.length > 0 ? (
                         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-4">
                             {yourKeptRows.map(item => {
                                 const e = item.chat;
@@ -780,11 +765,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             else setSelectedGroupForDetail(fullGroup || {
                                                 id: g.id,
                                                 name: g.name,
-                                                category: category || 'general',
-                                                joinPolicy: joinPolicy || 'open',
+                                                category: (category as any) || 'general',
+                                                joinPolicy: (joinPolicy as any) || 'open',
                                                 memberCount: memberCount || 1,
                                                 description: description || '',
-                                                viewerRole: role,
+                                                viewerRole: role as any,
                                                 viewerStatus: 'active',
                                                 createdAt: g.lastActivityAt || new Date().toISOString(),
                                                 createdBy: '',
@@ -798,11 +783,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 else setSelectedGroupForDetail(fullGroup || {
                                                     id: g.id,
                                                     name: g.name,
-                                                    category: category || 'general',
-                                                    joinPolicy: joinPolicy || 'open',
+                                                    category: (category as any) || 'general',
+                                                    joinPolicy: (joinPolicy as any) || 'open',
                                                     memberCount: memberCount || 1,
                                                     description: description || '',
-                                                    viewerRole: role,
+                                                    viewerRole: role as any,
                                                     viewerStatus: 'active',
                                                     createdAt: g.lastActivityAt || new Date().toISOString(),
                                                     createdBy: '',
@@ -849,12 +834,27 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             )}
                                         </div>
                                         <div className="flex items-center justify-between pt-1 border-t border-nature-100 dark:border-nature-900 text-[11px] text-nature-600 dark:text-nature-400">
-                                            <span>{t('Join: {policy}', { policy: named(JOIN_POLICY_WORDS, joinPolicy, joinPolicy?.replace(/_/g, ' ') || '') })}</span>
+                                            <span>{t('Join: {policy}', { policy: named(JOIN_POLICY_WORDS, joinPolicy || '', joinPolicy?.replace(/_/g, ' ') || '') })}</span>
                                             <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">{t('Open chat →')}</span>
                                         </div>
                                     </div>
                                 );
                             })}
+                        </div>
+                    ) : loadingYourChats || (loading && !treasuries.length) ? (
+                        <div className="py-8 text-center text-sm text-nature-600 dark:text-nature-400" role="status">
+                            {t('Loading groups...')}
+                        </div>
+                    ) : yourChatsError ? (
+                        <div className="py-6 text-center text-sm text-nature-600 dark:text-nature-400 space-y-2">
+                            <p role="alert">{yourChatsError}</p>
+                            <button
+                                type="button"
+                                onClick={handleRetryYours}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline min-h-[44px] min-w-[44px]"
+                            >
+                                {t('Retry')}
+                            </button>
                         </div>
                     ) : (
                         <p className="text-sm text-nature-600 dark:text-nature-400">

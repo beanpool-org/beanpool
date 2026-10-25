@@ -79,6 +79,7 @@ export function yoursRows(
                     conversationId: g.id,
                     name: g.name,
                     avatarUrl: g.avatarUrl || null,
+                    badge: null,
                     role: g.viewerRole || 'member',
                     category: g.category,
                     joinPolicy: g.joinPolicy,

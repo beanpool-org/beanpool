@@ -105,7 +105,7 @@ function use(b: Browser) {
 type Doc = { v: number; items: string[] };
 const KIT: ToolManifest<Doc> = {
     id: 'kit', name: word('Fixture kit'), line: word('Everything a tool can draw, for the tests.'), icon: '🧪',
-    shelf: 'stock', shopKinds: 'all', owner: 'both', permissions: ['node-copy'], screens: ['main'], row: () => null,
+    shelf: 'stock', categories: 'all', owner: 'both', permissions: ['node-copy'], screens: ['main'], row: () => null,
     examples: [word('a drill')],
     doc: {
         // Version 1 kept one name; version 2 a list. A document marked `poison` can't be read.

@@ -47,7 +47,7 @@ const sampleTreasuryDetail = {
     liveOffers: 1,
     isLeadOrSoleKeeperOrAdmin: true,
     keepers: [{ publicKey: mockIdentity.publicKey, callsign: 'Alice', role: 'lead' }],
-    shop: { id: 'shop-1', kind: 'tools', counts: { things: 1 }, howToDeal: 'Pick up on weekends' },
+    shop: { id: 'shop-1', category: 'tools', counts: { things: 1 }, howToDeal: 'Pick up on weekends' },
 } as any;
 
 describe('enterprise logo presets (web)', () => {

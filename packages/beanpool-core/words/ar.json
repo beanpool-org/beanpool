@@ -916,5 +916,17 @@
     "few": "{n} أشياء · {out} معارة",
     "many": "{n} شيئًا · {out} معارة",
     "other": "{n} شيء · {out} معارة"
-  }
+  },
+  "Friends, neighbours, shared interests": "أصدقاء، جيران، اهتمامات مشتركة",
+  "Open discussion space": "مساحة نقاش مفتوحة",
+  "Getting a practical job done together": "إنجاز عمل عملي معًا",
+  "People who share a skill or craft": "أشخاص يشاركون نفس المهارة أو الحرفة",
+  "Open\u0004join policy": "مفتوحة",
+  "Anyone can join immediately": "يمكن لأي شخص الانضمام فورًا",
+  "Request to Join\u0004join policy": "طلب انضمام",
+  "Convenor approval required to join": "يلزم موافقة المنسق للانضمام",
+  "Invite Only\u0004join policy": "بدعوة فقط",
+  "Convenor must invite new members": "يجب على المنسق دعوة الأعضاء الجدد",
+  "🥖 With Beans involved?": "🥖 مع فاصوليا؟",
+  "Start a project or an enterprise →": "بدء مشروع أو مؤسسة ←"
 }

@@ -768,5 +768,17 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n} സാധനം · {out} പുറത്ത്",
     "other": "{n} സാധനങ്ങൾ · {out} പുറത്ത്"
-  }
+  },
+  "Friends, neighbours, shared interests": "സുഹൃത്തുക്കൾ, അയൽക്കാർ, സമാന താൽപ്പര്യങ്ങൾ",
+  "Open discussion space": "തുറന്ന ചർച്ചാ വേദി",
+  "Getting a practical job done together": "പ്രായോഗികമായ ഒരു ജോലി ഒരുമിച്ച് പൂർത്തിയാക്കൽ",
+  "People who share a skill or craft": "ഒരു നൈപുണ്യമോ കരകൗശലമോ പങ്കിടുന്ന ആളുകൾ",
+  "Open\u0004join policy": "തുറന്നത്",
+  "Anyone can join immediately": "ആർക്കും ഉടൻ ചേരാം",
+  "Request to Join\u0004join policy": "ചേരാൻ അഭ്യർത്ഥിക്കുക",
+  "Convenor approval required to join": "ചേരാൻ കൺവീനറുടെ അനുമതി ആവശ്യമാണ്",
+  "Invite Only\u0004join policy": "ക്ഷണം വഴി മാത്രം",
+  "Convenor must invite new members": "കൺവീനർ പുതിയ അംഗങ്ങളെ ക്ഷണിക്കേണ്ടതുണ്ട്",
+  "🥖 With Beans involved?": "🥖 പയർ ഉൾപ്പെട്ടിട്ടുണ്ടോ?",
+  "Start a project or an enterprise →": "ഒരു പ്രോജക്റ്റോ സംരംഭമോ ആരംഭിക്കുക →"
 }

@@ -138,7 +138,7 @@ describe('Create a Group in the pseudo-locale', () => {
         expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(xx('Create a Group'));
         expect(screen.getByText(xx('Working Group'))).toBeInTheDocument();
         expect(screen.getByText(xx('Request to Join'))).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: xx('🌱 Start a project') })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: (n) => n.includes(xx('Start a project or an enterprise →')) })).toBeInTheDocument();
         expect(bracketed()).toBeGreaterThan(15);
         const others = ['ℹ️'];
         expect(bypassing(document.body, { others })).toEqual([]);

@@ -15,16 +15,17 @@ import { DecideSection } from '../components/DecideSection';
 import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { GroupDetailModal } from '../components/GroupDetailModal';
+import { StartSomethingDialog } from '../components/StartSomethingDialog';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
-import { modeFor, readerFeaturesOnce, readsOwn, useCommunityInfo, useReadsOwn } from '../lib/features';
-import { TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, type FeatureMode, type WordKey } from '@beanpool/core';
+import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
+import { type CommunityInfo } from '../lib/api';
+import { TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
 import { TOOL_APPS } from '../tools';
 import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
 import { EnterpriseCard } from '../components/EnterpriseCard';
-import { LocalCommunityAction } from '../components/LocalCommunityMark';
 import { Sentence } from '../components/Sentence';
 
 interface Props {
@@ -104,7 +105,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [modesUnknown, setModesUnknown] = useState(false);
     // Commons → Tools (DESIGN-tool-template-fable.md §1.5, the phone's row since T0.2): where a member here has any tool
     // this build has a web half for. Nothing here names a tool.
-    const communityInfo = useCommunityInfo();
+    const [communityInfo, setCommunityInfo] = useState<CommunityInfo | null>(null);
     const toolsHere = useMemo(() => {
         const facts = { profile: communityInfo?.profile ?? null, features: (communityInfo?.features ?? {}) as Record<string, unknown> };
         return TOOL_SHELVES.some((shelf) => toolsOnShelf(shelf, null, 'member', facts, TOOLS).some((m) => !!TOOL_APPS[m.id]));
@@ -115,6 +116,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             .then(() => communityInfoOnce())
             .then((info) => {
                 if (cancelled) return;
+                setCommunityInfo(info);
                 // The node's info alone sets Decide and the Beans create options, as before: no wait on the reader's set.
                 setVotes(decisionsOn(info));
                 setBeansOn(info?.features?.beans !== false);
@@ -171,11 +173,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
     const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat' || groupCategoryFilter === 'my_groups';
 
+    // Start something dialog
+    const [showStartSomething, setShowStartSomething] = useState(false);
+
     // Propose / New Enterprise modal
     const [showNewModal, setShowNewModal] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newDescription, setNewDescription] = useState('');
-    const [newLifecycle, setNewLifecycle] = useState<'ongoing' | 'bounded'>('bounded');
+    const [newLifecycle, setNewLifecycle] = useState<'' | 'ongoing' | 'bounded'>('bounded');
     const [newGoal, setNewGoal] = useState<number | ''>('');
     const [newDeadline, setNewDeadline] = useState('');
     const [newPhotos, setNewPhotos] = useState<string[]>([]);
@@ -239,6 +244,38 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         return effectiveDecisions.filter(d => d.status === 'open').length;
     }, [effectiveDecisions]);
 
+    const handlePickStartRow = (key: StartRowKey) => {
+        setShowStartSomething(false);
+        if (key === 'chat') {
+            setShowCreateGroupModal(true);
+        } else if (key === 'project') {
+            setNewLifecycle('bounded');
+            setShowNewModal(true);
+            setCreateError(null);
+        } else if (key === 'enterprise') {
+            setNewLifecycle('ongoing');
+            setShowNewModal(true);
+            setCreateError(null);
+        } else if (key === 'decision') {
+            if (decisionsMode === 'preview') {
+                return;
+            }
+            if (!canProposeDecision) {
+                alert(t('You can propose a Decision once you have completed a trade.'));
+                return;
+            }
+            if (hasOpenDecision) {
+                alert(t('You already have an open decision (limit 1 open decision per author).'));
+                return;
+            }
+            setShowProposeDecision(true);
+        } else if (key === 'poll') {
+            onNavigate?.('marketplace', 'new-poll');
+        } else if (key === 'event') {
+            onNavigate?.('marketplace', 'new-event');
+        }
+    };
+
     useEffect(() => {
         fetchEnterprises();
     }, [identity?.publicKey]);
@@ -296,6 +333,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const submitNewEnterprise = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!identity || creating || preparingPhoto) return;
+        if (!newLifecycle) {
+            setCreateError(t('Choose a project or an enterprise first'));
+            return;
+        }
         if (!newTitle.trim()) {
             setCreateError(t('Title is required'));
             return;
@@ -397,7 +438,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* min-w-0 and break-words: a longer language's title and button wrap where they are, never off a 320 px screen.
                     The button is not min-w-0 (max 50 %, so a longer language's word still breaks), and the row has no gap
                     beside it, as before: English's "Commons" and "Propose" both stay whole at 320 px with 1.3x text. */}
-                <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl xl:max-w-7xl mx-auto w-full flex justify-between items-center">
                     <div className="min-w-0">
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> <span className="min-w-0 break-words">{t('The Commons')}</span>
@@ -405,38 +446,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">{t('Community decisions, the Commons, and your groups: projects, enterprises and more')}</p>
                     </div>
                     {identity && (
-                        decisionsMode === 'preview' && activeSection === 'decide' ? (
-                            <LocalCommunityAction
-                                feature="decisions"
-                                label={t('+ Propose')}
-                                onNearYou={onNavigate ? () => onNavigate('home') : undefined}
-                                onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined}
-                            />
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    if (activeSection === 'decide') {
-                                        if (!canProposeDecision) {
-                                            alert(t('You can propose a Decision once you have completed a trade.'));
-                                            return;
-                                        }
-                                        if (hasOpenDecision) {
-                                            alert(t('You already have an open decision (limit 1 open decision per author).'));
-                                            return;
-                                        }
-                                        setShowProposeDecision(true);
-                                    } else if (activeSection === 'groups') {
-                                        setShowCreateGroupModal(true);
-                                    } else {
-                                        setShowNewModal(true);
-                                        setCreateError(null);
-                                    }
-                                }}
-                                className="max-w-[50%] break-words leading-tight bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
-                            >
-                                {activeSection === 'groups' ? t('+ Create Group') : t('+ Propose')}
-                            </button>
-                        )
+                        <button
+                            onClick={() => setShowStartSomething(true)}
+                            className="max-w-[50%] break-words leading-tight bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                        >
+                            <span aria-hidden="true">＋ </span>{t('Start something')}
+                        </button>
                     )}
                 </div>
 
@@ -712,7 +727,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="propose-modal-title" className="text-lg font-black text-white">
-                                {t('Propose an Enterprise / Project')}
+                                {newLifecycle === 'bounded'
+                                    ? t('Start a project')
+                                    : newLifecycle === 'ongoing'
+                                    ? t('Start an enterprise')
+                                    : t('Start a project or an enterprise')}
                             </h2>
                             <button
                                 type="button"
@@ -739,6 +758,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
                                         type="button"
+                                        aria-pressed={newLifecycle === 'bounded'}
                                         onClick={() => setNewLifecycle('bounded')}
                                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col gap-0.5 ${
                                             newLifecycle === 'bounded'
@@ -751,6 +771,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     </button>
                                     <button
                                         type="button"
+                                        aria-pressed={newLifecycle === 'ongoing'}
                                         onClick={() => setNewLifecycle('ongoing')}
                                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col gap-0.5 ${
                                             newLifecycle === 'ongoing'
@@ -875,10 +896,18 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={creating || preparingPhoto}
+                                    disabled={creating || preparingPhoto || !newLifecycle}
                                     className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
-                                    {creating ? t('Submitting…') : preparingPhoto ? t('Preparing photo…') : t('Propose Enterprise 🌱')}
+                                    {creating
+                                        ? t('Submitting…')
+                                        : preparingPhoto
+                                        ? t('Preparing photo…')
+                                        : !newLifecycle
+                                        ? t('Choose a project or an enterprise first')
+                                        : newLifecycle === 'bounded'
+                                        ? t('Start the project 🌱')
+                                        : t('Start the enterprise 🏛️')}
                                 </button>
                             </div>
                         </form>
@@ -901,12 +930,22 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 isOpen={showCreateGroupModal}
                 onClose={() => setShowCreateGroupModal(false)}
                 onCreated={() => fetchGroups()}
-                onStartWithBeans={!beansOn ? undefined : (lifecycle) => {
+                onStartWithBeans={!beansOn ? undefined : () => {
                     setShowCreateGroupModal(false);
-                    setNewLifecycle(lifecycle);
+                    setNewLifecycle('');
                     setShowNewModal(true);
                     setCreateError(null);
                 }}
+            />
+
+            <StartSomethingDialog
+                isOpen={showStartSomething}
+                onClose={() => setShowStartSomething(false)}
+                onPick={handlePickStartRow}
+                features={{ beans: beansOn, enterprises: enterprisesMode === 'live' || (modesUnknown && beansOn), decisions: votes }}
+                canPropose={canProposeDecision}
+                decisionsPreview={decisionsMode === 'preview'}
+                enterprisesPreview={enterprisesMode === 'preview'}
             />
 
             <GroupDetailModal

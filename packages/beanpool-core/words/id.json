@@ -731,5 +731,17 @@
   },
   "{n} thing · {out} out|{n} things · {out} out": {
     "other": "{n} barang · {out} sedang dipinjam"
-  }
+  },
+  "Friends, neighbours, shared interests": "Teman, tetangga, minat bersama",
+  "Open discussion space": "Ruang diskusi terbuka",
+  "Getting a practical job done together": "Menyelesaikan pekerjaan praktis bersama",
+  "People who share a skill or craft": "Orang-orang dengan keahlian atau kejuruan yang sama",
+  "Open\u0004join policy": "Terbuka",
+  "Anyone can join immediately": "Siapa saja bisa langsung bergabung",
+  "Request to Join\u0004join policy": "Minta Bergabung",
+  "Convenor approval required to join": "Persetujuan pengelola diperlukan untuk bergabung",
+  "Invite Only\u0004join policy": "Khusus Undangan",
+  "Convenor must invite new members": "Pengelola harus mengundang anggota baru",
+  "🥖 With Beans involved?": "🥖 Melibatkan kacang?",
+  "Start a project or an enterprise →": "Mulai proyek atau usaha →"
 }

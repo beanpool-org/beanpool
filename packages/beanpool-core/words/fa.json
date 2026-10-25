@@ -768,5 +768,17 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n} وسیله · {out} بیرون",
     "other": "{n} وسیله · {out} بیرون"
-  }
+  },
+  "Friends, neighbours, shared interests": "دوستان، همسایگان، علایق مشترک",
+  "Open discussion space": "فضای گفتگوی آزاد",
+  "Getting a practical job done together": "انجام یک کار عملی با همدیگر",
+  "People who share a skill or craft": "افرادی با مهارت یا پیشه مشترک",
+  "Open\u0004join policy": "آزاد",
+  "Anyone can join immediately": "هر کسی می‌تواند بلافاصله بپیوندد",
+  "Request to Join\u0004join policy": "درخواست پیوستن",
+  "Convenor approval required to join": "پیوستن نیازمند تأیید هماهنگ‌کننده است",
+  "Invite Only\u0004join policy": "فقط با دعوت",
+  "Convenor must invite new members": "هماهنگ‌کننده باید اعضای جدید را دعوت کند",
+  "🥖 With Beans involved?": "🥖 پای لوبیا در میان است؟",
+  "Start a project or an enterprise →": "شروع یک پروژه یا طرح تجاری →"
 }

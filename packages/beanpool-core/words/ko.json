@@ -731,5 +731,17 @@
   },
   "{n} thing · {out} out|{n} things · {out} out": {
     "other": "물건 {n}개 · 나가 있는 것 {out}개"
-  }
+  },
+  "Friends, neighbours, shared interests": "친구, 이웃, 공통 관심사",
+  "Open discussion space": "열린 토론 공간",
+  "Getting a practical job done together": "실질적인 일을 함께 해결하기",
+  "People who share a skill or craft": "기술이나 공예를 함께 나누는 사람들",
+  "Open\u0004join policy": "자유 가입",
+  "Anyone can join immediately": "누구나 바로 가입할 수 있어요",
+  "Request to Join\u0004join policy": "가입 신청",
+  "Convenor approval required to join": "모임 주최자의 승인이 필요해요",
+  "Invite Only\u0004join policy": "초대 전용",
+  "Convenor must invite new members": "모임 주최자가 새 멤버를 초대해야 해요",
+  "🥖 With Beans involved?": "🥖 콩이 관련되어 있나요?",
+  "Start a project or an enterprise →": "프로젝트나 사업 시작하기 →"
 }

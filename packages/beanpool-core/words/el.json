@@ -768,5 +768,17 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n} πράγμα · {out} σε δανεισμό",
     "other": "{n} πράγματα · {out} σε δανεισμό"
-  }
+  },
+  "Friends, neighbours, shared interests": "Φίλοι, γείτονες, κοινά ενδιαφέροντα",
+  "Open discussion space": "Χώρος ανοιχτής συζήτησης",
+  "Getting a practical job done together": "Ολοκλήρωση μιας πρακτικής εργασίας μαζί",
+  "People who share a skill or craft": "Άνθρωποι που μοιράζονται μια δεξιότητα ή τέχνη",
+  "Open\u0004join policy": "Ανοιχτή",
+  "Anyone can join immediately": "Οποιοσδήποτε μπορεί να συμμετάσχει άμεσα",
+  "Request to Join\u0004join policy": "Αίτημα συμμετοχής",
+  "Convenor approval required to join": "Απαιτείται έγκριση συντονιστή για συμμετοχή",
+  "Invite Only\u0004join policy": "Μόνο με πρόσκληση",
+  "Convenor must invite new members": "Ο συντονιστής πρέπει να προσκαλέσει νέα μέλη",
+  "🥖 With Beans involved?": "🥖 Με συμμετοχή φασολιών;",
+  "Start a project or an enterprise →": "Ξεκινήστε ένα έργο ή εγχείρημα →"
 }

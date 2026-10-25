@@ -48,6 +48,14 @@ const mockIdentity: BeanPoolIdentity = {
 };
 
 beforeEach(() => {
+    vi.mocked(communityInfoOnce).mockResolvedValue({
+        memberCount: 3,
+        postCount: 0,
+        transactionCount: 0,
+        commonsBalance: 100,
+        profile: 'local',
+        features: { beans: true, enterprises: true, decisions: true },
+    } as any);
     vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as any);
     vi.mocked(getGroups).mockResolvedValue([] as any);
     vi.mocked(getDecisions).mockResolvedValue({ decisions: [], myPoolVoting: null, canPropose: true } as any);
@@ -97,7 +105,7 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
 
     it('dialog rows follow community shape (Beans off, Enterprises off, Decisions off)', async () => {
         // Beans off
-        vi.mocked(communityInfoOnce).mockResolvedValueOnce({
+        vi.mocked(communityInfoOnce).mockResolvedValue({
             memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local',
             features: { beans: false, decisions: true },
         } as any);

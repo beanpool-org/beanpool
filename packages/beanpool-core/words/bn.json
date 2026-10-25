@@ -768,5 +768,17 @@
   "{n} thing · {out} out|{n} things · {out} out": {
     "one": "{n}টি জিনিস · {out}টি বাইরে",
     "other": "{n}টি জিনিস · {out}টি বাইরে"
-  }
+  },
+  "Friends, neighbours, shared interests": "বন্ধু, প্রতিবেশী, সাধারণ আগ্রহ",
+  "Open discussion space": "উন্মুক্ত আলোচনার স্থান",
+  "Getting a practical job done together": "একসাথে বাস্তব কোনো কাজ সম্পন্ন করা",
+  "People who share a skill or craft": "একই দক্ষতা বা পেশার মানুষজন",
+  "Open\u0004join policy": "উন্মুক্ত",
+  "Anyone can join immediately": "যে কেউ তাৎক্ষণিকভাবে যোগ দিতে পারেন",
+  "Request to Join\u0004join policy": "যোগদানের অনুরোধ",
+  "Convenor approval required to join": "যোগদানের জন্য আহ্বায়কের অনুমোদন প্রয়োজন",
+  "Invite Only\u0004join policy": "শুধুমাত্র আমন্ত্রণে",
+  "Convenor must invite new members": "আহ্বায়ককে নতুন সদস্যদের আমন্ত্রণ জানাতে হবে",
+  "🥖 With Beans involved?": "🥖 সাথে কি শিমের লেনদেন আছে?",
+  "Start a project or an enterprise →": "একটি প্রকল্প বা উদ্যোগ শুরু করুন →"
 }

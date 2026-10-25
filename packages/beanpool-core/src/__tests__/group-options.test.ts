@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { t } from '../words.js';
 import {
     GROUP_CATEGORY_OPTIONS,
     GROUP_JOIN_POLICY_OPTIONS,
@@ -26,7 +27,7 @@ describe('group-options in @beanpool/core (decisions 4, 11, 14, §5 S2)', () => 
 
     it('offers the three join policies, open first', () => {
         expect(GROUP_JOIN_POLICY_OPTIONS.map(p => p.key)).toEqual(['open', 'request_to_join', 'invite_only']);
-        expect(GROUP_JOIN_POLICY_OPTIONS.map(p => p.label)).toEqual(['Open', 'Request to Join', 'Invite Only']);
+        expect(GROUP_JOIN_POLICY_OPTIONS.map(p => t(p.label))).toEqual(['Open', 'Request to Join', 'Invite Only']);
     });
 
     it('bridges to Start a project or an enterprise, neither of them a group category', () => {

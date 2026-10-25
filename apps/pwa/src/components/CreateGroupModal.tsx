@@ -1,34 +1,34 @@
 import { useState, useEffect } from 'react';
-import { t, word, type WordKey } from '@beanpool/core';
-import { createGroup, type Group, type GroupCategory, type JoinPolicy } from '../lib/api';
+import {
+    t,
+    GROUP_CATEGORY_OPTIONS,
+    GROUP_JOIN_POLICY_OPTIONS,
+    CREATE_GROUP_DEFAULTS,
+    START_ENTERPRISE_BRIDGE,
+    type GroupCategory,
+    type JoinPolicy,
+} from '@beanpool/core';
+import { createGroup, type Group } from '../lib/api';
 
 interface Props {
     isOpen: boolean;
     onClose: () => void;
     onCreated: (group: Group) => void;
     /** With Beans involved, the form hands over to the project or enterprise form (group decisions §3.1). */
-    onStartWithBeans?: (lifecycle: 'bounded' | 'ongoing') => void;
+    onStartWithBeans?: (lifecycle?: 'bounded' | 'ongoing') => void;
 }
 
-// Labels and descriptions are word() keys (the phone's where it says the same), shown through t() where drawn.
-const CATEGORIES: Array<{ key: GroupCategory; label: WordKey; icon: string; desc: WordKey }> = [
-    { key: 'working_group', label: word('Working Group'), icon: '🤝', desc: word('Practical focus group coordinating tasks') },
-    { key: 'guild', label: word('Guild'), icon: '🛡️', desc: word('Skill sharing and craft practitioners') },
-    { key: 'social', label: word('Social Circle'), icon: '☕', desc: word('Community chats and shared interests') },
-    { key: 'general', label: word('General'), icon: '💬', desc: word('Open discussion space') },
-];
-
-const JOIN_POLICIES: Array<{ key: JoinPolicy; label: WordKey; icon: string; desc: WordKey }> = [
-    { key: 'open', label: word('Open', 'join policy'), icon: '🚪', desc: word('Anyone can join immediately') },
-    { key: 'request_to_join', label: word('Request to Join', 'join policy'), icon: '⏳', desc: word('Convenor approval required to join') },
-    { key: 'invite_only', label: word('Invite Only', 'join policy'), icon: '🔒', desc: word('Convenor must invite new members') },
-];
+const JOIN_ICONS: Record<JoinPolicy, string> = {
+    open: '🚪',
+    request_to_join: '⏳',
+    invite_only: '🔒',
+};
 
 export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans }: Props) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [category, setCategory] = useState<GroupCategory>('working_group');
-    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>('open');
+    const [category, setCategory] = useState<GroupCategory>(CREATE_GROUP_DEFAULTS.category);
+    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>(CREATE_GROUP_DEFAULTS.joinPolicy);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -144,7 +144,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             {t('Category')}
                         </label>
                         <div className="space-y-2">
-                            {CATEGORIES.map((cat) => {
+                            {GROUP_CATEGORY_OPTIONS.map((cat) => {
                                 const active = category === cat.key;
                                 return (
                                     <button
@@ -158,7 +158,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-800 hover:border-nature-300'
                                         }`}
                                     >
-                                        <span className="text-2xl" aria-hidden="true">{cat.icon}</span>
+                                        <span className="text-2xl" aria-hidden="true">{cat.emoji}</span>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{t(cat.label)}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">{t(cat.desc)}</div>
@@ -169,13 +169,14 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             })}
                         </div>
                         {onStartWithBeans && (
-                            <div className="mt-3 space-y-2" data-testid="create-group-with-beans">
-                                <p className="text-xs text-nature-600 dark:text-nature-400">{t('With Beans involved?')}</p>
-                                <div className="flex flex-wrap gap-2">
-                                    <button type="button" onClick={() => onStartWithBeans('bounded')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">{t('🌱 Start a project')}</button>
-                                    <button type="button" onClick={() => onStartWithBeans('ongoing')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">{t('🏛️ Start an enterprise')}</button>
-                                </div>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onStartWithBeans()}
+                                className="w-full mt-3 p-3 border border-dashed border-nature-300 dark:border-nature-700 hover:border-emerald-500 rounded-xl text-left text-xs text-nature-700 dark:text-nature-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            >
+                                <span className="font-semibold">{t(START_ENTERPRISE_BRIDGE.lead)}</span>{' '}
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline">{t(START_ENTERPRISE_BRIDGE.link)}</span>
+                            </button>
                         )}
                     </div>
 
@@ -184,7 +185,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                             {t('Join Policy')}
                         </label>
                         <div className="space-y-2">
-                            {JOIN_POLICIES.map((pol) => {
+                            {GROUP_JOIN_POLICY_OPTIONS.map((pol) => {
                                 const active = joinPolicy === pol.key;
                                 return (
                                     <button
@@ -198,7 +199,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-800 hover:border-nature-300'
                                         }`}
                                     >
-                                        <span className="text-2xl" aria-hidden="true">{pol.icon}</span>
+                                        <span className="text-2xl" aria-hidden="true">{JOIN_ICONS[pol.key]}</span>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{t(pol.label)}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">{t(pol.desc)}</div>

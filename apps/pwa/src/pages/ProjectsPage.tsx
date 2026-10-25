@@ -426,7 +426,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     const yourGroups = useMemo(() => {
         if (!identity?.publicKey) return [];
-        const list = groups.filter(g => g.viewerRole || g.viewerStatus === 'active');
+        const list = groups.filter(g => g.viewerStatus === 'active' || (!g.viewerStatus && !!g.viewerRole));
         list.sort((a, b) => {
             const aConv = a.viewerRole === 'convenor';
             const bConv = b.viewerRole === 'convenor';
@@ -850,6 +850,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-ok-tint text-bp-chip-ok-ink">
                                                 {t('INVITED')}
                                             </span>
+                                        ) : g.viewerStatus === 'pending_approval' ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
+                                                {t('Pending', undefined, 'join request')}
+                                            </span>
                                         ) : g.viewerRole ? (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                                 g.viewerRole === 'convenor'
@@ -857,10 +861,6 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                     : 'bg-nature-800 text-nature-300'
                                             }`}>
                                                 {named(ROLE_WORDS, g.viewerRole, g.viewerRole)}
-                                            </span>
-                                        ) : g.viewerStatus === 'pending_approval' ? (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
-                                                {t('Pending', undefined, 'join request')}
                                             </span>
                                         ) : null}
                                     </div>

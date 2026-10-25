@@ -241,7 +241,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(await screen.findByText('No groups of yours yet. Start one with +, or join one below.')).toBeInTheDocument();
     });
 
-    it('an invited group card says INVITED', async () => {
+    it('an invited group card says INVITED (even if viewerRole is member)', async () => {
         const invitedGroup: Group = {
             id: 'group-chess',
             slug: 'chess',
@@ -251,6 +251,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             joinPolicy: 'invite_only',
             memberCount: 8,
             viewerStatus: 'invited',
+            viewerRole: 'member',
             description: 'Weekly games',
             createdAt: '2026-01-01T00:00:00Z',
         };
@@ -261,5 +262,30 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         const findSection = await screen.findByTestId('commons-chat-groups');
         expect(within(findSection).getByText('Chess Club')).toBeInTheDocument();
         expect(within(findSection).getByText('INVITED')).toBeInTheDocument();
+    });
+
+    it('a group with pending_approval viewerStatus says Pending and stays in Find even when viewerRole is member', async () => {
+        const pendingGroup: Group = {
+            id: 'group-debate',
+            slug: 'debate',
+            createdBy: 'pk-someone',
+            name: 'Debate Society',
+            category: 'cultural',
+            joinPolicy: 'apply',
+            memberCount: 4,
+            viewerStatus: 'pending_approval',
+            viewerRole: 'member',
+            description: 'Weekly debates',
+            createdAt: '2026-01-01T00:00:00Z',
+        };
+
+        vi.mocked(getGroups).mockResolvedValue([pendingGroup]);
+
+        render(<ProjectsPage identity={me} />);
+        const findSection = await screen.findByTestId('commons-chat-groups');
+        expect(within(findSection).getByText('Debate Society')).toBeInTheDocument();
+        expect(within(findSection).getByText('Pending')).toBeInTheDocument();
+        expect(within(findSection).queryByText('MEMBER')).toBeNull();
+        expect(screen.queryByTestId('commons-yours')).toBeNull();
     });
 });

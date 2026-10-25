@@ -13,7 +13,13 @@ On the phone, the bar at the top of the screen is the same on every tab. From le
 - **The "needs you" icons:** only while something is waiting for you.
 - **The ? icon, the invite icon, Settings and your picture.**
 
-In a web browser the top bar is similar. It has the connection status on the left, the page's name in the middle, and the "needs you" icons beside your profile, the **?** and Settings on the right. It has no bean sheet and no separate invite icon: **Invites** is under **People** (or the envelope icon when an invitation is waiting). The tabs are along the bottom, or down the left side on a wide screen.
+In a web browser the top bar is simpler. It has the connection status on the left, the page's name, and your profile, the **?** and Settings on the right. It has no bean sheet and no invite icon: **Invites** is under **People**. The tabs are along the bottom, or down the left side on a wide screen.
+
+The web app has the "needs you" icons too, where there is room for them:
+
+- **On a phone:** in the top bar, between the page's name and your profile. The page's name always comes first. Where there is not room for every icon, the last ones fold into **•••**. Where there is room for less than one icon, a small number shows how many things need you. Where there is no room at all, they don't show. Tap **•••** or the number to see them all.
+- **On the Map tab on a phone:** they don't show, so they never cover **BeanPool** at the top.
+- **On a wide screen:** at the bottom of the side bar, above the connection status, the **?** and Settings.
 
 ## The bean
 

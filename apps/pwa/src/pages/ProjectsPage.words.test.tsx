@@ -64,10 +64,10 @@ describe('the Commons page in the pseudo-locale', () => {
         render(<ProjectsPage identity={ME} />);
         expect(await screen.findByText('Seed Savers')).toBeInTheDocument();
         await screen.findByText('Garden Solar Pumps');
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`🌱 ${xx('The Commons')}`);
+        expect(screen.getByRole('heading', { level: 1 }).textContent?.trim()).toBe(xx('Commons'));
         expect(within(screen.getByTestId('commons-section-tabs')).getByText(xx('Decide'))).toBeInTheDocument();
         expect(within(screen.getByTestId('group-filter-chips')).getAllByRole('button').map((b) => b.textContent))
-            .toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups'].map((w) => xx(w)));
+            .toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups'].map((w) => xx(w)));
         expect(screen.getByText(xx('{n} members').replace('{n}', '3'))).toBeInTheDocument();
         expect(screen.getByText(xx('Pending'))).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('View details for group {name}').replace('{name}', 'Seed Savers') })).toBeInTheDocument();
@@ -75,17 +75,30 @@ describe('the Commons page in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
     });
 
-    it('nothing yet: no groups, no enterprises, and My groups empty', async () => {
+    it('nothing yet: no groups, no enterprises, and Yours empty', async () => {
         vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
         vi.mocked(getGroups).mockResolvedValue([] as never);
         await showIn('xx');
         render(<ProjectsPage identity={ME} />);
-        expect(await screen.findByText(xx('No groups found'))).toBeInTheDocument();
-        expect(await screen.findByText(xx('No enterprises found'))).toBeInTheDocument();
-        expect(screen.getByText(xx('Start a working group, guild, or team to coordinate discussions.'))).toBeInTheDocument();
+        expect(await screen.findByText(xx('Nothing of yours yet. Start something with +, or find one below.'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
-        fireEvent.click(within(screen.getByTestId('group-filter-chips')).getByText(xx('My groups')));
-        expect(screen.getByText(xx('You have not joined any groups yet.'))).toBeInTheDocument();
+    });
+
+    it('an invited group in the pseudo-locale shows INVITED', async () => {
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
+        vi.mocked(getGroups).mockResolvedValue([{
+            id: 'g1',
+            name: 'Mushroom Growers',
+            category: 'working_group',
+            joinPolicy: 'open',
+            memberCount: 2,
+            viewerStatus: 'invited',
+            description: 'Fungi',
+            createdAt: '2026-01-01T00:00:00Z',
+        }] as never);
+        await showIn('xx');
+        render(<ProjectsPage identity={ME} />);
+        expect(await screen.findByText(xx('INVITED'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
     });
 

@@ -251,6 +251,22 @@ describe('Wide screen layout: Commons, Tools, and Channels container pins', () =
         expect(grid.className).toContain('xl:max-w-7xl');
     });
 
+    it('Commons Yours grid uses container-driven auto-fill minmax rule instead of lg:grid-cols-3', async () => {
+        const kept = {
+            ...mockEnterprise,
+            keepers: [{ publicKey: testIdentity.publicKey, callsign: testIdentity.callsign, role: 'lead' }],
+        };
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [kept] });
+        render(<ProjectsPage identity={testIdentity} onOpenTreasury={vi.fn()} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        const grid = yoursBlock.querySelector('.grid') as HTMLElement;
+        expect(grid).not.toBeNull();
+        expect(grid.className).toContain('grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))]');
+        expect(grid.className).not.toContain('lg:grid-cols-3');
+        expect(grid.className).not.toContain('xl:grid-cols-3');
+    });
+
     it('Tools page containers preserve max-w-xl reading width (not widened to 6xl)', async () => {
         // 1. ToolsList container
         const { unmount } = render(

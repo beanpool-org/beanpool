@@ -232,7 +232,8 @@ for (const dark of [false, true]) {
             const banner = byId('shopfront-banner');
             expect(banner?.textContent).toBe('🔧');
             expect(styleOf(banner).backgroundColor).toBe(colors().brand.tint);
-            expect(styleOf(banner).height).toBe(128);
+            expect(styleOf(banner).aspectRatio).toBe(3); // 3:1, the shape its keeper chose the strip in (choose-the-part)
+            expect(styleOf(banner).width).toBe('100%');
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
             expect(byId('shopfront-name')?.textContent).toBe(NAME);
             expect(host.textContent).toContain('🔧 Repairs · since Sep 2026');
@@ -344,7 +345,8 @@ for (const dark of [false, true]) {
             const banner = byId('shopfront-banner');
             expect(banner?.querySelector('img')?.getAttribute('src')).toBe(`${NODE}${PHOTO}`);
             expect(banner?.textContent).toBe('');
-            expect(styleOf(banner).height).toBe(128);
+            expect(styleOf(banner).aspectRatio).toBe(3); // 3:1, the shape its keeper chose the strip in (choose-the-part)
+            expect(styleOf(banner).width).toBe('100%');
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
         });
 

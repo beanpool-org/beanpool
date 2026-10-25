@@ -9,7 +9,7 @@
  * - Name: 15/800, allows wrapping to 2 lines.
  * - Pills row: status badges (PAUSED, WINDING UP, CLOSED, FUNDED), kind pill (Enterprise / Project), role pill (Lead keeper, Keeper, Leader, Collaborator).
  * - Line 2: 12/secondary — enterprise: "Balance {amount} 🫘 · {n} live offers"; project: "{raised} of {goal} 🫘 raised · {days}".
- * - Manage pill: keeps ≥44 dp touch target, flexShrink: 0 on the right.
+ * - Manage pill: keeps ≥44 dp touch target, under line 2 (so line 2 has the row's width at 320 dp × 1.3).
  */
 
 import React from 'react';
@@ -249,16 +249,15 @@ export function YoursEnterpriseRow({ item, onPress, onManage, flush }: Props) {
         }
     }
 
-    const spokenStatus = stateBadge === 'paused'
+    // Every badge drawn is spoken: a closed project that was funded says both.
+    const spokenState = stateBadge === 'paused'
         ? t('paused')
         : stateBadge === 'winding_up'
             ? t('winding up')
             : stateBadge === 'closed'
                 ? t('closed')
-                : isFunded
-                    ? t('funded')
-                    : null;
-    const spokenLabel = [rowSpokenName(item.chat), spokenStatus, line2].filter(Boolean).join('. ');
+                : null;
+    const spokenLabel = [rowSpokenName(item.chat), spokenState, isFunded ? t('funded') : null, line2].filter(Boolean).join('. ');
 
     const handleRowPress = () => {
         if (onPress) {

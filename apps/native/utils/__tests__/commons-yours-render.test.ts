@@ -323,6 +323,13 @@ describe('Commons S3 — Yours first, Find named, explainer gone (phone)', () =>
         // Group row "Garden Crew" is present with "Convenor" role word
         expect(host.textContent).toContain('Garden Crew');
         expect(host.textContent).toContain('Convenor');
+        // The Convenor pill is on the bottom line (the kind-pill slot, empty for groups), never beside the name: there it cut
+        // "Garden Crew" to "Gard…" at 320 dp × 1.3 (deciding review of #2472, fix round 1).
+        const leaf = (text: string) => Array.from(host.querySelectorAll('*')).find((el) => el.childElementCount === 0 && el.textContent === text) as HTMLElement | undefined;
+        const nameEl = leaf('Garden Crew');
+        const pillEl = leaf('Convenor');
+        expect(nameEl && pillEl).toBeTruthy();
+        expect(pillEl!.parentElement!.parentElement).not.toBe(nameEl!.parentElement);
         const groupRow = Array.from(host.querySelectorAll('button')).find(b => (b.textContent ?? '').includes('Garden Crew') && !(b.textContent ?? '').includes('Manage'));
         expect(groupRow).toBeTruthy();
         await click(groupRow, 'Group row');

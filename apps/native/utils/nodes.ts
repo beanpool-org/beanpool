@@ -4,6 +4,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { assertPlainNodeAddress, isPlainNodeAddress, plainOriginOf } from './node-url';
+import { clearPendingProfileChange } from './pending-profile-sync';
 import {
     hydrateRequestSigning, knownRequestSigning, ratchetedRequestSigning, rememberRequestSigning, requestSigningOf,
     setRequestSigningKeeper,
@@ -105,10 +106,16 @@ export function loadSavedRequestSigning(): Promise<void> {
     return hydrateRequestSigning(getSavedNodes);
 }
 
+/**
+ * Take `url` off the phone's list of communities. A profile change still waiting to reach it goes with it
+ * (pending-profile-sync.ts): it is no longer the phone's to send. A community followed to its new address carried
+ * its change there first (address-follow.ts).
+ */
 export async function removeSavedNode(url: string) {
     let nodes = await getSavedNodes();
     nodes = nodes.filter(n => n.url !== url);
     await AsyncStorage.setItem(SAVED_NODES_STORE_KEY, JSON.stringify(nodes));
+    await clearPendingProfileChange(url);
 }
 
 /** The file a phone with no community open uses (no anchor yet). The same before and after the rename below. */

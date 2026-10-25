@@ -33,6 +33,7 @@ import type { BeanPoolIdentity } from './identity';
 import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
 import { communityAddress, dropFromRecord } from './push-registrations';
+import { clearPendingProfileChange } from './pending-profile-sync';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 import { disconnectFromVault, hasVault, vaultCopyKnown, VaultError } from './vault';
 
@@ -284,6 +285,7 @@ export function deleteFailedLine(reason: string, hasWords: boolean): string {
  *   read through nodes.ts `getSavedNodes`, puts the community the phone is set to back into it.
  * - Its tool data (photos, reminders, settings) goes, notifying Home only once the anchor is at `next` so a card's
  *   re-read never reopens or re-creates the deleted community.
+ * - A profile change still waiting to reach it goes (pending-profile-sync.ts); one waiting for another community stays.
  *
  * The key, its 12 words and the rest of the account's app storage stay. The caller opens `next`'s copy (db.ts `initDB`)
  * and moves the screen. Throws, before anything changes, for a `next` whose address isn't plain (node-url.ts; the plan
@@ -320,6 +322,11 @@ export async function leaveThisCommunity(here: string, next: string, storage: St
         }
     } catch (e) {
         console.warn('[Account] The guest marker of the community left could not be removed', e);
+    }
+    try {
+        await clearPendingProfileChange(here, undefined, storage);
+    } catch (e) {
+        console.warn('[Account] The profile change waiting for the community left could not be removed', e);
     }
     try {
         const { removeCommunityToolData } = await import('../tools/store');

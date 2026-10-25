@@ -522,6 +522,17 @@ describe('leaving a community by itself', () => {
         expect(fetch).not.toHaveBeenCalled();
     });
 
+    it('a profile change waiting to reach the community left goes with it; one waiting for the next stays (pending-profile-sync.ts)', async () => {
+        await kimsPhone();
+        mem.async.set(`beanpool_pending_profile:${MULLUM}`, JSON.stringify({ publicKey: kim.publicKey, callsign: 'Kim in Mullum' }));
+        mem.async.set(`beanpool_pending_profile:${BELLINGEN}`, JSON.stringify({ publicKey: kim.publicKey, callsign: 'Kim in Bellingen' }));
+
+        await leaveThisCommunity(MULLUM, BELLINGEN);
+
+        expect(mem.async.has(`beanpool_pending_profile:${MULLUM}`)).toBe(false);
+        expect(JSON.parse(mem.async.get(`beanpool_pending_profile:${BELLINGEN}`)!)).toEqual({ publicKey: kim.publicKey, callsign: 'Kim in Bellingen' });
+    });
+
     it('a next community whose address isn\'t plain is refused before anything changes', async () => {
         await kimsPhone();
 

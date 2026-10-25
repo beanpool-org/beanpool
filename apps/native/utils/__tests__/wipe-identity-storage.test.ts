@@ -33,6 +33,10 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_canonical_profile: JSON.stringify({ avatar: 'bundled://koala', bio: 'Grows tomatoes', contactValue: '0400 000 000' }),
             pending_profile_avatar: 'bundled://koala',
             pending_profile_sync: 'true',
+            // A profile change waiting to reach each community (pending-profile-sync.ts): this account's new name and photo,
+            // kept for the community it was made in. They go with the account, in every community; the saved list stays.
+            'beanpool_pending_profile:https://test.beanpool.org': JSON.stringify({ publicKey: 'ab'.repeat(32), callsign: 'Renamed offline', avatar: 'bundled://koala' }),
+            'beanpool_pending_profile:https://castlemaine.beanpool.org': JSON.stringify({ publicKey: 'ab'.repeat(32) }),
             // The invite codes this key made, with who each was for (the node keeps them).
             [`bp_offline_invites_${'ab'.repeat(32)}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
             // An unfinished post, kept per community: the next account there would be offered it to finish as its own.

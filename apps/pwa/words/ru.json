@@ -3877,13 +3877,5 @@
   "Full-size photo": "Полноразмерное фото",
   "Dismiss full-size photo": "Закрыть полноразмерное фото",
   "Close photo": "Закрыть фото",
-  "✅ Action Required: Release Credits": "✅ Требуется действие: перевести кредиты",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "Вы плательщик. Когда {name} выполнит условия, переведите средства с доверительного счёта для завершения сделки.",
-  "My groups": "Мои группы",
-  "The Commons": "Фонд общих проектов",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "Решения сообщества, Фонд общих проектов и ваши группы: проекты, предприятия и другое",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} Группа объединяет нескольких людей, а не всё сообщество. У проектов и предприятий есть бобы; у чат-групп их нет. Участие в группе не влияет на доверие к вам или силу голоса.",
-  "Groups:": "Группы:",
-  "You have not joined any groups yet.": "Вы пока не вступили ни в одну группу.",
   "It will read \"This message was deleted\" for both of you.": "У обоих отобразится «Это сообщение удалено»."
 }

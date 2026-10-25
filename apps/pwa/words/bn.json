@@ -3627,13 +3627,5 @@
   "Full-size photo": "বড় ছবি",
   "Dismiss full-size photo": "বড় ছবি বন্ধ করুন",
   "Close photo": "ছবি বন্ধ করুন",
-  "✅ Action Required: Release Credits": "✅ করণীয়: ক্রেডিট রিলিজ করুন",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "আপনি প্রদানকারী। {name} শর্ত পূরণ করলে লেনদেন সম্পন্ন করতে ট্রাস্টে রক্ষিত তহবিল রিলিজ করুন।",
-  "My groups": "আমার দলসমূহ",
-  "The Commons": "যৌথ তহবিল",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "কমিউনিটি সিদ্ধান্ত, যৌথ তহবিল এবং আপনার দলসমূহ: প্রকল্প, উদ্যোগ এবং আরও অনেক কিছু",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} গ্রুপ হলো সবার বদলে নির্দিষ্ট কিছু মানুষের জন্য একটি জায়গা। প্রকল্প ও উদ্যোগসমূহ শিম ধারণ করে; চ্যাট গ্রুপ কোনো শিম রাখে না। কোনো গ্রুপে থাকার ফলে আপনার আস্থা বা ভোট পরিবর্তন হয় না।",
-  "Groups:": "গ্রুপ:",
-  "You have not joined any groups yet.": "আপনি এখনও কোনো দলে যোগ দেননি।",
   "It will read \"This message was deleted\" for both of you.": "এটি আপনাদের দুজনের জন্যই \"এই বার্তাটি মুছে ফেলা হয়েছে\" দেখাবে।"
 }

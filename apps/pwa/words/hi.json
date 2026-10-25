@@ -3627,13 +3627,5 @@
   "Full-size photo": "पूर्ण आकार की फ़ोटो",
   "Dismiss full-size photo": "पूर्ण आकार की फ़ोटो हटाएँ",
   "Close photo": "फ़ोटो बंद करें",
-  "✅ Action Required: Release Credits": "✅ कार्रवाई आवश्यक: क्रेडिट जारी करें",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "आप भुगतानकर्ता हैं। एक बार जब {name} शर्तें पूरी कर ले, तो लेन-देन पूरा करने के लिए ट्रस्ट में रखी गई धनराशि जारी करें।",
-  "My groups": "मेरे समूह",
-  "The Commons": "साझा पूल",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "सामुदायिक निर्णय, साझा पूल, और आपके समूह: परियोजनाएं, उद्यम और बहुत कुछ",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} समूह सभी के बजाय कुछ लोगों के लिए एक जगह है। परियोजनाएँ और उपक्रम फलियाँ रखते हैं; चैट समूह कोई फलियाँ नहीं रखते। किसी समूह में होने से आपका विश्वास या आपका वोट नहीं बदलता।",
-  "Groups:": "समूह:",
-  "You have not joined any groups yet.": "आप अभी तक किसी भी समूह में शामिल नहीं हुए हैं।",
   "It will read \"This message was deleted\" for both of you.": "आप दोनों के लिए \"यह संदेश हटा दिया गया था\" लिखा आएगा।"
 }

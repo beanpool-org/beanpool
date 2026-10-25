@@ -3502,13 +3502,5 @@
   "Full-size photo": "全尺寸相片",
   "Dismiss full-size photo": "關閉全尺寸相片",
   "Close photo": "關閉相片",
-  "✅ Action Required: Release Credits": "✅ 需要處理：撥付信用額度",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "你是付款方。當 {name} 履行條款後，請撥付託管款項以完成交易。",
-  "My groups": "我的群組",
-  "The Commons": "公共板塊",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "社群決策、公共資金池與你的群組：專案、在地事業等",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} 群組是部分成員而非全員交流的地方。專案和事業可以持有豆子；聊天群組則無。加入群組不會改變你的信任等級或投票權。",
-  "Groups:": "群組：",
-  "You have not joined any groups yet.": "你尚未加入任何群組。",
   "It will read \"This message was deleted\" for both of you.": "雙方都會看到「此訊息已被刪除」。"
 }

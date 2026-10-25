@@ -3877,13 +3877,5 @@
   "Full-size photo": "Повнорозмірне фото",
   "Dismiss full-size photo": "Закрити повнорозмірне фото",
   "Close photo": "Закрити фото",
-  "✅ Action Required: Release Credits": "✅ Потрібна дія: Виплатити бали",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "Ви — платник. Як тільки {name} виконає умови, розблокуйте кошти з довірчого утримання для завершення угоди.",
-  "My groups": "Мої групи",
-  "The Commons": "Спільне",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "Рішення спільноти, Спільне та ваші групи: проєкти, підприємства та інше",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} Група — це місце для окремих людей, а не для всіх. Проекти та підприємства зберігають боби; чат-групи їх не мають. Перебування в групі не змінює ваш рівень довіри чи ваш голос.",
-  "Groups:": "Групи:",
-  "You have not joined any groups yet.": "Ви ще не приєдналися до жодної групи.",
   "It will read \"This message was deleted\" for both of you.": "Для вас обох відображатиметься «Це повідомлення було видалено»."
 }

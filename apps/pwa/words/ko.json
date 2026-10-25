@@ -3502,13 +3502,5 @@
   "Full-size photo": "원본 사진",
   "Dismiss full-size photo": "사진 닫기",
   "Close photo": "사진 닫기",
-  "✅ Action Required: Release Credits": "✅ 필요 작업: 크레딧 지급",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "회원님은 지불자입니다. {name}님이 조건을 이행하면 신뢰 보관된 금액을 지급 승인하여 거래를 완료해 주세요.",
-  "My groups": "내 모임",
-  "The Commons": "공유 공간",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "커뮤니티 의사결정, 공유 공간, 모임: 프로젝트, 기업 등",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} 모임은 전체가 아닌 일부 사람들을 위한 공간이에요. 프로젝트와 기업은 콩을 보유하지만, 대화 모임은 보유하지 않아요. 모임에 참여해도 신뢰도나 투표권은 바뀌지 않아요.",
-  "Groups:": "모임:",
-  "You have not joined any groups yet.": "아직 가입한 모임이 없어요.",
   "It will read \"This message was deleted\" for both of you.": "두 사람 모두에게 \"삭제된 메시지입니다\"라고 표시돼요."
 }

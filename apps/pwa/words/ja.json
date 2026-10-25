@@ -3502,13 +3502,5 @@
   "Full-size photo": "全画面写真",
   "Dismiss full-size photo": "全画面写真を閉じる",
   "Close photo": "写真を閉じる",
-  "✅ Action Required: Release Credits": "✅ アクションが必要: クレジットを支払う",
-  "You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.": "あなたは支払者です。{name}が条件を満たしたら、保託された資金を解除して取引を完了してください。",
-  "My groups": "所属グループ",
-  "The Commons": "コモンズ",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "コミュニティの決定事項、コモンズ、所属グループ：プロジェクトや事業体など",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} グループは全員ではなく一部の人たちのための場所です。プロジェクトや事業体は豆を保有できますが、チャットグループは保有しません。グループに参加しても、信頼や投票権は変わりません。",
-  "Groups:": "グループ:",
-  "You have not joined any groups yet.": "まだどのグループにも参加していません。",
   "It will read \"This message was deleted\" for both of you.": "お互いの画面に「このメッセージは削除されました」と表示されます。"
 }

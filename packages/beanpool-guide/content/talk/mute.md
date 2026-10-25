@@ -14,7 +14,7 @@ In any chat with a person or a group, and in an enterprise's chat if you are one
 
 To undo it, tap the same button, then **Unmute**.
 
-Muting is in the phone app only for now.
+Muting a one-to-one chat is on the phone only for now; group chats can be muted in both apps.
 
 ## What muting does
 

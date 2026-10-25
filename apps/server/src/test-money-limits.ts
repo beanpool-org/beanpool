@@ -498,6 +498,9 @@ async function main(): Promise<void> {
         for (const who of [ann, cal, bo]) { completedTrade(who.pk, tradie.pk); plantPost(who.pk, 'offer'); }
         const sellaOffer = plantPost(sella.pk, 'offer');
         const sellaOther = plantPost(sella.pk, 'offer');
+        // Asked for, not the offer she buys: one open deal per member on a listing (engine/escrow.ts DEAL_OPEN_CODE), so an
+        // ask for the offer her buy holds in trust is refused before any payment is counted.
+        const sellaAsked = plantPost(sella.pk, 'offer');
         const annNeed = plantPost(ann.pk, 'need');
         const annOffer = plantPost(ann.pk, 'offer');
         const project = plantProject(owner.pk);
@@ -505,7 +508,7 @@ async function main(): Promise<void> {
 
         const kinds: [string, Res][] = [];
         kinds.push(['a one-step buy (accept)', await accept(ann, sellaOffer)]);
-        kinds.push(['asking to buy an offer', await request(ann, sellaOffer)]);
+        kinds.push(['asking to buy an offer', await request(ann, sellaAsked)]);
         const halAsks = await request(hal, annNeed);
         assert(halAsks.status === 200, `setup: Hal offers to help with Ann's need (${show(halAsks)})`);
         kinds.push(['approving help on her own need', await approve(ann, halAsks.body?.transaction?.id)]);
@@ -519,7 +522,7 @@ async function main(): Promise<void> {
         refused(await send(ann, ben.pk), 'money_payments_day', /100 payments/, before, 'the 101st payment, a send');
         refused(await accept(ann, sellaOffer), 'money_payments_day', /100 payments/, before, 'a one-step buy past it');
         refused(await request(ann, sellaOther), 'money_payments_day', /100 payments/, before, 'asking to buy another offer past it');
-        const askedAgain = await request(ann, sellaOffer);
+        const askedAgain = await request(ann, sellaAsked);
         assert(askedAgain.status === 200 && askedAgain.body?.transaction?.id === kinds[1][1].body?.transaction?.id && sameBooks(before, books()),
             `asking again for the offer her first ask still waits on is no new payment: that ask comes back and nothing moves (${show(askedAgain)})`);
         refused(await crowdfund(ann, project), 'money_payments_day', /100 payments/, before, 'a crowdfund pledge past it');

@@ -20,6 +20,8 @@ import { initStateEngine, createProject, getAllProjects } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -39,6 +41,12 @@ function makeMember(callsign: string) {
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    return { pubKeyHex, privateKey };
+}
+
+function makeStranger() {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     return { pubKeyHex, privateKey };
 }
 
@@ -65,6 +73,9 @@ async function main() {
 
     await initTls();
     initStateEngine();
+    const ADMIN_PASSWORD = 'correct-horse-battery-staple-1234';
+    const { hash, salt } = hashPassword(ADMIN_PASSWORD);
+    saveLocalConfig({ ...getLocalConfig(), adminHash: hash, salt });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -75,6 +86,118 @@ async function main() {
     const project = createProject(proposer.pubKeyHex, 'Library Renovation', 'Funding books and seats', 500);
     assert(project !== null, 'Project created successfully');
     const projectId = project!.id;
+
+    // 0a. Non-member is refused access to /api/treasuries and /api/enterprises (401 unauthenticated, 403 signed non-member)
+    const unauthTreasuriesRes = await fetch(`${BASE}/api/treasuries`);
+    assert(unauthTreasuriesRes.status === 401, `Unauthenticated request refused from /api/treasuries (got ${unauthTreasuriesRes.status})`);
+    const unauthEnterprisesRes = await fetch(`${BASE}/api/enterprises`);
+    assert(unauthEnterprisesRes.status === 401, `Unauthenticated request refused from /api/enterprises (got ${unauthEnterprisesRes.status})`);
+
+    const stranger = makeStranger();
+    const strangerTreasuriesRes = await signedFetch('GET', '/api/treasuries', stranger);
+    assert(strangerTreasuriesRes.status === 403, `Non-member stranger refused from /api/treasuries (got ${strangerTreasuriesRes.status})`);
+    const strangerEnterprisesRes = await signedFetch('GET', '/api/enterprises', stranger);
+    assert(strangerEnterprisesRes.status === 403, `Non-member stranger refused from /api/enterprises (got ${strangerEnterprisesRes.status})`);
+
+    // 0b. Another member sees live project in /api/treasuries and /api/enterprises by default
+    const memberTreasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
+    const projectInTreasuries = memberTreasuriesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
+    assert(!!projectInTreasuries, 'Another member sees live project in /api/treasuries');
+    assert(projectInTreasuries?.lifecycle === 'bounded', 'Project has lifecycle bounded in /api/treasuries');
+    assert(projectInTreasuries?.goalAmount === 500, 'Project has goalAmount 500 in /api/treasuries');
+
+    const memberEnterprisesRes = (await signedFetch('GET', '/api/enterprises', attacker)).body;
+    const projectInEnterprises = memberEnterprisesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
+    assert(!!projectInEnterprises, 'Another member sees live project in /api/enterprises');
+
+    // 0c. Suspended project shows only to its keepers, not other members
+    const suspProj = createProject(proposer.pubKeyHex, 'Suspended Project', 'Temporarily suspended', 200);
+    assert(suspProj !== null, 'Suspended project created');
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspProj!.id);
+
+    const attackerSuspCheck = (await signedFetch('GET', '/api/treasuries', attacker)).body;
+    assert(!attackerSuspCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Other member does not see suspended project in /api/treasuries');
+    const attackerSuspCheckEnt = (await signedFetch('GET', '/api/enterprises', attacker)).body;
+    assert(!attackerSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Other member does not see suspended project in /api/enterprises');
+
+    const keeperSuspCheck = (await signedFetch('GET', '/api/treasuries', proposer)).body;
+    assert(keeperSuspCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/treasuries');
+    const keeperSuspCheckEnt = (await signedFetch('GET', '/api/enterprises', proposer)).body;
+    assert(keeperSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/enterprises');
+
+    // 0c2. An admin-rejected project (adminRejectProject sets status 'rejected') shows only to its keepers, as a suspended one
+    const rejProj = createProject(proposer.pubKeyHex, 'Rejected Project', 'Dismissed by an admin', 200);
+    assert(rejProj !== null, 'Rejected project created');
+    db.prepare("UPDATE members SET status = 'rejected', lat = -28.55, lng = 153.5 WHERE public_key = ?").run(rejProj!.id);
+    db.prepare("UPDATE members SET lat = -28.55, lng = 153.5 WHERE public_key = ?").run(suspProj!.id);
+    assert(!(await signedFetch('GET', '/api/treasuries', attacker)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Other member does not see a rejected project in /api/treasuries');
+    assert(!(await signedFetch('GET', '/api/enterprises', attacker)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Other member does not see a rejected project in /api/enterprises');
+    assert((await signedFetch('GET', '/api/treasuries', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/treasuries');
+    assert((await signedFetch('GET', '/api/enterprises', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/enterprises');
+
+    const disProj = createProject(proposer.pubKeyHex, 'Disabled Project', 'Dismissed as disabled', 200);
+    assert(disProj !== null, 'Disabled project created');
+    db.prepare("UPDATE members SET status = 'disabled', lat = -28.55, lng = 153.5 WHERE public_key = ?").run(disProj!.id);
+
+    // 0c3. Map endpoints: non-member refused, rejected project with location excluded for both members and keepers
+    const unauthMapRes = await fetch(`${BASE}/api/enterprises/map`);
+    assert(unauthMapRes.status === 401, `Unauthenticated request refused from /api/enterprises/map (got ${unauthMapRes.status})`);
+    const strangerMapRes = await signedFetch('GET', '/api/enterprises/map', stranger);
+    assert(strangerMapRes.status === 403, `Non-member stranger refused from /api/enterprises/map (got ${strangerMapRes.status})`);
+
+    const attackerMap = (await signedFetch('GET', '/api/enterprises/map', attacker)).body;
+    assert(!attackerMap?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Other member does not see a rejected project with a location on /api/enterprises/map');
+    assert(!attackerMap?.enterprises?.some((e: any) => e.publicKey === suspProj!.id), 'Other member does not see suspended project on /api/enterprises/map');
+    assert(!attackerMap?.enterprises?.some((e: any) => e.publicKey === disProj!.id), 'Other member does not see disabled project on /api/enterprises/map');
+
+    const keeperMap = (await signedFetch('GET', '/api/enterprises/map', proposer)).body;
+    assert(!keeperMap?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Keeper does not see a rejected project with a location on /api/enterprises/map');
+    assert(!keeperMap?.enterprises?.some((e: any) => e.publicKey === suspProj!.id), 'Keeper does not see a suspended project with a location on /api/enterprises/map');
+    assert(!keeperMap?.enterprises?.some((e: any) => e.publicKey === disProj!.id), 'Keeper does not see a disabled project with a location on /api/enterprises/map');
+
+    for (const mapAlias of ['/api/map/enterprises', '/api/treasuries/map']) {
+        const aliasMap = (await signedFetch('GET', mapAlias, attacker)).body;
+        assert(!aliasMap?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), `Other member does not see a rejected project on ${mapAlias}`);
+    }
+
+    // 0c4. Statuses endpoints: non-member refused, rejected project excluded for members and keepers; suspended/disabled remain
+    const unauthStatusesRes = await fetch(`${BASE}/api/enterprises/statuses`);
+    assert(unauthStatusesRes.status === 401, `Unauthenticated request refused from /api/enterprises/statuses (got ${unauthStatusesRes.status})`);
+    const strangerStatusesRes = await signedFetch('GET', '/api/enterprises/statuses', stranger);
+    assert(strangerStatusesRes.status === 403, `Non-member stranger refused from /api/enterprises/statuses (got ${strangerStatusesRes.status})`);
+
+    const attackerStatuses = (await signedFetch('GET', '/api/enterprises/statuses', attacker)).body;
+    assert(!attackerStatuses?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Other member does not see a rejected project on /api/enterprises/statuses');
+    assert(attackerStatuses?.enterprises?.some((e: any) => e.publicKey === suspProj!.id), 'Other member still sees suspended project on /api/enterprises/statuses');
+    assert(attackerStatuses?.enterprises?.some((e: any) => e.publicKey === disProj!.id), 'Other member still sees disabled project on /api/enterprises/statuses');
+
+    const keeperStatuses = (await signedFetch('GET', '/api/enterprises/statuses', proposer)).body;
+    assert(!keeperStatuses?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Keeper does not see a rejected project on /api/enterprises/statuses');
+
+    const aliasStatuses = (await signedFetch('GET', '/api/treasuries/statuses', attacker)).body;
+    assert(!aliasStatuses?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Other member does not see a rejected project on /api/treasuries/statuses');
+
+    // 0c5. Manager password read: /api/local/admin/treasury lists rejected, suspended and disabled rows
+    const unauthAdminRes = await fetch(`${BASE}/api/local/admin/treasury`);
+    assert(unauthAdminRes.status === 401 || unauthAdminRes.status === 403, `Unauthenticated request refused from /api/local/admin/treasury (got ${unauthAdminRes.status})`);
+    const badAdminRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: { 'X-Admin-Password': 'wrong-password' } });
+    assert(badAdminRes.status === 401 || badAdminRes.status === 403, `Wrong password refused from /api/local/admin/treasury (got ${badAdminRes.status})`);
+
+    const twoFa = turnOn2faForTests(ADMIN_PASSWORD);
+    const adminTreasuriesRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: twoFa.headers() });
+    assert(adminTreasuriesRes.status === 200, `Manager password sign-in answers 200 on /api/local/admin/treasury (got ${adminTreasuriesRes.status})`);
+    const adminBody = await adminTreasuriesRes.json();
+    const adminTreasuries = adminBody.treasuries ?? [];
+    assert(adminTreasuries.some((t: any) => t.publicKey === rejProj!.id), 'Manager lists rejected project in /api/local/admin/treasury');
+    assert(adminTreasuries.some((t: any) => t.publicKey === suspProj!.id), 'Manager lists suspended project in /api/local/admin/treasury');
+    assert(adminTreasuries.some((t: any) => t.publicKey === disProj!.id), 'Manager lists disabled project in /api/local/admin/treasury');
+
+    // 0d. Pruned project stays absent for everyone
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(suspProj!.id);
+    const attackerPrunedCheck = (await signedFetch('GET', '/api/treasuries', attacker)).body;
+    assert(!attackerPrunedCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Other member does not see pruned project in /api/treasuries');
+    const keeperPrunedCheck = (await signedFetch('GET', '/api/treasuries', proposer)).body;
+    assert(!keeperPrunedCheck?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper does not see pruned project in /api/treasuries');
 
     // 1. Test POST /api/commons/projects/update: Rejects non-owner update
     const nonOwnerUpdateRes = await signedFetch('POST', '/api/commons/projects/update', attacker, {
@@ -148,9 +271,13 @@ async function main() {
     const cfGetRes = await signedFetch('GET', `/api/crowdfund/projects/${projectId}`, attacker);
     assert(cfGetRes.status === 404, `GET /api/crowdfund/projects/:id returns 404 after deletion (got ${cfGetRes.status})`);
 
-    // Verify /api/treasuries excludes deleted and bounded enterprises by default
+    // Verify /api/treasuries and /api/enterprises exclude deleted project for everyone
     const treasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
     assert(!treasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/treasuries');
+    const enterprisesRes = (await signedFetch('GET', '/api/enterprises', attacker)).body;
+    assert(!enterprisesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/enterprises');
+    const keeperTreasuriesRes = (await signedFetch('GET', '/api/treasuries', proposer)).body;
+    assert(!keeperTreasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Keeper does not see deleted project in /api/treasuries');
 
     // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 404
     const repeatDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', proposer, {

@@ -34,6 +34,7 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-25 #2454: string[] params in join-open-door.tsx are DECIDED (#2118): a repeated param fails closed. See POLICY.md.
 - 2026-10-19 #2174: repeated search params on claim/find-community: refused on purpose, fourth filing (#1753, #2073, #2118).
 - 2026-10-18 #2118: never take [0] of a repeated claim param (#1753, #2073).
 

@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatNumber, t, tn, word, type WordKey,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
@@ -53,7 +53,7 @@ import {
     getNodeInfo, getRemotePosts, sendRemoteTransfer,
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
-    requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
+    requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -1169,6 +1169,34 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             />
         );
     }
+    // The deals sheet, drawn by the list AND the listing page (its "All your deals ›" opens it there).
+    const dealsModal = (
+        <MyDealsModal
+            visible={showDealsModal}
+            preview={dealsMode === 'preview'}
+            identity={identity}
+            onClose={() => setShowDealsModal(false)}
+            posts={posts}
+            transactions={myTransactions}
+            initialTab={dealsInitialTab}
+            onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
+            onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
+            onNavigateToPost={async (postId, txId) => {
+                setShowDealsModal(false);
+                const found = posts.find(p => p.id === postId);
+                if (found) {
+                    setSelectedPost(found);
+                    if (txId) setSelectedTxId(txId);
+                }
+            }}
+            onPromptReview={(review) => {
+                setShowDealsModal(false);
+                setReviewStars(5);
+                setReviewComment('');
+                setPromptReviewForTx(review);
+            }}
+        />
+    );
     if (selectedPost) {
         if (selectedPost.type === 'event') {
             return (
@@ -1255,9 +1283,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // definition of the fee, so it is imported.
         const commissionNeeded = Math.round(selectedPost.credits * (1 + TRANSACTION_FEE_RATE) * 100) / 100;
 
-        const activeTx = selectedTxId 
-            ? myTransactions.find(t => t.id === selectedTxId)
-            : myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
+        // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
+        // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
+        const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
+            && (t.status === 'pending' || t.status === 'requested')) : undefined;   // a finished pin gives way to the listing's live deal
+        const activeTx = pinnedTx
+            ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             
         // --- Escrow Roles ---
         const isAcceptedByMe = activeTx 
@@ -1515,16 +1546,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                  {/* Action buttons */}
                  
                  {/* 1. Pending Trust Hold State (Applies to both Payer and Payee) */}
-                 {selectedPost.status === 'pending' && (isPayer || isPayee) && (
+                 {(selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                      <div className="flex flex-col gap-2 mt-4">
                          {isPayer ? (
                              <>
-                                 <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
-                                     {t('✅ Action Required: Release Credits')}
-                                 </p>
+                                 {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
+                                     deal's own date, never the post's while the deals are still loading. */}
+                                 {!isOwnPost && activeTx?.createdAt && (
+                                     <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
+                                         {t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                             date: formatDate(new Date(activeTx.createdAt), 'day-month'),
+                                             n: formatNumber(activeTx.credits ?? selectedPost.credits),
+                                         })}
+                                     </p>
+                                 )}
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
-                                     {t('You are the Payer. Once {name} has fulfilled the terms, release the funds held in trust to complete the transaction.', { name: targetPeerCallsign })}
+                                     {t("Release the Beans when it's done.")}
                                  </p>
+                                 {selectedPost.type === 'offer' && !!selectedPost.repeatable && (
+                                     <p className="text-xs text-nature-500 text-center -mt-1 mb-2 px-4">
+                                         {t('You can take it up again once this one is done.')}
+                                     </p>
+                                 )}
 
                                  {showCompleteConfirm ? (
                                      <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4 shadow-inner mt-2">
@@ -1666,6 +1709,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              }`}
                          >
                              {t('❌ Cancel Hold')}
+                         </button>
+                         <button
+                             type="button"
+                             onClick={() => {
+                                 setDealsInitialTab('pending');
+                                 setShowDealsModal(true);
+                             }}
+                             className="text-xs text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white font-medium text-center mt-1 py-1 transition-colors"
+                         >
+                             {t('All your deals ›')}
                          </button>
                      </div>
                  )}
@@ -1955,7 +2008,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                                 setShowAcceptConfirm(false);
                                             } catch (err) {
-                                                alert(explainTradeError(err));
+                                                // The member's deal on this listing is under way already (made in another tab or on their
+                                                // phone): said, their deals refreshed, and the listing opened at the deal the node named, as
+                                                // My Deals' View deal opens one.
+                                                const open = openDealIn(err);
+                                                if (open) {
+                                                    alert(t('You already have a deal under way on this. Finish or cancel it first.'));
+                                                    setShowAcceptConfirm(false);
+                                                    if (open.transactionId) setSelectedTxId(open.transactionId);
+                                                    refresh();
+                                                    onRefreshTransactions?.();
+                                                } else {
+                                                    alert(explainTradeError(err));
+                                                }
                                             } finally {
                                                 setAccepting(false);
                                             }
@@ -2659,6 +2724,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClose={() => setLightboxState(null)}
                     />
                 )}
+                {dealsModal}
             </div>
         );
     }
@@ -3626,30 +3692,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
-            <MyDealsModal
-                visible={showDealsModal}
-                preview={dealsMode === 'preview'}
-                identity={identity}
-                onClose={() => setShowDealsModal(false)}
-                posts={posts}
-                transactions={myTransactions}
-                initialTab={dealsInitialTab}
-                onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined}
-                onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined}
-                onNavigateToPost={async (postId, txId) => {
-                    const found = posts.find(p => p.id === postId);
-                    if (found) {
-                        setSelectedPost(found);
-                        if (txId) setSelectedTxId(txId);
-                    }
-                }}
-                onPromptReview={(review) => {
-                    setShowDealsModal(false);
-                    setReviewStars(5);
-                    setReviewComment('');
-                    setPromptReviewForTx(review);
-                }}
-            />
+            {dealsModal}
 
             <PricingGuideModal
                 isOpen={showPricingGuide}

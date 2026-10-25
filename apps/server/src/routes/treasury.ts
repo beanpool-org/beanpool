@@ -193,19 +193,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // `adminSignIn`: the admin routes' own sign-in (the manager's password), which reads the keepers' backing as an admin.
     const listTreasuries = async (ctx: any, adminSignIn: boolean) => {
-        const includeBounded = ctx.query?.includeBounded === 'true';
-        const whereClause = includeBounded
-            ? "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
-            : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
-        // A suspended or disabled enterprise is off the Commons list (#839 review finding) — neither client
-        // badges those states, so it read as an ordinary live enterprise. Its own keepers and node admins still
+        // Live projects (lifecycle = 'bounded') are listed by default; an old ?includeBounded=true changes nothing.
+        const whereClause = "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
+        // A suspended, disabled or admin-rejected one is off the Commons list (#839 review finding; rejected since live
+        // projects are listed) — neither client badges those states, so it read as an ordinary live enterprise. Its own keepers and node admins still
         // see it: the list card is how a keeper reaches the enterprise's page, which explains the state. Detail
         // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
             `SELECT public_key, callsign, avatar_ref, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[]).filter(r =>
-            !(r.status === 'suspended' || r.status === 'disabled')
+            !(r.status === 'suspended' || r.status === 'disabled' || r.status === 'rejected')
+            || adminSignIn
             || (!!viewer && canAdministerTreasury(viewer, r.public_key))
         );
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
@@ -303,7 +302,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Lightweight statuses endpoint for marketplace / search / map filtering without balance computation & keeper lookups
     const listEnterpriseStatusesHandler = async (ctx: any) => {
         const rows = db.prepare(
-            "SELECT public_key, callsign, paused, status FROM members WHERE is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
+            "SELECT public_key, callsign, paused, status FROM members WHERE is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted', 'rejected'))"
         ).all() as any[];
         ctx.body = {
             enterprises: rows.map(r => ({
@@ -318,7 +317,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/treasuries/statuses', listEnterpriseStatusesHandler);
 
     // Enterprise map endpoint (docs/the-commons.md §2.2, Slice 6)
-    // Only includes enterprises with a set location; excludes completed, suspended, disabled, pruned and deleted
+    // Only includes enterprises with a set location; excludes completed, suspended, disabled, pruned, deleted and rejected
     // enterprises. The map is the same for every reader (members only, https-server.ts MEMBERS_ONLY_READS_PATTERNS), so
     // there is no keeper exception here (#839 review finding).
     const listEnterpriseMapPinsHandler = async (ctx: any) => {
@@ -329,7 +328,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                AND lat IS NOT NULL
                AND lng IS NOT NULL
                AND wind_up_finalised_at IS NULL
-               AND (status IS NULL OR status NOT IN ('completed', 'suspended', 'disabled', 'pruned', 'deleted'))
+               AND (status IS NULL OR status NOT IN ('completed', 'suspended', 'disabled', 'pruned', 'deleted', 'rejected'))
              ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         ctx.body = {

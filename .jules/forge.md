@@ -46,6 +46,7 @@ const { id } = req.body; // could be undefined, crashes downstream
 ```
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-25 #2450: catch around GET /api/events/mine is CLAIM FALSE (Koa answers 500; never echo e.message). See POLICY.md.
 - 2026-10-19 #2173: posts/remove 400 on success:false is a phantom: every bad case is answered before removePost.
 
 ### 2026-10-16 — "400 on a failed test alert" (#2007) — CLOSED. The 200 with `ok: false` is what the manager's Alerts panel reads; see POLICY.md.

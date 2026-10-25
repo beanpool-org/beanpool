@@ -28,6 +28,7 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-25 #2449: the event-post suite landed alone; its fetch retry and 503-tolerant SSRF check must not be re-filed. See POLICY.md.
 - 2026-10-19 #2168: withheld-notes exemptions still checked where no block applies (#1819); assert each under a block.
 
 ### 2026-10-01 — "test-viewer-helpers" (#1363) — CLOSED, CONTRADICTS #1376.

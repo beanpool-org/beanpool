@@ -16,7 +16,7 @@ afterEach(() => {
     resetHomeStoreForTests();
 });
 
-const ME = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Zara' };
+const ME = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Zara', createdAt: '2026-01-01T00:00:00.000Z' };
 
 const makeHomeAnswer = (items: NeedsItem[] = []) => ({
     generatedAt: new Date().toISOString(),

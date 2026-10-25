@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pluralKey, setLanguage } from '@beanpool/core';
 import {
     adminItemInWords, adminLabel, buildNeedsYou, closesInWords, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_PRIORITY,
-    type NeedsYouInputs, type NeedsYouEntry,
+    type NeedsYouInputs, type NeedsYouEntry, type NeedsYouTransaction,
 } from '../needs-you';
 
 const ME = 'me-pubkey';
@@ -17,7 +17,7 @@ const quiet = (over: Partial<NeedsYouInputs> = {}): NeedsYouInputs => ({
     me: ME, now: NOW, transactions: [], decisions: { decisions: [], myPoolVoting: null, signed: true },
     conversations: [], groupChats: [], admin: null, ...over,
 });
-const tx = (id: string, status: string, seller = ME, buyer = 'other') => ({ id, postId: `post-${id}`, status, sellerPublicKey: seller, buyerPublicKey: buyer });
+const tx = (id: string, status: string, seller = ME, buyer = 'other'): NeedsYouTransaction => ({ id, postId: `post-${id}`, status, sellerPublicKey: seller, buyerPublicKey: buyer });
 const vote = (closesInMs: number, over: Record<string, unknown> = {}) => ({
     opensAt: iso(NOW - H), closesAt: iso(NOW + closesInMs), myVote: null, franchise: '1m1v' as const, ...over,
 });
@@ -45,7 +45,7 @@ describe('What needs you: which kinds show', () => {
     });
 
     it('a deal waits on you when a request is made to you, or a deal of yours is in progress (as payer); not when you asked or are payee in pending', () => {
-        const only = (t: ReturnType<typeof tx>[]) => buildNeedsYou(quiet({ transactions: t }));
+        const only = (t: NeedsYouTransaction[]) => buildNeedsYou(quiet({ transactions: t }));
         expect(only([tx('a', 'requested')])[0]?.count).toBe(1);
         expect(only([tx('a', 'pending', 'other', ME)])[0]?.count).toBe(1);
         expect(only([tx('a', 'pending', ME, 'other')])).toEqual([]); // payee in pending is waiting on buyer to release

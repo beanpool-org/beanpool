@@ -244,6 +244,29 @@ test('every language copy of /global has its own iPhone button text and note, re
     }
 });
 
+// The "or in your browser" line under door 1 sits just above door 2's button: as a bare inline link it is an ~18 px
+// target, an easy mis-tap on a phone. .door-browser makes it 48 px, on the home page and on the 404 page that repeats
+// the three doors, in English and every language (PR #2513 review: 404.html had been left without it).
+test('the browser line under door 1 is a 48 px tap target on every home and 404 page, in every language', () => {
+    const css = fs.readFileSync(path.join(SITE, 'style.css'), 'utf8');
+    assert.match(css, /\.hero-door \.door-browser a \{[^}]*min-height: 48px/, 'style.css gives .door-browser links 48 px');
+    const dirs = ['', ...fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && ['index.html', '404.html'].every((f) => fs.existsSync(path.join(SITE, d.name, f))))
+        .map((d) => d.name)];
+    assert.ok(dirs.length >= 25, 'English and all 24 language copies: ' + dirs.length);
+    for (const dir of dirs) {
+        for (const file of ['index.html', '404.html']) {
+            const page = fs.readFileSync(path.join(SITE, dir, file), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+            const doors = page.slice(page.indexOf('class="hero-doors"'));
+            const lines = [...doors.matchAll(/<p([^>]*)><a href="https:\/\/global\.beanpool\.org[^"]*">/g)];
+            assert.equal(lines.length >= 1, true, (dir || 'en') + '/' + file + ': the browser line under door 1');
+            const first = lines[0];
+            assert.ok(first.index < doors.indexOf('</div>'), (dir || 'en') + '/' + file + ': the browser line is inside door 1');
+            assert.match(first[1], /class="door-browser"/, (dir || 'en') + '/' + file + ': the browser line carries .door-browser');
+        }
+    }
+});
+
 test('a computer goes straight to global.beanpool.org, with this page out of the history', () => {
     for (const ua of [UA.mac, UA.windows]) {
         const { els, went } = visit({ ua });

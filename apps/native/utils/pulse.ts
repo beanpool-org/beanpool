@@ -26,6 +26,8 @@ export interface PulseFeedItem {
     publishedAt: string | null;
     source: string;
     isVerified: boolean;
+    external_id?: string | null;
+    channel_id?: string | null;
 }
 
 /**

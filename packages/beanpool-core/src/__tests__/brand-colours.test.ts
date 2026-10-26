@@ -67,6 +67,17 @@ describe('brand colours are readable in both themes', () => {
         }
     });
 
+    it('covers every tile role for categories, event and pulse, in both themes', () => {
+        const roles = new Set(pairs.map((p) => p.role));
+        for (const cat of [
+            'food', 'services', 'labour', 'tools', 'goods', 'garden', 'housing', 'transport',
+            'education', 'arts', 'health', 'care', 'animals', 'tech', 'energy', 'mindset',
+            'general', 'event', 'pulse',
+        ]) {
+            expect(roles).toContain(`tile.${cat}`);
+        }
+    });
+
     it("judges inks on every page, card and sunken ground the web app declares (index.css), in both themes", () => {
         // Each of --bg-primary / --bg-secondary / --bg-card is declared twice: under :root (light), then under
         // :root.dark-theme (dark). Dark --bg-secondary (#384038) sits under words in Messages, the consent card and the

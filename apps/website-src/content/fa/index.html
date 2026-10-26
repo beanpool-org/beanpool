@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: 14d0411fc2842c7a -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — مبادله برای جامعه‌ها، نه برای بانک‌های تجاری</title>
-    <meta name="description" content="BeanPool یک برنامه رایگان است که هر جامعه برای خود اجرا می‌کند تا کمک‌ها، کالاها و مهارت‌ها را به جای پول با لوبیا مبادله کند. جامعه‌ای نزدیک خود پیدا کنید یا راه‌اندازی کنید، یا با یک دعوت‌نامه بپیوندید؛ جامعه جهانی به‌زودی برای همه باز می‌شود. آیفون، اندروید و وب.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="برنامه BeanPool رایگان است و جامعه برای مبادله کمک، کالا و مهارت‌ها با لوبیا به جای پول، آن را اداره می‌کند. آن را در جامعه جهانی امتحان کنید، جامعه‌ای در نزدیکی خود پیدا کنید یا راه‌اندازی نمایید، یا با دعوت بپیوندید. برای iPhone، Android و وب.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">سه راه ورود</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">اکنون در سراسر جهان امتحان کنید</a>
-                            <p>جامعه جهانی به‌زودی و بدون نیاز به دعوت‌نامه برای همه باز می‌شود: نگاهی بیندازید، چیزی رایگان یا برای معاوضه ارسال کنید و جامعه‌ای نزدیک خود پیدا کنید. این بخش امروز یک پیش‌نمایش خصوصی است. تا زمان باز شدن آن، جامعه‌هایی را که در حال حاضر فعال هستند در زیر ببینید، یکی را راه‌اندازی کنید، یا از دعوت‌نامه‌ای که عضوی به شما داده استفاده کنید.</p>
+                            <a href="/global" class="btn btn-primary font-header">اکنون در سراسر جهان امتحان کنید</a>
+                            <p>نیازی به دعوت‌نامه نیست: در مرورگر خود یا در برنامه به جامعه جهانی بپیوندید، نگاهی بیندازید، چیزی رایگان یا برای مبادله ارسال کنید، و جامعه‌ای نزدیک خود بیابید.</p>
+                            <p><a href="https://global.beanpool.org">یا در مرورگر خود</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">یافتن یا راه‌اندازی یک جامعه</a>
-                            <p>جامعه‌هایی را که در حال حاضر فعال هستند ببینید، یا روی یک رایانه یدکی یا یک سرور اجاره‌ای کوچک یکی را راه‌اندازی کنید. درخواست ورود به جامعه‌ای در نزدیکی شما به‌زودی، با باز شدن جامعه جهانی، امکان‌پذیر خواهد بود.</p>
+                            <p>جامعه‌هایی را که در حال حاضر فعال هستند ببینید، از جامعه‌ای نزدیک خود بخواهید اجازه ورود دهد، یا جامعه‌ای روی یک رایانه بلااستفاده یا سرور اجاره‌ای کوچک راه‌اندازی کنید.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">دعوت‌نامه دارید؟</a>
@@ -172,7 +166,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">به فروشگاه برنامه دسترسی ندارید؟ هم جامعه جهانی و هم جامعه خودتان در مرورگر گوشی شما باز می‌شوند؛ آن‌ها را به صفحه اصلی خود اضافه کنید.</p>
+                        <p class="hero-web-note">فروشگاه برنامه ندارید؟ از BeanPool در مرورگر تلفن خود استفاده کنید، یا برنامه Android را از <a href="https://beanpool.org/android">beanpool.org/android</a> دانلود نمایید.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>۱. از یکی از سه مسیر وارد شوید</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>دعوت‌نامه‌ای را که عضوی برایتان فرستاده باز کنید؛ به‌زودی می‌توانید جامعه جهانی را نیز بدون دعوت‌نامه امتحان کنید و از آنجا از جامعه‌ای نزدیک خود بخواهید اجازه ورود دهد. در هر صورت، نامی را انتخاب می‌کنید که دیگران شما را با آن بشناسند.</p>
+                        <p>جامعه جهانی را بدون دعوت امتحان کنید، از جامعه‌ای نزدیک خود بخواهید شما را راه دهد، یا دعوتی را که یکی از اعضا فرستاده باز کنید. در هر صورت، نامی را انتخاب می‌کنید که مردم شما را با آن بشناسند.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>نقشه</h3>
-                    <p>ببینید چه چیزهایی در نزدیکی شما ارائه می‌شود. هر پین را خودتان قرار می‌دهید: از موقعیت مکانی همان لحظه خود استفاده کنید، یا پین را با دست قرار دهید. وقتی اجازه دهید، برنامه همچنین از موقعیت شما برای نمایش نزدیک‌ترین موارد استفاده می‌کند، و هرگز در پس‌زمینه اجرا نمی‌شود. پین‌های رویداد و پین‌های طرح تجاری تنظیم‌شده در برنامه تحت وب را می‌توان روی تقریبی قرار داد که محل را تا حدود ۱۰۰&nbsp;متر گرد می‌کند. پین‌ها توسط اعضای جامعه شما دیده می‌شوند. وقتی جامعه جهانی برای همه باز شود، یک بازدیدکننده فهرست‌ها و موقعیت تقریبی آن‌ها را می‌بیند، اما هیچ نام، عکس نمایه یا محل دقیقی را نمی‌بیند. هر کسی می‌تواند ظرف یک دقیقه به آن بپیوندد، بنابراین اعضای آن نیز فهرست‌های یکدیگر را تا حدود یک کیلومتر می‌بینند؛ محل دقیق برای زمانی است که برای ملاقات هماهنگ می‌کنید و خودتان به اشتراک می‌گذارید.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>ببینید چه چیزهایی در نزدیکی شما ارائه می‌شود. هر پین را خودتان قرار می‌دهید: از موقعیت مکانی همان لحظه خود استفاده کنید، یا پین را با دست قرار دهید. وقتی اجازه دهید، برنامه همچنین از موقعیت شما برای نمایش نزدیک‌ترین موارد استفاده می‌کند، و هرگز در پس‌زمینه اجرا نمی‌شود. پین‌های رویداد و پین‌های طرح تجاری تنظیم‌شده در برنامه تحت وب را می‌توان روی تقریبی قرار داد که محل را تا حدود ۱۰۰&nbsp;متر گرد می‌کند. پین‌ها توسط اعضای جامعه شما دیده می‌شوند. در جامعه جهانی، یک بازدیدکننده آگهی‌ها و مکان تقریبی آن‌ها را می‌بیند، اما هیچ نام، تصویر نمایه یا نقطه دقیقی نمایش داده نمی‌شود. هر کسی می‌تواند ظرف یک دقیقه به آن بپیوندد، بنابراین اعضای آن نیز فهرست‌های یکدیگر را تا حدود یک کیلومتر می‌بینند؛ محل دقیق برای زمانی است که برای ملاقات هماهنگ می‌کنید و خودتان به اشتراک می‌گذارید.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>از اولین راه‌اندازی خصوصی است</h3>
-                    <p>فهرست‌ها، نقشه، پیام‌ها و موجودی‌های یک جامعه از لحظه شروع نود، فقط برای اعضای آن است؛ چیزی برای روشن کردن وجود ندارد. اگر فردی بدون داشتن حساب، آدرس آن را باز کند، به جامعه جهانی هدایت می‌شود که به‌زودی برای همه باز خواهد شد.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>فهرست‌ها، نقشه، پیام‌ها و موجودی‌های یک جامعه از لحظه شروع نود، فقط برای اعضای آن است؛ چیزی برای روشن کردن وجود ندارد. اگر فردی بدون داشتن حساب، آدرس آن را باز کند، به جامعه جهانی هدایت می‌شود که در آن می‌توانند ببینند چه مواردی در نزدیکی آن‌ها وجود دارد و درخواست عضویت دهند.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>حدود نیم ساعت زمان می‌برد، اگر بتوانید یک دستورالعمل ساده را دنبال کنید. ابتدا شش نکته‌ای که باید بدانید:</p>
                 <ul class="run-node-facts">
                     <li><strong>هزینه آن چقدر است.</strong> نرم‌افزار رایگان است. روی یک رایانه یدکی که در خانه روشن بماند (یک Mini PC، یک NAS یا یک رزبری پای با سیستم ۶۴ بیتی)، یا روی یک سرور اجاره‌ای کوچک با هزینه چند دلار در ماه (حدود ۶ دلار آمریکا) اجرا می‌شود.</li>
-                    <li><strong>چه کسی آن را میزبانی می‌کند.</strong> شما، روی دستگاه خودتان یا دستگاهی که اجاره می‌کنید. هرگز نیازی به beanpool.org نیست: آدرس وب اختصاصی خودتان کار می‌کند.</li>
+                    <li><strong>چه کسی آن را میزبانی می‌کند.</strong> شما، روی دستگاه خودتان یا دستگاهی که اجاره می‌کنید. هرگز نیازی به <a href="https://beanpool.org">beanpool.org</a> نیست: آدرس وب اختصاصی خودتان کار می‌کند.</li>
                     <li><strong>مسئولیت‌هایی که بر عهده می‌گیرید.</strong> گزارش‌های اعضا به شما می‌رسد. پوشه داده‌ها در اختیار شماست تا با یک کد بازیابی از آن نسخه پشتیبان تهیه کنید. دو مالک داشته باشید. سرور را روشن و به‌روز نگه دارید.</li>
                     <li><strong>آنچه هرگز نمی‌بینید.</strong> پیام‌های مستقیم اعضای شما.</li>
                     <li><strong>ابتدا داکر (Docker).</strong> پیش از اجرای بلوک زیر، دستگاه باید داکر نصب شده داشته باشد؛ یک سرور تازه اجاره‌شده داکر ندارد.</li>
@@ -598,7 +589,7 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>

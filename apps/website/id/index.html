@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Pertukaran untuk Komunitas, Bukan Bank Komersial</title>
-    <meta name="description" content="BeanPool adalah aplikasi gratis yang dijalankan oleh komunitas untuk saling bertukar bantuan, barang, dan keahlian dengan Kacang alih-alih uang. Temukan atau mulai komunitas di dekat Anda, atau bergabung dengan undangan; komunitas global segera dibuka untuk semua orang. iPhone, Android, dan web.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool adalah aplikasi gratis yang dijalankan oleh komunitas secara mandiri untuk bertukar bantuan, barang, dan keterampilan menggunakan Beans alih-alih uang. Coba di komunitas global, temukan atau mulai komunitas di dekat Anda, atau bergabung dengan undangan. iPhone, Android, dan web.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -146,7 +145,6 @@
     <section id="hero">
         <div class="hero-bg"></div>
         <div class="container hero-container">
-    <div class="website-stale-banner"><p>Halaman ini lebih baru dalam bahasa Inggris. <a href="../index.html">Baca versi bahasa Inggris saat ini →</a></p></div>
             <div class="hero-header">
                 <div class="hero-badge">Gratis di ponsel dan web</div>
                 <h1>Pertukaran untuk <span class="gradient-text">Komunitas</span>,<br>Bukan Bank Komersial</h1>
@@ -199,11 +197,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Tiga pintu masuk</span>
@@ -212,14 +206,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Coba sekarang, di seluruh dunia</a>
-                            <p>Komunitas global akan segera terbuka bagi siapa saja, tanpa undangan: lihat-lihat, pasang sesuatu secara gratis atau untuk barter, dan temukan komunitas di dekat Anda. Saat ini masih berupa pratinjau pribadi. Sebelum dibuka, lihat komunitas yang sudah berjalan di bawah ini, mulai sebuah komunitas, atau gunakan undangan yang diberikan oleh anggota.</p>
+                            <a href="/global" class="btn btn-primary font-header">Coba sekarang, di seluruh dunia</a>
+                            <p>Tidak perlu undangan: bergabunglah dengan komunitas global di peramban atau di aplikasi, lihat-lihat, unggah penawaran gratis atau barter, dan temukan komunitas di dekat Anda.</p>
+                            <p><a href="https://global.beanpool.org">atau di peramban Anda</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Temukan atau mulai komunitas</a>
-                            <p>Lihat komunitas yang sudah berjalan, atau mulai satu komunitas di komputer cadangan atau server sewaan kecil. Mengajukan diri untuk bergabung ke komunitas di dekat Anda akan segera hadir saat komunitas global dibuka.</p>
+                            <p>Lihat komunitas yang sudah berjalan, minta salah satu yang dekat dengan Anda untuk menerima Anda, atau mulai satu di komputer luang atau server sewaan kecil.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Punya undangan?</a>
@@ -258,7 +251,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">Tidak ada toko aplikasi? Komunitas global maupun komunitas Anda sendiri dapat dibuka di peramban ponsel Anda; tambahkan ke layar utama Anda.</p>
+                        <p class="hero-web-note">Tidak ada toko aplikasi? Gunakan BeanPool di peramban ponsel Anda, atau unduh aplikasi untuk Android dari <a href="https://beanpool.org/android">beanpool.org/android</a>.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -357,8 +350,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Masuk melalui salah satu dari tiga pintu</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Buka undangan yang dikirimkan oleh seorang anggota; segera Anda juga dapat mencoba komunitas global tanpa undangan dan, dari sana, mengajukan diri untuk bergabung ke komunitas di dekat Anda. Apa pun pilihannya, Anda menentukan nama panggilan yang akan dikenal orang lain.</p>
+                        <p>Coba komunitas global tanpa undangan, minta komunitas di dekat Anda untuk menerima Anda, atau buka undangan yang dikirimkan oleh seorang anggota. Apa pun pilihannya, Anda menentukan nama yang akan dikenal orang lain.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -407,8 +399,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Peta</h3>
-                    <p>Lihat apa yang ditawarkan di dekat Anda. Setiap pin Anda tempatkan sendiri: gunakan lokasi Anda saat itu, atau pasang pin secara manual. Saat Anda mengizinkannya, aplikasi juga menggunakan lokasi Anda untuk menampilkan apa yang terdekat dari Anda, dan tidak pernah di latar belakang. Pin acara, dan pin usaha yang diatur di aplikasi web, dapat disetel ke Perkiraan, yang membulatkan titik sekitar 100&nbsp;m. Pin dilihat oleh anggota komunitas Anda. Ketika komunitas global dibuka untuk semua orang, pengunjung di sana dapat melihat daftar dan perkiraan lokasinya, tetapi tanpa nama, tanpa foto profil, dan tanpa titik pasti. Siapa pun dapat bergabung dalam satu menit, sehingga para anggotanya juga melihat daftar satu sama lain dengan perkiraan sekitar satu kilometer; titik pasti Anda bagikan sendiri saat mengatur janji temu.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Lihat apa yang ditawarkan di dekat Anda. Setiap pin Anda tempatkan sendiri: gunakan lokasi Anda saat itu, atau pasang pin secara manual. Saat Anda mengizinkannya, aplikasi juga menggunakan lokasi Anda untuk menampilkan apa yang terdekat dari Anda, dan tidak pernah di latar belakang. Pin acara, dan pin usaha yang diatur di aplikasi web, dapat disetel ke Perkiraan, yang membulatkan titik sekitar 100&nbsp;m. Pin dilihat oleh anggota komunitas Anda. Di komunitas global, pengunjung dapat melihat listing dan perkiraan lokasinya, tetapi tanpa nama, foto profil, dan titik persisnya. Siapa pun dapat bergabung dalam satu menit, sehingga para anggotanya juga melihat daftar satu sama lain dengan perkiraan sekitar satu kilometer; titik pasti Anda bagikan sendiri saat mengatur janji temu.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -595,8 +586,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Pribadi sejak pertama kali dinyalakan</h3>
-                    <p>Daftar penawaran, peta, pesan, dan saldo komunitas hanya untuk anggotanya sejak node dinyalakan; tidak ada yang perlu diaktifkan secara manual. Seseorang yang membuka alamatnya tanpa akun akan diarahkan ke komunitas global, yang segera dibuka untuk semua orang.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Daftar penawaran, peta, pesan, dan saldo komunitas hanya untuk anggotanya sejak node dinyalakan; tidak ada yang perlu diaktifkan secara manual. Seseorang yang membuka alamatnya tanpa akun akan diarahkan ke komunitas global, tempat mereka dapat melihat apa yang ada di dekat mereka dan meminta untuk bergabung.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -610,7 +600,7 @@
                 <p>Sekitar setengah jam, jika Anda bisa mengikuti petunjuk. Enam hal yang perlu diketahui terlebih dahulu:</p>
                 <ul class="run-node-facts">
                     <li><strong>Biaya yang dibutuhkan.</strong> Perangkat lunaknya gratis. Aplikasi ini berjalan pada komputer cadangan yang terus menyala di rumah (Mini PC, NAS, atau Raspberry Pi dengan sistem 64-bit), atau pada server sewaan kecil dengan biaya beberapa dolar per bulan (sekitar US$6).</li>
-                    <li><strong>Siapa yang meng-hosting.</strong> Anda sendiri, di komputer Anda sendiri atau yang Anda sewa. Tidak memerlukan beanpool.org: alamat web Anda sendiri berfungsi.</li>
+                    <li><strong>Siapa yang meng-hosting.</strong> Anda sendiri, di komputer Anda sendiri atau yang Anda sewa. Tidak memerlukan <a href="https://beanpool.org">beanpool.org</a>: alamat web Anda sendiri berfungsi.</li>
                     <li><strong>Tanggung jawab Anda.</strong> Laporan dari anggota Anda masuk kepada Anda. Folder data adalah tanggung jawab Anda untuk dicadangkan, dengan kode pemulihan. Pertahankan dua pemilik. Biarkan server terus menyala dan diperbarui.</li>
                     <li><strong>Yang tidak pernah Anda lihat.</strong> Pesan langsung anggota Anda.</li>
                     <li><strong>Docker terlebih dahulu.</strong> Komputer tersebut harus sudah terpasang Docker sebelum menjalankan blok di bawah; server yang baru disewa belum memilikinya.</li>
@@ -684,7 +674,7 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>

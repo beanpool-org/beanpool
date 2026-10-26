@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: 14d0411fc2842c7a -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Trao đổi cho cộng đồng, không phải ngân hàng thương mại</title>
-    <meta name="description" content="BeanPool là ứng dụng miễn phí do cộng đồng tự vận hành để trao đổi sự giúp đỡ, hàng hóa và kỹ năng bằng Đậu thay vì tiền. Hãy tìm hoặc khởi tạo một cộng đồng gần bạn, hoặc tham gia bằng lời mời; cộng đồng toàn cầu sẽ sớm mở cửa cho mọi người. iPhone, Android và web.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool là ứng dụng miễn phí do cộng đồng tự vận hành để trao đổi sự giúp đỡ, hàng hóa và kỹ năng bằng Beans thay vì tiền. Hãy trải nghiệm trên cộng đồng toàn cầu, tìm hoặc thành lập cộng đồng gần bạn, hoặc tham gia bằng lời mời. Hỗ trợ iPhone, Android và web.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Ba lối vào</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Trải nghiệm ngay, trên toàn thế giới</a>
-                            <p>Cộng đồng toàn cầu sẽ sớm mở cửa cho mọi người mà không cần lời mời: tham quan xung quanh, đăng thứ gì đó miễn phí hoặc để trao đổi, và tìm một cộng đồng gần bạn. Hiện tại đây là bản xem trước riêng tư. Cho đến khi mở cửa, hãy xem các cộng đồng đang hoạt động bên dưới, khởi tạo một cộng đồng, hoặc sử dụng lời mời mà một thành viên đã gửi cho bạn.</p>
+                            <a href="/global" class="btn btn-primary font-header">Trải nghiệm ngay, trên toàn thế giới</a>
+                            <p>Không cần lời mời: tham gia cộng đồng toàn cầu trong trình duyệt hoặc ứng dụng, dạo quanh, đăng đồ miễn phí hoặc trao đổi và tìm cộng đồng gần bạn.</p>
+                            <p><a href="https://global.beanpool.org">hoặc trong trình duyệt của bạn</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Tìm hoặc khởi tạo một cộng đồng</a>
-                            <p>Xem các cộng đồng đang hoạt động, hoặc khởi tạo một cộng đồng trên máy tính dự phòng hay máy chủ thuê giá rẻ. Tính năng xin gia nhập một cộng đồng gần bạn sẽ sớm ra mắt khi cộng đồng toàn cầu mở cửa.</p>
+                            <p>Xem các cộng đồng đang hoạt động, yêu cầu một cộng đồng gần bạn cho phép tham gia, hoặc tự khởi tạo trên máy tính cá nhân hoặc máy chủ thuê nhỏ.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Bạn có lời mời?</a>
@@ -172,7 +166,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">Không có kho ứng dụng? Cả cộng đồng toàn cầu và cộng đồng của chính bạn đều có thể mở trong trình duyệt điện thoại; hãy thêm chúng vào màn hình chính.</p>
+                        <p class="hero-web-note">Không có cửa hàng ứng dụng? Hãy dùng BeanPool trong trình duyệt trên điện thoại của bạn, hoặc tải ứng dụng cho Android từ <a href="https://beanpool.org/android">beanpool.org/android</a>.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Bước vào qua một trong ba cánh cửa</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Mở lời mời mà một thành viên gửi cho bạn; bạn cũng sẽ sớm có thể trải nghiệm cộng đồng toàn cầu mà không cần lời mời, và từ đó, xin gia nhập một cộng đồng gần bạn. Dù bằng cách nào, bạn cũng sẽ chọn tên gọi mà mọi người sẽ biết đến bạn.</p>
+                        <p>Trải nghiệm cộng đồng toàn cầu mà không cần lời mời, yêu cầu một cộng đồng gần bạn cho bạn vào, hoặc mở lời mời do một thành viên gửi cho bạn. Dù bằng cách nào, bạn cũng sẽ chọn tên mà mọi người sẽ biết đến bạn.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Bản đồ</h3>
-                    <p>Xem những gì đang được chia sẻ ở gần bạn. Mỗi ghim đều do chính bạn đặt: sử dụng vị trí của bạn tại thời điểm đó, hoặc thả ghim thủ công. Khi bạn cho phép, ứng dụng cũng sử dụng vị trí của bạn để hiển thị những gì gần bạn nhất, và không bao giờ chạy ngầm. Ghim sự kiện và ghim doanh nghiệp được thiết lập trong ứng dụng web có thể đặt thành Ước chừng, giúp làm tròn vị trí trong phạm vi khoảng 100&nbsp;m. Ghim được nhìn thấy bởi các thành viên trong cộng đồng của bạn. Khi cộng đồng toàn cầu mở cửa cho tất cả mọi người, khách truy cập ở đó sẽ thấy các tin đăng và vị trí đại khái của chúng, nhưng không thấy tên, không thấy ảnh hồ sơ và không thấy vị trí chính xác. Bất kỳ ai cũng có thể tham gia trong vòng một phút, vì vậy các thành viên cũng chỉ nhìn thấy tin đăng của nhau trong phạm vi khoảng một kilômét; vị trí chính xác là do bạn tự chia sẻ khi hẹn gặp nhau.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Xem những gì đang được chia sẻ ở gần bạn. Mỗi ghim đều do chính bạn đặt: sử dụng vị trí của bạn tại thời điểm đó, hoặc thả ghim thủ công. Khi bạn cho phép, ứng dụng cũng sử dụng vị trí của bạn để hiển thị những gì gần bạn nhất, và không bao giờ chạy ngầm. Ghim sự kiện và ghim doanh nghiệp được thiết lập trong ứng dụng web có thể đặt thành Ước chừng, giúp làm tròn vị trí trong phạm vi khoảng 100&nbsp;m. Ghim được nhìn thấy bởi các thành viên trong cộng đồng của bạn. Trên cộng đồng toàn cầu, khách truy cập thấy các bài đăng và vị trí gần đúng, nhưng không có tên, ảnh hồ sơ và vị trí chính xác. Bất kỳ ai cũng có thể tham gia trong vòng một phút, vì vậy các thành viên cũng chỉ nhìn thấy tin đăng của nhau trong phạm vi khoảng một kilômét; vị trí chính xác là do bạn tự chia sẻ khi hẹn gặp nhau.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Riêng tư ngay từ lần khởi động đầu tiên</h3>
-                    <p>Tin đăng, bản đồ, tin nhắn và số dư của cộng đồng chỉ dành riêng cho các thành viên ngay từ khoảnh khắc máy chủ bắt đầu chạy; không cần phải bật bất kỳ thiết lập nào. Người mở địa chỉ máy chủ mà không có tài khoản sẽ được chuyển hướng đến cộng đồng toàn cầu, nơi sẽ sớm mở cửa cho mọi người.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Tin đăng, bản đồ, tin nhắn và số dư của cộng đồng chỉ dành riêng cho các thành viên ngay từ khoảnh khắc máy chủ bắt đầu chạy; không cần phải bật bất kỳ thiết lập nào. Người mở địa chỉ máy chủ mà không có tài khoản sẽ được chuyển hướng đến cộng đồng toàn cầu, nơi họ có thể thấy những gì ở gần mình và yêu cầu tham gia.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>Khoảng nửa giờ nếu bạn làm theo hướng dẫn. Sáu điều cần biết trước tiên:</p>
                 <ul class="run-node-facts">
                     <li><strong>Chi phí.</strong> Phần mềm hoàn toàn miễn phí. Phần mềm chạy trên máy tính dự phòng luôn bật ở nhà (Mini PC, NAS hoặc Raspberry Pi chạy hệ điều hành 64-bit), hoặc trên máy chủ thuê giá rẻ với vài đô la mỗi tháng (khoảng 6 USD).</li>
-                    <li><strong>Ai lưu trữ máy chủ.</strong> Chính bạn, trên máy riêng hoặc máy bạn thuê. Không bao giờ cần đến beanpool.org: địa chỉ web riêng của bạn hoàn toàn hoạt động tốt.</li>
+                    <li><strong>Ai lưu trữ máy chủ.</strong> Chính bạn, trên máy riêng hoặc máy bạn thuê. Không bao giờ cần đến <a href="https://beanpool.org">beanpool.org</a>: địa chỉ web riêng của bạn hoàn toàn hoạt động tốt.</li>
                     <li><strong>Trách nhiệm của bạn.</strong> Các báo cáo từ thành viên sẽ được gửi tới bạn. Bạn chịu trách nhiệm sao lưu thư mục dữ liệu bằng mã khôi phục. Duy trì hai chủ sở hữu. Luôn giữ máy chủ hoạt động và được cập nhật.</li>
                     <li><strong>Điều bạn không bao giờ thấy.</strong> Tin nhắn trực tiếp của các thành viên.</li>
                     <li><strong>Cần cài đặt Docker trước.</strong> Máy cần được cài sẵn Docker trước khi chạy khối lệnh bên dưới; một máy chủ mới thuê chưa có Docker.</li>
@@ -598,7 +589,7 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>

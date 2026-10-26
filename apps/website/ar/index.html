@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — تبادل للمجتمعات، لا للبنوك التجارية</title>
-    <meta name="description" content="BeanPool تطبيق مجاني يديره المجتمع بنفسه لتبادل المساعدة والسلع والمهارات بعملة فاصوليا بدلاً من المال. اعثر على مجتمع قريب منك أو ابدأ مجتمعاً، أو انضم عبر دعوة؛ سيُفتح المجتمع العالمي للجميع قريباً. آيفون، أندرويد والويب.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool هو تطبيق مجاني يديره المجتمع بنفسه لتبادل المساعدة والسلع والمهارات بالفاصوليا بدلاً من المال. جربه في المجتمع العالمي، أو ابحث عن مجتمع قريب منك أو ابدأه، أو انضم عبر دعوة. يتوفر على iPhone وAndroid والويب.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -146,7 +145,6 @@
     <section id="hero">
         <div class="hero-bg"></div>
         <div class="container hero-container">
-    <div class="website-stale-banner"><p>هذه الصفحة أحدث باللغة الإنجليزية. <a href="../index.html">اقرأ النسخة الإنجليزية الحالية ←</a></p></div>
             <div class="hero-header">
                 <div class="hero-badge">مجاني على الهاتف والويب</div>
                 <h1>تبادل من أجل <span class="gradient-text">المجتمعات</span>،<br>لا للبنوك التجارية</h1>
@@ -199,11 +197,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">ثلاث طرق للدخول</span>
@@ -212,14 +206,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">جرّبه الآن، حول العالم</a>
-                            <p>سيُفتح المجتمع العالمي للجميع قريباً، دون الحاجة إلى دعوة: تجول فيه، وانشر شيئاً مجانياً أو للتبادل، واعثر على مجتمع قريب منك. هو حالياً في مرحلة معاينة خاصة. حتى يتم افتتاحه، يمكنك الاطلاع على المجتمعات التي تعمل بالفعل أدناه، أو بدء مجتمع، أو استخدام دعوة منحك إياها أحد الأعضاء.</p>
+                            <a href="/global" class="btn btn-primary font-header">جرّبه الآن، حول العالم</a>
+                            <p>لا يلزم وجود دعوة: انضم إلى المجتمع العالمي في متصفحك أو في التطبيق، وتجول فيه، وانشر شيئاً مجانياً أو للتبادل، واعثر على مجتمع قريب منك.</p>
+                            <p><a href="https://global.beanpool.org">أو في متصفحك</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">اعثر على مجتمع أو ابدأ مجتمعاً</a>
-                            <p>اطّلع على المجتمعات التي تعمل بالفعل، أو ابدأ مجتمعاً على كمبيوتر إضافي أو خادم مستأجر صغير. طلب الانضمام إلى مجتمع قريب منك سيتاح قريباً، عند افتتاح المجتمع العالمي.</p>
+                            <p>اطّلع على المجتمعات التي تعمل بالفعل، واطلب من مجتمع قريب منك قبولك، أو ابدأ مجتمعاً على كمبيوتر إضافي أو خادم مستأجر صغير.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">لديك دعوة؟</a>
@@ -258,7 +251,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">لا يوجد متجر تطبيقات؟ يُفتح كل من المجتمع العالمي ومجتمعك الخاص في متصفح هاتفك؛ أضفهما إلى شاشتك الرئيسية.</p>
+                        <p class="hero-web-note">ليس لديك متجر تطبيقات؟ استخدم BeanPool في متصفح هاتفك، أو نزّل تطبيق Android من <a href="https://beanpool.org/android">beanpool.org/android</a>.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -357,8 +350,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. ادخل عبر أحد الأبواب الثلاثة</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>افتح الدعوة التي أرسلها إليك أحد الأعضاء؛ وقريباً يمكنك أيضاً تجربة المجتمع العالمي دون دعوة ومن خلاله تطلب من مجتمع قريب منك السماح لك بالانضمام. في كلتا الحالتين، ستختار الاسم الذي سيعرفك به الناس.</p>
+                        <p>جرب المجتمع العالمي دون دعوة، أو اطلب من مجتمع قريب منك قبولك، أو افتح الدعوة التي أرسلها إليك أحد الأعضاء. في كلتا الحالتين تختار الاسم الذي سيعرفك الناس به.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -407,8 +399,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>الخريطة</h3>
-                    <p>شاهد ما هو معروض بالقرب منك. كل دبوس تضعه بنفسك: استخدم موقعك في تلك اللحظة، أو ضع الدبوس يدوياً. عندما تسمح بذلك، يستخدم التطبيق موقعك أيضاً لإظهار الأقرب إليك، ولا يعمل في الخلفية أبداً. يمكن ضبط دبابيس الفعاليات ودبابيس المؤسسات المحددة في تطبيق الويب على وضع تقريبي، مما يقرّب الموقع إلى حوالي 100&nbsp;متر. يرى دبابيس الموقع أعضاء مجتمعك. وعندما يُفتح المجتمع العالمي للجميع، سيرى الزائر هناك القوائم ومواقعها التقريبية، ولكن دون أسماء أو صور شخصية أو مواقع دقيقة. يمكن لأي شخص الانضمام إليه في دقيقة واحدة، لذا يرى أعضاؤه قوائم بعضهم البعض بدقة تقارب كيلومتراً واحداً أيضاً؛ والموقع الدقيق يعود لك لمشاركته عند الاتفاق على اللقاء.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>شاهد ما هو معروض بالقرب منك. كل دبوس تضعه بنفسك: استخدم موقعك في تلك اللحظة، أو ضع الدبوس يدوياً. عندما تسمح بذلك، يستخدم التطبيق موقعك أيضاً لإظهار الأقرب إليك، ولا يعمل في الخلفية أبداً. يمكن ضبط دبابيس الفعاليات ودبابيس المؤسسات المحددة في تطبيق الويب على وضع تقريبي، مما يقرّب الموقع إلى حوالي 100&nbsp;متر. يرى دبابيس الموقع أعضاء مجتمعك. في المجتمع العالمي، يرى الزائر القوائم ومواقعها التقريبية، دون أسماء أو صور شخصية أو أماكن دقيقة. يمكن لأي شخص الانضمام إليه في دقيقة واحدة، لذا يرى أعضاؤه قوائم بعضهم البعض بدقة تقارب كيلومتراً واحداً أيضاً؛ والموقع الدقيق يعود لك لمشاركته عند الاتفاق على اللقاء.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -595,8 +586,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>خاص من أول تشغيل</h3>
-                    <p>قوائم المجتمع وخريطته ورسائله وأرصدته مخصصة لأعضائه منذ اللحظة الأولى لتشغيل خادمه؛ ولا يوجد شيء يتطلب التفعيل. والشخص الذي يفتح عنوانه دون أن يكون لديه حساب يتم توجيهه إلى المجتمع العالمي، الذي سيُفتح للجميع قريباً.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>قوائم المجتمع وخريطته ورسائله وأرصدته مخصصة لأعضائه منذ اللحظة الأولى لتشغيل خادمه؛ ولا يوجد شيء يتطلب التفعيل. والشخص الذي يفتح عنوانه دون أن يكون لديه حساب يتم توجيهه إلى المجتمع العالمي، حيث يمكنهم رؤية ما هو متاح بالقرب منهم وطلب الانضمام.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -610,7 +600,7 @@
                 <p>حوالي نصف ساعة، إذا كان بإمكانك اتباع الخطوات. ستة أمور يجب معرفتها أولاً:</p>
                 <ul class="run-node-facts">
                     <li><strong>التكلفة.</strong> البرنامج مجاني. ويعمل على كمبيوتر إضافي يبقى قيد التشغيل في المنزل (كمبيوتر مصغر Mini PC، أو وحدة تخزين شبكي NAS، أو جهاز Raspberry Pi بنظام 64 بت)، أو على خادم مستأجر صغير مقابل بضعة دولارات شهرياً (حوالي 6 دولارات أمريكية).</li>
-                    <li><strong>الجهة المستضيفة.</strong> أنت المستضيف، على جهازك الخاص أو على الخادم الذي تستأجره. وهو لا يحتاج أبداً إلى beanpool.org: عنوان الويب الخاص بك يعمل تماماً.</li>
+                    <li><strong>الجهة المستضيفة.</strong> أنت المستضيف، على جهازك الخاص أو على الخادم الذي تستأجره. وهو لا يحتاج أبداً إلى <a href="https://beanpool.org">beanpool.org</a>: عنوان الويب الخاص بك يعمل تماماً.</li>
                     <li><strong>المسؤوليات التي تتحملها.</strong> تصلك البلاغات الواردة من أعضائك. ومجلد البيانات مسؤوليتك لنسخه احتياطياً، مع رمز استعادة. احتفظ بمالكين اثنين. واحرص على بقاء الخادم قيد التشغيل ومحدثاً.</li>
                     <li><strong>ما لا تراه أبداً.</strong> الرسائل المباشرة لأعضائك.</li>
                     <li><strong>تثبيت Docker أولاً.</strong> يجب تثبيت Docker على الجهاز قبل تشغيل الأوامر أدناه؛ فالخادم المستأجر حديثاً لا يحتوي عليه.</li>
@@ -684,7 +674,7 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>

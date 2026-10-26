@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: 14d0411fc2842c7a -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Mabadilishano kwa Ajili ya Jamii, Si Benki za Kibiashara</title>
-    <meta name="description" content="BeanPool ni programu ya bure ambayo jamii hujiendeshea yenyewe ili kubadilishana misaada, bidhaa na ujuzi kwa Maharagwe badala ya pesa. Tafuta au anzisha jamii iliyo karibu nawe, au jiunge kwa mwaliko; jamii ya kimataifa itafunguliwa kwa kila mtu hivi karibuni. iPhone, Android na wavuti.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool ni programu ya bure ambayo jamii hujiendeshea yenyewe ili kubadilishana misaada, bidhaa na ujuzi kwa Beans badala ya pesa. Ijaribu kwenye jamii ya kimataifa, pata au anzisha jamii iliyo karibu nawe, au jiunge kwa mwaliko. iPhone, Android na wavuti.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Njia tatu za kujiunga</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Ijaribu sasa, duniani kote</a>
-                            <p>Jamii ya kimataifa itafunguliwa kwa kila mtu hivi karibuni, bila mwaliko: tazama pembeni, weka kitu cha bure au cha kubadilishana, na upate jamii iliyo karibu nawe. Leo ni onyesho la awali la faragha. Hadi itakapofunguliwa, tazama jamii ambazo tayari zinafanya kazi hapa chini, anzisha moja, au tumia mwaliko uliopewa na mwanachama.</p>
+                            <a href="/global" class="btn btn-primary font-header">Ijaribu sasa, duniani kote</a>
+                            <p>Hakuna mwaliko unaohitajika: jiunge na jamii ya kimataifa kwenye kivinjari chako au kwenye programu, tazama pande zote, chapisha kitu bila malipo au cha kubadilishana, na upate jamii iliyo karibu nawe.</p>
+                            <p><a href="https://global.beanpool.org">au kwenye kivinjari chako</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Tafuta au anzisha jamii</a>
-                            <p>Tazama jamii ambazo tayari zinafanya kazi, au anzisha moja kwenye kompyuta ya ziada au seva ndogo ya kukodi. Kuomba kujiunga na jamii iliyo karibu nawe kutapatikana hivi karibuni, wakati jamii ya kimataifa itakapofunguliwa.</p>
+                            <p>Tazama jamii ambazo tayari zinafanya kazi, omba iliyo karibu nawe ikuruhusu kuingia, au anzisha moja kwenye kompyuta ya ziada au seva ndogo iliyokodishwa.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Una mwaliko?</a>
@@ -172,7 +166,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">Huna duka la programu? Jamii ya kimataifa na jamii yako mwenyewe zinafunguka katika kivinjari cha simu yako; ziongeze kwenye skrini yako ya mwanzo.</p>
+                        <p class="hero-web-note">Huna duka la programu? Tumia BeanPool kwenye kivinjari cha simu yako, au pakua programu ya Android kutoka <a href="https://beanpool.org/android">beanpool.org/android</a>.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Ingia kupitia mojawapo ya milango mitatu</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Fungua mwaliko uliotumiwa na mwanachama; hivi karibuni unaweza pia kujaribu jamii ya kimataifa bila mwaliko na, kutoka hapo, uombe jamii iliyo karibu nawe ikuruhusu kujiunga. Kwa njia yoyote ile, unachagua jina ambalo watu watakufahamu kwalo.</p>
+                        <p>Jaribu jamii ya kimataifa bila mwaliko, omba jamii iliyo karibu nawe ikuruhusu kuingia, au fungua mwaliko uliotumiwa na mwanachama. Kwa njia yoyote ile unachagua jina ambalo watu watakujua nalo.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Ramani</h3>
-                    <p>Ona kinachotolewa karibu nawe. Kila pini ni ile unayoiweka mwenyewe: tumia eneo lako la wakati huo, au weka pini hiyo kwa mkono. Unaporuhusu, programu pia hutumia eneo lako kukuonyesha kilicho karibu nawe zaidi, na kamwe haifanyi hivyo chinichini. Pini za matukio, na pini za biashara zilizowekwa kwenye programu ya wavuti, zinaweza kuwekwa kuwa Takriban, ambapo eneo hurekebishwa kuwa takriban 100&nbsp;m. Pini zinaonekana kwa wanachama wa jamii yako. Wakati jamii ya kimataifa itakapofunguliwa kwa kila mtu, mgeni huko ataona matangazo na takriban mahali yalipo, lakini bila majina, picha za wasifu wala maeneo kamili. Mtu yeyote anaweza kujiunga nayo kwa dakika moja, kwa hivyo wanachama wake huona matangazo ya wenzao ndani ya takriban kilomita moja pia; eneo kamili ni lako kushiriki mnapopanga kukutana.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Ona kinachotolewa karibu nawe. Kila pini ni ile unayoiweka mwenyewe: tumia eneo lako la wakati huo, au weka pini hiyo kwa mkono. Unaporuhusu, programu pia hutumia eneo lako kukuonyesha kilicho karibu nawe zaidi, na kamwe haifanyi hivyo chinichini. Pini za matukio, na pini za biashara zilizowekwa kwenye programu ya wavuti, zinaweza kuwekwa kuwa Takriban, ambapo eneo hurekebishwa kuwa takriban 100&nbsp;m. Pini zinaonekana kwa wanachama wa jamii yako. Kwenye jamii ya kimataifa, mgeni huona matangazo na takriban mahali yalipo, lakini si majina, picha za wasifu wala maeneo kamili. Mtu yeyote anaweza kujiunga nayo kwa dakika moja, kwa hivyo wanachama wake huona matangazo ya wenzao ndani ya takriban kilomita moja pia; eneo kamili ni lako kushiriki mnapopanga kukutana.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Faragha kuanzia mwanzo kabisa</h3>
-                    <p>Matangazo, ramani, jumbe na masalio ya jamii ni kwa ajili ya wanachama wake kuanzia wakati ambapo nodi yake inapoanza kufanya kazi; hakuna cha kuwasha. Mtu anayefungua anwani yake bila kuwa na akaunti huelekezwa kwenye jamii ya kimataifa, ambayo itafunguliwa kwa kila mtu hivi karibuni.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Matangazo, ramani, jumbe na masalio ya jamii ni kwa ajili ya wanachama wake kuanzia wakati ambapo nodi yake inapoanza kufanya kazi; hakuna cha kuwasha. Mtu anayefungua anwani yake bila kuwa na akaunti huelekezwa kwenye jamii ya kimataifa, ambapo wanaweza kuona kile kilicho karibu nao na kuomba kujiunga.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>Takriban nusu saa, ikiwa unaweza kufuata maelekezo. Mambo sita ya kujua kwanza:</p>
                 <ul class="run-node-facts">
                     <li><strong>Gharama zake.</strong> Programu ni ya bure. Inaendeshwa kwenye kompyuta ya ziada inayobaki ikiwaka nyumbani (Mini PC, NAS, au Raspberry Pi yenye mfumo wa 64-bit), au kwenye seva ndogo ya kukodi kwa dola chache kwa mwezi (takriban US$6).</li>
-                    <li><strong>Nani anayeihifadhi.</strong> Wewe mwenyewe, kwenye mashine yako mwenyewe au unayoikodi. Kamwe haihitaji beanpool.org: anwani yako ya wavuti inafanya kazi.</li>
+                    <li><strong>Nani anayeihifadhi.</strong> Wewe mwenyewe, kwenye mashine yako mwenyewe au unayoikodi. Kamwe haihitaji <a href="https://beanpool.org">beanpool.org</a>: anwani yako ya wavuti inafanya kazi.</li>
                     <li><strong>Majukumu yako.</strong> Ripoti kutoka kwa wanachama wako huja kwako. Folda ya data ni yako kuiwekea nakala rudufu, kwa msimbo wa kurejesha. Wekeni wamiliki wawili. Weka seva ikiwa inafanya kazi na kusasishwa.</li>
                     <li><strong>Kile ambacho hutakiona kamwe.</strong> Jumbe za moja kwa moja za wanachama wako.</li>
                     <li><strong>Docker kwanza.</strong> Mashine inahitaji Docker ikiwa imesakinishwa kabla ya kizuizi cha msimbo hapa chini; seva iliyokodishwa hivi karibuni haina.</li>
@@ -598,7 +589,7 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>

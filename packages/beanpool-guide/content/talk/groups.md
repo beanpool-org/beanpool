@@ -26,7 +26,7 @@ On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterpri
 
 - On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.
 - In the web app, open **Commons**, then **Groups**, and tap **Start something** and pick **Chat group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
-- Every group has a picture: the one chosen for its kind is already there. Tap it to choose another, or a photo.
+- Every group has a picture: the one for its kind is already chosen, and it follows the **Category** until you choose one yourself. To pick another, tap **Choose another**. On the phone it offers your camera, your photos and the ready-made pictures. In the web app it shows the ready-made pictures, and **Choose a photo** picks one of your own.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
 - Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. **Social Circle** is chosen for you.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
@@ -140,6 +140,8 @@ On the web, open the group in **Commons**, under **Groups**, and tap **Post to**
 ## Convenors and the lead convenor
 
 A convenor looks after the group. Whoever created it is its **lead convenor**, and the group's card names them, as **Lead convenor: Ali**. In the members list their row is marked **LEAD**.
+
+Any convenor can change the group's picture: open the group (on the phone, **Group info** in its chat's **⋮** menu) and tap **Change the picture** (in the web app, also **Choose a photo**). A group always keeps a picture; it can be changed, never removed.
 
 In **Convenor Tools**, any convenor can:
 

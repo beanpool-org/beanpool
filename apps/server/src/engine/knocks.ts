@@ -128,7 +128,7 @@ import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from
 import { getNodeRole } from './sync.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
-import { broadcast, dispatchPushNotification } from '../state-engine.js';
+import { dispatchPushNotification } from '../state-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -545,10 +545,6 @@ export function notifyKnockReceived(_now = Date.now()): void {
 
     const recipients = Array.from(new Set([...adminPks, ...memberPks]));
     if (recipients.length === 0) return;
-
-    try {
-        broadcast({ type: 'knock_received' }, recipients);
-    } catch { }
 
     try {
         dispatchPushNotification(

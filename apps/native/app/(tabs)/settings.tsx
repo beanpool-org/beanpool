@@ -63,13 +63,14 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, t, word, formatNumber, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
+import { fetchMyNodeRole } from '../../utils/node-admin';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { ChatMemoryCard } from '../../components/ChatMemoryCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
@@ -612,6 +613,9 @@ export default function SettingsScreen() {
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifKnocks, setNotifKnocks] = useState(false);
+    // "Requests to join" only where it changes something (core knockSwitchShown): not for an owner or admin, who is always
+    // told, nor on a Known community, whose members are never told. Asked as the screen opens.
+    const [knockSwitch, setKnockSwitch] = useState(false);
     const [notifLoading, setNotifLoading] = useState(false);
     // How long before an event starts this member wants to be told. The day before until they say otherwise
     // (the shared contract), and an empty list means no reminders at all.
@@ -2043,6 +2047,7 @@ export default function SettingsScreen() {
                                     setNotifEscrow(prefs.notify_escrow !== 'false');
                                     setNotifKnocks(prefs.notify_knocks === 'true');
                                 }
+                                if (identity.privateKey) setKnockSwitch(knockSwitchShown(nodeProfile?.features, (await fetchMyNodeRole(url, identity)).role));
                             }
                         } catch (e) { console.warn('[Prefs] Failed to fetch preferences:', e); }
                         setNotifLoading(false);
@@ -2539,7 +2544,7 @@ export default function SettingsScreen() {
                                     <View style={[styles.toggleThumb, notifMarketplace && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
-                            <View style={styles.menuBtn}>
+                            <View style={knockSwitch ? styles.menuBtn : [styles.menuBtn, styles.menuBtnLast]}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.menuText}>{t("Held in Trust & System")}</Text>
@@ -2552,19 +2557,21 @@ export default function SettingsScreen() {
                                     <View style={[styles.toggleThumb, notifEscrow && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
-                            <View style={[styles.menuBtn, styles.menuBtnLast]}>
-                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚪</Text></View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.menuText}>{t("Requests to join")}</Text>
-                                    <Text style={styles.menuSub}>{t("When someone asks to join your community")}</Text>
+                            {knockSwitch && (
+                                <View style={[styles.menuBtn, styles.menuBtnLast]}>
+                                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚪</Text></View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.menuText}>{t("Requests to join")}</Text>
+                                        <Text style={styles.menuSub}>{t("When someone asks to join your community")}</Text>
+                                    </View>
+                                    <Pressable style={[styles.toggle, notifKnocks && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t("Requests to join notifications")} accessibilityState={{ checked: notifKnocks }} onPress={async () => {
+                                        const next = !notifKnocks; setNotifKnocks(next);
+                                        try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_knocks: next } }); } } catch (e) { console.warn('[Prefs]', e); }
+                                    }}>
+                                        <View style={[styles.toggleThumb, notifKnocks && styles.toggleThumbOn]} />
+                                    </Pressable>
                                 </View>
-                                <Pressable style={[styles.toggle, notifKnocks && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t("Requests to join notifications")} accessibilityState={{ checked: notifKnocks }} onPress={async () => {
-                                    const next = !notifKnocks; setNotifKnocks(next);
-                                    try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_knocks: next } }); } } catch (e) { console.warn('[Prefs]', e); }
-                                }}>
-                                    <View style={[styles.toggleThumb, notifKnocks && styles.toggleThumbOn]} />
-                                </Pressable>
-                            </View>
+                            )}
                         </View>
                     )}
 

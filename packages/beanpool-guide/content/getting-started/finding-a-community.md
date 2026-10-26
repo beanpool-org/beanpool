@@ -62,7 +62,7 @@ You stay a member of the global community, and can switch between them: see "Mor
 
 ## If you are a member of a local community
 
-People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). Members who turned on **Requests to join** under **Notification Preferences** are notified too. In a community where any member can invite, if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them.
+People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them.
 
 Tapping the line or the notification opens them in the phone app. Or tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
 

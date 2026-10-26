@@ -50,6 +50,18 @@ import { t, word, type Words } from './words.js';
 /** The title of every push a community sends: the app's name, the same in every language. */
 export const PUSH_NOTICE_TITLE = 'BeanPool';
 
+/**
+ * Whether Settings shows the "Requests to join" switch (`notify_knocks`) to this member: only where it changes
+ * something. Owners and admins are always told (the server's engine/knocks.ts notifyKnockReceived); a Known community
+ * (door `admins`) never tells its other members, since only owners and admins answer there; a community that takes no
+ * requests (`knocks` off) has none to tell. `features`: the community's, as it said them; `role`: GET
+ * /api/node-admin/me's, null for none, undefined while not known (the switch waits for it). Both apps use this.
+ */
+export function knockSwitchShown(features: { door?: unknown; knocks?: unknown } | null | undefined, role: unknown): boolean {
+    if (role === undefined || role === 'owner' || role === 'admin') return false;
+    return features?.knocks !== false && features?.door !== 'admins';
+}
+
 /** Where the app goes for a notice whose details it can't fetch: the tab its kind belongs to. */
 export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings' | 'people';
 

@@ -3,7 +3,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_MARKER, PUSH_NOTICE_TITLE, isPushNoticeId, isPushNoticeKind,
-    pushCommunityTag, pushNoticeBytes, pushNoticeWords, verifyPushNotice, type PushNoticeData, type PushNoticeKind,
+    knockSwitchShown, pushCommunityTag, pushNoticeBytes, pushNoticeWords, verifyPushNotice, type PushNoticeData, type PushNoticeKind,
 } from '../push-notice.js';
 import { wordsFor } from '../words.js';
 
@@ -37,6 +37,21 @@ describe('the kinds', () => {
         expect(pushNoticeWords('community.knock')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'Someone asked to join your community.' });
 
         expect(isPushNoticeKind('community.knock-answer')).toBe(false);
+    });
+
+    it('the "Requests to join" switch shows only where it changes something', () => {
+        // A member where any member may answer: shown.
+        expect(knockSwitchShown({ door: 'members', knocks: true }, null)).toBe(true);
+        expect(knockSwitchShown({ door: 'members', knocks: true }, 'moderator')).toBe(true);
+        // A community from before the door: any member answers there too.
+        expect(knockSwitchShown({}, null)).toBe(true);
+        // Owners and admins are always told; a Known community never tells its members; no requests, nothing to tell.
+        expect(knockSwitchShown({ door: 'members', knocks: true }, 'owner')).toBe(false);
+        expect(knockSwitchShown({ door: 'members', knocks: true }, 'admin')).toBe(false);
+        expect(knockSwitchShown({ door: 'admins', knocks: true }, null)).toBe(false);
+        expect(knockSwitchShown({ door: 'members', knocks: false }, null)).toBe(false);
+        // The role not known yet: not shown until it is.
+        expect(knockSwitchShown({ door: 'members', knocks: true }, undefined)).toBe(false);
     });
 
     it('every kind has a sentence, and every push has the same title', () => {

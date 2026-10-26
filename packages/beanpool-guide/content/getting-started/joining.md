@@ -114,7 +114,7 @@ The global community has no invites: anyone joins it in the BeanPool app, with 1
 
 People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Requests are answered in the phone app: the web app doesn't list them.
 
-When someone asks to join, owners and admins receive a notification: **Someone asked to join your community.** A line also appears on **Home** under **Needs you** (**2 people asked to join**). Tapping either opens **Invites** in the phone app. Members who turned on **Requests to join** under **Notification Preferences** are notified too. In a community where any member can invite, if a request waits 3 days with no answer, the count appears on every member's Home screen so someone can welcome them.
+When someone asks to join, owners and admins receive a notification: **Someone asked to join your community.** A line also appears on **Home** under **Needs you** (**2 people asked to join**). Tapping either opens **Invites** in the phone app. In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if a request waits 3 days with no answer, the count appears on every member's Home screen so someone can welcome them.
 
 - **Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.
 - **Not now** tells them nothing more than "no answer yet".

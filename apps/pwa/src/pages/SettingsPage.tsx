@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, LANGS, describeArea, formatNumber, isLang, t, tn } from '@beanpool/core';
+import { AREA_STEP_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, t, tn } from '@beanpool/core';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
@@ -18,7 +18,7 @@ import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats, getSignInRecovery,
+    updateNotificationPreferences, getNodeStats, getSignInRecovery, request,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
 import { useCommunityInfo } from '../lib/features';
@@ -301,6 +301,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifKnocks, setNotifKnocks] = useState(false);
+    // Whether "Requests to join" means anything to this member (core knockSwitchShown): their node role, as the node says
+    // it. Not known yet (or no answer): the switch waits.
+    const [nodeRole, setNodeRole] = useState<unknown>(undefined);
+    useEffect(() => {
+        let alive = true;
+        request<{ role?: unknown }>('GET', '/api/node-admin/me')
+            .then(r => { if (alive) setNodeRole(typeof r?.role === 'string' ? r.role : null); })
+            .catch(() => { /* unknown: no switch */ });
+        return () => { alive = false; };
+    }, [identity.publicKey]);
 
     // How long before an event starts this member wants to be told. The day before until they say otherwise
     // (the shared contract), and an empty list means no reminders at all.
@@ -1660,17 +1670,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     />
                                 </div>
 
-                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
-                                    <div>
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Requests to join')}</div>
-                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts when someone asks to join your community')}</div>
+                                {/* Only where it changes something: owners and admins are always told, and a Known community never tells its members. */}
+                                {knockSwitchShown(communityInfo?.features as { door?: unknown; knocks?: unknown } | undefined, nodeRole) && (
+                                    <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                        <div>
+                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Requests to join')}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts when someone asks to join your community')}</div>
+                                        </div>
+                                        <ToggleSwitch
+                                            checked={notifKnocks}
+                                            onChange={() => handleToggleNotif('knocks')}
+                                            label={t('Requests to join notifications')}
+                                        />
                                     </div>
-                                    <ToggleSwitch
-                                        checked={notifKnocks}
-                                        onChange={() => handleToggleNotif('knocks')}
-                                        label={t('Requests to join notifications')}
-                                    />
-                                </div>
+                                )}
 
                                 {/* Event reminders (decision 2). Ticks rather than switches: this is one
                                     setting with several answers, and "Off" is one of them, not a fourth

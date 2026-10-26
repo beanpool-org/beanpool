@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { GroupDetailModal } from './GroupDetailModal';
 import { getGroup, getGroupMembers, getGroupSuccession, type Group, type GroupMember } from '../lib/api';
+import * as pictureCrop from '../lib/picture-crop';
 
 vi.mock('../lib/api', () => ({
     getGroupDecisions: vi.fn(async () => null),
@@ -228,6 +229,24 @@ describe("GroupDetailModal roster's faces", () => {
         expect(srcs.filter(src => src?.startsWith('data:'))).toEqual([]);
         // No photo: the initial, as before.
         expect(screen.getByText('N')).toBeInTheDocument();
+    });
+
+    it('a photo picked empties the file input, so the same photo picked again after a cancelled crop opens the crop again', async () => {
+        vi.spyOn(pictureCrop, 'readPictureFile').mockResolvedValue({ src: 'data:image/jpeg;base64,UkFX', width: 1600, height: 1200, image: {} as HTMLImageElement });
+        render(<GroupDetailModal group={group} isOpen={true} onClose={() => {}} myPubkey={LEAD} />);
+        // A convenor's "Choose a photo" beside Change the picture.
+        await waitFor(() => expect(screen.getByText('Choose a photo')).toBeInTheDocument());
+        const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+        const emptied = vi.spyOn(input, 'value', 'set');
+        const photo = () => new File(['x'], 'garden.jpg', { type: 'image/jpeg' });
+        for (const round of [1, 2]) {
+            fireEvent.change(input, { target: { files: [photo()] } });
+            expect(emptied, `pick ${round}: the input is emptied`).toHaveBeenCalledTimes(round);
+            expect(emptied).toHaveBeenLastCalledWith('');
+            fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull());
+        }
+        vi.restoreAllMocks();
     });
 });
 

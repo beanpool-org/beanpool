@@ -100,6 +100,8 @@ export function GroupDetailModal({
 
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        // Emptied, so the same photo chosen again (after a crop cancelled) opens the crop again.
+        e.target.value = '';
         if (!file) return;
         try {
             const cropped = await cropper.crop(file, AVATAR_PICTURE);

@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { CreateGroupModal } from './CreateGroupModal';
 import { createGroup } from '../lib/api';
+import * as pictureCrop from '../lib/picture-crop';
 
 vi.mock('../lib/api', () => ({
     createGroup: vi.fn(async (params) => ({ id: 'g1', ...params })),
@@ -118,5 +119,22 @@ describe('CreateGroupModal Picture (Pictures S4, §4.3)', () => {
                 avatarUrl: 'bundled://leaf',
             }));
         });
+    });
+
+    it('a photo picked empties the file input, so the same photo picked again after a cancelled crop opens the crop again', async () => {
+        vi.spyOn(pictureCrop, 'readPictureFile').mockResolvedValue({ src: 'data:image/jpeg;base64,UkFX', width: 1600, height: 1200, image: {} as HTMLImageElement });
+        render(<CreateGroupModal isOpen={true} onClose={vi.fn()} onCreated={vi.fn()} />);
+        // The Picture row's "Choose a photo" is the form's one file input.
+        const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+        const emptied = vi.spyOn(input, 'value', 'set');
+        const photo = () => new File(['x'], 'garden.jpg', { type: 'image/jpeg' });
+        for (const round of [1, 2]) {
+            fireEvent.change(input, { target: { files: [photo()] } });
+            expect(emptied, `pick ${round}: the input is emptied`).toHaveBeenCalledTimes(round);
+            expect(emptied).toHaveBeenLastCalledWith('');
+            fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull());
+        }
+        vi.restoreAllMocks();
     });
 });

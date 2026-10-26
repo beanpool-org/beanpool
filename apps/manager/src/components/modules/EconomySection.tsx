@@ -1120,9 +1120,10 @@ export function EconomySection({
                 </ModalBackdrop>
             )}
 
-            {/* Seed Offer Modal */}
+            {/* Seed Offer Modal. No items-center on the backdrop: with the photo step it can be taller than a phone, and a centred
+                flex child that overflows puts its top out of reach; m-auto on the panel centres it when it fits and scrolls when not; scroll-pb-4 keeps a scrolled-to last button off the very edge. */}
             {seedOfferTreasury && (
-                <ModalBackdrop onClose={() => setSeedOfferTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setSeedOfferTreasury(null)} className="fixed inset-0 overflow-y-auto scroll-pb-4 bg-black/80 backdrop-blur-sm z-50 flex p-4">
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">
                             Post Initial Offer for {seedOfferTreasury.name}

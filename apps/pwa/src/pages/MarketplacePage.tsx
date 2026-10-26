@@ -2649,7 +2649,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <div className="mb-5">
                                     <p className="text-xs font-bold text-nature-400 uppercase tracking-widest mb-2">
                                         {t('Photos ({n}/{max})', { n: editPhotos.length, max: 5 })}
-                                        {Boolean(selectedPost.photos && selectedPost.photos.length > 0) && <span className="text-red-500 font-bold"> *</span>}
+                                        {Boolean(selectedPost.photos && selectedPost.photos.length > 0) && <span className="text-bp-ink-danger font-bold"> *</span>}
                                     </p>
                                     <div className="flex gap-2 flex-wrap">
                                         {editPhotos.map((photo, i) => (

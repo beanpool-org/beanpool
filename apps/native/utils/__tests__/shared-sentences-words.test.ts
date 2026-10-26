@@ -78,6 +78,8 @@ const PT: Catalog = {
     'Requests and offers on your marketplace posts': 'Pedidos e ofertas nas suas publicações do mercado',
     'Account Recovery Alerts': 'Alertas de recuperação da conta',
     'Urgent alerts when someone tries to recover your account': 'Alertas urgentes quando alguém tenta recuperar a sua conta',
+    'Requests to join': 'Pedidos para entrar',
+    'When someone asks to join your community': 'Quando alguém pede para entrar na sua comunidade',
     'That is not a whole claim code.': 'Esse não é um código de reivindicação completo.',
     "The server's answer can't be used.": 'A resposta do servidor não pode ser usada.',
     "This phone's key can't be read.": 'A chave deste telemóvel não pode ser lida.',
@@ -157,17 +159,27 @@ describe('the calm line a forged notification\'s tap shows', () => {
 describe('Android\'s notification channels, as the phone\'s settings list them', () => {
     it('the same ids and English as before; named and described in Portuguese from the catalog; BeanPool stays its name', () => {
         const en = notificationChannels();
-        expect(en.map((c) => c.id)).toEqual(['default', 'escrow', 'chat', 'marketplace', 'recovery']);
-        expect(en.map((c) => c.name)).toEqual(['BeanPool', 'Held in Trust Alerts', 'Direct Messages', 'Marketplace', 'Account Recovery Alerts']);
+        expect(en.map((c) => c.id)).toEqual(['default', 'escrow', 'chat', 'marketplace', 'recovery', 'knocks']);
+        expect(en.map((c) => c.name)).toEqual(['BeanPool', 'Held in Trust Alerts', 'Direct Messages', 'Marketplace', 'Account Recovery Alerts', 'Requests to join']);
         setLanguage('pt', [PT]);
         const pt = notificationChannels();
-        expect(pt.map((c) => c.name)).toEqual(['BeanPool', 'Alertas de valores retidos', 'Mensagens diretas', 'Mercado', 'Alertas de recuperação da conta']);
+        expect(pt.map((c) => c.name)).toEqual(['BeanPool', 'Alertas de valores retidos', 'Mensagens diretas', 'Mercado', 'Alertas de recuperação da conta', 'Pedidos para entrar']);
         expect(pt.find((c) => c.id === 'recovery')?.description).toBe('Alertas urgentes quando alguém tenta recuperar a sua conta');
         setLanguage('xx');
         for (const c of notificationChannels().filter((x) => x.id !== 'default')) {
             expect(c.name, c.id).toMatch(/^\[.*\]$/);
             expect(c.description, c.id).toMatch(/^\[.*\]$/);
         }
+    });
+
+    it('every channel a community names in a push is one the phone makes (Android shows nothing on a channel it lacks)', () => {
+        // The server's categoryId → channel table (state-engine.ts dispatchPushNotification), read from its source.
+        const engine = fs.readFileSync(path.join(ROOT, '../server/src/state-engine.ts'), 'utf8');
+        const table = engine.match(/const channelMap: Record<string, string> = \{([\s\S]*?)\};/)?.[1] ?? '';
+        const named = [...table.matchAll(/^\s*\w+: '([a-z]+)',?/gm)].map((m) => m[1]);
+        expect(named).toContain('knocks');
+        const made = new Set<string>(notificationChannels().map((c) => c.id));
+        expect(named.filter((id) => !made.has(id))).toEqual([]);
     });
 
     it('set from that list each time the phone gets its token, so a language change renames them', () => {

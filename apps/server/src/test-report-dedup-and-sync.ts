@@ -21,7 +21,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import * as stateEngine from './state-engine.js';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, exportSyncState, dismissReport, actionReport, submitReport, createPost: rawCreatePost } from './state-engine.js';
+import { initStateEngine, exportSyncState, dismissReport, actionReport, submitReport, createPost as rawCreatePost } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { createCommunityRoutes } from './routes/community.js';
 import { setMemberPhoto } from '@beanpool/engine';

@@ -25,7 +25,7 @@ import { db } from './db/db.js';
 import { LedgerManager, setCommonsBalance } from '@beanpool/core';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, createPost: rawCreatePost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
+    initStateEngine, createPost as rawCreatePost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
     moveToCommons, payFromCommons, getCommonsBalanceExact, cancelPostTransaction, rejectPostRequest, removePost, adminDeletePost,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

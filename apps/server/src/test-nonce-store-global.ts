@@ -44,7 +44,7 @@ import { isNodeMember } from '@beanpool/engine';
 import { db } from './db/db.js';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, seedGenesisMember, createPost: rawCreatePost } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost as rawCreatePost } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';

@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, createGroup, inviteGroupMember, joinGroup, removeGroupMember, createPost: rawCreatePost,
+    initStateEngine, createGroup, inviteGroupMember, joinGroup, removeGroupMember, createPost as rawCreatePost,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { createGroupRoutes } from './routes/groups.js';

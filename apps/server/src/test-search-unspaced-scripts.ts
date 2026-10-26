@@ -18,7 +18,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, createPost: rawCreatePost, getPosts } from './state-engine.js';
+import { initStateEngine, createPost as rawCreatePost, getPosts } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { setMemberPhoto } from '@beanpool/engine';
 import { searchTermsFor } from '@beanpool/core';

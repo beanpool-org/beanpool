@@ -49,7 +49,7 @@ import WebSocket from 'ws';
 import { solveDoorWorkSync } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, createPost: rawCreatePost, createGroup, joinGroup, exportSyncState } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, createGroup, joinGroup, exportSyncState } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import * as stateEngine from './state-engine.js';
 import { startHttpsServer } from './https-server.js';

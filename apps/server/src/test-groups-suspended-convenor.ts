@@ -33,7 +33,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost: rawCreatePost, createGroup, joinGroup, inviteGroupMember, approveGroupMember,
+    initStateEngine, transfer, createPost as rawCreatePost, createGroup, joinGroup, inviteGroupMember, approveGroupMember,
     postGroupThreadMessage, postEventThreadMessage, getGroupLead, seedGenesisMember,
     adminEmergencySuspend, adminLiftSuspension,
 } from './state-engine.js';

@@ -32,7 +32,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, seedGenesisMember, createPost: rawCreatePost, getBalance } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, getBalance } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';

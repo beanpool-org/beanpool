@@ -26,7 +26,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, seedGenesisMember, createPost: rawCreatePost, completePostTransaction, getCommonsBalanceExact,
+    initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, completePostTransaction, getCommonsBalanceExact,
     moveToCommons, conservingTransaction, createTreasury,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

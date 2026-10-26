@@ -20,7 +20,7 @@ delete process.env.CF_RECORD_NAME;
 import { wrapCreatePost } from './post-test-helper.js';
 import { db, initSchema } from './db/db.js';
 import {
-    createPost: rawCreatePost,
+    createPost as rawCreatePost,
     updatePost,
     getPosts,
     getActivePostCount,

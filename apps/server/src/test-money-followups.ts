@@ -36,7 +36,7 @@ import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harnes
 import { db, createCrowdfundProject } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost: rawCreatePost, acceptPost, requestPost, approvePostRequest, getBalance, runLedgerAudit,
+    initStateEngine, transfer, createPost as rawCreatePost, acceptPost, requestPost, approvePostRequest, getBalance, runLedgerAudit,
     getCommonsBalanceExact, persistCommonsBalance, persistDecayAndCommons,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

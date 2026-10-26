@@ -36,7 +36,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, createGroup, joinGroup, removeGroupMember, inviteGroupMember, createPost: rawCreatePost,
+    initStateEngine, seedGenesisMember, createGroup, joinGroup, removeGroupMember, inviteGroupMember, createPost as rawCreatePost,
     exportSyncState, importRemoteState, setNodeRole, REPORTS_PER_REPORTER_PER_HOUR,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

@@ -42,7 +42,7 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, createPost: rawCreatePost, getPosts, transfer,
+    initStateEngine, createPost as rawCreatePost, getPosts, transfer,
     acceptPost, completePostTransaction, cancelPostTransaction, adminDeletePost,
     exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';

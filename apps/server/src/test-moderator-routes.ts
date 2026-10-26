@@ -27,7 +27,7 @@ import type Router from '@koa/router';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, nodeRoleOf,
-    createPost: rawCreatePost, submitReport, getMember,
+    createPost as rawCreatePost, submitReport, getMember,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';

@@ -24,7 +24,7 @@ import {
     initStateEngine, exportSyncState, importRemoteState, setNodeRole,
     createGroup, getGroup, listGroups, joinGroup, removeGroupMember, inviteGroupMember, approveGroupMember,
     handOverGroupLead, getGroupLead,
-    setMemberRole, isGroupMember, getMemberGroupIds, createPost: rawCreatePost, getPosts, signSyncPayload,
+    setMemberRole, isGroupMember, getMemberGroupIds, createPost as rawCreatePost, getPosts, signSyncPayload,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';

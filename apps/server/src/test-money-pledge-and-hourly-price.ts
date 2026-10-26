@@ -23,7 +23,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { db, initSchema, createCrowdfundProject, pledgeToProject, getCrowdfundProject } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, conservingTransaction, createPost: rawCreatePost, acceptPost, requestPost, approvePostRequest,
+    initStateEngine, transfer, conservingTransaction, createPost as rawCreatePost, acceptPost, requestPost, approvePostRequest,
     completePostTransaction, cancelPostTransaction, getBalance, runLedgerAudit,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

@@ -32,7 +32,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import WebSocket from 'ws';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, seedGenesisMember, createPost: rawCreatePost, createTreasury, adminAssignTreasuryOperator, getAvailableBacking, getBalance, applyDueKeeperChanges, transfer } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, createTreasury, adminAssignTreasuryOperator, getAvailableBacking, getBalance, applyDueKeeperChanges, transfer } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';

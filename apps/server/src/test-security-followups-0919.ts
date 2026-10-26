@@ -28,7 +28,7 @@ import {
     createGroup,
     joinGroup,
     transfer,
-    createPost: rawCreatePost,
+    createPost as rawCreatePost,
     acceptPost,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

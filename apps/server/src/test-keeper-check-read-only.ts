@@ -29,7 +29,7 @@ import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, createPost: rawCreatePost, createTreasury, getAvailableBacking, transfer,
+    initStateEngine, seedGenesisMember, createPost as rawCreatePost, createTreasury, getAvailableBacking, transfer,
     requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

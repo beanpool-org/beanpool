@@ -60,7 +60,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, grantNodeRole, createPost: rawCreatePost, exportSyncState, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState, importRemoteState, setNodeRole,
     payFromCommons, createGroup, dispatchPushNotification,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

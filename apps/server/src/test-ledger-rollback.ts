@@ -44,7 +44,7 @@ import {
     conservingTransaction,
     createTreasury,
     adminAssignTreasuryOperator,
-    createPost: rawCreatePost,
+    createPost as rawCreatePost,
     requestPost,
     approvePostRequest,
     acceptPost,

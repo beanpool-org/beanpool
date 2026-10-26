@@ -38,7 +38,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, grantNodeRole, createPost: rawCreatePost, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
     adminPruneUser, runMarketplaceHygiene,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

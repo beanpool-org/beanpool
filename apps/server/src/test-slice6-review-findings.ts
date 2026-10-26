@@ -27,7 +27,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator, adminSetOperator, setUserStatusRow,
-    keeperOf, getBalance, createProject, createConversation, sendMessage, addFriend, createPost: rawCreatePost, requestPost,
+    keeperOf, getBalance, createProject, createConversation, sendMessage, addFriend, createPost as rawCreatePost, requestPost,
     approvePostRequest, transfer, ensureEnterpriseThread, exportSyncState, reconcileLedgerFromDb,
     canOperateTreasury,
 } from './state-engine.js';

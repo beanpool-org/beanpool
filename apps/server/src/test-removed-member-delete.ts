@@ -45,7 +45,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost: rawCreatePost,
+    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost as rawCreatePost,
     createTreasury, adminAssignTreasuryOperator, proposeKeeperRemoval, requestToJoinEnterprise, approveKeeperRequest, getLeadInactivity,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

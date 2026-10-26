@@ -53,7 +53,7 @@ import {
     getCommonsBalanceExact,
     getMember,
     assertMemberActive,
-    createPost: rawCreatePost,
+    createPost as rawCreatePost,
     acceptPost,
     completePostTransaction,
     isSoleOwner,

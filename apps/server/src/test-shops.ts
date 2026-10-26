@@ -59,7 +59,7 @@ import { initTls } from './services/tls.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
     initStateEngine, seedGenesisMember, adminPruneUser, purgeMemberSelf, exportSyncState, signSyncPayload, importRemoteState,
-    setNodeRole, reconcileLedgerFromDb, createProject, updateProject, createPost: rawCreatePost,
+    setNodeRole, reconcileLedgerFromDb, createProject, updateProject, createPost as rawCreatePost,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { SHOPS_NEAR_MAX } from './routes/shops.js';

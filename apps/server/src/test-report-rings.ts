@@ -35,7 +35,7 @@ delete process.env.APPLE_SERVICES_ID;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, createPost: rawCreatePost, exportSyncState } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';

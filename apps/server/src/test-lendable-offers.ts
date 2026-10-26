@@ -44,7 +44,7 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost: rawCreatePost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, getBalance, hasLiveOffer,
+    initStateEngine, transfer, createPost as rawCreatePost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, getBalance, hasLiveOffer,
     runMarketplaceHygiene, adminPruneUser, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, getPosts,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

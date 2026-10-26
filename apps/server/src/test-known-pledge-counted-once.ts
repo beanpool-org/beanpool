@@ -38,7 +38,7 @@ import { initTls } from './services/tls.js';
 import * as se from './state-engine.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, seedGenesisMember, createPost: rawCreatePost, acceptPost, getBalance, getEnterpriseUnderlyingFloor,
+    initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, acceptPost, getBalance, getEnterpriseUnderlyingFloor,
     getMemberTrustProfile, adminAssignTreasuryOperator, applyDueKeeperChanges, getCommonsBalanceExact,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);

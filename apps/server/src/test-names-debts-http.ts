@@ -48,7 +48,7 @@ process.env.ADMIN_PASSWORD = 'NamesDebts123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost: rawCreatePost, completePostTransaction, getCommonsBalanceExact, acceptPost, resolveEscrowDispute, sweepRepayment } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, completePostTransaction, getCommonsBalanceExact, acceptPost, resolveEscrowDispute, sweepRepayment } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';

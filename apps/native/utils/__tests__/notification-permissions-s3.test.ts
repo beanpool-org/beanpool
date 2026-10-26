@@ -293,6 +293,12 @@ describe('S3: notification permission at the tap, never at account creation', ()
                     expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
                     expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledWith('test-pubkey');
                     expect((await readNotificationPermissionRecord()).state).toBe(state);
+
+                    // Spent: the next start asks nothing and registers nothing again.
+                    pushServiceMock.registerForPushNotifications.mockClear();
+                    await askNotificationPermissionOnAction(action, 'test-pubkey', { promptUser });
+                    expect(pushServiceMock.registerForPushNotifications).not.toHaveBeenCalled();
+                    expect(promptUser).not.toHaveBeenCalled();
                 });
             }
         }
@@ -390,6 +396,40 @@ describe('S3: notification permission at the tap, never at account creation', ()
             const promptUser = vi.fn(async (_kind: 'ask' | 'settings') => 'not_now' as const);
             await askNotificationPermissionOnAction('message', 'test-pubkey', { promptUser });
             expect(promptUser).toHaveBeenCalledWith('ask');
+        });
+    });
+
+    // #2524 deciding review, finding 4: the first message's ask lives where every DM start passes, not in each screen.
+    describe('the first-message ask covers every way a DM starts', () => {
+        const root = path.resolve(__dirname, '../..');
+        const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+            const p = path.join(dir, e.name);
+            if (e.isDirectory()) return e.name === '__tests__' || e.name === 'node_modules' ? [] : walk(p);
+            return /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+        });
+        const sources = ['app', 'components', 'utils', 'services', 'tools'].flatMap((d) => walk(path.join(root, d)));
+
+        it('createConversationApi is the only place a DM is made, and it asks before it calls the node', () => {
+            const makers = sources.filter((f) => /\/api\/messages\/conversation[`'"]/.test(fs.readFileSync(f, 'utf8')));
+            expect(makers.map((f) => path.relative(root, f))).toEqual(['utils/db.ts']);
+            const db = fs.readFileSync(path.join(root, 'utils/db.ts'), 'utf8');
+            const start = db.indexOf('export async function createConversationApi(');
+            const body = db.slice(start, db.indexOf('\n}\n', start));
+            const ask = body.indexOf("askNotificationPermissionOnAction('message'");
+            expect(ask).toBeGreaterThan(-1);
+            expect(ask).toBeLessThan(body.indexOf('/api/messages/conversation'));
+            // Loaded lazily, so db.ts's many importers never load expo-notifications through it.
+            expect(/^import[^\n]*notification-permission/m.test(db)).toBe(false);
+        });
+
+        it('every DM start in the app goes through createConversationApi', () => {
+            const starts = sources.filter((f) => /createConversationApi\('dm'/.test(fs.readFileSync(f, 'utf8')))
+                .map((f) => path.relative(root, f)).sort();
+            // The starts the deciding review counted (post/[id] has six of them).
+            expect(starts).toEqual(expect.arrayContaining([
+                'app/(tabs)/people.tsx', 'app/new-message.tsx', 'app/post/[id].tsx', 'app/public-profile.tsx',
+                'app/shop/[id].tsx', 'app/treasury-detail.tsx',
+            ]));
         });
     });
 

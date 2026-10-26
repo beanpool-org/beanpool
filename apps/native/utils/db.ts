@@ -6490,6 +6490,16 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
+    // Front doors S3 (#2524): every way a DM starts (New message, Message on a listing, a profile, People, a shop, a
+    // project's keeper, a deal's approve or decline) comes through here, so the first message's notification ask is made
+    // here once, not in each screen. It asks only while unanswered or declined, once, and never when the phone already
+    // allows notifications (utils/notification-permission.ts). Loaded lazily, and an ask that fails never stops the chat.
+    try {
+        const { askNotificationPermissionOnAction } = await import('./notification-permission');
+        await askNotificationPermissionOnAction('message', identity.publicKey);
+    } catch (e) {
+        console.warn('[Push] The first-message notification ask failed; the chat goes on:', e);
+    }
     // The pins before the node's answer is written, through the handle it is written with (see refreshConversationFromNode):
     // its rows are never the update's seed. With the pins unread, nothing is asked or written (§3.4 amendment 5's gate).
     const database = await getDb();

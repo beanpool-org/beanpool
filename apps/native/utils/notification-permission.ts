@@ -267,6 +267,8 @@ export async function askNotificationPermissionOnAction(
     const os = await readOsNotificationPermission();
     if (os.granted) {
         await registerPushToken(publicKey);
+        // Spent, as an answered prompt is: every later DM start (they all ask through createConversationApi) skips at once.
+        await writeNotificationPermissionRecord({ ...record, [action === 'knock' ? 'knockRetried' : 'messageRetried']: true }, storage);
         return 'granted';
     }
     if (!os.available) return record.state;

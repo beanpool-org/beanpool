@@ -254,9 +254,11 @@ export default function NewMessageScreen() {
     // ── Handlers ────────────────────────────────────────────────────────────
     const handleSelectMember = useCallback(async (pubkey: string) => {
         if (!identity?.publicKey || creating) return;
+        // createConversationApi makes the first-message notification ask for every DM start; asked here first only so
+        // this row's spinner isn't showing behind the prompt (it is asked once, so the one inside then does nothing).
+        await askNotificationPermissionOnAction('message', identity.publicKey).catch(() => 'unanswered');
         setCreating(pubkey);
         try {
-            await askNotificationPermissionOnAction('message', identity.publicKey);
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);
             const apiConv = await createConversationApi('dm', [identity.publicKey, pubkey], identity.publicKey);

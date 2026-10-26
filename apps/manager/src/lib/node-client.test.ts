@@ -68,6 +68,9 @@ import {
     passwordNeeds2faError,
 } from './node-client';
 
+/** An Offer's photo as the Manager sends it: the node refuses a new Offer with none. */
+const PHOTO = 'data:image/jpeg;base64,cmVzaXplZA==';
+
 describe('normalizeNodeUrl', () => {
     it('returns default URL when rawUrl is empty or whitespace', () => {
         expect(normalizeNodeUrl('')).toBe('https://localhost:8443');
@@ -897,10 +900,10 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(createNodeTreasury('https://node.example.com', { name: '', avatar: '' }, 'pw')).rejects.toThrow('name and avatar are required');
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'Not a treasury' }) });
-        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1 }, 'pw')).rejects.toThrow('Not a treasury');
+        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1, photos: [PHOTO] }, 'pw')).rejects.toThrow('Not a treasury');
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 502, statusText: 'Bad Gateway', json: async () => { throw new Error('not json'); } });
-        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1 }, 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
+        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1, photos: [PHOTO] }, 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
     });
 
     it('seedTreasuryOffer sends POST to seed an offer with 2FA session token', async () => {
@@ -912,7 +915,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         const res = await seedTreasuryOffer(
             'https://node.example.com',
             'treasury-pubkey-123',
-            { title: 'Farm Eggs', category: 'food', credits: 10, description: 'Fresh eggs', repeatable: true },
+            { title: 'Farm Eggs', category: 'food', credits: 10, photos: [PHOTO], description: 'Fresh eggs', repeatable: true },
             'adminpass',
             'tfa123'
         );
@@ -926,6 +929,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             title: 'Farm Eggs',
             category: 'food',
             credits: 10,
+            photos: [PHOTO],
             description: 'Fresh eggs',
             repeatable: true,
             password: 'adminpass',

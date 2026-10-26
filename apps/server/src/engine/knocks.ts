@@ -419,7 +419,16 @@ export function openKnocksWaitingDays(minDays: number, now = Date.now()): number
  */
 export function measureKnockAnswers(now = Date.now()): 'week' | 'slow' | 'none' | null {
     const since = iso(now - 90 * DAY_MS);
-    const rows = db.prepare(`SELECT created_at, status, decided_at FROM join_requests WHERE created_at >= ? AND status IN ('pending', 'approved', 'declined')`).all(since) as Pick<KnockRow, 'created_at' | 'status' | 'decided_at'>[];
+    const rows = db.prepare(`
+        SELECT created_at, status, decided_at FROM join_requests
+        WHERE created_at >= ? AND status IN ('pending', 'approved', 'declined')
+        AND NOT (
+            status = 'pending' AND (
+                EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey AND (m.is_visitor = 0 OR m.status = 'pruned'))
+                OR EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)
+            )
+        )
+    `).all(since) as Pick<KnockRow, 'created_at' | 'status' | 'decided_at'>[];
     if (rows.length < 3) return null;
 
     let openOlderThan14 = false;

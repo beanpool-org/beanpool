@@ -69,6 +69,7 @@ export type NeedsTarget =
      */
     | { to: 'invite'; id: string }
     | { to: 'invites' }
+    | { to: 'people' }
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
 export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }

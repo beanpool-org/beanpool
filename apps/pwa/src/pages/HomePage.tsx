@@ -1823,6 +1823,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // group shows as invited.
                 case 'invite': return onNavigate('group', target.id);
                 case 'invites': return onNavigate('projects');
+                case 'people': return onNavigate('people-invites');
                 case 'shop': return onNavigate('shop', (target as any).id);
                 case 'shop-mine': return onNavigate('shop-mine');
                 default: return undefined;

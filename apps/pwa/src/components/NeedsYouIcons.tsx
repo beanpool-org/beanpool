@@ -55,6 +55,7 @@ export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: strin
         case 'group': return onNavigate('group', target.id);
         case 'invite': return onNavigate('group', target.id);
         case 'invites': return onNavigate('projects');
+        case 'people': return onNavigate('people-invites');
         default: return undefined;
     }
 }

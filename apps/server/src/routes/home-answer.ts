@@ -196,7 +196,8 @@ export type NeedsTarget =
      * where each shows as invited. Only to an app that says it opens them (lands=invite).
      */
     | { to: 'invite'; id: string }
-    | { to: 'invites' };
+    | { to: 'invites' }
+    | { to: 'people' };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -565,7 +566,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                 count: waitingKnocks,
                 accent: true,
                 label: waitingKnocks === 1 ? '1 person asked to join' : `${waitingKnocks} people asked to join`,
-                target: { to: 'invites' },
+                target: { to: 'people' },
             });
         }
     }

@@ -46,7 +46,8 @@ export type NeedsYouTarget =
      * (utils/home-store.ts homePath).
      */
     | { to: 'invite'; id: string }
-    | { to: 'invites' };
+    | { to: 'invites' }
+    | { to: 'people' };
 
 /** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
 export function groupVoteHref(groupId: string): { pathname: string; params: Record<string, string> } {
@@ -82,6 +83,7 @@ export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>
         // inviteLandingHref, as a Commons row opens it); several, the Commons list where each is marked INVITED.
         case 'invite': return { pathname: '/group/[id]', params: { id: target.id, invited: '1' } };
         case 'invites': return { pathname: '/(tabs)/projects', params: { section: 'groups' } };
+        case 'people': return { pathname: '/(tabs)/people', params: { view: 'invites' } };
     }
 }
 

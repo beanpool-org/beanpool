@@ -421,7 +421,7 @@ describe('the event form in the pseudo-locale', () => {
         await renderIn('xx', createElement(NewEventModal, { visible: true, onClose() {} }));
         for (const english of ['New Event', 'TITLE *', 'STARTS *', 'ENDS (OPTIONAL)', 'Pick a date and time', '2 hours after start if blank', 'WHERE', 'At a place',
             'PLACE NAME *', 'FIND AN ADDRESS', 'PIN ON THE MAP *', 'The map is not available in this build. Use your location.', 'Tap the map to place the pin.',
-            '📍 Use my location', "Anyone who opens this node's map will see this spot.", 'Approximate (~100 m)', 'DESCRIPTION', 'PHOTO (OPTIONAL)', '📷 Add a photo',
+            '📍 Use my location', "Anyone who opens this node's map will see this spot.", 'Approximate (~100 m)', 'DESCRIPTION', 'PHOTO *', '📷 Add a photo',
             'NOTE FOR PEOPLE WHO ARE GOING', 'POST AS', 'WHO CAN SEE IT', 'This community', 'Addresses from OpenStreetMap. What you type here is sent to them.']) {
             expect(host.textContent, english).toContain(xx(english));
         }
@@ -516,7 +516,7 @@ describe('in English nothing is bracketed, and the words are as they were', () =
         root = createRoot(host);
         await renderIn('en', createElement(NewEventModal, { visible: true, onClose() {} }));
         expect(bracketed(host)).toBe(0);
-        for (const english of ['New Event', 'TITLE *', 'Pick a date and time', 'Tap the map to place the pin.', 'Approximate (~100 m)', 'This community', 'Create']) {
+        for (const english of ['New Event', 'TITLE *', 'Pick a date and time', 'Tap the map to place the pin.', 'Approximate (~100 m)', 'This community', '📷 Add a photo']) {
             expect(host.textContent, english).toContain(english);
         }
     });

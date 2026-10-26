@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { normalizeCategory, t } from '@beanpool/core';
+import { normalizeCategory, t, upperCase } from '@beanpool/core';
 import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 
 export type CategoryTileKind = 'listing' | 'event' | 'pulse' | 'group';
@@ -58,11 +58,11 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
     if (kind === 'event' || category === 'event') {
         tileKey = 'event';
         emoji = '📅';
-        word = t('EVENT', undefined, 'event category tile label').toUpperCase();
+        word = upperCase(t('EVENT', undefined, 'event category tile label'));
     } else if (kind === 'pulse' || category === 'pulse') {
         tileKey = 'pulse';
         emoji = '🗞️';
-        word = t('PULSE', undefined, 'pulse category tile label').toUpperCase();
+        word = upperCase(t('PULSE', undefined, 'pulse category tile label'));
     } else if (kind === 'group') {
         const groupMeta = category ? GROUP_CATEGORY_MAP[category] : undefined;
         if (groupMeta) {
@@ -72,20 +72,21 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
         } else {
             tileKey = 'general';
             emoji = '👥';
-            word = (category ? String(category).trim() : 'GENERAL').toUpperCase();
+            word = upperCase(category ? String(category).trim() : 'GENERAL');
         }
     } else {
         // Listing
         const normalized = normalizeCategory(category);
         tileKey = KNOWN_TILES.has(normalized) ? normalized : 'general';
-        const meta = MARKETPLACE_CATEGORIES_BY_ID.get(normalized);
-        if (category && meta) {
+        const isKnown = !!category && (normalized !== 'general' || category.trim().toLowerCase() === 'general');
+        const meta = isKnown ? MARKETPLACE_CATEGORIES_BY_ID.get(normalized) : undefined;
+        if (meta) {
             emoji = meta.emoji;
-            word = t(meta.label).toUpperCase();
+            word = upperCase(t(meta.label));
         } else {
             // Unknown or null category falls back to 📦 on general tint
             emoji = '📦';
-            word = meta ? t(meta.label).toUpperCase() : 'GENERAL';
+            word = upperCase(t(MARKETPLACE_CATEGORIES_BY_ID.get('general')!.label));
         }
     }
 

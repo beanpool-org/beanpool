@@ -12,7 +12,8 @@ import {
     type KeeperRequestItem, type SuccessionProposalItem, type KeeperChangeItem,
     type BalanceInfo,
     getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    type EnterpriseThreadMessage
+    type EnterpriseThreadMessage,
+    changeEnterpriseShop
 } from '../lib/api';
 import { onSyncActivity } from '../lib/sync';
 import {
@@ -26,9 +27,10 @@ import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import {
-    formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
-    isAmbiguousAmount, parseAmount, upperCase, type WordKey,
+    deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    isAmbiguousAmount, parseAmount, upperCase, type WordKey, BANNER_PICTURE,
 } from '@beanpool/core';
+import { usePictureCrop } from '../components/PictureCropDialog';
 import { ReportModal } from '../components/ReportModal';
 import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
@@ -134,6 +136,59 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const isKeeperRef = useRef(false);
     // The page or its keepers' Manage tab (round 3 §3, S8). Each enterprise opens on its page unless initialTab asked.
     const [tab, setTab] = useState<'page' | 'manage'>(initialTab ?? 'page');
+
+    const bannerCropper = usePictureCrop();
+    const bannerFileInputRef = useRef<HTMLInputElement>(null);
+    const [bannerDismissed, setBannerDismissed] = useState(() => {
+        try {
+            return localStorage.getItem(`bp_banner_prompt_dismissed_${pubkey}`) === '1';
+        } catch {
+            return false;
+        }
+    });
+
+    useEffect(() => {
+        try {
+            setBannerDismissed(localStorage.getItem(`bp_banner_prompt_dismissed_${pubkey}`) === '1');
+        } catch {
+            setBannerDismissed(false);
+        }
+    }, [pubkey]);
+
+    const handleDismissBanner = () => {
+        setBannerDismissed(true);
+        try {
+            localStorage.setItem(`bp_banner_prompt_dismissed_${pubkey}`, '1');
+        } catch {
+            // ignore storage access errors
+        }
+    };
+
+    const [savingBanner, setSavingBanner] = useState(false);
+
+    const handleBannerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || savingBanner) return;
+        let photo: string | null = null;
+        try {
+            photo = await bannerCropper.crop(file, BANNER_PICTURE);
+        } catch {
+            alert(t("That picture couldn't be read. Try another."));
+            return;
+        }
+        if (!photo) return;
+        setSavingBanner(true);
+        try {
+            await changeEnterpriseShop(pubkey, { photo });
+            setDetail((d: any) => d ? { ...d, shop: { ...d.shop, photoUrl: photo } } : d);
+            load(true);
+        } catch (err: any) {
+            alert(err?.message || t('Could not save banner photo.'));
+        } finally {
+            setSavingBanner(false);
+        }
+    };
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
@@ -506,7 +561,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             });
             await load();
         } catch (err: any) {
-            setActionFeedback({ at: 'pledge', type: 'error', message: err.message || t('Failed to complete pledge.') });
+            const message = err.code === 'project_closed'
+                ? t("This project's deadline has passed: it takes no more pledges.")
+                : (err.message || t('Failed to complete pledge.'));
+            setActionFeedback({ at: 'pledge', type: 'error', message });
         } finally {
             setPledging(false);
         }
@@ -515,8 +573,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     /** The deadline badge's words, and whether the deadline has passed (the badge's colour): never by comparing words. */
     const getDaysRemaining = (deadline: string | null | undefined): { text: string; expired: boolean } | null => {
         if (!deadline) return null;
-        const diff = new Date(deadline).getTime() - new Date().getTime();
-        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        const days = deadlineDaysRemaining(deadline);
         if (days < 0) return { text: t('Expired'), expired: true };
         if (days === 0) return { text: t('Ends today'), expired: false };
         // English says "days" for every count, as it always has here; another language may not.
@@ -1091,6 +1148,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const canManage = !elsewhere && (isKeeperOfThis || isLeadOrSoleKeeperOrAdmin || isEffectivePreview);
     // Its face and shelf change while it is open; a closed or wound-up one keeps them as they are (the node refuses).
     const faceOpen = !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
+    const hasBanner = !!shopPhotoOf(detail?.shop);
+    const showAddBanner = !elsewhere && !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed && faceOpen;
 
     // An action's words, drawn where `feedbackAt` puts them.
     const feedbackAlert = actionFeedback && (
@@ -2000,6 +2059,36 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     lines={[categorySinceLine(shopCategoryOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
                                 />
 
+                                {showAddBanner && (
+                                    <div className="flex flex-wrap items-center gap-3 pt-2 pb-1" data-testid="banner-prompt">
+                                        <input
+                                            type="file"
+                                            ref={bannerFileInputRef}
+                                            accept="image/*"
+                                            className="hidden"
+                                            data-testid="add-banner-input"
+                                            aria-label={t('Add a banner photo')}
+                                            onChange={handleBannerFileChange}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => bannerFileInputRef.current?.click()}
+                                            disabled={savingBanner}
+                                            className={`min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold shadow-sm transition-colors cursor-pointer ${savingBanner ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                        >
+                                            {t('Add a banner photo')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleDismissBanner}
+                                            disabled={savingBanner}
+                                            className={`min-h-[44px] px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-700 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-200 text-sm font-semibold transition-colors cursor-pointer ${savingBanner ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        >
+                                            {t('Not now')}
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* State banners everyone can see */}
                                 {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                                     <div
@@ -2098,7 +2187,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
                                     const daysRemaining = getDaysRemaining(detail.deadlineAt);
                                     // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
-                                    const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle);
+                                    const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle, detail.deadlineAt);
 
                                     return (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -2949,6 +3038,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     targetName={name}
                 />
             )}
+            {bannerCropper.dialog}
         </div>
     );
 }

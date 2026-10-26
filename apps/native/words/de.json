@@ -6111,5 +6111,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} Versuche, {ms} ms pro Versuch ({expected} im Schnitt erwartet)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "„{title}“ ist online, aber nicht in deinem Shop. Um es hineinzulegen, öffne es, tippe auf Beitrag bearbeiten und hake In deinen Shop legen an.",
   "✓ Friend": "✓ Freund",
-  "✓ nonce issued": "✓ Nonce ausgestellt"
+  "✓ nonce issued": "✓ Nonce ausgestellt",
+  "Failed to load": "Laden fehlgeschlagen"
 }

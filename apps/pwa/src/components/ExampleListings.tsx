@@ -10,6 +10,14 @@
 import { t } from '@beanpool/core';
 import { POST_TYPE_COLORS } from '../lib/marketplace';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
+import { CategoryTile } from './CategoryTile';
+
+const EXAMPLE_CATEGORY_MAP: Record<string, string> = {
+    seedlings: 'garden',
+    couch: 'goods',
+    mending: 'services',
+    drill: 'tools',
+};
 
 export function ExampleListings() {
     return (
@@ -24,9 +32,9 @@ export function ExampleListings() {
                             aria-label={exampleLabel(example)}
                             className="h-full min-w-0 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 bg-nature-50 dark:bg-nature-950 p-3 flex flex-row gap-3 select-none"
                         >
-                            <span aria-hidden="true" className="w-14 h-14 rounded-xl flex-shrink-0 border border-dashed border-nature-300 dark:border-nature-700 flex items-center justify-center text-2xl opacity-80">
-                                {example.emoji}
-                            </span>
+                            <div className="w-14 h-14 rounded-xl flex-shrink-0 border border-dashed border-nature-300 dark:border-nature-700 overflow-hidden">
+                                <CategoryTile category={EXAMPLE_CATEGORY_MAP[example.key] ?? 'general'} size="thumb" />
+                            </div>
                             <span className="flex-1 min-w-0 flex flex-col gap-1">
                                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                     <span data-testid="example-badge" className="text-[11px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full bg-oat-200 text-oat-900 dark:bg-oat-800 dark:text-oat-100">

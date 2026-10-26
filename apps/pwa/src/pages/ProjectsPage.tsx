@@ -376,7 +376,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         setCreating(true);
         setCreateError(null);
         try {
-            await createEnterprise({
+            const res = await createEnterprise({
                 name: newTitle.trim(),
                 purpose: newDescription.trim(),
                 description: newDescription.trim(),
@@ -392,7 +392,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setNewGoal('');
             setNewDeadline('');
             setNewPhotos([]);
-            await fetchEnterprises();
+            if (newLifecycle === 'ongoing' && res?.publicKey && onOpenTreasury) {
+                onOpenTreasury(res.publicKey);
+                void fetchEnterprises();
+            } else {
+                await fetchEnterprises();
+            }
         } catch (err: any) {
             setCreateError(err.message || t('Failed to propose enterprise'));
         } finally {
@@ -1149,13 +1154,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </div>
                             )}
 
-                            {/* Its logo, the one picture made with it (its avatar). Its banner is its shop's photo, which a keeper
-                                chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
+                            {/* Its logo, the one picture made with it (its avatar). Its banner is its shop's photo (Marty, 24 Oct 2026:
+                                "avatar and cover photo are different"): an enterprise is offered it right after Start, so only an
+                                enterprise's form says so; a project's is still chosen later in Manage. */}
                             <div>
                                 <label htmlFor="propose-logo" className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
                                     {t('Logo (optional)')}
                                 </label>
-                                <p className="m-0 mb-1 text-xs text-nature-400">{t('Its banner photo is chosen later, in Manage.')}</p>
+                                {newLifecycle === 'ongoing' && (
+                                    <p className="m-0 mb-1 text-xs text-nature-400">{t('You can add a banner photo next.')}</p>
+                                )}
                                 <input
                                     id="propose-logo"
                                     type="file"

@@ -220,6 +220,7 @@ describe("the Commons tab's enterprises (#2200)", () => {
         for (const name of [EGGS.name, BAKERY.name]) expect(times(host.textContent ?? '', name), name).toBe(1);
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
         for (const name of [EGGS.name, BAKERY.name]) expect(times(host.textContent ?? '', name), name).toBe(1);
+        expect(host.querySelectorAll('[data-testid="category-tile"]').length).toBeGreaterThan(0);
         // One list, as on the web: no second panel of the same enterprises over it.
         expect(host.textContent).not.toContain("THE COMMONS' ENTERPRISES");
         expect(node.getTreasuries).toHaveBeenCalledTimes(1);

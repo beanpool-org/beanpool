@@ -10,7 +10,7 @@ related: the-pulse, the-bean, how-it-works, your-channels
 On the phone, open the **Pulse** and tap **Learn**. In the web app, open the Pulse and tap **How it works** along the top. It holds:
 
 - videos from BeanPool about how it works;
-- the **Daily Reflection**, a short thought that changes every morning. It is just a heading; there is nothing to open.
+- the **Daily Reflection**, a short thought that changes every morning. Tap it to open the day's reflection.
 
 Members can add their own how-to channels to Learn too, by choosing the subject **How it works** when they add a channel. Those videos are the members' own, not BeanPool's: check who posted a video before you follow its advice.
 

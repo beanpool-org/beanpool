@@ -30,6 +30,7 @@ import { EventNextDates } from './EventNextDates';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
 import { Sentence } from './Sentence';
+import { CategoryTile } from './CategoryTile';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -297,10 +298,11 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     // single condensed row of emoji, title, price and badge, built to double the listings on screen. Matching the
     // card beside it there means showing nothing — a thumbnail only this card had would make the event the odd
     // one out again, in the view that can least afford the height.
-    const photo = viewMode === 'compact' ? null : firstPhoto;
-    // Only a photo turns the card's text into a column beside a thumbnail. Without one the card is exactly what
+    const hasPicture = viewMode !== 'compact';
+    const photo = hasPicture ? firstPhoto : null;
+    // Only a photo or tile turns the card's text into a column beside a thumbnail. Without one the card is exactly what
     // it has always been, in every view.
-    const asRow = !!photo && viewMode === 'list';
+    const asRow = hasPicture && viewMode === 'list';
 
     const lines = (
         <>
@@ -333,18 +335,20 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                     asRow ? 'flex-row items-start gap-3' : 'flex-col gap-1'
                 }`}
             >
-                {photo && (
-                    // Inside the tap target that opens the event, never a second one: an offer card's photo
-                    // opens a lightbox, and two answers under one thumb is how a card stops being tappable.
-                    // The alt is the title, which the button's own aria-label already carries, so a screen
-                    // reader hears the event once.
-                    <img
-                        src={photo}
-                        alt={p.title}
-                        className={`object-cover rounded-xl bg-nature-100 dark:bg-nature-900 ${
-                            asRow ? 'w-16 h-16 flex-shrink-0' : 'w-full h-[110px] mb-1'
-                        }`}
-                    />
+                {hasPicture && (
+                    photo ? (
+                        <img
+                            src={photo}
+                            alt={p.title}
+                            className={`object-cover rounded-xl bg-nature-100 dark:bg-nature-900 ${
+                                asRow ? 'w-16 h-16 flex-shrink-0' : 'w-full h-[110px] mb-1'
+                            }`}
+                        />
+                    ) : (
+                        <div className={`overflow-hidden rounded-xl ${asRow ? 'w-16 h-16 flex-shrink-0' : 'w-full h-[110px] mb-1'}`}>
+                            <CategoryTile kind="event" size={asRow ? 'thumb' : 'grid'} />
+                        </div>
+                    )
                 )}
                 {asRow ? <span className="min-w-0 flex-1 flex flex-col gap-1">{lines}</span> : lines}
             </button>

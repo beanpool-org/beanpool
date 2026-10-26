@@ -11,7 +11,7 @@ Projects and enterprises are the groups that hold Beans. Each has its own beans,
 
 On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Manage**, say why enterprises live in a local community, and change nothing. See "Beans and the global community".
 
-- A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, the pledges go into the project's account and it takes no more. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.
+- A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, or once its end date is over, it takes no more pledges. When the goal is met, the pledges go into the project's account. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.
 - An **enterprise** keeps going and trades: a tool library, the egg flock, a market stall. Its **keepers** run it together and stand behind it. One of them is the **lead keeper**.
 
 An enterprise has its own daily limits, ten times a member's: 1,000 payments, 300 people it has never paid before, 1,000 deals approved, 1,000 new posts and 50,000 changes. What a keeper does for it counts against the enterprise, not against the keeper's own. It also counts against what that keeper does for all the enterprises they keep together, which has the same limits: however many enterprises you keep, you can do one enterprise's worth for them in a day, on top of your own. So an enterprise with two or more keepers can still use all of its limits. Once an enterprise has used up one of its limits for the day, what you do of that for it counts against your own limits instead, as if you had done it for yourself. If you then reach one of yours, the app says so and names the enterprise. So one keeper who uses up its day can only stop themselves: every other keeper still has all of their own. Running the enterprise always counts against the keeper's own changes: taking on, removing or replacing keepers, stepping down, pausing, winding up, and completing or turning down its deals.
@@ -43,7 +43,7 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 
 ## Backing an enterprise
 
-- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.
+- **Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does a project once its end date is over (on the end date itself its page says **Ends today** and it still takes them; from the day after, **Expired**), or an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.
 - **Trade with it:** its Offers and Needs are in the Market like anyone's.
 - **Become a keeper:** see "Keepers".
 
@@ -74,10 +74,10 @@ Before a project reaches its goal, its leader can also cancel it (on the phone, 
 - On the web or phone, tap **Commons**, then **Start something** (on the phone, the round **+** button) and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)
 - Give it a **Name** and a **Purpose statement**.
 - For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.
-- Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Its banner photo, across the top of its page, is chosen later under **Manage**.
+- Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. For an enterprise, you can add a banner photo next; a project's is chosen later in **Manage**.
 - Tap **Start the project 🌱** or **Start the enterprise 🏛️**.
 
-It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one.
+It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one. When you start an enterprise, it opens on its own page with **Add a banner photo**: tap it to choose the photo and the part that shows, or **Not now** to leave it for later.
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 

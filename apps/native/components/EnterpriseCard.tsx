@@ -9,11 +9,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { TreasurySummary } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
+import { CategoryTile } from './CategoryTile';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { enterpriseCardStatus } from '../utils/enterprise-card';
-import { formatNumber, inCapitalsOf, t, tn } from '@beanpool/core';
+import { deadlineDaysRemaining, formatNumber, inCapitalsOf, t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 /** The Commons cards' styles, the enterprise card's and (in projects.tsx) the group card's, which shares most of them. */
@@ -75,8 +76,7 @@ export const commonsCardStyles = ({ theme, colors }: Pick<ThemeContextType, 'the
 /** How long a project has left, in the member's language; `expired` drawn in the danger colour. */
 function getDaysRemaining(deadline: string | null | undefined): { text: string; expired: boolean } | null {
     if (!deadline) return null;
-    const diff = new Date(deadline).getTime() - new Date().getTime();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    const days = deadlineDaysRemaining(deadline);
     if (days < 0) return { text: t('Expired'), expired: true };
     if (days === 0) return { text: t('Ends today'), expired: false };
     // English writes one form for both, as it always has.
@@ -113,8 +113,8 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                     // which React Native's Image cannot.
                     <MemberAvatar avatarUrl={item.avatar} pubkey={item.publicKey} callsign={item.name || item.callsign || ''} size={44} />
                 ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={{ fontSize: 22 }}>{hasGoal ? '🌱' : '🏛️'}</Text>
+                    <View style={[styles.avatar, { overflow: 'hidden' }]}>
+                        <CategoryTile category="general" size="thumb" />
                     </View>
                 )}
                 <View style={styles.cardTitleCol}>

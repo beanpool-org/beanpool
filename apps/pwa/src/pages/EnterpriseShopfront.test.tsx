@@ -300,11 +300,15 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(byId('shopfront-banner')?.textContent).toBe('');
         fireEvent.error(photo);
         expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(byId('shopfront-banner')?.textContent).toBe('🎨');
+        expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument();
+        expect(byId('shopfront-banner')?.textContent).toContain('🎨');
+        expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
         cleanup();
         await open({ detail: membersView(), keeperOf: [] });
         expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(byId('shopfront-banner')?.textContent).toBe('🎨');
+        expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument();
+        expect(byId('shopfront-banner')?.textContent).toContain('🎨');
+        expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
     });
 
     it("a project's goal card sits above About", async () => {
@@ -678,7 +682,9 @@ describe("the keepers' Manage tab", () => {
             await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
             expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
             fireEvent.click(screen.getByRole('tab', { name: 'Page' }));
-            await waitFor(() => expect(byId('shopfront-banner')?.textContent).toBe('🎨'));
+            await waitFor(() => expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument());
+            expect(byId('shopfront-banner')?.textContent).toContain('🎨');
+            expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
             expect(byId('shopfront-banner-photo')).toBeNull();
         });
 

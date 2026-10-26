@@ -18,6 +18,7 @@ import { useStyles, useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { MemberAvatar } from '../MemberAvatar';
 import { Sentence } from '../Sentence';
+import { CategoryTile } from '../CategoryTile';
 import { categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { shopCategoryLabel } from '../../utils/shop';
 import { anchorUrl } from '../../utils/node-post';
@@ -150,7 +151,7 @@ export function ShopfrontHeader({ name, ownerKey, logoUrl, category, fallbackEmo
                 {photo && photo !== failed ? (
                     <Image source={{ uri: photo }} style={s.bannerImage} contentFit="cover" cachePolicy="memory-disk" onError={() => setFailed(photo)} />
                 ) : (
-                    <Text style={s.bannerEmoji}>{category ? categoryEmoji(category) : fallbackEmoji}</Text>
+                    <CategoryTile category={category} size="banner" />
                 )}
             </View>
             <View style={s.logo} testID="shopfront-logo">
@@ -247,14 +248,14 @@ export function openListing(id: string): void {
     router.push({ pathname: '/post/[id]', params: { id } });
 }
 
-/** A listing's picture: its own photo (the node's small copy), or its category's emoji on a quiet ground. */
-function ListingPicture({ l, style, emojiStyle }: { l: ShopfrontListing; style: object; emojiStyle: object }) {
+/** A listing's picture: its own photo (the node's small copy), or its category's tile. */
+function ListingPicture({ l, style, size = 'thumb' }: { l: ShopfrontListing; style: object; emojiStyle?: object; size?: 'grid' | 'thumb' }) {
     return (
-        <View style={style}>
+        <View style={[style, { overflow: 'hidden' }]}>
             {l.photo ? (
                 <Image source={{ uri: listPhotoUrl(l.photo) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" accessibilityIgnoresInvertColors />
             ) : (
-                <Text style={emojiStyle}>{categoryEmoji(l.category)}</Text>
+                <CategoryTile category={l.category} size={size} />
             )}
         </View>
     );
@@ -282,7 +283,7 @@ export function ShopfrontFeatured({ listings, showsBeans, onOpen = openListing }
                             accessibilityLabel={price ? t('{title}, {price}', { title: l.title, price }) : l.title}
                             testID={`shopfront-featured-${l.id}`}
                         >
-                            <ListingPicture l={l} style={s.tilePhoto} emojiStyle={s.tileEmoji} />
+                            <ListingPicture l={l} style={s.tilePhoto} size="grid" />
                             <View style={s.tileText}>
                                 <Text style={s.tileTitle} numberOfLines={2}>{l.title}</Text>
                                 {price ? <Text style={s.price}>{price}</Text> : null}
@@ -342,7 +343,7 @@ export function ShopfrontSections({ sections, showsBeans, empty, onOpen = openLi
                                     accessibilityLabel={[l.title, ...lines].join(', ')}
                                     testID={`shopfront-row-${l.id}`}
                                 >
-                                    <ListingPicture l={l} style={s.thumb} emojiStyle={s.thumbEmoji} />
+                                    <ListingPicture l={l} style={s.thumb} size="thumb" />
                                     <View style={s.rowText}>
                                         <Text style={s.rowTitle} numberOfLines={2}>{l.title}</Text>
                                         {lines.length ? <Text style={s.muted}>{lines.join(' · ')}</Text> : null}

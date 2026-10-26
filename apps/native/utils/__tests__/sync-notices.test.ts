@@ -196,4 +196,51 @@ describe('local notices from the background sync', () => {
         expect(await checkWhileOpen(own, { storage: AsyncStorage, recipient: kim.publicKey })).toEqual({ kind: 'show' });
         expect(await checkTap(own, { storage: AsyncStorage, recipient: kim.publicKey })).toEqual({ kind: 'nothing', reason: 'local' });
     });
+
+    it('background sync polls open knock status and posts a notice when answered', async () => {
+        const { postKnockStatusNoticesFromSync } = await import('../sync-notices');
+        const knocker = account();
+        mem.async.set('beanpool_knocks', JSON.stringify({
+            pubkey: knocker.publicKey,
+            knocks: [{ url: MULLUM, name: 'Mullumbimby', key: 'mullum', sentAt: new Date().toISOString() }],
+        }));
+
+        vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
+            status: 'approved',
+            invite: 'INV-TEST-1234',
+            expiresAt: new Date(Date.now() + 30 * DAY).toISOString(),
+        }), { status: 200 }));
+
+        const postedKnocks: LocalNotice[] = [];
+        const count = await postKnockStatusNoticesFromSync({
+            storage: AsyncStorage,
+            account: knocker,
+            post: async (n) => { postedKnocks.push(n); },
+        });
+
+        expect(count).toBe(1);
+        expect(postedKnocks[0].title).toBe('BeanPool');
+        expect(postedKnocks[0].body).toBe('A community answered your request.');
+    });
+
+    it('background sync posts a notice when admin queue knocks count rises', async () => {
+        const { postAdminKnockNoticesFromSync } = await import('../sync-notices');
+        const adminAccount = account();
+
+        vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
+            total: 2,
+            items: [{ kind: 'knocks', count: 2, label: 'People asking to join', section: 'home', settingsPath: '/settings#section=home' }],
+        }), { status: 200 }));
+
+        const postedAdmin: LocalNotice[] = [];
+        const count = await postAdminKnockNoticesFromSync({
+            storage: AsyncStorage,
+            account: adminAccount,
+            post: async (n) => { postedAdmin.push(n); },
+        });
+
+        expect(count).toBe(1);
+        expect(postedAdmin[0].title).toBe('BeanPool');
+        expect(postedAdmin[0].body).toBe('Someone asked to join your community.');
+    });
 });

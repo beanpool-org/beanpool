@@ -31,6 +31,16 @@ describe('the kinds', () => {
         expect(pushNoticeWords('group.invite')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'You were invited to join a group.' });
     });
 
+    it('a knock notice lands on People with fixed generic words, and an answer lands on Home', () => {
+        expect(isPushNoticeKind('community.knock')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['community.knock'].tab).toBe('people');
+        expect(pushNoticeWords('community.knock')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'Someone asked to join your community.' });
+
+        expect(isPushNoticeKind('community.knock-answer')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['community.knock-answer'].tab).toBe('home');
+        expect(pushNoticeWords('community.knock-answer')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'A community answered your request.' });
+    });
+
     it('every kind has a sentence, and every push has the same title', () => {
         for (const kind of Object.keys(PUSH_NOTICE_KINDS) as PushNoticeKind[]) {
             const words = pushNoticeWords(kind);

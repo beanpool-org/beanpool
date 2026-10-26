@@ -12,7 +12,10 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-daily-pulse.ts
  */
 
-import { initStateEngine, getPosts, requestPost, acceptPost, createPost } from './state-engine.js';
+import { initStateEngine, getPosts, requestPost, acceptPost, createPost as rawCreatePost } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';
 import { getPulseEntry, getTodaysPulseEntry, getAllPulseEntries } from './daily-pulse-entries.js';
 import { ensurePulseTreasury, rotateDailyPulse, getActivePulsePost, getActiveMemberListingCount, syncPulseMarketplaceGate, getPulseTreasuryPubkey, PULSE_CALLSIGN, DAILY_PULSE_CHANNEL_ID } from './daily-pulse.js';
@@ -245,14 +248,14 @@ async function main() {
     assert(!!getActivePulsePost(), 'Pulse post active when 0 member listings exist');
 
     // Route: Create 1st member listing -> Pulse remains active (< 2)
-    const ctxCreate1: any = { requestBody: { type: 'offer', title: 'Route Listing 1', authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    const ctxCreate1: any = { requestBody: { type: 'offer', title: 'Route Listing 1', authorPublicKey: peerPubkey, photos: TEST_PHOTOS }, state: { actor: peerPubkey } };
     await dispatchRoute('POST', '/api/marketplace/posts', ctxCreate1);
     assert(ctxCreate1.body?.success === true, 'Route: 1st member post created');
     assert(getActiveMemberListingCount() === 1, 'Listing count is 1');
     assert(!!getActivePulsePost(), 'Route: Pulse active when 1 member listing exists (< 2)');
 
     // Route: Create 2nd member listing -> Pulse suppressed (>= 2)
-    const ctxCreate2: any = { requestBody: { type: 'offer', title: 'Route Listing 2', authorPublicKey: peerPubkey }, state: { actor: peerPubkey } };
+    const ctxCreate2: any = { requestBody: { type: 'offer', title: 'Route Listing 2', authorPublicKey: peerPubkey, photos: TEST_PHOTOS }, state: { actor: peerPubkey } };
     await dispatchRoute('POST', '/api/marketplace/posts', ctxCreate2);
     assert(ctxCreate2.body?.success === true, 'Route: 2nd member post created');
     assert(getActiveMemberListingCount() === 2, 'Listing count is 2');

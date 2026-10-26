@@ -38,9 +38,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, createPost, removePost, createGroup, getPosts,
+    initStateEngine, seedGenesisMember, createPost as rawCreatePost, removePost, createGroup, getPosts,
     exportSyncState, importRemoteState, setNodeRole, adminPruneUser, bumpPostsVersion,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';

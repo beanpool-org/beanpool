@@ -19,7 +19,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from './db/db.js';
-import { initStateEngine, createPost, createTreasury, updateProfile } from './state-engine.js';
+import { initStateEngine, createPost as rawCreatePost, createTreasury, updateProfile } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { avatarRefOf, avatarUrlOf, avatarVersionOf } from '@beanpool/core';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { createAvatarRoutes } from './routes/avatar.js';

@@ -35,9 +35,12 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
     initStateEngine, createGroup, joinGroup, approveGroupMember, removeGroupMember, inviteGroupMember,
-    setMemberRole, createPost, createTreasury, adminAssignTreasuryOperator, createConversation, submitReport,
+    setMemberRole, createPost as rawCreatePost, createTreasury, adminAssignTreasuryOperator, createConversation, submitReport,
     getReports,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { rsvpEvent } from './engine/posts.js';
 import { postGroupThreadMessage, getGroupThread, GROUP_LINE_MAX_BYTES } from './engine/group-thread.js';

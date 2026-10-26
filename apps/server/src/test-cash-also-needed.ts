@@ -33,6 +33,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -77,7 +78,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 
 const post = (title: string, cashAlsoNeeded: boolean) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', cashAlsoNeeded,
+    credits: 20, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
 });
 
 async function main() {

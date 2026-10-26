@@ -192,6 +192,11 @@ vi.mock('../db', () => ({
     signedGet: net.signedGet,
 }));
 
+vi.mock('../shop', async (importOriginal) => ({
+    ...(await importOriginal<any>()),
+    changeEnterpriseShop: net.changeEnterpriseShop,
+}));
+
 vi.mock('../blocklist', () => ({ blockUser: async () => true, isUserBlocked: async () => false }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ features: { beans: true, enterprises: true } }) }));
 vi.mock('../node-profile', () => ({
@@ -411,8 +416,12 @@ describe('banner-after-start (Native)', () => {
 
     it('5. the button opens the crop step and saving sets the banner', async () => {
         params.now = { publicKey: ENT, name: 'Community Bakery' };
-        const entData = sampleEnterprise({ shop: { photoUrl: null } });
-        net.getTreasuryDetail.mockResolvedValue(entData);
+        let entData = sampleEnterprise({ shop: { photoUrl: null } });
+        net.getTreasuryDetail.mockImplementation(async () => entData);
+        net.changeEnterpriseShop.mockImplementation(async (_treasury: string, changes: any) => {
+            if (changes.photo) entData = { ...entData, shop: { ...entData.shop, photoUrl: changes.photo } };
+            return { success: true, shop: { photoUrl: changes.photo } };
+        });
         net.getBalance.mockResolvedValue({ balance: 10, keeperOf: [ENT] });
 
         await mount(createElement(TreasuryDetailScreen));
@@ -468,5 +477,34 @@ describe('banner-after-start (Native)', () => {
             /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtnReload).toBeUndefined();
+    });
+
+    it('7. dismissing on enterprise A does not suppress banner prompt on enterprise B', async () => {
+        const ENT_B = '8'.repeat(64);
+        store.map.set(`bp_banner_prompt_dismissed_${ENT}`, '1');
+
+        params.now = { publicKey: ENT_B, name: 'Community Garden' };
+        net.getTreasuryDetail.mockResolvedValue(sampleEnterprise({ publicKey: ENT_B, shop: { photoUrl: null } }));
+        net.getBalance.mockResolvedValue({ balance: 10, keeperOf: [ENT_B] });
+
+        await mount(createElement(TreasuryDetailScreen));
+
+        const addBannerBtn = Array.from(host!.querySelectorAll('button')).find(el =>
+            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+        );
+        expect(addBannerBtn).toBeDefined();
+    });
+
+    it('8. banner prompt not shown on closed or completed enterprise', async () => {
+        params.now = { publicKey: ENT, name: 'Community Bakery' };
+        net.getTreasuryDetail.mockResolvedValue(sampleEnterprise({ status: 'completed', shop: { photoUrl: null } }));
+        net.getBalance.mockResolvedValue({ balance: 10, keeperOf: [ENT] });
+
+        await mount(createElement(TreasuryDetailScreen));
+
+        const addBannerBtn = Array.from(host!.querySelectorAll('button')).find(el =>
+            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+        );
+        expect(addBannerBtn).toBeUndefined();
     });
 });

@@ -9,8 +9,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import {
     getTreasuryDetail, getBalance, createConversationApi, treasuryPledge, reportAbuse, requestToJoinEnterprise,
-    getEnterpriseThread, postEnterpriseThreadMessage, getEnterpriseLedger, changeEnterpriseShop, type EnterpriseLedgerResponse
+    getEnterpriseThread, postEnterpriseThreadMessage, getEnterpriseLedger, type EnterpriseLedgerResponse
 } from '../utils/db';
+import { changeEnterpriseShop } from '../utils/shop';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePictureCrop } from '../components/PictureCrop';
 import { pickBannerPhoto } from '../utils/banner-photo';
@@ -116,8 +117,9 @@ export default function TreasuryDetailScreen() {
     useEffect(() => {
         if (!treasuryKey) return;
         let live = true;
+        setBannerDismissed(false);
         AsyncStorage.getItem(`bp_banner_prompt_dismissed_${treasuryKey}`)
-            .then((val) => { if (live && val) setBannerDismissed(true); })
+            .then((val) => { if (live) setBannerDismissed(val === '1'); })
             .catch(() => {});
         return () => { live = false; };
     }, [treasuryKey]);
@@ -132,17 +134,24 @@ export default function TreasuryDetailScreen() {
     const handlePickBanner = async () => {
         if (!treasuryKey || pickingBanner) return;
         setPickingBanner(true);
+        let photo: string | null = null;
         try {
-            const photo = await pickBannerPhoto(cropper.crop);
-            if (photo) {
-                await changeEnterpriseShop(treasuryKey, { photo });
-                setDetail((d: any) => d ? { ...d, shop: { ...d.shop, photoUrl: photo } } : d);
-            }
+            photo = await pickBannerPhoto(cropper.crop);
         } catch {
             Alert.alert(t('Error'), t("That picture couldn't be read. Try another."));
-        } finally {
             setPickingBanner(false);
+            return;
         }
+        if (photo) {
+            try {
+                await changeEnterpriseShop(treasuryKey, { photo });
+                setDetail((d: any) => d ? { ...d, shop: { ...d.shop, photoUrl: photo } } : d);
+                load();
+            } catch (e: any) {
+                Alert.alert(t('Error'), e?.message ? signedRequestWords(e.message) : t('Could not save banner photo.'));
+            }
+        }
+        setPickingBanner(false);
     };
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -473,7 +482,8 @@ export default function TreasuryDetailScreen() {
     const kw = keeperWords(detail?.lifecycle);
     const project = kw.kind === 'project';
     const hasBanner = !!shopPhotoOf(detail?.shop);
-    const showAddBanner = !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed;
+    const faceOpen = !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
+    const showAddBanner = !elsewhere && !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed && faceOpen;
     // Manage, its keepers' console: a keeper of it, or whom the node says leads it or administers the node. In a preview,
     // what a keeper would see, saying why it lives in a local community.
     const showsManage = isEffectivePreview || (!!treasuryKey && !!detail && mayManage(detail, isKeeperOfThis));
@@ -649,7 +659,7 @@ export default function TreasuryDetailScreen() {
                             <View style={styles.bannerPromptRow}>
                                 <Pressable
                                     onPress={handlePickBanner}
-                                    style={styles.addBannerBtn}
+                                    style={[styles.addBannerBtn, pickingBanner && { opacity: 0.6 }]}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Add a banner photo')}
                                     disabled={pickingBanner}
@@ -658,9 +668,10 @@ export default function TreasuryDetailScreen() {
                                 </Pressable>
                                 <Pressable
                                     onPress={handleDismissBanner}
-                                    style={styles.notNowBtn}
+                                    style={[styles.notNowBtn, pickingBanner && { opacity: 0.5 }]}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Not now')}
+                                    disabled={pickingBanner}
                                 >
                                     <Text style={styles.notNowBtnText}>{t('Not now')}</Text>
                                 </Pressable>

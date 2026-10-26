@@ -174,6 +174,9 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         for (const m of TOOLS) if (TOOL_APPS[m.id]) expect(cases.map((c) => c.manifest.id)).toContain(m.id);
     });
 
+    // One case is heavy on its own: "things main with full" draws the whole shed (316 rows) and runs axe over it,
+    // ~1 s at rest and 15–22 s under taskpolicy -b beside 10 hogs (measured 27 Oct; every other case under 5 s).
+    // 60 s gives that case room on a loaded machine; a hang still fails.
     it.each(SCREEN_CASES)('%s: every word through t(), it fits, nothing scrolls sideways, axe clean', async (where, { c, doc, screenName }) => {
         await showIn('xx');
         resetToolStoreForTest();
@@ -195,9 +198,6 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         expect(layoutProblems(page), where).toEqual([]);
         expect(await axeProblems(page), where).toEqual([]);
         view.unmount();
-        // One case is heavy on its own: "things main with full" draws the whole shed (316 rows) and runs axe over it,
-        // ~1 s at rest and 15–22 s under taskpolicy -b beside 10 hogs (measured 27 Oct; every other case under 5 s).
-        // 60 s gives that case room on a loaded machine; a hang still fails.
     }, 60_000);
 
     it('the Tools screen, the menu, Settings, About and the unknown tool: the same, in xx', async () => {

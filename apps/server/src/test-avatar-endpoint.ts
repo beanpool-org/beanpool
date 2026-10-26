@@ -501,7 +501,7 @@ async function main() {
     // 49 posts across these members
     for (let i = 0; i < 49; i++) {
         const author = i < 35 ? photoMembers[i % photoMembers.length] : bundledMembers[i % bundledMembers.length];
-        createPost('offer', 'goods', `Listing Item #${i + 1}`, `Description for item ${i + 1}`, 10 + i, 'fixed', author);
+        createPost('offer', 'goods', `Listing Item #${i + 1}`, `Description for item ${i + 1}`, 10 + i, 'fixed', author, undefined, undefined, undefined, undefined, undefined, undefined, { allowNoPhoto: true });
     }
 
     // 6.1 /api/community/members Benchmark

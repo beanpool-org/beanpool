@@ -79,7 +79,7 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -184,9 +184,9 @@ async function main() {
     try {
         // ── 1. A dispute ruling ──────────────────────────────────────────────────────────────────
         console.log('— 1. a dispute ruling names who ruled in words —');
-        se.createPost('offer', 'services', 'Weeding', 'weeds', 10, 'fixed', Buyer.pubKeyHex);
+        createPost('offer', 'services', 'Weeding', 'weeds', 10, 'fixed', Buyer.pubKeyHex);
         const stuck = () => {
-            const post = se.createPost('offer', 'goods', `Firewood ${crypto.randomBytes(3).toString('hex')}`, 'dry', 40, 'fixed', Seller.pubKeyHex)!;
+            const post = createPost('offer', 'goods', `Firewood ${crypto.randomBytes(3).toString('hex')}`, 'dry', 40, 'fixed', Seller.pubKeyHex)!;
             return se.acceptPost(post.id, Buyer.pubKeyHex)!;
         };
         const partyText = (txId: string, postId: string) => {
@@ -234,7 +234,7 @@ async function main() {
         // ── 2. A report actioned with deletePost ─────────────────────────────────────────────────
         console.log('\n— 2. a takedown after reports —');
         const P_TITLE = `Miracle cure ${crypto.randomBytes(3).toString('hex')}`;
-        const P = se.createPost('offer', 'goods', P_TITLE, 'buy now', 5, 'fixed', Ann.pubKeyHex)!;
+        const P = createPost('offer', 'goods', P_TITLE, 'buy now', 5, 'fixed', Ann.pubKeyHex)!;
         const rep1 = se.submitReport(R1.pubKeyHex, Ann.pubKeyHex, 'Spam or scam', P.id)!;
         const rep2 = se.submitReport(R2.pubKeyHex, Ann.pubKeyHex, 'Misleading post', P.id)!;
         const openBefore = se.getReports('pending').pendingCount;
@@ -281,7 +281,7 @@ async function main() {
 
         // ── 3. A dismissed post report ───────────────────────────────────────────────────────────
         console.log('\n— 3. a dismissed report —');
-        const Q = se.createPost('offer', 'goods', 'Honest honey', 'jars', 8, 'fixed', Ann.pubKeyHex)!;
+        const Q = createPost('offer', 'goods', 'Honest honey', 'jars', 8, 'fixed', Ann.pubKeyHex)!;
         const rep3 = se.submitReport(R1.pubKeyHex, Ann.pubKeyHex, 'Other', Q.id)!;
         const memberReport = se.submitReport(R2.pubKeyHex, C.pubKeyHex, 'rude in chat')!;
         // The phone app files an enterprise report with the enterprise's key where a post id would go.
@@ -305,7 +305,7 @@ async function main() {
 
         // ── 4. A plain admin delete, and the preference ──────────────────────────────────────────
         console.log('\n— 4. a plain admin delete —');
-        const Z = se.createPost('offer', 'goods', 'Knock-off watches', 'cheap', 3, 'fixed', Ann.pubKeyHex)!;
+        const Z = createPost('offer', 'goods', 'Knock-off watches', 'cheap', 3, 'fixed', Ann.pubKeyHex)!;
         const rep4 = se.submitReport(R2.pubKeyHex, Ann.pubKeyHex, 'Spam or scam', Z.id)!;
         db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'notify_marketplace', 'false')`).run(R2.pubKeyHex);
         await flush(); sent.length = 0; clear(...all);
@@ -356,7 +356,7 @@ async function main() {
 
         // ── 6. A report dismissed after the author took the post down ────────────────────────────
         console.log('\n— 6. a dismissed report on a post its author already took down —');
-        const G = se.createPost('offer', 'goods', 'Gone garlic', 'bulbs', 4, 'fixed', Ann.pubKeyHex)!;
+        const G = createPost('offer', 'goods', 'Gone garlic', 'bulbs', 4, 'fixed', Ann.pubKeyHex)!;
         const rep6 = se.submitReport(R1.pubKeyHex, Ann.pubKeyHex, 'Other', G.id)!;
         assert(se.removePost(G.id, Ann.pubKeyHex) === true, 'the author deletes their own post');
         await flush(); sent.length = 0; clear(...all);
@@ -372,8 +372,8 @@ async function main() {
         // ── 7. Prune Stale Posts ─────────────────────────────────────────────────────────────────
         console.log('\n— 7. Prune Stale Posts —');
         const oldAt = new Date(Date.now() - 100 * 86_400_000 - 3_600_000).toISOString();
-        const annOld = Array.from({ length: 15 }, (_, i) => se.createPost('offer', 'goods', `Old jar ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
-        const samOld = Array.from({ length: 2 }, (_, i) => se.createPost('offer', 'goods', `Old crate ${i}`, 'old', 2, 'fixed', Seller.pubKeyHex)!.id);
+        const annOld = Array.from({ length: 15 }, (_, i) => createPost('offer', 'goods', `Old jar ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
+        const samOld = Array.from({ length: 2 }, (_, i) => createPost('offer', 'goods', `Old crate ${i}`, 'old', 2, 'fixed', Seller.pubKeyHex)!.id);
         const setAge = db.prepare('UPDATE posts SET created_at = ? WHERE id = ?');
         for (const id of [...annOld, ...samOld]) setAge.run(oldAt, id);
         const rep7 = se.submitReport(R2.pubKeyHex, Ann.pubKeyHex, 'Spam or scam', annOld[0])!;
@@ -407,7 +407,7 @@ async function main() {
 
         // One request takes at most MAX_BULK_DELETE_POSTS ids; the manager and settings.js send longer lists in batches.
         assert(MAX_BULK_DELETE_POSTS === 200, `the bulk-delete cap is 200 (${MAX_BULK_DELETE_POSTS})`);
-        const capIds = Array.from({ length: 201 }, (_, i) => se.createPost('offer', 'goods', `Cap jar ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
+        const capIds = Array.from({ length: 201 }, (_, i) => createPost('offer', 'goods', `Cap jar ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
         const overLimitRes = await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: capIds });
         assert(overLimitRes.status === 400, `bulk-delete with 201 ids is rejected with 400 (${overLimitRes.status})`);
         assert(/Bulk delete limit exceeded \(maximum 200 posts per request\)/.test(overLimitRes.body?.error || ''),
@@ -453,7 +453,7 @@ async function main() {
                 return { alerts, batches, loads, maxInFlight, selectedPostIds };
             };
             const freshPosts = (n: number, tag: string) =>
-                Array.from({ length: n }, (_, i) => se.createPost('offer', 'goods', `${tag} ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
+                Array.from({ length: n }, (_, i) => createPost('offer', 'goods', `${tag} ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
             const upCount = (ids: string[]) => ids.length === 0 ? 0 : (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE id IN (${ids.map(() => '?').join(',')}) AND active = 1`).get(...ids) as any).c;
 
             const none = await runSettingsDelete([]);
@@ -480,7 +480,7 @@ async function main() {
         console.log('\n— 8. the enterprise ledger names an arbitrated deal\'s signer in words —');
         const { publicKey: farm } = se.createTreasury('FarmCoop', '/uploads/avatar.jpg', 200);
         const farmDeal = () => {
-            const post = se.createPost('offer', 'goods', `Farm eggs ${crypto.randomBytes(3).toString('hex')}`, 'dozen', 20, 'fixed', farm)!;
+            const post = createPost('offer', 'goods', `Farm eggs ${crypto.randomBytes(3).toString('hex')}`, 'dozen', 20, 'fixed', farm)!;
             return se.acceptPost(post.id, Buyer.pubKeyHex)!;
         };
         const fd1 = farmDeal(), fd2 = farmDeal();

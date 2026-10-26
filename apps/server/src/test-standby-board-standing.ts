@@ -59,7 +59,7 @@ async function child(): Promise<void> {
         'setup-primary': async (a: { replicationToken: string; pat: string; hana: string; olly: string; pia: string }) => {
             const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
-            (se as any).createPost = wrapCreatePost(se.createPost);
+            const createPost = wrapCreatePost(se.createPost);
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             const genesis = crypto.randomBytes(32).toString('hex');
@@ -76,7 +76,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'lead', 'admin')`).run(mill, a.pat);
             db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(a.pat);
             const offer = (author: string, title: string) =>
-                se.createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, true)!.id;
+                createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, true)!.id;
             return { mill, posts: { mill: offer(mill, 'Flour'), hana: offer(a.hana, 'Lemons'), olly: offer(a.olly, 'Firewood'), pia: offer(a.pia, 'Honey') } };
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
@@ -104,9 +104,7 @@ async function child(): Promise<void> {
             }
         },
         change: async (a: { mill: string; pat: string; hana: string; olly: string; pia: string }) => {
-            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
-            (se as any).createPost = wrapCreatePost(se.createPost);
             se.initiateWindUp(a.mill, a.pat);
             se.setHolidayMode(a.hana, true);
             const paused = se.adminEmergencySuspend(a.pia, 'owner:password', 'Threats made to another member at the market');
@@ -130,9 +128,7 @@ async function child(): Promise<void> {
         },
         row: async (a: { key: string }) => {
             const { db } = await import('./db/db.js');
-            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
-            (se as any).createPost = wrapCreatePost(se.createPost);
             // Every column, so a node without board_standing_changed_at answers null rather than failing.
             const r = db.prepare('SELECT * FROM members WHERE public_key = ?').get(a.key) as Record<string, any> | undefined;
             return {
@@ -141,9 +137,7 @@ async function child(): Promise<void> {
             };
         },
         delta: async (a: { since: string }) => {
-            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
-            (se as any).createPost = wrapCreatePost(se.createPost);
             return se.getPosts({ updatedAfter: a.since, sync: true, types: ['offer', 'need', 'poll', 'event'], limit: 1000 })
                 .map(p => ({ id: p.id, status: p.status }));
         },

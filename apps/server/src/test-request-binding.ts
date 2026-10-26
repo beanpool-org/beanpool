@@ -84,7 +84,7 @@ async function child(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     // Loaded when a command needs it, so the servers boot on a tree without it (the fail-first run on origin/main).
@@ -100,7 +100,7 @@ async function child(): Promise<void> {
     const port = await startHttpsServer(0);
 
     const offer = (pk: string, title: string) => {
-        const post = se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
+        const post = createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
         if (!post) throw new Error(`could not list ${title}`);
         return post;
     };

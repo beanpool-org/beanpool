@@ -137,7 +137,7 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer, PUBLIC_READ_EXACT } = await import('./https-server.js');
     const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
     const { db } = await import('./db/db.js');
@@ -540,7 +540,7 @@ async function main() {
                 `${who} reads the pricing guide's eggs, without the listing's photo (${r.status} ${JSON.stringify(eggsItem(r)?.thumbnailUrl)})`);
         }
 
-        const entPost = se.createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', 1, 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
+        const entPost = createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', 1, 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
         assert(!!entPost?.id, 'setup: the enterprise lists a loaf');
         const pageStranger = await get(`/api/treasury/${enterprise}`);
         const pageMember = await get(`/api/treasury/${enterprise}`, carol);
@@ -645,7 +645,7 @@ async function main() {
         // A lone listing 0.04° (4.45 km) south of its area's centre, and a point 49.9 km further south: within the card's
         // 50 km of the listing, 54.35 km from its area's centre. A stranger's exact count here would find the listing to
         // the metre by bisection (#1159); the deciding review of #1286 found this count was the one public way left to.
-        const lone = se.createPost('offer', 'other', 'Sentinel lone offer', 'Far from the rest', 0, 'fixed', alice.pk, -35.04, 140.6);
+        const lone = createPost('offer', 'other', 'Sentinel lone offer', 'Far from the rest', 0, 'fixed', alice.pk, -35.04, 140.6);
         assert(!!lone?.id, 'setup: Alice lists a lone offer');
         setSwitchOverride('directoryMirror', true);
         const q = { lat: -35.04 - 49.9 / (6371 * Math.PI / 180), lng: 140.6 };

@@ -280,7 +280,7 @@ async function testRealServer(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { startP2P } = await import('./p2p.js');
@@ -495,7 +495,7 @@ async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> 
         { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
     await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
     // Asking for one (a Need, a loan) that is gone or no longer active: the same code, from requestPost and its route.
-    const shears = se.createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
+    const shears = createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
     db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(shears.id);
     const askGone = await call('POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
     const askPaused = await call('POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });

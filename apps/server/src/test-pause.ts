@@ -227,7 +227,7 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     const de = await import('./decisions-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
@@ -317,7 +317,7 @@ async function main() {
         if (!s.ok || !s.sessionId) throw new Error(`could not open Ada's key session: ${s.error}`);
         return { 'X-Admin-Session': s.sessionId };
     })();
-    const offer = (author: Id, title: string) => se.createPost('offer', 'food', title, `${title}, fresh this week`, 5, 'fixed', author.pubKeyHex)!.id;
+    const offer = (author: Id, title: string) => createPost('offer', 'food', title, `${title}, fresh this week`, 5, 'fixed', author.pubKeyHex)!.id;
     const openDeal = (postId: string, author: Id, buyer: Id) => {
         const tx = se.requestPost(postId, buyer.pubKeyHex);
         se.approvePostRequest(tx.id, author.pubKeyHex);

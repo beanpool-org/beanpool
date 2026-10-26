@@ -105,7 +105,7 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { startP2P } = await import('./p2p.js');
@@ -274,8 +274,8 @@ async function main() {
             `and its details say who wrote and which chat (${JSON.stringify(dmDetails)})`);
 
         se.transfer('genesis', bob.pk, 50, 'seed', 'direct', true);
-        se.createPost('offer', 'other', 'Seedlings', 'Tomato seedlings', 1, 'fixed', bob.pk); // a member offers before they ask
-        const listing = se.createPost('offer', 'other', 'Quince jam deluxe', 'Small batch', 7, 'fixed', ann.pk)!;
+        createPost('offer', 'other', 'Seedlings', 'Tomato seedlings', 1, 'fixed', bob.pk); // a member offers before they ask
+        const listing = createPost('offer', 'other', 'Quince jam deluxe', 'Small batch', 7, 'fixed', ann.pk)!;
         const asked = await caught(() => se.requestPost(listing.id, bob.pk));
         const askedAnn = asked.filter(m => toWhom.get(m.to) === ann);
         assert(askedAnn.length === 2 && askedAnn.every(m => onlyItsWords(m) && m.data.k === 'market.request')
@@ -293,7 +293,7 @@ async function main() {
         const annNotice = announced.find(m => toWhom.get(m.to) === ann)!;
         const bobNotice = announced.find(m => toWhom.get(m.to) === bob)!;
 
-        const ev = se.createPost('event', 'community', 'Secret garden bee', 'Bring gloves', 0, 'fixed', cat.pk, -28.55, 153.5, [], false, undefined, false,
+        const ev = createPost('event', 'community', 'Secret garden bee', 'Bring gloves', 0, 'fixed', cat.pk, -28.55, 153.5, [], false, undefined, false,
             { eventStartAt: inHours(30), eventPlaceName: 'Riverbend hall' } as any)!;
         se.rsvpEvent(ev.id, bob.pk, 'going');
         const moved = await caught(() => se.updatePost(ev.id, cat.pk, { eventStartAt: inHours(54) } as any, cat.pk));

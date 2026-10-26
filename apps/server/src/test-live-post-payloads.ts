@@ -47,7 +47,7 @@ async function main() {
     const { db } = await import('./db/db.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    (se as any).createPost = wrapCreatePost(se.createPost);
+    const createPost = wrapCreatePost(se.createPost);
     se.initStateEngine();
 
     const member = (callsign: string): string => {
@@ -71,7 +71,7 @@ async function main() {
 
     // ── 1. A new public offer ─────────────────────────────────────────────────────────────────────────
     clear();
-    const offer = se.createPost('offer', 'food', 'Spare lemons', 'A bag of them', 5, 'fixed', author,
+    const offer = createPost('offer', 'food', 'Spare lemons', 'A bag of them', 5, 'fixed', author,
         -28.55, 153.5, undefined, false, undefined, false, { reach: 'peers', reachPeers: [PEER] })!;
     assert(!!offer, '1. setup: the author posts a public offer that names a neighbouring community');
     const created = last(ben, 'new_post');
@@ -100,7 +100,7 @@ async function main() {
 
     // ── 3. Polls: closePoll and votePoll broadcast a row read for the author or the voter ──────────────
     clear();
-    const poll = se.createPost('poll', 'general', 'Market day?', 'Pick one', 0, 'fixed', author,
+    const poll = createPost('poll', 'general', 'Market day?', 'Pick one', 0, 'fixed', author,
         undefined, undefined, undefined, false, undefined, false,
         { reach: 'peers', reachPeers: [PEER], pollOptions: [{ id: 'a', text: 'Saturday' }, { id: 'b', text: 'Sunday' }], durationDays: 7 })!;
     assert(!!poll && !('reachPeers' in (last(ben, 'new_post')?.post ?? {})), '3a. a new poll\'s broadcast names no communities');
@@ -130,7 +130,7 @@ async function main() {
         '4c. the stranger\'s socket gets nothing for it on a local node, so the new field cannot ride on it');
 
     clear();
-    const second = se.createPost('need', 'food', 'Need eggs', 'A dozen', 5, 'fixed', author)!;
+    const second = createPost('need', 'food', 'Need eggs', 'A dozen', 5, 'fixed', author)!;
     assert(se.adminDeletePost(second.id), '4d. setup: an admin removes a public need');
     const adminRemoved = last(ben, 'post_removed');
     assert(adminRemoved?.id === second.id && adminRemoved.audienceScope === 'public',
@@ -140,7 +140,7 @@ async function main() {
     const group = se.createGroup({ name: 'Garden club', createdBy: author, joinPolicy: 'open' });
     se.joinGroup(group.id, watcher);
     clear();
-    const groupOffer = se.createPost('offer', 'food', 'Seedlings', 'Tomatoes', 2, 'fixed', author,
+    const groupOffer = createPost('offer', 'food', 'Seedlings', 'Tomatoes', 2, 'fixed', author,
         undefined, undefined, undefined, false, undefined, false, { audienceScope: 'group', targetGroupId: group.id })!;
     const groupCreated = last(ben, 'new_post');
     assert(groupCreated?.post?.id === groupOffer.id && groupCreated.post.audienceScope === 'group',
@@ -155,7 +155,7 @@ async function main() {
     assert(livePostChange(groupRemoved) === null, '5f. and stays a doorbell');
 
     clear();
-    const groupNeed = se.createPost('need', 'food', 'Need mulch', 'A trailer load', 2, 'fixed', author,
+    const groupNeed = createPost('need', 'food', 'Need mulch', 'A trailer load', 2, 'fixed', author,
         undefined, undefined, undefined, false, undefined, false, { audienceScope: 'group', targetGroupId: group.id })!;
     assert(se.removePost(groupNeed.id, author), '5g. setup: the author removes a group listing');
     const authorGroupRemoved = last(ben, 'post_removed');

@@ -85,9 +85,14 @@ afterEach(() => { cleanup(); });
 
 describe("a keeper editing their enterprise's listing on the web", () => {
     it('Edit for a keeper of the enterprise that listed it: the same form, saved with the member\'s own key, the saved listing shown', async () => {
-        stubNode([eggs], [ENT]);
+        // The node's listings, as it answers them: the edit saved changes what it answers next.
+        const listings: Array<Record<string, unknown>> = [eggs];
+        stubNode(listings, [ENT]);
         const saved = { ...eggs, title: 'Dozen free-range eggs' };
-        const update = vi.spyOn(api, 'updateMarketplacePost').mockResolvedValue({ success: true, post: saved } as any);
+        const update = vi.spyOn(api, 'updateMarketplacePost').mockImplementation(async () => {
+            listings[0] = saved;
+            return { success: true, post: saved } as any;
+        });
         await openEggs();
 
         await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());

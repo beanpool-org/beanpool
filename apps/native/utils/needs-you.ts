@@ -175,6 +175,7 @@ export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'lab
             : tn(n, '{n} emergency suspension the community is voting on', '{n} emergency suspensions the community is voting on');
         case 'removals': return tn(n, '{n} removal in its 7-day grace period', '{n} removals in their 7-day grace period');
         case 'unclean_shutdown': return t('the node restarted after an unclean shutdown');
+        case 'knocks': return tn(n, '{n} person asked to join', '{n} people asked to join');
         // A kind a newer node added: its own label, with the count.
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }

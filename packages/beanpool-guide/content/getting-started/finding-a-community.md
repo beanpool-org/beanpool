@@ -34,7 +34,11 @@ A community that hasn't published its address is listed, but it can't be asked f
 
 Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
-While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
+While you wait, the community's card says **You asked to join. No answer yet**, with how promptly the community answers (such as **Usually answers within a week** or **Hasn't answered requests lately**). You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
+
+If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours.
+
+When an admin or member answers, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
 
 If nobody answers within 30 days, the card says **No answer came. You can ask again.**
 
@@ -58,7 +62,9 @@ You stay a member of the global community, and can switch between them: see "Mor
 
 ## If you are a member of a local community
 
-People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
+People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). Members who turned on **Requests to join** under **Notification Preferences** are notified too. In a community where any member can invite, if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them.
+
+Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
 
 - **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.

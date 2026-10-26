@@ -9895,6 +9895,7 @@ export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTok
 
 export function getMemberPreference(publicKey: string, prefKey: string): string {
     const row = db.prepare(`SELECT pref_value FROM member_preferences WHERE public_key = ? AND pref_key = ?`).get(publicKey, prefKey) as any;
+    if (prefKey === 'notify_knocks') return row?.pref_value ?? 'false';
     return row?.pref_value ?? 'true'; // Default to 'true' (enabled)
 }
 
@@ -9904,7 +9905,7 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
  * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
-export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', 'eventReminderOffsets'];
 
 /**
  * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
@@ -9947,6 +9948,7 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         notify_marketplace: 'true',
         notify_escrow: 'true',
         notify_recovery: 'true',
+        notify_knocks: 'false',
     };
     for (const r of rows) {
         // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.
@@ -10078,7 +10080,7 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 // ===================== GENERIC PUSH DISPATCHER =====================
 
 /** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
-export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
+export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'knocks';
 
 /**
  * Notices to a node's owners about the server itself (services/alerts.ts, services/standby-health.ts): sent whatever the
@@ -10141,6 +10143,7 @@ export function dispatchPushNotification(
         marketplace: 'marketplace',
         escrow: 'escrow',
         recovery: 'recovery',
+        knocks: 'knocks',
     };
 
     // Map categoryId to notification sound
@@ -10149,6 +10152,7 @@ export function dispatchPushNotification(
         marketplace: 'default',
         escrow: 'default',
         recovery: 'default',
+        knocks: 'default',
     };
 
     // The kind's words in each phone's language (its registration's `lang`; English without one), once per language a send.
@@ -10169,7 +10173,9 @@ export function dispatchPushNotification(
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
-        const pref = OWNER_SERVER_KINDS.has(kind) ? null : getMemberPreference(pk, prefKey);
+        const role = nodeRoleOf(pk);
+        const isAdminOrOwner = role === 'owner' || role === 'admin';
+        const pref = (OWNER_SERVER_KINDS.has(kind) || (kind === 'community.knock' && isAdminOrOwner)) ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;

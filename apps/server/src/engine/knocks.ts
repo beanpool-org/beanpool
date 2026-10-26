@@ -123,11 +123,12 @@ import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
 import { addEntry, assertNamesAdmin, reconcileHolders } from './names-list.js';
-import { mayInviteHere } from '../config/door.js';
+import { mayInviteHere, getDoor } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { broadcast, dispatchPushNotification } from '../state-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -162,7 +163,7 @@ export const KNOCK_RULES = {
 /** How long an invite lasts: `redeemInvite` refuses one older than this. */
 const INVITE_LIFETIME_MS = 30 * DAY_MS;
 
-export type KnockStatus = 'pending' | 'approved' | 'declined';
+export type KnockStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
 
 interface KnockRow {
     id: string;
@@ -231,6 +232,7 @@ type Standing =
 
 function standingOf(row: KnockRow | undefined, now: number): Standing {
     if (!row) return { kind: 'free' };
+    if (row.status === 'cancelled') return { kind: 'free' };
     if (row.status === 'pending') return isOpen(row, now) ? { kind: 'waiting', row } : { kind: 'lapsed', row };
     if (row.status === 'declined') {
         return ageMs(row.decided_at, now) < KNOCK_RULES.declineBlockDays * DAY_MS ? { kind: 'waiting', row } : { kind: 'free' };
@@ -349,6 +351,19 @@ export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAns
     }
 }
 
+/** Cancel an open request to join from `pubkey`. */
+export function cancelKnock(pubkey: string, now = Date.now()): { ok: true; knock: KnockRow } | { ok: false; reason: string } {
+    const key = pubkey.toLowerCase();
+    const row = latestKnock(key);
+    if (!row || row.status !== 'pending' || !isOpen(row, now)) {
+        return { ok: false, reason: 'not_found' };
+    }
+    const at = iso(now);
+    db.prepare(`UPDATE join_requests SET status = 'cancelled', decided_at = ?, updated_at = ? WHERE id = ?`).run(at, at, row.id);
+    const updated = db.prepare('SELECT * FROM join_requests WHERE id = ?').get(row.id) as KnockRow;
+    return { ok: true, knock: updated };
+}
+
 // ── The members ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface OpenKnock {
@@ -378,6 +393,104 @@ export function listOpenKnocks(limit: number, offset: number, now = Date.now()):
 /** How many knocks are open, for the operator's Settings. */
 export function openKnockCount(now = Date.now()): number {
     return listOpenKnocks(0, 0, now).total;
+}
+
+/**
+ * How many open knocks have been waiting for at least `minDays` (e.g. 3 days for members door, 7 days for alerts).
+ */
+export function openKnocksWaitingDays(minDays: number, now = Date.now()): number {
+    const cutoff = iso(now - minDays * DAY_MS);
+    const maxAge = iso(now - KNOCK_RULES.openDays * DAY_MS);
+    return (db.prepare(`
+        SELECT COUNT(*) AS n FROM join_requests
+        WHERE status = 'pending' AND created_at <= ? AND created_at >= ?
+        AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey AND (m.is_visitor = 0 OR m.status = 'pruned'))
+        AND NOT EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)
+    `).get(cutoff, maxAge) as { n: number }).n;
+}
+
+/**
+ * The node measures, over its last 90 days: the share of knocks answered within 7 days, and the age of the oldest open knock.
+ * Returns:
+ *   - null when < 3 knocks seen;
+ *   - 'week' when >= 80% answered within 7 days and no open knock > 14 days old;
+ *   - 'none' when an open knock is > 14 days old or < 50% answered;
+ *   - 'slow' otherwise.
+ */
+export function measureKnockAnswers(now = Date.now()): 'week' | 'slow' | 'none' | null {
+    const since = iso(now - 90 * DAY_MS);
+    const rows = db.prepare(`SELECT created_at, status, decided_at FROM join_requests WHERE created_at >= ? AND status IN ('pending', 'approved', 'declined')`).all(since) as Pick<KnockRow, 'created_at' | 'status' | 'decided_at'>[];
+    if (rows.length < 3) return null;
+
+    let openOlderThan14 = false;
+    let totalAnswered = 0;
+    let answeredWithin7 = 0;
+
+    for (const r of rows) {
+        if (r.status === 'pending') {
+            const ageDays = (now - Date.parse(r.created_at)) / DAY_MS;
+            if (ageDays > 14) openOlderThan14 = true;
+        } else {
+            totalAnswered++;
+            if (r.decided_at) {
+                const answerDays = (Date.parse(r.decided_at) - Date.parse(r.created_at)) / DAY_MS;
+                if (answerDays <= 7) answeredWithin7++;
+            }
+        }
+    }
+
+    if (openOlderThan14 || (totalAnswered / rows.length) < 0.5) {
+        return 'none';
+    }
+
+    if ((answeredWithin7 / rows.length) >= 0.8) {
+        return 'week';
+    }
+
+    return 'slow';
+}
+
+/**
+ * Notifies active owners and admins (and opted-in members if door !== 'admins') of an incoming knock.
+ */
+export function notifyKnockReceived(now = Date.now()): void {
+    const adminRows = db.prepare(`
+        SELECT nr.member_pubkey AS pk
+        FROM node_roles nr
+        JOIN members m ON m.public_key = nr.member_pubkey
+        WHERE nr.role IN ('owner', 'admin') AND m.status = 'active'
+    `).all() as { pk: string }[];
+    const adminPks = adminRows.map(r => r.pk);
+
+    let memberPks: string[] = [];
+    if (getDoor() !== 'admins') {
+        const memberRows = db.prepare(`
+            SELECT mp.public_key AS pk
+            FROM member_preferences mp
+            JOIN members m ON m.public_key = mp.public_key
+            WHERE mp.pref_key = 'notify_knocks' AND mp.pref_value = 'true' AND m.status = 'active'
+        `).all() as { pk: string }[];
+        memberPks = memberRows.map(r => r.pk);
+    }
+
+    const recipients = Array.from(new Set([...adminPks, ...memberPks]));
+    if (recipients.length === 0) return;
+
+    try {
+        broadcast({ type: 'knock_received' }, recipients);
+    } catch { }
+
+    try {
+        dispatchPushNotification(
+            recipients,
+            'SYSTEM',
+            'BeanPool',
+            'Someone asked to join your community.',
+            { screen: 'people' },
+            'knocks',
+            'community.knock',
+        );
+    } catch { }
 }
 
 export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated' | 'admins_only';

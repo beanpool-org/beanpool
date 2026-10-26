@@ -38,6 +38,7 @@ import { KNOCKS_STORE_KEY } from './storage-keys';
 
 export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
+export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
 /** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending. */
 export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
@@ -57,6 +58,9 @@ export const KNOCK_MESSAGES = {
     unreachable: word("Couldn't reach this community. Check your connection and try again."),
     unreadable: word("This community sent an answer the app couldn't read. Please try again later."),
     waiting: word('You asked to join. No answer yet: communities usually answer within a few days.'),
+    waitingWeek: word('You asked to join. Usually answers within a week.'),
+    waitingSlow: word("You asked to join. Hasn't answered requests lately."),
+    waitingNone: word('You asked to join. Not taking requests right now.'),
     none: word('No answer came. You can ask again.'),
     invited: word('A member invited you. Join now to become a member.'),
 } as const;
@@ -190,6 +194,23 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
     return status ? { ok: true, value: status } : { ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreadable };
 }
 
+/** Cancel an open request to join on `communityUrl`. */
+export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity): Promise<{ ok: boolean; message?: string }> {
+    const origin = communityOrigin(communityUrl);
+    if (!origin) return { ok: false, message: t(KNOCK_MESSAGES.noAddress) };
+    try {
+        const res = await withTimeout(signedPost(origin, KNOCK_CANCEL_PATH, {}, identity));
+        if (res.ok) {
+            await forgetKnock(identity.publicKey, origin);
+            return { ok: true };
+        }
+        const { message } = await readError(res);
+        return { ok: false, message: message ?? t(KNOCK_MESSAGES.unreadable) };
+    } catch {
+        return { ok: false, message: t(KNOCK_MESSAGES.unreachable) };
+    }
+}
+
 /**
  * The status as the member will meet it. `approved` needs an invite to be one. Anything else a node might say
  * that isn't `none` (a `declined`, say) is shown as waiting: a no is never a message.
@@ -281,6 +302,7 @@ export type KnockCardState =
  */
 export function knockCardState(
     hasAddress: boolean, asked: boolean, status: KnockStatusResult | null | undefined, memberNote?: string | null,
+    answers?: 'week' | 'slow' | 'none' | null,
 ): KnockCardState {
     if (!hasAddress) return { kind: 'no_address', note: KNOCK_MESSAGES.noAddress };
     if (memberNote) return { kind: 'member', note: memberNote };
@@ -296,7 +318,11 @@ export function knockCardState(
         return { kind: 'no_address', note: status.message };
     }
     switch (status.value.status) {
-        case 'pending': return { kind: 'waiting', note: KNOCK_MESSAGES.waiting };
+        case 'pending':
+            if (answers === 'week') return { kind: 'waiting', note: KNOCK_MESSAGES.waitingWeek };
+            if (answers === 'slow') return { kind: 'waiting', note: KNOCK_MESSAGES.waitingSlow };
+            if (answers === 'none') return { kind: 'waiting', note: KNOCK_MESSAGES.waitingNone };
+            return { kind: 'waiting', note: KNOCK_MESSAGES.waiting };
         case 'approved': return { kind: 'invited', invite: status.value.invite, note: KNOCK_MESSAGES.invited };
         default: return { kind: 'ask', note: KNOCK_MESSAGES.none };
     }
@@ -309,6 +335,7 @@ export function knockCardState(
  */
 export function cardKnockLines(
     asked: readonly RememberedKnock[], statuses: Readonly<Record<string, KnockStatusResult | null | undefined>>,
+    directoryAnswers?: Readonly<Record<string, 'week' | 'slow' | 'none' | null | undefined>>,
 ): Array<{ url: string; text: string; invited: boolean }> {
     const lines: Array<{ url: string; text: string; invited: boolean }> = [];
     for (const k of asked) {
@@ -316,7 +343,15 @@ export function cardKnockLines(
         if (!s || !s.ok) continue;
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
         if (s.value.status === 'approved') lines.push({ url: k.url, text: t('{name} said yes. Join now.', { name }), invited: true });
-        else if (s.value.status === 'pending') lines.push({ url: k.url, text: t('Waiting for {name}: usually a few days.', { name }), invited: false });
+        else if (s.value.status === 'pending') {
+            const ans = directoryAnswers?.[k.url];
+            const line = ans === 'week'
+                ? t('Waiting for {name}: usually answers within a week.', { name })
+                : ans === 'slow'
+                    ? t("Waiting for {name}: hasn't answered requests lately.", { name })
+                    : t('Waiting for {name}: usually a few days.', { name });
+            lines.push({ url: k.url, text: line, invited: false });
+        }
     }
     return lines;
 }

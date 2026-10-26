@@ -47,6 +47,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { getDoor } from '../config/door.js';
 import { resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { closingDay, listingPromise, MAX_CLOSING_DAYS, MAX_PROMISE_OWNERS, type ListingPromise } from './directory-cache.js';
+import { measureKnockAnswers } from './knocks.js';
 
 export type { ListingPromise };
 
@@ -198,12 +199,14 @@ export function acceptingKnocks(): boolean {
     return getProfileSwitches().knocks && getDoor() !== 'admins' && resolvePublicNodeUrl(PUBLIC_URL_RULES.community) !== null;
 }
 
-/** The three fields the directory push carries, besides what getDirectoryInfo publishes. */
+/** The fields the directory push carries, besides what getDirectoryInfo publishes. */
 export interface ListingFields {
     promise: ListingPromise | null;
     acceptingKnocks: boolean;
     /** Only while it is still to come (a mirror drops a day long past anyway). */
     closingOn: string | null;
+    /** How quickly it answers requests to join (Front doors S1). */
+    answers: 'week' | 'slow' | 'none' | null;
 }
 
 /** What this community's next push says, and the measurement it came from. */
@@ -213,7 +216,8 @@ export function listingFields(now: number = Date.now()): { fields: ListingFields
         ? listingPromise({ v: 1, owners: Math.min(status.owners, MAX_PROMISE_OWNERS), backups: true, reports: true, notice: true })
         : null;
     const closingOn = status.closingOn && status.closingOn >= today(now) ? status.closingOn : null;
-    return { fields: { promise, acceptingKnocks: acceptingKnocks(), closingOn }, status };
+    const answers = measureKnockAnswers(now);
+    return { fields: { promise, acceptingKnocks: acceptingKnocks(), closingOn, answers }, status };
 }
 
 const PUBLIC_FIELDS_TTL_MS = 60_000;

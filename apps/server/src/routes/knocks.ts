@@ -55,6 +55,7 @@ import { avatarValueRefusal, photoRefusalText } from '../engine/avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import {
     KNOCK_RULES, submitKnock, knockStatusFor, listOpenKnocks, openKnockCount, approveKnock, declineKnock, knockerRefusal,
+    cancelKnock, notifyKnockReceived,
     type KnockRefusal, type AnswerRefusal,
 } from '../engine/knocks.js';
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
@@ -267,8 +268,19 @@ export function createKnockRoutes(deps: RouteDeps): Router {
             throw e;
         }
         if (!outcome.ok) return refuseKnock(ctx, outcome.reason);
+        notifyKnockReceived();
         ctx.status = 201;
         ctx.body = { knock: { status: 'pending' } };
+    });
+
+    router.post('/api/join/knock/cancel', async (ctx) => {
+        const applicant = signer(ctx, 'Sign this request with the key you asked to join with.');
+        if (!applicant) return;
+        if (refusedOnStandby(ctx, STANDBY_KNOCK)) return;
+        const outcome = cancelKnock(applicant);
+        if (!outcome.ok) return answer(ctx, 404, word('There’s no open request to join to cancel.'), 'not_found');
+        ctx.status = 200;
+        ctx.body = { knock: { id: outcome.knock.id, status: outcome.knock.status } };
     });
 
     router.get('/api/join/knock/status', async (ctx) => {

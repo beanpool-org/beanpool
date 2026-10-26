@@ -113,7 +113,7 @@ async function main() {
     const admin = newId('Admin');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', ?, ?, ?)`).run(admin.pk, admin.name, new Date().toISOString(), owner.pk, 'genesis');
-    db.prepare(`INSERT INTO node_roles (public_key, role, granted_at) VALUES (?, 'admin', ?)`).run(admin.pk, new Date().toISOString());
+    db.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_at) VALUES (?, 'admin', ?)`).run(admin.pk, new Date().toISOString());
 
     const memberDefault = newId('MemberDefault');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)

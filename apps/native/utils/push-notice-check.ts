@@ -470,7 +470,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people' | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
@@ -482,6 +482,7 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     market: '/(tabs)/market',
     chats: '/(tabs)/chats',
     settings: '/(tabs)/settings',
+    people: '/(tabs)/people',
 };
 
 /**

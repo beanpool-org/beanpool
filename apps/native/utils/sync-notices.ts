@@ -23,6 +23,7 @@ import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { LOCAL_NOTICE_DATA } from './push-notice-check';
 import { communityAddress } from './push-pins';
+import { KNOCKS_STORE_KEY } from './storage-keys';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const UNSEEN_NOTICES_PATH = '/api/notices?unseen=1';
@@ -176,6 +177,121 @@ export async function postNoticesFromSync(deps: {
         return posted;
     } catch (e) {
         console.warn('[Notices] The sync\'s notices could not be posted', e);
+        return 0;
+    }
+}
+
+export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
+
+/**
+ * Polls status for remembered open knocks and posts a local notice if any was approved.
+ */
+export async function postKnockStatusNoticesFromSync(deps: {
+    storage: Storage;
+    account: Account | null;
+    post: (notice: LocalNotice) => Promise<unknown>;
+    now?: number;
+    timeoutMs?: number;
+}): Promise<number> {
+    const now = deps.now ?? Date.now();
+    if (!deps.account?.publicKey || !deps.account.privateKey) return 0;
+    try {
+        const raw = await deps.storage.getItem(KNOCKS_STORE_KEY);
+        if (!raw) return 0;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.pubkey !== deps.account.publicKey || !Array.isArray(parsed.knocks)) return 0;
+        let posted = 0;
+        for (const k of parsed.knocks) {
+            if (!k || typeof k.url !== 'string') continue;
+            const url = `${k.url}/api/join/knock/status`;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
+            try {
+                const headers = await buildSignedHeaders('GET', url, '', deps.account.privateKey, deps.account.publicKey);
+                const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+                if (!res.ok) continue;
+                const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+                if (body?.status === 'approved') {
+                    const noticeId = `knock-answer:${k.url}:${body.invite ?? 'approved'}`;
+                    const claimed = await claim([noticeId], deps.storage, now);
+                    if (claimed.length > 0) {
+                        await deps.post({
+                            title: 'BeanPool',
+                            body: 'A community answered your request.',
+                            data: { ...LOCAL_NOTICE_DATA, type: 'knock-answer', url: k.url },
+                        });
+                        posted++;
+                    }
+                }
+            } catch (e) {
+                console.log(`[Notices] Knock status check failed for ${k.url}: ${e instanceof Error ? e.message : e}`);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+        return posted;
+    } catch (e) {
+        console.warn('[Notices] Failed to check knock status in sync', e);
+        return 0;
+    }
+}
+
+/**
+ * Polls the admin queue for knocks and posts a local notice if the count increased.
+ */
+export async function postAdminKnockNoticesFromSync(deps: {
+    storage: Storage;
+    account: Account | null;
+    post: (notice: LocalNotice) => Promise<unknown>;
+    now?: number;
+    timeoutMs?: number;
+}): Promise<number> {
+    const now = deps.now ?? Date.now();
+    if (!deps.account?.publicKey || !deps.account.privateKey) return 0;
+    try {
+        const community = communityAddress(await deps.storage.getItem(ANCHOR_STORE_KEY));
+        if (!community) return 0;
+        const url = `${community}/api/node-admin/queue`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
+        let items: Array<{ kind: string; count: number }> | null = null;
+        try {
+            const headers = await buildSignedHeaders('GET', url, '', deps.account.privateKey, deps.account.publicKey);
+            const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+            if (!res.ok) return 0;
+            const body = await res.json().catch(() => null) as { items?: unknown } | null;
+            if (Array.isArray(body?.items)) items = body.items as Array<{ kind: string; count: number }>;
+        } catch (e) {
+            console.log(`[Notices] Admin queue check failed for ${community}: ${e instanceof Error ? e.message : e}`);
+            return 0;
+        } finally {
+            clearTimeout(timer);
+        }
+
+        if (!items) return 0;
+        const knockItem = items.find(i => i && i.kind === 'knocks');
+        const count = knockItem && typeof knockItem.count === 'number' ? knockItem.count : 0;
+
+        const lastRaw = await deps.storage.getItem(ADMIN_KNOCKS_COUNT_STORE_KEY);
+        const lastCount = lastRaw !== null && !Number.isNaN(Number(lastRaw)) ? Number(lastRaw) : 0;
+        await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, String(count));
+
+        if (count > lastCount) {
+            try {
+                await deps.post({
+                    title: 'BeanPool',
+                    body: 'Someone asked to join your community.',
+                    data: { ...LOCAL_NOTICE_DATA, type: 'admin-knocks' },
+                });
+                return 1;
+            } catch (e) {
+                console.warn('[Notices] Could not post admin knock notice', e);
+                return 0;
+            }
+        }
+        return 0;
+    } catch (e) {
+        console.warn('[Notices] Failed to check admin knocks in sync', e);
         return 0;
     }
 }

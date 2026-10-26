@@ -65,6 +65,8 @@ export interface DirectoryRow {
     acceptingKnocks: boolean | null;
     /** The day it says it closes (YYYY-MM-DD), or null. */
     closingOn: string | null;
+    /** How quickly it answers requests to join: 'week', 'slow', 'none', or null when fewer than 3 knocks seen. */
+    answers?: 'week' | 'slow' | 'none' | null;
 }
 
 /**
@@ -100,6 +102,8 @@ export interface Community {
     acceptingKnocks: boolean | null;
     /** The day it says it closes (YYYY-MM-DD), or null. */
     closingOn: string | null;
+    /** How quickly it answers requests to join: 'week', 'slow', 'none', or null when fewer than 3 knocks seen. */
+    answers?: 'week' | 'slow' | 'none' | null;
 }
 
 export const MAX_NAME_CHARS = 80;
@@ -241,6 +245,10 @@ function knocks(v: unknown): boolean | null {
     return typeof v === 'boolean' ? v : null;
 }
 
+function answers(a: unknown): 'week' | 'slow' | 'none' | null {
+    return a === 'week' || a === 'slow' || a === 'none' ? a : null;
+}
+
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DAY_MS = 86_400_000;
 
@@ -276,6 +284,7 @@ export function normaliseRegistryRow(raw: unknown): DirectoryRow | null {
         promise: listingPromise(r.promise),
         acceptingKnocks: knocks(r.accepting_knocks ?? r.acceptingKnocks),
         closingOn: closingDay(r.closing_on ?? r.closingOn),
+        answers: answers(r.answers),
     };
 }
 
@@ -297,18 +306,20 @@ interface CacheRecord {
     promise: string | null;
     accepting_knocks: number | null;
     closing_on: string | null;
+    answers?: string | null;
     first_seen_at: string;
     updated_at: string;
 }
 
 function columns(r: DirectoryRow): unknown[] {
     return [r.name, r.url, r.lat, r.lng, r.radiusKm, r.memberCount, r.contactEmail, r.contactPhone, r.registryUpdatedAt,
-        r.promise ? JSON.stringify(r.promise) : null, r.acceptingKnocks === null ? null : r.acceptingKnocks ? 1 : 0, r.closingOn];
+        r.promise ? JSON.stringify(r.promise) : null, r.acceptingKnocks === null ? null : r.acceptingKnocks ? 1 : 0, r.closingOn,
+        r.answers ?? null];
 }
 
 function stored(c: CacheRecord): unknown[] {
     return [c.name, c.node_url, c.lat, c.lng, c.radius_km, c.member_count, c.contact_email, c.contact_phone, c.registry_updated_at,
-        c.promise ?? null, c.accepting_knocks ?? null, c.closing_on ?? null];
+        c.promise ?? null, c.accepting_knocks ?? null, c.closing_on ?? null, c.answers ?? null];
 }
 
 export interface DirectoryWrite {
@@ -331,14 +342,14 @@ let listedRows: Array<{ row: DirectoryRow; folded: string | null }> | null = nul
 export function writeDirectoryRows(rows: readonly DirectoryRow[], now: string): DirectoryWrite {
     const existing = new Map((db.prepare('SELECT * FROM directory_cache').all() as CacheRecord[]).map(c => [c.community_key, c]));
     const insert = db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count,
-        contact_email, contact_phone, registry_updated_at, promise, accepting_knocks, closing_on, first_seen_at, updated_at)
-        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        contact_email, contact_phone, registry_updated_at, promise, accepting_knocks, closing_on, answers, first_seen_at, updated_at)
+        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const update = db.prepare(`UPDATE directory_cache SET listed = 1, name = ?, node_url = ?, lat = ?, lng = ?, radius_km = ?,
         member_count = ?, contact_email = ?, contact_phone = ?, registry_updated_at = ?, promise = ?, accepting_knocks = ?,
-        closing_on = ?, updated_at = ? WHERE community_key = ?`);
+        closing_on = ?, answers = ?, updated_at = ? WHERE community_key = ?`);
     const scrub = db.prepare(`UPDATE directory_cache SET listed = 0, name = NULL, node_url = NULL, lat = NULL, lng = NULL,
         radius_km = NULL, member_count = NULL, contact_email = NULL, contact_phone = NULL, registry_updated_at = NULL,
-        promise = NULL, accepting_knocks = NULL, closing_on = NULL, updated_at = ? WHERE community_key = ?`);
+        promise = NULL, accepting_knocks = NULL, closing_on = NULL, answers = NULL, updated_at = ? WHERE community_key = ?`);
     const out: DirectoryWrite = { added: [], updated: 0, removed: 0 };
     const seen = new Set<string>();
     db.transaction(() => {
@@ -382,13 +393,14 @@ export function mergeReplicatedDirectory(communities: unknown): DirectoryMerge {
     if (!Array.isArray(communities) || communities.length === 0) return merge;
     const current = db.prepare('SELECT updated_at FROM directory_cache WHERE community_key = ?');
     const upsert = db.prepare(`INSERT INTO directory_cache (community_key, listed, name, node_url, lat, lng, radius_km, member_count,
-        contact_email, contact_phone, registry_updated_at, promise, accepting_knocks, closing_on, first_seen_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        contact_email, contact_phone, registry_updated_at, promise, accepting_knocks, closing_on, answers, first_seen_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(community_key) DO UPDATE SET listed = excluded.listed, name = excluded.name, node_url = excluded.node_url,
             lat = excluded.lat, lng = excluded.lng, radius_km = excluded.radius_km, member_count = excluded.member_count,
             contact_email = excluded.contact_email, contact_phone = excluded.contact_phone,
             registry_updated_at = excluded.registry_updated_at, promise = excluded.promise,
             accepting_knocks = excluded.accepting_knocks, closing_on = excluded.closing_on,
+            answers = excluded.answers,
             first_seen_at = excluded.first_seen_at, updated_at = excluded.updated_at`);
     db.transaction(() => {
         for (const raw of communities) {
@@ -446,6 +458,7 @@ function listed(): Array<{ row: DirectoryRow; folded: string | null }> {
             promise: listingPromise(c.promise),
             acceptingKnocks: c.accepting_knocks === 1 ? true : c.accepting_knocks === 0 ? false : null,
             closingOn: closingDay(c.closing_on),
+            answers: answers(c.answers),
         },
         folded: c.name === null ? null : foldForSearch(c.name),
     }));
@@ -473,6 +486,7 @@ function toCommunity(r: DirectoryRow, distanceKm: number | null): Community {
         promise: r.promise,
         acceptingKnocks: r.acceptingKnocks,
         closingOn: r.closingOn,
+        answers: r.answers ?? null,
     };
 }
 
@@ -553,6 +567,9 @@ export function listCommunities(query: CommunityQuery): { communities: Community
         }
         if (query.point && a.band !== null) {
             if (a.first !== b.first) return a.first ? -1 : 1;
+            const aAnswersNone = a.r.answers === 'none';
+            const bAnswersNone = b.r.answers === 'none';
+            if (aAnswersNone !== bAnswersNone) return aAnswersNone ? 1 : -1;
             if (a.rank !== b.rank) return a.rank - b.rank;
             return a.r.key < b.r.key ? -1 : a.r.key > b.r.key ? 1 : 0;
         }
@@ -642,4 +659,38 @@ export function writeMirrorStatus(patch: Partial<MirrorStatus>): MirrorStatus {
     db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
         .run(STATUS_KEY, JSON.stringify(next));
     return next;
+}
+
+export function clearDirectoryForTesting(): void {
+    db.prepare('DELETE FROM directory_cache').run();
+    listedRows = null;
+}
+
+export function insertDirectoryRowForTesting(row: DirectoryRow): void {
+    const now = new Date().toISOString();
+    db.prepare(`
+        INSERT INTO directory_cache (
+            community_key, listed, name, node_url, lat, lng, radius_km,
+            member_count, contact_email, contact_phone, registry_updated_at,
+            promise, accepting_knocks, closing_on, answers, first_seen_at, updated_at
+        ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        row.key,
+        row.name,
+        row.url,
+        row.lat,
+        row.lng,
+        row.radiusKm,
+        row.memberCount,
+        row.contactEmail,
+        row.contactPhone,
+        row.registryUpdatedAt,
+        row.promise ? JSON.stringify(row.promise) : null,
+        row.acceptingKnocks === null ? null : (row.acceptingKnocks ? 1 : 0),
+        row.closingOn,
+        row.answers ?? null,
+        now,
+        now,
+    );
+    listedRows = null;
 }

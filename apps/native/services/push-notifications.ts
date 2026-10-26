@@ -10,7 +10,7 @@ import { registerAccountForPush, retryDueRegistrations } from '../utils/push-reg
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../utils/push-notice-check';
 import { openNoticeIn } from '../utils/push-notice-switch';
 import { countNotice, watchNoticeCounts } from '../utils/notice-counts';
-import { postNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
+import { postNoticesFromSync, postKnockStatusNoticesFromSync, postAdminKnockNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
 import { notificationChannels } from '../utils/notification-channels';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 import { toolReminderRoute } from '../tools/reminders';
@@ -285,7 +285,12 @@ export async function postNoticesAfterSync(): Promise<number> {
     try {
         if (AppState.currentState === 'active') return 0;
         if ((await Notifications.getPermissionsAsync()).status !== 'granted') return 0;
-        return await postNoticesFromSync({ storage: AsyncStorage, account: await loadIdentity(), post: postLocalNotice });
+        const account = await loadIdentity();
+        let total = 0;
+        total += await postNoticesFromSync({ storage: AsyncStorage, account, post: postLocalNotice });
+        total += await postKnockStatusNoticesFromSync({ storage: AsyncStorage, account, post: postLocalNotice });
+        total += await postAdminKnockNoticesFromSync({ storage: AsyncStorage, account, post: postLocalNotice });
+        return total;
     } catch (e) {
         console.warn('[Notices] The sync\'s notices were not posted', e);
         return 0;

@@ -44,6 +44,17 @@ Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** 
 
 Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
 
+**Requests to join and the public directory.** When someone finds your community in the global directory and asks to join, your server tells its owners and admins with a push notification ("Someone asked to join your community.") and a line on Home under Needs you ("2 people asked to join"). Members who opted into "Requests to join" in Notification Preferences are notified too.
+
+If a request waits **3 days** without an answer in an Invite community (any member invites), the Needs you line is shown to all members so someone can welcome them.
+
+If a request waits **7 days** with no answer, the server sends an operator alert (`knock.waiting`: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
+
+Your server measures how promptly requests are answered over its last 90 days and publishes this line to the directory:
+- **"Usually answers within a week"** when at least 80% of requests were answered within 7 days and none is older than 14 days.
+- **"Hasn't answered requests lately"** when an open request is older than 14 days or fewer than half were answered. Communities with this status for 60 days sort after those that answer within their distance band.
+- Nothing is shown until at least 3 requests have been received.
+
 **While no new members are being taken** (the community is paused), the card says so first. No choice is marked as the one in use; the one from before the pause is marked "before the pause". Saving either choice takes new members again, and every member is told. Until the manager has checked whether the community is paused, it won't save: if it can't check, reload to try again.
 
 **While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The card says so first, in the server's words, with what would end it, and offers nothing to save until the preview is off.

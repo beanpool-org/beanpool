@@ -89,6 +89,7 @@ import { cleanLabel } from '../config/clean-label.js';
 import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
+import { openKnocksWaitingDays } from '../engine/knocks.js';
 import { dispatchPushNotification, readWatchdogStatus, resolvePublicNodeUrl } from '../state-engine.js';
 import { getOffboxStatus } from './offbox-backups.js';
 import { backupLockState } from './sealed-backup.js';
@@ -164,6 +165,7 @@ export type AlertKey =
     | 'reg.notice'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
     | 'door.busy'
+    | 'knock.waiting'
     | 'requests.flood';
 
 interface Row {
@@ -240,6 +242,8 @@ const ROWS: Record<AlertKey, Row> = {
     'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
     /** More new members in a day than DOOR_BUSY_NEW_MEMBERS_PER_DAY (engine/door-signal.ts doorBusy): told when it rises. */
     'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
+    /** A request to join has waited 7 days without an answer (front doors S1). */
+    'knock.waiting': { title: 'a request to join is waiting', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
     /** Signed requests turned away for room in the nonce store (nonceConditions): 4 when a member is, or the newer accounts' share is full. */
     'requests.flood': { title: 'signed requests turned away', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
 };
@@ -1687,6 +1691,13 @@ function tlsConditions(at: number): Condition[] {
     ];
 }
 
+function knockConditions(t: number): Condition[] {
+    const hasWaiting = openKnocksWaitingDays(7, t) > 0;
+    return hasWaiting
+        ? [{ key: 'knock.waiting', active: true, detail: 'A request to join has waited 7 days.' }]
+        : [{ key: 'knock.waiting', active: false, detail: 'No requests to join have waited 7 days.' }];
+}
+
 /** One tick: every row looked at, the book updated, what waits sent. */
 export async function checkServerAlerts(): Promise<AlertEvent[]> {
     try {
@@ -1709,6 +1720,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...childFoldConditions(s, t),
             ...childSummaryConditions(s, t),
             ...nonceConditions(t),
+            ...knockConditions(t),
         ];
         return await updateAlerts(conditions);
     } catch (e) {

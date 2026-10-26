@@ -611,6 +611,7 @@ export default function SettingsScreen() {
     const [notifChat, setNotifChat] = useState(true);
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
+    const [notifKnocks, setNotifKnocks] = useState(false);
     const [notifLoading, setNotifLoading] = useState(false);
     // How long before an event starts this member wants to be told. The day before until they say otherwise
     // (the shared contract), and an empty list means no reminders at all.
@@ -2040,6 +2041,7 @@ export default function SettingsScreen() {
                                     setNotifMarketplace(prefs.notify_marketplace !== 'false');
                                     setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
                                     setNotifEscrow(prefs.notify_escrow !== 'false');
+                                    setNotifKnocks(prefs.notify_knocks === 'true');
                                 }
                             }
                         } catch (e) { console.warn('[Prefs] Failed to fetch preferences:', e); }
@@ -2537,7 +2539,7 @@ export default function SettingsScreen() {
                                     <View style={[styles.toggleThumb, notifMarketplace && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
-                            <View style={[styles.menuBtn, styles.menuBtnLast]}>
+                            <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.menuText}>{t("Held in Trust & System")}</Text>
@@ -2548,6 +2550,19 @@ export default function SettingsScreen() {
                                     try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_escrow: next } }); } } catch (e) { console.warn('[Prefs]', e); }
                                 }}>
                                     <View style={[styles.toggleThumb, notifEscrow && styles.toggleThumbOn]} />
+                                </Pressable>
+                            </View>
+                            <View style={[styles.menuBtn, styles.menuBtnLast]}>
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚪</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>{t("Requests to join")}</Text>
+                                    <Text style={styles.menuSub}>{t("When someone asks to join your community")}</Text>
+                                </View>
+                                <Pressable style={[styles.toggle, notifKnocks && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t("Requests to join notifications")} accessibilityState={{ checked: notifKnocks }} onPress={async () => {
+                                    const next = !notifKnocks; setNotifKnocks(next);
+                                    try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_knocks: next } }); } } catch (e) { console.warn('[Prefs]', e); }
+                                }}>
+                                    <View style={[styles.toggleThumb, notifKnocks && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
                         </View>

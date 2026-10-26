@@ -51,7 +51,7 @@ import { t, word, type Words } from './words.js';
 export const PUSH_NOTICE_TITLE = 'BeanPool';
 
 /** Where the app goes for a notice whose details it can't fetch: the tab its kind belongs to. */
-export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings';
+export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings' | 'people';
 
 /**
  * Every kind of push a community sends, with the one sentence its lock screen shows. A server never sends free text in a
@@ -77,6 +77,8 @@ export const PUSH_NOTICE_KINDS = {
     'event.update': { body: word("There is news about an event you're going to."), tab: 'market' },
     'community.notice': { body: word('Your community has a notice for you.'), tab: 'home' },
     'community.near': { body: word('A community has started near you.'), tab: 'home' },
+    'community.knock': { body: word('Someone asked to join your community.'), tab: 'people' },
+    'community.knock-answer': { body: word('A community answered your request.'), tab: 'home' },
     'account.recovery-started': { body: word("Someone is trying to recover your account. If this isn't you, open BeanPool and stop it."), tab: 'settings' },
     'account.restored': { body: word("Your account was just restored on another device. If that wasn't you, open BeanPool now."), tab: 'settings' },
     // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a

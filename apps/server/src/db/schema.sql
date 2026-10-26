@@ -1094,7 +1094,8 @@ CREATE TABLE IF NOT EXISTS directory_cache (
     updated_at TEXT NOT NULL,
     promise TEXT,
     accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1)),
-    closing_on TEXT
+    closing_on TEXT,
+    answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))
 );
 CREATE INDEX IF NOT EXISTS idx_directory_cache_updated_at ON directory_cache(updated_at);
 
@@ -1147,7 +1148,7 @@ CREATE TABLE IF NOT EXISTS join_requests (
     message TEXT NOT NULL,
     avatar TEXT,
     from_node TEXT,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     decided_by TEXT,
     invite_code TEXT UNIQUE,

@@ -300,6 +300,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [notifChat, setNotifChat] = useState(true);
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
+    const [notifKnocks, setNotifKnocks] = useState(false);
 
     // How long before an event starts this member wants to be told. The day before until they say otherwise
     // (the shared contract), and an empty list means no reminders at all.
@@ -313,6 +314,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 setNotifChat(prefs.notify_chat !== 'false' && prefs.notify_chat !== false);
                 setNotifMarketplace(prefs.notify_marketplace !== 'false' && prefs.notify_marketplace !== false);
                 setNotifEscrow(prefs.notify_escrow !== 'false' && prefs.notify_escrow !== false);
+                setNotifKnocks(prefs.notify_knocks === 'true' || prefs.notify_knocks === true);
                 setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
             }
         } catch (e) {
@@ -348,20 +350,23 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     };
 
-    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow') => {
+    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks') => {
         const nextChat = key === 'chat' ? !notifChat : notifChat;
         const nextMkt = key === 'marketplace' ? !notifMarketplace : notifMarketplace;
         const nextEscrow = key === 'escrow' ? !notifEscrow : notifEscrow;
+        const nextKnocks = key === 'knocks' ? !notifKnocks : notifKnocks;
 
         if (key === 'chat') setNotifChat(nextChat);
         if (key === 'marketplace') setNotifMarketplace(nextMkt);
         if (key === 'escrow') setNotifEscrow(nextEscrow);
+        if (key === 'knocks') setNotifKnocks(nextKnocks);
 
         try {
             await updateNotificationPreferences(identity.publicKey, {
                 notify_chat: nextChat,
                 notify_marketplace: nextMkt,
                 notify_escrow: nextEscrow,
+                notify_knocks: nextKnocks,
             });
         } catch (e) {
             console.warn('[NotifPrefs] Save failed:', e);
@@ -1652,6 +1657,18 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         checked={notifEscrow}
                                         onChange={() => handleToggleNotif('escrow')}
                                         label={t('Escrow & Deals Notifications')}
+                                    />
+                                </div>
+
+                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Requests to join')}</div>
+                                        <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts when someone asks to join your community')}</div>
+                                    </div>
+                                    <ToggleSwitch
+                                        checked={notifKnocks}
+                                        onChange={() => handleToggleNotif('knocks')}
+                                        label={t('Requests to join notifications')}
                                     />
                                 </div>
 

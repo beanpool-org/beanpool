@@ -79,6 +79,7 @@ import { type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
+import { openKnocksWaitingDays } from '../engine/knocks.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -504,6 +505,7 @@ function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, d
         case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
         case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
         case 'agent_suggestions': return `${plural(n, 'suggestion', 'suggestions')} from your AI assistant to approve`;
+        case 'knocks': return n === 1 ? '1 person asked to join' : `${n} people asked to join`;
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
 }
@@ -554,6 +556,17 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             const parts = work.map(i => adminItemInWords(i, c.switches.decisions));
             const joined = parts.length <= 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
             items.push({ kind: 'admin', count: queue.total, accent: true, label: joined.charAt(0).toUpperCase() + joined.slice(1), target: { to: 'admin', section: work[0].section } });
+        }
+    } else if (row?.status === 'active' && !isVisitorKey(me) && c.features.door === 'members') {
+        const waitingKnocks = openKnocksWaitingDays(3);
+        if (waitingKnocks > 0) {
+            items.push({
+                kind: 'admin',
+                count: waitingKnocks,
+                accent: true,
+                label: waitingKnocks === 1 ? '1 person asked to join' : `${waitingKnocks} people asked to join`,
+                target: { to: 'invites' },
+            });
         }
     }
 

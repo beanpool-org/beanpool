@@ -93,7 +93,7 @@ describe('banner-after-start (PWA)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         localStorage.clear();
-        vi.spyOn(api, 'getTreasuries').mockResolvedValue([]);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, keeperOf: [ENT_KEY] } as any);
         vi.spyOn(api, 'getCommonsBalance').mockResolvedValue({ balance: 500 });
         vi.spyOn(api, 'getGroups').mockResolvedValue([]);
@@ -101,7 +101,7 @@ describe('banner-after-start (PWA)', () => {
         vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [] } as any);
         vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ tier: 'member', features: null } as any);
         vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: null, messages: [], readOnly: false } as any);
-        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(null);
+        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(null as any);
     });
 
     afterEach(() => {

@@ -86,6 +86,20 @@ export default function TreasuryDetailScreen() {
     // The shopfront's listings with their photos and stamps (S5): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
+    // The keeper-only Paused section: its own read (readOwnerListings(treasuryKey, { keeper: true })), keeping only rows
+    // with status === 'paused', in its own state, with stale-read guards (shownPubkey / turn), cleared when not keeper.
+    const [pausedListings, setPausedListings] = useState<ShopfrontListing[]>([]);
+    const shownPubkey = useRef(treasuryKey);
+    shownPubkey.current = treasuryKey;
+    const pausedTurn = useRef(0);
+    const prevKey = useRef(treasuryKey);
+    useEffect(() => {
+        if (prevKey.current !== treasuryKey) {
+            prevKey.current = treasuryKey;
+            setOwnListings(undefined);
+            setPausedListings([]);
+        }
+    }, [treasuryKey]);
     const [messagingLead, setMessagingLead] = useState(false);
 
     // Keeper Join Request State
@@ -234,6 +248,7 @@ export default function TreasuryDetailScreen() {
             const d = sampleTreasuryDetail(treasuryKey);
             setDetail(d);
             setIsKeeperOfThis(false);
+            setPausedListings([]);
             setLoading(false);
             return () => { active = false; };
         }
@@ -241,6 +256,7 @@ export default function TreasuryDetailScreen() {
         if (!reader.known) return () => { active = false; };
         if (elsewhere) {
             setDetail(null);
+            setPausedListings([]);
             setLoading(false);
             return () => { active = false; };
         }
@@ -265,7 +281,21 @@ export default function TreasuryDetailScreen() {
                     setIsKeeperOfThis(false);
                 }
                 if (d && treasuryKey && hasShopfront(d) && readsAsMember(d)) {
-                    void readOwnerListings(treasuryKey, { keeper }).then((rows) => { if (active) setOwnListings(rows); });
+                    void readOwnerListings(treasuryKey).then((rows) => {
+                        if (active && shownPubkey.current === treasuryKey) setOwnListings(rows);
+                    });
+                    if (keeper) {
+                        const turn = ++pausedTurn.current;
+                        void readOwnerListings(treasuryKey, { keeper: true }).then((rows) => {
+                            if (active && shownPubkey.current === treasuryKey && turn === pausedTurn.current && rows) {
+                                setPausedListings(rows.filter((l) => l.status === 'paused'));
+                            }
+                        });
+                    } else {
+                        setPausedListings([]);
+                    }
+                } else {
+                    setPausedListings([]);
                 }
             } catch {
                 // handle error
@@ -410,7 +440,6 @@ export default function TreasuryDetailScreen() {
     const leadKeeper = leadKeeperOf(shopfrontKeepers);
     const memberView = isEffectivePreview || readsAsMember(detail);
     const shopListings: ShopfrontListing[] = ownListings ?? listingsFromDetailPosts(detail?.posts);
-    const pausedListings = isKeeperOfThis ? shopListings.filter((l) => l.status === 'paused') : [];
     const openListingHere = (id: string) => { if (!isEffectivePreview) openListing(id); };
     const handleMessageLead = async () => {
         if (!leadKeeper || !myPubkey || messagingLead) return;

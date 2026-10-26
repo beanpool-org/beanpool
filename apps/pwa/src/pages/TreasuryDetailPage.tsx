@@ -137,6 +137,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
+    // The keeper-only Paused section: its own read (readOwnerListings(pubkey, { keeper: true })), keeping only rows
+    // with status === 'paused', in its own state, with stale-read guards (shownPubkey / turn), re-read with readListings.
+    const [pausedListings, setPausedListings] = useState<ShopfrontListing[]>([]);
+    const pausedTurn = useRef(0);
     // Another enterprise can open over this one (a keeper's profile, a link: App.tsx changes the key, not the page). It opens
     // on its page with none of the one before's listings, and a read for the one before that lands late is dropped.
     const shownPubkey = useRef(pubkey);
@@ -147,6 +151,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             prevPubkey.current = pubkey;
             setTab('page');
             setOwnListings(undefined);
+            setPausedListings([]);
         }
     }, [pubkey]);
     // Manage's Featured card shows these same listings, so an Offer posted, paused or resumed in Manage shows there as on the
@@ -154,18 +159,32 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // An Offer put on or off the shelf while a read is out keeps its new place over what that read says of it.
     const listingsTurn = useRef(0);
     const featuredMeanwhile = useRef(new Set<Map<string, string | null>>());
-    const readListings = useCallback(async (opts?: { keeper?: boolean }) => {
+    const readPaused = useCallback(async () => {
+        if (!isKeeperRef.current) {
+            setPausedListings([]);
+            return;
+        }
+        const turn = ++pausedTurn.current;
+        const read = await readOwnerListings(pubkey, { keeper: true });
+        if (shownPubkey.current !== pubkey || turn !== pausedTurn.current) return;
+        if (read) {
+            setPausedListings(read.filter((l) => l.status === 'paused'));
+        }
+    }, [pubkey]);
+    const readListings = useCallback(async () => {
         const turn = ++listingsTurn.current;
         const meanwhile = new Map<string, string | null>();
         featuredMeanwhile.current.add(meanwhile);
-        const keeper = opts?.keeper ?? isKeeperRef.current;
-        const read = await readOwnerListings(pubkey, { keeper });
+        // The page's sections, Featured, Together and "No live listings yet." read what members read (no keeper flag), even for keepers.
+        const read = await readOwnerListings(pubkey);
         featuredMeanwhile.current.delete(meanwhile);
         if (shownPubkey.current !== pubkey || turn !== listingsTurn.current) return;
         setOwnListings((was) => !read
             ? (Array.isArray(was) ? was : read)
             : read.map((l) => (meanwhile.has(l.id) ? { ...l, featuredAt: meanwhile.get(l.id) ?? null } : l)));
-    }, [pubkey]);
+        if (isKeeperRef.current) void readPaused();
+        else setPausedListings([]);
+    }, [pubkey, readPaused]);
     const featuredHere = (postId: string, featuredAt: string | null) => {
         if (shownPubkey.current !== pubkey) return;
         featuredMeanwhile.current.forEach((m) => m.set(postId, featuredAt));
@@ -551,8 +570,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             isKeeperRef.current = keeper;
 
             // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
-            // For a keeper, read with keeper=1 to retrieve paused listings too.
-            if (hasShopfront(d) && readsAsMember(d)) void readListings({ keeper });
+            if (hasShopfront(d) && readsAsMember(d)) {
+                void readListings();
+            } else {
+                setPausedListings([]);
+            }
         } catch (e: any) {
             // A quiet read again that fails leaves the page as it was.
             if (!quiet && current()) setError(e.message || t('Check your connection and try again.'));
@@ -1059,7 +1081,6 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const leadKeeper = leadKeeperOf(shopfrontKeepers);
     const memberView = isEffectivePreview || readsAsMember(detail);
     const shopListings: ShopfrontListing[] = ownListings ?? listingsFromDetailPosts(detail?.posts);
-    const pausedListings = isKeeperOfThis ? shopListings.filter((l) => l.status === 'paused') : [];
     // What each of its listings says of it while it is paused, winding up or closed (the old listing rows' badge).
     const listingNote = detail?.status === 'completed'
         ? t('Closed', undefined, 'a listing')

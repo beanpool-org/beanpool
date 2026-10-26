@@ -733,6 +733,13 @@ router.post('/api/marketplace/posts', async (ctx) => {
         ctx.body = { error: 'Post as an enterprise through its own route: POST /api/treasury/:treasury/{offer,need,event}' };
         return;
     }
+    if (type === 'offer' || type === 'need' || type === 'event') {
+        if (!Array.isArray(photos) || photos.length === 0) {
+            ctx.status = 400;
+            ctx.body = { error: word('Add a photo first') };
+            return;
+        }
+    }
     if (Array.isArray(photos)) {
         const photoRefusal = routePhotosRefusal(photos);
         if (photoRefusal) {

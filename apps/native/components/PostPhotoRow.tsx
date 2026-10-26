@@ -12,9 +12,10 @@ import { askForPostPhoto } from '../utils/post-photo';
 /** The most photos a listing holds (the node keeps five: engine/posts.ts). */
 export const MAX_POST_PHOTOS = 5;
 
-export function PostPhotoRow({ photos, onChange, testID }: { photos: string[]; onChange: (next: string[]) => void; testID?: string }) {
+export function PostPhotoRow({ photos, onChange, testID, required }: { photos: string[]; onChange: (next: string[]) => void; testID?: string; required?: boolean }) {
     const styles = useStyles(({ colors }) => StyleSheet.create({
         label: { fontSize: 11, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginBottom: 8 },
+        requiredStar: { color: colors.feedback.danger.solid },
         row: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
         thumb: { width: 60, height: 60, borderRadius: 12, position: 'relative' },
         img: { width: 60, height: 60, borderRadius: 12 },
@@ -34,7 +35,10 @@ export function PostPhotoRow({ photos, onChange, testID }: { photos: string[]; o
 
     return (
         <View testID={testID}>
-            <Text style={styles.label}>{t('PHOTOS ({n}/{max})', { n: photos.length, max: MAX_POST_PHOTOS })}</Text>
+            <Text style={styles.label}>
+                {t('PHOTOS ({n}/{max})', { n: photos.length, max: MAX_POST_PHOTOS })}
+                {required ? <Text style={styles.requiredStar}> *</Text> : null}
+            </Text>
             <View style={styles.row}>
                 {photos.map((uri, i) => (
                     <View key={`${i}-${uri.length}`} style={styles.thumb}>

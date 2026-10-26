@@ -18,6 +18,7 @@
  * reach local), so the body's versions of those are deliberately ignored rather than passed and overridden.
  */
 
+import { word } from '@beanpool/core';
 import { createPost } from '../state-engine.js';
 import type { EventTimeOut } from '../engine/posts.js';
 
@@ -31,6 +32,9 @@ import type { EventTimeOut } from '../engine/posts.js';
  */
 export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, out?: EventTimeOut) {
     const b = body || {};
+    if (!Array.isArray(b.photos) || b.photos.length === 0) {
+        throw new Error(word('Add a photo first'));
+    }
     return createPost(
         'event', 'community', b.title, b.description || '',
         0, 'fixed', author,

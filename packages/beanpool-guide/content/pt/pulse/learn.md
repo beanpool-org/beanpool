@@ -3,7 +3,7 @@ slug: learn
 title: A seção Aprender
 summary: Vídeos curtos sobre o BeanPool e as páginas do guia que os acompanham.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## O que há nela

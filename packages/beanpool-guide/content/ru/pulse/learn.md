@@ -3,7 +3,7 @@ slug: learn
 title: Раздел Знания
 summary: Короткие обучающие видео о BeanPool и соответствующие им страницы гида.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Что внутри

@@ -3,7 +3,7 @@ slug: learn
 title: Spazio Impara
 summary: Brevi video su BeanPool e le relative pagine della guida a cui fanno riferimento.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Cosa contiene

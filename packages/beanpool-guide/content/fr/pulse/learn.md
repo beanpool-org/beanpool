@@ -3,7 +3,7 @@ slug: learn
 title: L'espace Découvrir
 summary: Courtes vidéos sur BeanPool et pages du guide correspondantes.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Ce qu'il contient

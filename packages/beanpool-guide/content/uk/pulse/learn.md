@@ -3,7 +3,7 @@ slug: learn
 title: Розділ Навчання
 summary: Короткі відео про BeanPool та відповідні сторінки посібника.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Що тут міститься

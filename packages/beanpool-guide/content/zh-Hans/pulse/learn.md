@@ -3,7 +3,7 @@ slug: learn
 title: “学习”板块
 summary: 关于 BeanPool 的短视频以及对应的指南页面。
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## 包含的内容

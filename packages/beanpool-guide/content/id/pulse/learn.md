@@ -3,7 +3,7 @@ slug: learn
 title: Ruang Belajar
 summary: Video pendek tentang BeanPool, dan halaman panduan yang sesuai.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Apa isinya
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Di ponsel, buka **Kabar** dan ketuk **Belajar**. Di web app, buka Kabar dan ketuk **Cara kerja** di sepanjang bagian atas. Isinya memuat:
 
 - video dari BeanPool tentang cara kerjanya;
-- **Renungan Harian**, pemikiran singkat yang berganti setiap pagi. Ini hanyalah judul; tidak ada yang perlu dibuka.
+- **Renungan Harian**, pemikiran singkat yang berganti setiap pagi. Ketuk untuk membuka renungan hari ini.
 
 Anggota juga dapat menambahkan saluran panduan mereka sendiri ke Belajar, dengan memilih topik **Cara kerja** saat mereka menambahkan saluran. Video tersebut adalah milik anggota sendiri, bukan milik BeanPool: periksa siapa yang memposting video sebelum kamu mengikuti sarannya.
 

@@ -3,7 +3,7 @@ slug: learn
 title: പഠന വിഭാഗം
 summary: BeanPool-നെക്കുറിച്ചുള്ള ചെറിയ വീഡിയോകളും അവയ്ക്കൊപ്പമുള്ള ഗൈഡ് പേജുകളും.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## ഇതിൽ എന്തൊക്കെയാണുള്ളത്

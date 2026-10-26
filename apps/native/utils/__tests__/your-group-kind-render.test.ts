@@ -7,12 +7,30 @@
  * words), from the `lifecycle` the node sends on each enterprise-kind row; a node too old to send it reads enterprise.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Module from 'node:module';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { YourChat } from '../your-groups';
 
+(Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+    Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
+
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock('expo', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+}));
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid', getRandomBytes: (n: number) => new Uint8Array(n) }));
+vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.0.0' } } }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
+}));
 
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {

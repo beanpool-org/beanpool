@@ -17,9 +17,9 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initStateEngine, createGroup, getGroup, createTreasury } from './state-engine.js';
-import { updateGroup, getGroupPicture } from '@beanpool/engine';
+import { updateGroup, getGroupPicture, getMemberPhoto } from '@beanpool/engine';
 import { db } from './db/db.js';
-import { registerTreasuryRoutes } from './routes/treasury.js';
+import { createTreasuryRoutes } from './routes/treasury.js';
 
 let run = 0;
 let passed = 0;
@@ -31,6 +31,15 @@ function assert(cond: boolean, msg: string): void {
     } else {
         console.error(`✗ ${msg}`);
     }
+}
+
+async function dispatch(router: any, method: string, path: string, ctx: any) {
+    const matched = router.match(path, method);
+    const layer = matched.pathAndMethod.find((l: any) => l.methods.includes(method));
+    if (!layer) throw new Error(`No route found for ${method} ${path}`);
+    const fn = layer.stack[layer.stack.length - 1];
+    await fn(ctx);
+    return ctx;
 }
 
 interface Identity {
@@ -112,15 +121,7 @@ async function main() {
     assert(updateNullFailed, 'updateGroup threw error when clearing picture to null');
 
     // 3. Treasury create route with no avatar/photos defaults to bundled://bean-green
-    const handlers: Record<string, Function> = {};
-    const router = {
-        post: (p: string, h: Function) => { handlers[p] = h; },
-        get: () => {},
-        put: () => {},
-        patch: () => {},
-        delete: () => {},
-    };
-    registerTreasuryRoutes(router);
+    const router = createTreasuryRoutes({ checkAdminAuth: async () => false } as any);
 
     const fakeCtx: any = {
         state: { actor: founder.pub },
@@ -133,14 +134,14 @@ async function main() {
         body: {},
     };
 
-    await handlers['/api/treasury'](fakeCtx);
+    await dispatch(router, 'POST', '/api/treasury', fakeCtx);
     assert(fakeCtx.status === 200, `createEnterpriseHandler succeeded (status: ${fakeCtx.status})`);
     assert(fakeCtx.body?.success === true, `createEnterpriseHandler returned success: true`);
 
-    const treasuryRow = db.prepare('SELECT avatar_url, avatar_ref FROM treasuries WHERE name = ?').get('Mullum Bakery') as any;
+    const bakeryPhoto = getMemberPhoto(db, fakeCtx.body.publicKey);
     assert(
-        treasuryRow?.avatar_url === 'bundled://bean-green' || treasuryRow?.avatar_ref === 'bundled://bean-green',
-        `created enterprise avatar defaulted to bundled://bean-green (avatar_url: ${treasuryRow?.avatar_url}, avatar_ref: ${treasuryRow?.avatar_ref})`
+        bakeryPhoto === 'bundled://bean-green',
+        `created enterprise avatar defaulted to bundled://bean-green (got: ${bakeryPhoto})`
     );
 
     // 4. Ingest / direct treasury row with no avatar is untouched
@@ -148,16 +149,17 @@ async function main() {
         systemCreated: true,
         purpose: 'Ingested via sync',
     });
-    const ingestRow = db.prepare('SELECT avatar_url, avatar_ref FROM treasuries WHERE public_key = ?').get(ingestTreasury.publicKey) as any;
+    const ingestPhoto = getMemberPhoto(db, ingestTreasury.publicKey);
     assert(
-        !ingestRow?.avatar_url && !ingestRow?.avatar_ref,
-        `ingest row with empty avatar remains empty (avatar_url: ${ingestRow?.avatar_url}, avatar_ref: ${ingestRow?.avatar_ref})`
+        !ingestPhoto,
+        `ingest row with empty avatar remains empty (got: ${ingestPhoto})`
     );
 
     console.log(`\n${passed}/${run} tests passed.`);
     if (passed !== run) {
         process.exit(1);
     }
+    process.exit(0);
 }
 
 main().catch((err) => {

@@ -116,7 +116,11 @@ vi.mock('expo-status-bar', () => ({
 }));
 
 vi.mock('../../components/AvatarPickerSheet', () => ({
-    AvatarPickerSheet: () => null,
+    AvatarPickerSheet: ({ visible, onSelectImage }: any) =>
+        visible ? createElement('button', {
+            'aria-label': 'Select test logo',
+            onClick: () => onSelectImage('bundled://bean-green')
+        }) : null,
 }));
 
 vi.mock('../../components/MemberAvatar', () => ({
@@ -240,7 +244,7 @@ describe('CreateGroupModal is chat-group form with bridge', () => {
         await type(host!.querySelector('input[placeholder*="Bindarrabi"]'), 'Garden Crew');
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b =>
-            /Create Group/i.test(b.getAttribute('aria-label') || b.textContent || '')
+            /^Create Group/i.test(b.getAttribute('aria-label') || '') || (b.textContent?.includes('Create Group') && !b.getAttribute('aria-label')?.includes('Close'))
         );
         expect(submitBtn).toBeDefined();
 
@@ -268,6 +272,14 @@ describe('propose-project modal kind handling', () => {
         // Fill in required fields: Title and Purpose
         await type(host!.querySelector('input[aria-label="Enterprise name or project title"]'), 'Mullum Food Co-op');
         await type(host!.querySelector('input[aria-label="Purpose statement"]'), 'Distribute fresh local produce');
+
+        // Pictures S4: Logo is mandatory; choose logo first
+        const chooseLogoBtn = host!.querySelector('button[aria-label="Choose a logo"]');
+        expect(chooseLogoBtn).toBeDefined();
+        await act(async () => { (chooseLogoBtn as HTMLButtonElement)!.click(); });
+        const selectLogoBtn = host!.querySelector('button[aria-label="Select test logo"]');
+        expect(selectLogoBtn).toBeDefined();
+        await act(async () => { (selectLogoBtn as HTMLButtonElement)!.click(); });
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b => /start initiative|start the enterprise/i.test(b.getAttribute('aria-label') || ''));
         expect(submitBtn).toBeDefined();

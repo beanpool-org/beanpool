@@ -362,6 +362,10 @@ export async function fetchDailyPulse(date?: string): Promise<DailyPulseReflecti
         }
         return await res.json();
     } catch (e: any) {
+        // If signedGet succeeded in reaching the server and returned an HTTP error, do not retry unauthenticated
+        if (e?.message?.includes('Failed to load Daily Pulse')) {
+            throw e;
+        }
         // Fallback for environments without AsyncStorage / db (like standalone tests)
         const url = await anchorUrl().catch(() => null);
         if (!url) throw e;

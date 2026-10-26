@@ -152,9 +152,10 @@ const LISTINGS = [
     { id: 'p-paused', type: 'offer', category: 'food', title: 'Special duck eggs', credits: 8, priceType: 'fixed', status: 'paused', shopId: SHOP_ID },
 ];
 
-function community(keeperOf: string[], listings: unknown = LISTINGS): (name: string, args: unknown[]) => Promise<unknown> | undefined {
+function community(keeperOf: string[], listings: unknown = LISTINGS, detailOver: Record<string, unknown> = {}): (name: string, args: unknown[]) => Promise<unknown> | undefined {
+    const detail = enterpriseDetail(detailOver);
     const answers: Record<string, unknown> = {
-        getTreasuryDetail: enterpriseDetail(),
+        getTreasuryDetail: detail,
         getBalance: { balance: 10, keeperOf },
         getEnterpriseThread: { conversation: null, messages: [], readOnly: false },
         getEnterpriseLedger: null,
@@ -164,7 +165,15 @@ function community(keeperOf: string[], listings: unknown = LISTINGS): (name: str
         if (name === 'signedGet') {
             const path = String(args[0]);
             if (path.startsWith(`/api/marketplace/posts?author=${ENT}`)) {
-                return Promise.resolve({ ok: true, status: 200, json: async () => listings });
+                const isKeeper = path.includes('keeper=1');
+                const allListings = Array.isArray(listings) ? listings : [];
+                if (isKeeper) {
+                    return Promise.resolve({ ok: true, status: 200, json: async () => allListings });
+                }
+                if (detail.paused || detail.status === 'winding_up' || detail.status === 'completed') {
+                    return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+                }
+                return Promise.resolve({ ok: true, status: 200, json: async () => allListings.filter((l: any) => l.status === 'active') });
             }
             return undefined;
         }
@@ -211,6 +220,7 @@ describe('treasury-detail paused section on phone', () => {
         await renderScreen();
 
         expect(host.textContent).toContain('Mullum Eggs');
+        expect(host.textContent).toContain('Dozen farm eggs');
         expect(byId('shopfront-paused')).toBeTruthy();
         expect(host.textContent).toContain('Special duck eggs');
 
@@ -220,7 +230,21 @@ describe('treasury-detail paused section on phone', () => {
         expect(nav.pushes).toContainEqual({ pathname: '/post/[id]', params: { id: 'p-paused' } });
     });
 
-    it('a non-keeper member sees NO Paused section and no paused listings', async () => {
+    it('with enterprise season-paused, keeper sections show no live listing and Paused section shows only the paused row', async () => {
+        net.answer = community([ENT], LISTINGS, { paused: true });
+        await renderScreen();
+
+        expect(host.textContent).toContain('Mullum Eggs');
+        // Sections must show empty message: no live listings
+        expect(host.textContent).toContain('No live listings yet.');
+        expect(host.textContent).not.toContain('Dozen farm eggs');
+
+        // Paused section must be visible and contain the paused listing
+        expect(byId('shopfront-paused')).toBeTruthy();
+        expect(host.textContent).toContain('Special duck eggs');
+    });
+
+    it('a non-keeper member sees NO Paused section and never triggers the keeper read', async () => {
         const notKeeper = enterpriseDetail({ keepers: [{ publicKey: DAMO, callsign: 'Damo', role: 'lead' }] });
         net.answer = (name, _args) => {
             if (name === 'getTreasuryDetail') return Promise.resolve(notKeeper);
@@ -236,9 +260,12 @@ describe('treasury-detail paused section on phone', () => {
         expect(host.textContent).toContain('Dozen farm eggs');
         expect(byId('shopfront-paused')).toBeNull();
         expect(host.textContent).not.toContain('Special duck eggs');
+
+        // Must never trigger keeper read
+        expect(net.args.some(([name, args]) => name === 'signedGet' && String(args[0]).includes('keeper=1'))).toBe(false);
     });
 
-    it('a visitor sees NO Paused section', async () => {
+    it('a visitor sees NO Paused section and never triggers the keeper read', async () => {
         me.identity = null;
         net.answer = community([]);
         await renderScreen();
@@ -246,5 +273,8 @@ describe('treasury-detail paused section on phone', () => {
         expect(host.textContent).toContain('Mullum Eggs');
         expect(byId('shopfront-paused')).toBeNull();
         expect(host.textContent).not.toContain('Special duck eggs');
+
+        // Must never trigger keeper read
+        expect(net.args.some(([name, args]) => name === 'signedGet' && String(args[0]).includes('keeper=1'))).toBe(false);
     });
 });

@@ -5,8 +5,10 @@
  * Verifies:
  *  - A keeper of the enterprise sees the "Paused" section listing paused Offers and Needs.
  *  - Tapping/clicking one opens it (calls onNavigatePost).
- *  - A non-keeper member sees NO Paused section and NO paused listings.
- *  - A visitor sees NO Paused section.
+ *  - With the enterprise season-paused, keeper's sections show "No live listings yet.",
+ *    and the Paused section shows only the paused row.
+ *  - A non-keeper member sees NO Paused section and never triggers the keeper read.
+ *  - A visitor sees NO Paused section and never triggers the keeper read.
  */
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
@@ -52,28 +54,31 @@ const strangerIdentity: BeanPoolIdentity = {
     createdAt: '2026-09-01T00:00:00.000Z',
 };
 
-const enterpriseDetail = {
-    publicKey: ENT,
-    name: 'Mullum Eggs',
-    purpose: 'Pasture eggs for all',
-    about: 'Fresh pasture eggs from Mullumbimby hens.',
-    since: '2026-09-01T00:00:00.000Z',
-    offerCategories: ['food'],
-    status: 'active',
-    paused: false,
-    lifecycle: 'ongoing',
-    balance: 50,
-    creditLine: 200,
-    liveOffers: 1,
-    keepers: [
-        { publicKey: KEEPER_PUBKEY, callsign: 'Charlie', role: 'keeper', backing: 10 },
-    ],
-    isLeadOrSoleKeeperOrAdmin: true,
-    shop: { id: 'shop-eggs', category: 'food', howToDeal: 'Pick up at gate' },
-    posts: [
-        { id: 'p-active', type: 'offer', title: 'Fresh eggs carton', credits: 6, status: 'active', price_type: 'fixed' },
-    ],
-};
+function makeEnterpriseDetail(over: Record<string, unknown> = {}) {
+    return {
+        publicKey: ENT,
+        name: 'Mullum Eggs',
+        purpose: 'Pasture eggs for all',
+        about: 'Fresh pasture eggs from Mullumbimby hens.',
+        since: '2026-09-01T00:00:00.000Z',
+        offerCategories: ['food'],
+        status: 'active',
+        paused: false,
+        lifecycle: 'ongoing',
+        balance: 50,
+        creditLine: 200,
+        liveOffers: 1,
+        keepers: [
+            { publicKey: KEEPER_PUBKEY, callsign: 'Charlie', role: 'keeper', backing: 10 },
+        ],
+        isLeadOrSoleKeeperOrAdmin: true,
+        shop: { id: 'shop-eggs', category: 'food', howToDeal: 'Pick up at gate' },
+        posts: [
+            { id: 'p-active', type: 'offer', title: 'Fresh eggs carton', credits: 6, status: 'active', price_type: 'fixed' },
+        ],
+        ...over,
+    };
+}
 
 const mockListings = [
     { id: 'p-active', type: 'offer', title: 'Fresh eggs carton', category: 'food', credits: 6, status: 'active', priceType: 'fixed', photos: [] },
@@ -81,16 +86,24 @@ const mockListings = [
 ];
 
 describe('TreasuryDetailPage paused section for keepers', () => {
+    let currentDetail: any;
+
     beforeEach(() => {
         vi.restoreAllMocks();
-        vi.spyOn(api, 'getTreasury').mockResolvedValue(enterpriseDetail as any);
+        currentDetail = makeEnterpriseDetail();
+        vi.spyOn(api, 'getTreasury').mockImplementation(async () => currentDetail);
         vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
         vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => {
-            // When keeper=1 is sent or keeper requests listings, return mockListings with paused item
-            if (filter?.keeper || filter?.author === ENT) {
+            // When keeper=1 is requested, return active rows and paused rows (skipping off-board filter)
+            if (filter?.keeper) {
                 return mockListings as any;
             }
-            return mockListings.filter(l => l.status === 'active') as any;
+            // Member read: if enterprise is season-paused or winding up, off-board filter returns empty []
+            if (currentDetail.paused || currentDetail.status === 'winding_up' || currentDetail.status === 'completed') {
+                return [];
+            }
+            // Active enterprise member read: active rows only, no paused rows
+            return mockListings.filter((l: any) => l.status === 'active') as any;
         });
         vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: null, readOnly: false, messages: [] } as any);
         vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({ enterprise: { publicKey: ENT }, period: {}, summary: {}, entries: [] } as any);
@@ -116,6 +129,9 @@ describe('TreasuryDetailPage paused section for keepers', () => {
 
         expect(await screen.findByRole('heading', { level: 1, name: 'Mullum Eggs' })).toBeInTheDocument();
 
+        // Active offer is visible under sections
+        expect(await screen.findByText('Fresh eggs carton')).toBeInTheDocument();
+
         // The Paused section must be visible to the keeper
         await waitFor(() => {
             expect(screen.getByTestId('shopfront-paused')).toBeInTheDocument();
@@ -128,7 +144,36 @@ describe('TreasuryDetailPage paused section for keepers', () => {
         expect(onNavigatePost).toHaveBeenCalledWith('p-paused');
     });
 
-    it('a non-keeper member sees NO Paused section and no paused listings', async () => {
+    it('with enterprise season-paused, keeper sections show no live listing and Paused section shows only the paused row', async () => {
+        currentDetail = makeEnterpriseDetail({ paused: true });
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 20, keeperOf: [ENT] } as any);
+        const onNavigatePost = vi.fn();
+
+        render(
+            <TreasuryDetailPage
+                identity={keeperIdentity}
+                pubkey={ENT}
+                isMember={true}
+                onBack={() => {}}
+                onNavigatePost={onNavigatePost}
+            />
+        );
+
+        expect(await screen.findByRole('heading', { level: 1, name: 'Mullum Eggs' })).toBeInTheDocument();
+
+        // The Paused section must be visible to the keeper with only the paused listing
+        await waitFor(() => {
+            expect(screen.getByTestId('shopfront-paused')).toBeInTheDocument();
+        });
+        expect(screen.getByText('Special duck eggs')).toBeInTheDocument();
+
+        // Sections must show empty message: no live listings
+        expect(await screen.findByText('No live listings yet.')).toBeInTheDocument();
+        // The active offer must NOT be shown in the sections
+        expect(screen.queryByText('Fresh eggs carton')).toBeNull();
+    });
+
+    it('a non-keeper member sees NO Paused section and never triggers the keeper read', async () => {
         vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 20, keeperOf: [] } as any);
         const onNavigatePost = vi.fn();
 
@@ -150,9 +195,13 @@ describe('TreasuryDetailPage paused section for keepers', () => {
         // Paused section and paused listing must NOT be visible
         expect(screen.queryByTestId('shopfront-paused')).toBeNull();
         expect(screen.queryByText('Special duck eggs')).toBeNull();
+
+        // Must never trigger keeper read
+        const postsCalls = vi.mocked(api.getMarketplacePosts).mock.calls;
+        expect(postsCalls.some(([filter]) => filter?.keeper)).toBe(false);
     });
 
-    it('a visitor sees NO Paused section and no paused listings', async () => {
+    it('a visitor sees NO Paused section and never triggers the keeper read', async () => {
         const onNavigatePost = vi.fn();
 
         render(
@@ -168,5 +217,8 @@ describe('TreasuryDetailPage paused section for keepers', () => {
         expect(await screen.findByRole('heading', { level: 1, name: 'Mullum Eggs' })).toBeInTheDocument();
         expect(screen.queryByTestId('shopfront-paused')).toBeNull();
         expect(screen.queryByText('Special duck eggs')).toBeNull();
+
+        const postsCalls = vi.mocked(api.getMarketplacePosts).mock.calls;
+        expect(postsCalls.some(([filter]) => filter?.keeper)).toBe(false);
     });
 });

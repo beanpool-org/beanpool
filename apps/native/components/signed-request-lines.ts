@@ -42,6 +42,8 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Couldn’t reach your community, so they are still your friend. Check your connection and try again.': word('Couldn’t reach your community, so they are still your friend. Check your connection and try again.'),
     // getGroupForLanding: no answer the phone can read.
     'Could not reach the node.': word('Could not reach the node.'),
+    // Pledges: refusal when a project deadline has passed.
+    "This project's deadline has passed: it takes no more pledges.": word("This project's deadline has passed: it takes no more pledges."),
 };
 
 /** db.ts's sentences with a status or the node's answer in them. */

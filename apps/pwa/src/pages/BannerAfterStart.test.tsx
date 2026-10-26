@@ -298,4 +298,16 @@ describe('banner-after-start (PWA)', () => {
         await waitFor(() => expect(api.getTreasury).toHaveBeenCalled());
         expect(screen.queryByText('Add a banner photo')).toBeNull();
     });
+
+    it('7. banner prompt not shown on completed or closed enterprise', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(sampleEnterprise({
+            status: 'completed',
+            shop: { photoUrl: null },
+        }) as any);
+
+        render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
+
+        await waitFor(() => expect(api.getTreasury).toHaveBeenCalled());
+        expect(screen.queryByText('Add a banner photo')).toBeNull();
+    });
 });

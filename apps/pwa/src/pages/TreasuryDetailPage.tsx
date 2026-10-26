@@ -162,18 +162,29 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         }
     };
 
+    const [savingBanner, setSavingBanner] = useState(false);
+
     const handleBannerFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
-        if (!file) return;
+        if (!file || savingBanner) return;
+        let photo: string | null = null;
         try {
-            const photo = await bannerCropper.crop(file, BANNER_PICTURE);
-            if (!photo) return;
+            photo = await bannerCropper.crop(file, BANNER_PICTURE);
+        } catch {
+            alert(t("That picture couldn't be read. Try another."));
+            return;
+        }
+        if (!photo) return;
+        setSavingBanner(true);
+        try {
             await changeEnterpriseShop(pubkey, { photo });
             setDetail((d: any) => d ? { ...d, shop: { ...d.shop, photoUrl: photo } } : d);
             load(true);
-        } catch {
-            alert(t("That picture couldn't be read. Try another."));
+        } catch (err: any) {
+            alert(err?.message || t('Could not save banner photo.'));
+        } finally {
+            setSavingBanner(false);
         }
     };
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
@@ -1102,7 +1113,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // Its face and shelf change while it is open; a closed or wound-up one keeps them as they are (the node refuses).
     const faceOpen = !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
     const hasBanner = !!shopPhotoOf(detail?.shop);
-    const showAddBanner = !elsewhere && !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed;
+    const showAddBanner = !elsewhere && !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed && faceOpen;
 
     // An action's words, drawn where `feedbackAt` puts them.
     const feedbackAlert = actionFeedback && (
@@ -2026,14 +2037,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <button
                                             type="button"
                                             onClick={() => bannerFileInputRef.current?.click()}
-                                            className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold shadow-sm transition-colors cursor-pointer"
+                                            disabled={savingBanner}
+                                            className={`min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold shadow-sm transition-colors cursor-pointer ${savingBanner ? 'opacity-60 cursor-not-allowed' : ''}`}
                                         >
                                             {t('Add a banner photo')}
                                         </button>
                                         <button
                                             type="button"
                                             onClick={handleDismissBanner}
-                                            className="min-h-[44px] px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-700 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-200 text-sm font-semibold transition-colors cursor-pointer"
+                                            disabled={savingBanner}
+                                            className={`min-h-[44px] px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-700 hover:bg-nature-50 dark:hover:bg-nature-800 text-nature-700 dark:text-nature-200 text-sm font-semibold transition-colors cursor-pointer ${savingBanner ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             {t('Not now')}
                                         </button>

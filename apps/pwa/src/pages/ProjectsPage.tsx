@@ -392,9 +392,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setNewGoal('');
             setNewDeadline('');
             setNewPhotos([]);
-            await fetchEnterprises();
             if (newLifecycle === 'ongoing' && res?.publicKey && onOpenTreasury) {
                 onOpenTreasury(res.publicKey);
+                void fetchEnterprises();
+            } else {
+                await fetchEnterprises();
             }
         } catch (err: any) {
             setCreateError(err.message || t('Failed to propose enterprise'));

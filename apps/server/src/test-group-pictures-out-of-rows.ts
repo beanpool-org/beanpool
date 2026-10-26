@@ -41,6 +41,8 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const HERE = path.dirname(SCRIPT);
 const DB_TS = path.join(HERE, 'db', 'db.ts');
 const STATE_ENGINE_TS = path.join(HERE, 'state-engine.ts');
+// Resolved here: a boot script runs from the temp data dir, where a bare '@beanpool/engine' resolves to nothing.
+const ENGINE = import.meta.resolve('@beanpool/engine');
 
 /** A JPEG the photo rules take (its structure walks), about `size` bytes, as a data URL. */
 function jpegUrl(size: number, seed = 1): string {
@@ -329,7 +331,7 @@ async function migration(root: string): Promise<void> {
         const boot1 = bootInto(stopDir, { GROUP_PICTURE_MOVE_BYTES: '100000' }, `
             console.error = (...a) => console.log(...a);
             const se = await import(${JSON.stringify(STATE_ENGINE_TS)});
-            const { setGroupPicture } = await import('@beanpool/engine');
+            const { setGroupPicture } = await import(${JSON.stringify(ENGINE)});
             const { db } = await import(${JSON.stringify(DB_TS)});
             se.initStateEngine();
             console.log('COMMITTED=' + db.prepare('SELECT COUNT(*) AS n FROM group_pictures gp JOIN groups g ON g.id = gp.group_id WHERE g.created_by = ?').get(${JSON.stringify(CREATOR)}).n);

@@ -378,7 +378,7 @@ async function main() {
     assert(made.status === 200 && !!offerId, `Alice lists an offer with a photo (got ${made.status} ${made.text.slice(0, 120)})`);
     const photoUrl = made.body?.post?.photos?.[0] as string | undefined;
     const taken = await post('/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Sentinel pumpkins', description: 'Taken by Bob', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
+        type: 'offer', category: 'other', title: 'Sentinel pumpkins', description: 'Taken by Bob', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5, photos: [TINY_PNG],
     }, alice);
     const takenId = taken.body?.post?.id as string;
     db.prepare("UPDATE posts SET status = 'pending', accepted_by = ?, accepted_at = ?, pending_transaction_id = 'mtx-priv' WHERE id = ?")
@@ -553,7 +553,7 @@ async function main() {
         const memberSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
         await sleep(200);
         const another = await post('/api/marketplace/posts', {
-            type: 'offer', category: 'other', title: 'Sentinel spade', description: 'Doorbell check', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
+            type: 'offer', category: 'other', title: 'Sentinel spade', description: 'Doorbell check', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5, photos: [TINY_PNG],
         }, alice);
         assert(another.status === 200, 'Alice lists another offer');
         await sleep(400);

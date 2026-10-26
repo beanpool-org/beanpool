@@ -15,7 +15,7 @@ export const MAX_POST_PHOTOS = 5;
 export function PostPhotoRow({ photos, onChange, testID, required }: { photos: string[]; onChange: (next: string[]) => void; testID?: string; required?: boolean }) {
     const styles = useStyles(({ colors }) => StyleSheet.create({
         label: { fontSize: 11, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginBottom: 8 },
-        requiredStar: { color: colors.feedback.danger.solid },
+        requiredStar: { color: colors.feedback.danger.fg },
         row: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
         thumb: { width: 60, height: 60, borderRadius: 12, position: 'relative' },
         img: { width: 60, height: 60, borderRadius: 12 },

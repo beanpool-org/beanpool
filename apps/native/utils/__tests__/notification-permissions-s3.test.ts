@@ -156,7 +156,7 @@ describe('S3: notification permission at the tap, never at account creation', ()
 
             // First knock: should prompt with reason and buttons
             const askPromise = askNotificationPermissionOnAction('knock', 'test-pubkey', {
-                promptUser: vi.fn(async () => 'turn_on'),
+                promptUser: vi.fn(async () => 'turn_on' as const),
             });
             const res1 = await askPromise;
             expect(res1).toBe('granted');

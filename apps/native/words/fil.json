@@ -6111,5 +6111,8 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} subok, {ms} ms bawat subok ({expected} ang inaasahan sa average)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "Naka-post na ang “{title}”, pero wala sa tindahan mo. Para ilagay ito, buksan ito, i-tap ang I-edit ang Post at lagyan ng tsek ang Ilagay ito sa tindahan mo.",
   "✓ Friend": "✓ Kaibigan",
-  "✓ nonce issued": "✓ naibigay ang nonce"
+  "✓ nonce issued": "✓ naibigay ang nonce",
+  "Turn on": "I-on",
+  "Turn on notifications?": "I-on ang mga notification?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para marinig mo kapag may sumagot sa iyo, nagpadala ng mensahe, o humiling na sumali. Wala nang iba."
 }

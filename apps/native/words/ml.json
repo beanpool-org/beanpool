@@ -6111,5 +6111,8 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} ശ്രമങ്ങൾ, ഒരു ശ്രമത്തിന് {ms} ms (ശരാശരി {expected} പ്രതീക്ഷിക്കുന്നു)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” പോസ്റ്റ് ചെയ്തു, പക്ഷേ നിങ്ങളുടെ ഷോപ്പിലില്ല. ചേർക്കാൻ, അത് തുറന്ന് Edit Post ടാപ്പ് ചെയ്ത് ഇത് നിങ്ങളുടെ ഷോപ്പിൽ ചേർക്കുക ടിക്ക് ചെയ്യുക.",
   "✓ Friend": "✓ സുഹൃത്ത്",
-  "✓ nonce issued": "✓ നോൺസ് നൽകി"
+  "✓ nonce issued": "✓ നോൺസ് നൽകി",
+  "Turn on": "ഓൺ ചെയ്യുക",
+  "Turn on notifications?": "അറിയിപ്പുകൾ ഓൺ ചെയ്യണോ?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ആരെങ്കിലും മറുപടി നൽകുമ്പോഴോ സന്ദേശമയയ്ക്കുമ്പോഴോ ചേരാൻ അഭ്യർത്ഥിക്കുമ്പോഴോ അറിയാൻ. മറ്റൊന്നിനുമല്ല."
 }

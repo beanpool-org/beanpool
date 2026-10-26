@@ -6111,5 +6111,8 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} کوششیں، ہر کوشش {ms} ملی سیکنڈ (اوسطاً {expected} متوقع)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” لگ گئی ہے، لیکن آپ کی دکان میں نہیں ہے۔ اسے شامل کرنے کے لیے اسے کھولیں، پوسٹ میں ترمیم کریں پر ٹیپ کریں اور اسے اپنی دکان میں رکھیں پر نشان لگائیں۔",
   "✓ Friend": "✓ دوست",
-  "✓ nonce issued": "✓ نونس جاری ہو گیا"
+  "✓ nonce issued": "✓ نونس جاری ہو گیا",
+  "Turn on": "آن کریں",
+  "Turn on notifications?": "اطلاعات آن کریں؟",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تاکہ جب کوئی آپ کو جواب دے، پیغام بھیجے یا شامل ہونے کی درخواست کرے تو آپ کو معلوم ہو سکے۔ اس کے علاوہ کچھ نہیں۔"
 }

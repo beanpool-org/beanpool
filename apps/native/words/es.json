@@ -6111,5 +6111,8 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} intentos, {ms} ms por intento ({expected} esperados en promedio)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "«{title}» está publicada, pero no en tu tienda. Para ponerla, ábrela, toca Editar publicación y marca Poner esto en tu tienda.",
   "✓ Friend": "✓ Amigo",
-  "✓ nonce issued": "✓ nonce emitido"
+  "✓ nonce issued": "✓ nonce emitido",
+  "Turn on": "Activar",
+  "Turn on notifications?": "¿Activar notificaciones?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para que te enteres cuando alguien te responda, te envíe un mensaje o pida unirse. Nada más."
 }

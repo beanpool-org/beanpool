@@ -8,13 +8,13 @@ related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong, the
 
 ## Opening it
 
-Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress.
+Tap **My Deals** at the top of the Market tab. A red number on it counts the deals waiting on you.
 
 On the global community there are no deals, so **My Deals** shows three example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you, one with the Beans held safely, and one done. Their buttons say why deals live in a local community, and change nothing. See "Beans and the global community".
 
 ## Three tabs
 
-- **In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them). The number on the tab counts the cards listed underneath.
+- **In Progress:** deals under way, and requests waiting for an answer. Each card says whose step is next, for example **Waiting on you: answer** (someone has asked), **Waiting on you: release** (the beans are held and the deal is done) or **You asked · waiting on** the other member. A deal with the beans held safely is marked **Held in Trust**. The number on the tab counts the cards listed underneath.
 - **My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.
 - **History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person.
 

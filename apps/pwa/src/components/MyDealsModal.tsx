@@ -421,7 +421,8 @@ export function MyDealsModal({
                                                     }
                                                 }}
                                                 className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
-                                                    isInteractive ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
+                                                    // The emerald "held" look is for beans in trust only (pending), as on the phone; a request is tappable but holds nothing yet.
+                                                    isInteractive ? `${isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20' : 'border-nature-200 dark:border-nature-800'} cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`
                                                     : isCompleted ? 'border-nature-200 dark:border-nature-800'
                                                     : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
                                                 }`}

@@ -379,6 +379,11 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(screen.getByText('Waiting on Tama to release')).toBeInTheDocument();
             expect(screen.getByText('You asked · waiting on Mere')).toBeInTheDocument();
 
+            // Only a deal with beans held looks held (emerald), as on the phone; a request holds nothing yet.
+            const cardOf = (title: string) => screen.getByText(title).closest('.rounded-2xl') as HTMLElement;
+            expect(cardOf('Bike tune-up').className).toContain('bg-emerald-50/10');
+            expect(cardOf('Help moving a couch').className).not.toContain('bg-emerald-50/10');
+
             // The buyer's amount is red, the seller's emerald
             expect(screen.getByText('- 20')).toHaveClass('text-red-500', 'dark:text-red-300');
             expect(screen.getByText('+ 10')).toHaveClass('text-emerald-500', 'dark:text-emerald-400');

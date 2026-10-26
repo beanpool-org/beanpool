@@ -336,6 +336,20 @@ describe('requests to join, from the background sync', () => {
         expect(requests.map((r) => r.url)).toEqual([`${MULLUM}/api/join/knock/status`, `${MULLUM}/api/join/knock/status`]);
     });
 
+    it('a tap on either of its notices opens where it is answered: Invites for the owner, Find a community for the asker', async () => {
+        adminRoutes();
+        open = 1;
+        await admin();
+        open = 2;
+        expect(await admin()).toBe(1);
+        community({ [`${MULLUM}/api/join/knock/status`]: () => json({ status: 'approved', invite: 'INV-1', expiresAt: null }) });
+        mem.async.set('beanpool_knocks', JSON.stringify({ pubkey: kim.publicKey, knocks: [{ url: MULLUM, name: 'Mullumbimby', key: 'mullum', sentAt: new Date().toISOString() }] }));
+        const { postKnockStatusNoticesFromSync } = await import('../sync-notices');
+        expect(await postKnockStatusNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (n) => { posted.push(n); } })).toBe(1);
+        const taps = await Promise.all(posted.map((n, i) => checkTap({ identifier: `local-${i}`, remote: false, title: n.title, body: n.body, data: n.data }, { storage: AsyncStorage, recipient: kim.publicKey })));
+        expect(taps).toEqual([{ kind: 'route', route: '/(tabs)/people?view=invites' }, { kind: 'route', route: '/find-community' }]);
+    });
+
     it("all of it under one deadline: a community that never answers can't hold the task past it (iOS gives ~30 s)", async () => {
         // Every read hangs until it is aborted.
         vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

@@ -32,6 +32,9 @@
 // is nothing to find again. One it stopped on is looked at again at every boot, and logged again, until the operator
 // deals with it. Never on a standby (its ledger is its main server's; the main server's return reaches it with the next
 // copy), and not while this node's Beans are switched off (nothing moves then).
+//
+// The same attribution gives an unfunded project's backers their Beans back a week after its end date
+// (engine/unfunded-pledges.ts): who is owed what from an escrow is worked out one way, here.
 
 import { DUST_THRESHOLD, isSyntheticAccount } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
@@ -86,10 +89,33 @@ export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
         WHERE COALESCE(p.status, '') != 'ACTIVE' AND a.balance > ?
         ORDER BY p.id
     `).all(DUST_THRESHOLD) as { id: string; title: string | null; status: string | null; balance: number }[];
-    return projects.map((p) => attribute(p.id, p.title ?? '', p.status ?? '', Number(p.balance)));
+    return projects.map((p) => attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance)));
 }
 
-function attribute(projectId: string, title: string, status: string, held: number): StrandedProjectEscrow {
+/**
+ * Who is owed what from a project's escrow holding `held`, and that each of them can be paid here; or why not. Reads only.
+ */
+export function attributeProjectEscrow(projectId: string, title: string, status: string, held: number): StrandedProjectEscrow {
+    const owed = owedFromProjectEscrow(projectId, title, status, held);
+    if (!owed.ok) return owed;
+    for (const o of owed.returns) {
+        const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(o.backer) as { status: string | null } | undefined;
+        if (!isNodeMember(db, o.backer) || member?.status === 'completed') {
+            const { projectId: id, title: name, status: state, escrow, held: holds } = owed;
+            return {
+                projectId: id, title: name, status: state, escrow, held: holds, ok: false,
+                reason: `backer ${o.backer} can't be paid here (no member's row, pruned, re-keyed away, or a wound-up enterprise)`,
+            };
+        }
+    }
+    return owed;
+}
+
+/**
+ * Who is owed what from a project's escrow holding `held`, from its own history alone (see WHO IS OWED WHAT above), or why
+ * that can't be worked out exactly. Whether each of them can be paid here is attributeProjectEscrow's. Reads only.
+ */
+export function owedFromProjectEscrow(projectId: string, title: string, status: string, held: number): StrandedProjectEscrow {
     const escrow = `escrow_${projectId}`;
     const base: StrandedBase = { projectId, title, status, escrow, held };
     const stop = (reason: string): StrandedProjectEscrow => ({ ...base, ok: false, reason });
@@ -139,13 +165,6 @@ function attribute(projectId: string, title: string, status: string, held: numbe
     const total = returns.reduce((s, o) => s + o.amount, 0);
     if (returns.length === 0 || !near(total, held)) {
         return stop(`the pledges since it last stood at 0 come to ${total}, but it holds ${held}`);
-    }
-
-    for (const o of returns) {
-        const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(o.backer) as { status: string | null } | undefined;
-        if (!isNodeMember(db, o.backer) || member?.status === 'completed') {
-            return stop(`backer ${o.backer} can't be paid here (no member's row, pruned, re-keyed away, or a wound-up enterprise)`);
-        }
     }
     return { ...base, ok: true, returns };
 }

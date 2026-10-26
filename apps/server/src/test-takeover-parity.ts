@@ -475,10 +475,10 @@ async function main(): Promise<void> {
         built('Kip pledges backing to Probe Co', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 2 }));
         // Probe Co hiring its own keeper while it holds nothing: refused, and the wage is owed (engine/escrow.ts isPayeeKeeper).
         built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools',
+            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', photos: [TINY_PNG],
         }));
         const job = built('and a job it needs done', await S_(cy, `/api/treasury/${probe.publicKey}/need`, {
-            title: 'Workshop tidy', description: 'Sort the parts bins', credits: 2, category: 'tools',
+            title: 'Workshop tidy', description: 'Sort the parts bins', credits: 2, category: 'tools', photos: [TINY_PNG],
         }));
         const bid = built('Kip offers to do it', await S_(kip, '/api/marketplace/posts/request', { postId: (job.post ?? job).id, buyerPublicKey: kip.pk })).transaction;
         const wage = await S_(cy, `/api/treasury/${probe.publicKey}/approve`, { transactionId: bid.id });
@@ -683,7 +683,7 @@ async function main(): Promise<void> {
 
         await both('accept a listing from before the take-over', postAs(kip, '/api/marketplace/posts/request', { postId: cyOffer.id, buyerPublicKey: kip.pk }));
         await both('a keeper posts for the enterprise', postAs(kip, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools',
+            title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools', photos: [TINY_PNG],
         }));
         await both("request a holiday member's listing", postAs(eve, '/api/marketplace/posts/request', { postId: boOffer.id, buyerPublicKey: eve.pk }));
         await both('a vouch by the voucher', postAs(bo, '/api/profile/vouch', { targetPubkey: hal.pk, level: 1 }));

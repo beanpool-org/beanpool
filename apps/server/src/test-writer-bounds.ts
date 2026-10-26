@@ -390,10 +390,10 @@ async function main(): Promise<void> {
         // Changed by W-money (Marty, 2026-09-29: "maybe needs to be higher for enterprise/project"): what a keeper puts up
         // for an enterprise used to count with their own 100, so a keeper stocking a shop had nothing left for themselves.
         // It now counts against the enterprise's own WRITER_LIMITS.enterprisePostsPerDay.
-        const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', credits: 0 });
+        const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', credits: 0, photos: TEST_PHOTOS });
         const own = await many(WRITER_LIMITS.postsPerDay, 8, () => post(max));
         const overOwn = await post(max);
-        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', credits: 0 });
+        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', credits: 0, photos: TEST_PHOTOS });
         assert(forEnt.status === 200 && own.every(s => s === 200) && overOwn.status === 429 && overOwn.body?.code === 'posts_per_day',
             `a keeper's post for the enterprise takes none of their 100: they still put up 100 of their own, and the 101st is 429 posts_per_day (${forEnt.status}, ${[...new Set(own)].join(',')}, ${show(overOwn)})`);
         assert(stillEnt.status === 200, `and past their own 100 they still post for the enterprise, against its own day (${show(stillEnt)})`);

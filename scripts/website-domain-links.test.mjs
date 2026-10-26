@@ -28,11 +28,13 @@ const PLACEHOLDER_PATTERNS = [
     /\byour\.domain\b/i,
     /\byou@example\.com\b/i,
     /\bexample\.com\b/i,
-    /\.beanpool\.org\b/i, // "ending in .beanpool.org"
 ];
 
-function isPlaceholder(text) {
-    return PLACEHOLDER_PATTERNS.some((p) => p.test(text));
+function isPlaceholder(domain, text, index) {
+    if (PLACEHOLDER_PATTERNS.some((p) => p.test(domain))) return true;
+    // e.g. "ending in .beanpool.org"
+    if (index > 0 && text[index - 1] === '.') return true;
+    return false;
 }
 
 test('door 1 on the home page points to /global', () => {
@@ -86,7 +88,7 @@ test('every domain name in visible text across English pages is a hyperlink', ()
         const unlinked = [];
         for (const m of matches) {
             const domain = m[0];
-            if (isPlaceholder(domain)) continue;
+            if (isPlaceholder(domain, text, m.index)) continue;
             unlinked.push(domain);
         }
 

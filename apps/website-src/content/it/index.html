@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: fd8efb317ac86e59 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Scambio per comunità, non per banche commerciali</title>
-    <meta name="description" content="BeanPool è un'app gratuita che una comunità gestisce per sé stessa per scambiare aiuto, beni e competenze in fagioli invece che con denaro. Trova o avvia una comunità vicino a te, oppure unisciti con un invito; la comunità globale aprirà presto a tutti. iPhone, Android e web.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool è un'app gratuita gestita autonomamente da una comunità per scambiare aiuto, beni e competenze in Beans anziché in denaro. Provalo nella comunità globale, trova o crea una comunità vicino a te, o unisciti con un invito. iPhone, Android e web.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Tre modi per entrare</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Provalo subito, in tutto il mondo</a>
-                            <p>La comunità globale aprirà presto a tutti, senza invito: dai un'occhiata in giro, pubblica qualcosa di gratuito o per uno scambio, e trova una comunità vicino a te. Oggi è in anteprima privata. Fino all'apertura, guarda le comunità già attive qui sotto, avviane una, o usa un invito che ti ha dato un membro.</p>
+                            <a href="global" class="btn btn-primary font-header">Provalo subito, in tutto il mondo</a>
+                            <p>Nessun invito necessario: unisciti alla comunità globale nel browser o nell'app, dai un'occhiata, pubblica qualcosa gratis o per scambio e trova una comunità vicino a te.</p>
+                            <p class="door-browser"><a href="https://global.beanpool.org/?lang=it">oppure nel tuo browser</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Trova o avvia una comunità</a>
-                            <p>Guarda le comunità già attive, oppure avviane una su un computer inutilizzato o su un piccolo server a noleggio. La possibilità di chiedere di entrare a una vicina a te arriverà presto, quando aprirà la comunità globale.</p>
+                            <p>Guarda le comunità già attive, chiedi a una vicina di farti entrare, o avviane una su un computer inutilizzato o un piccolo server a noleggio.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Hai un invito?</a>
@@ -156,7 +150,7 @@
                                     </g>
                                 </svg>
                             </a>
-                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Disponibile su Google Play">
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=it" target="_blank" rel="noopener" class="hero-store-badge" title="Disponibile su Google Play">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
                                     <rect width="135" height="40" rx="7" fill="#000"/>
                                     <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Entra da una delle tre porte</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Apri l'invito che ti ha inviato un membro; presto potrai anche provare la comunità globale senza invito e, da lì, chiedere a una comunità vicino a te di farti entrare. In ogni caso sceglierai il nome con cui le persone ti conosceranno.</p>
+                        <p>Prova la comunità globale senza invito, chiedi a una comunità vicino a te di farti entrare, oppure apri l'invito inviato da un membro. In ogni caso scegli il nome con cui le persone ti conosceranno.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Mappa</h3>
-                    <p>Guarda cosa c'è in offerta vicino a te. Ogni segnaposto è posizionato da te: usa la tua posizione in quel momento, oppure posiziona il segnaposto manualmente. Quando lo consenti, l'app usa la tua posizione anche per mostrare ciò che è più vicino a te, e mai in background. I segnaposto degli eventi, e quelli delle imprese impostati nell'app web, possono essere impostati su Approssimativo, che arrotonda il punto a circa 100&nbsp;m. I segnaposto sono visibili ai membri della tua comunità. Quando la comunità globale aprirà a tutti, i visitatori vedranno gli annunci e all'incirca dove si trovano, ma senza nomi, senza foto del profilo e senza posizioni esatte. Chiunque può iscriversi in un minuto, quindi anche i suoi membri vedono gli annunci reciproci con un'approssimazione di circa un chilometro; la posizione esatta spetta a te condividerla quando concordate di incontrarvi.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Guarda cosa c'è in offerta vicino a te. Ogni segnaposto è posizionato da te: usa la tua posizione in quel momento, oppure posiziona il segnaposto manualmente. Quando lo consenti, l'app usa la tua posizione anche per mostrare ciò che è più vicino a te, e mai in background. I segnaposto degli eventi, e quelli delle imprese impostati nell'app web, possono essere impostati su Approssimativo, che arrotonda il punto a circa 100&nbsp;m. I segnaposto sono visibili ai membri della tua comunità. Nella comunità globale un visitatore vede gli annunci e approssimativamente dove si trovano, ma nessun nome, nessuna foto del profilo e nessun punto esatto. Chiunque può iscriversi in un minuto, quindi anche i suoi membri vedono gli annunci reciproci con un'approssimazione di circa un chilometro; la posizione esatta spetta a te condividerla quando concordate di incontrarvi.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Privata fin dal primo avvio</h3>
-                    <p>Gli annunci, la mappa, i messaggi e i saldi di una comunità sono riservati ai suoi membri dal momento in cui il suo nodo si avvia; non c'è nulla da attivare. Chi apre il suo indirizzo senza un account viene indirizzato alla comunità globale, che aprirà presto a tutti.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Gli annunci, la mappa, i messaggi e i saldi di una comunità sono riservati ai suoi membri dal momento in cui il suo nodo si avvia; non c'è nulla da attivare. Chi apre il suo indirizzo senza un account viene indirizzato alla comunità globale, dove può vedere cosa c'è nelle vicinanze e chiedere di unirsi.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>Circa mezz'ora, se sai seguire una ricetta. Sei cose da sapere prima di iniziare:</p>
                 <ul class="run-node-facts">
                     <li><strong>Quanto costa.</strong> Il software è gratuito. Funziona su un computer inutilizzato che resta acceso a casa (un Mini PC, un NAS o un Raspberry Pi con sistema a 64 bit), oppure su un piccolo server a noleggio per pochi dollari al mese (circa 6 $ USD).</li>
-                    <li><strong>Chi lo ospita.</strong> Lo fai tu, sulla tua macchina o su quella che noleggi. Non ha mai bisogno di beanpool.org: puoi usare il tuo indirizzo web.</li>
+                    <li><strong>Chi lo ospita.</strong> Lo fai tu, sulla tua macchina o su quella che noleggi. Non ha mai bisogno di <a href="https://beanpool.org">beanpool.org</a>: puoi usare il tuo indirizzo web.</li>
                     <li><strong>Cosa ti assumi.</strong> Le segnalazioni dei tuoi membri arrivano a te. La cartella dei dati spetta a te salvarla con un backup, tramite un codice di ripristino. Mantieni due proprietari. Mantieni il server acceso e aggiornato.</li>
                     <li><strong>Cosa non vedi mai.</strong> I messaggi diretti dei tuoi membri.</li>
                     <li><strong>Prima Docker.</strong> La macchina richiede che Docker sia installato prima di eseguire il blocco sottostante; un server appena noleggiato non lo ha.</li>
@@ -598,13 +589,13 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>
         <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
         <ul>
-            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://global.beanpool.org/?lang=it">Try it now, worldwide</a> · join in your browser, no invite.</li>
             <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
             <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
         </ul>

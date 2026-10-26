@@ -2746,7 +2746,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             />
                         </div>
 
-                        {renderPhotoPicker(!eventEdit || (openDraft?.photos && openDraft.photos.length > 0))}
+                        {renderPhotoPicker(!eventEdit || Boolean(openDraft?.photos && openDraft.photos.length > 0))}
 
                         <div>
                             <label htmlFor="event-note" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Note for people who are going')}</label>

@@ -53,9 +53,9 @@ async function main() {
     assert(bal(T) === 0, '1. treasury starts at 0 balance (no beans minted)');
 
     // ---- 2. Treasury authors its offer + need (the member-gate + covenant proof) ---------
-    const eggs = createPost('offer', 'food', 'Dozen free-range eggs', 'Fresh daily from the community flock', 12, 'fixed', T, undefined, undefined, undefined, true);
+    const eggs = createPost('offer', 'food', 'Dozen free-range eggs', 'Fresh daily from the community flock', 12, 'fixed', T, undefined, undefined, [AVATAR], true);
     assert(eggs !== null && eggs.authorPublicKey === T, '2. treasury AUTHORS a recurring eggs Offer (clears createPost member gate)');
-    const tend = createPost('need', 'labour', 'Tend the chickens this week', 'Feed, water, collect + clean', 20, 'fixed', T);
+    const tend = createPost('need', 'labour', 'Tend the chickens this week', 'Feed, water, collect + clean', 20, 'fixed', T, undefined, undefined, [AVATAR]);
     assert(tend !== null, '2. treasury authors a paid tending Need (need "offer covenant" satisfied by the eggs offer)');
 
     // ---- 3. Pay the tender FIRST, from 0 → bounded deficit on the credit line ------------
@@ -78,7 +78,7 @@ async function main() {
     // ---- 4. Egg sales repay the deficit and return the enterprise to surplus -------------
     const B = 'egg-buyer-brenda-0000000000000000000000000000';
     seedMember(B, 'Brenda-Buyer');
-    createPost('offer', 'misc', 'Homemade jam', 'so Brenda can trade', 5, 'fixed', B); // buyer needs a live offer to trade
+    createPost('offer', 'misc', 'Homemade jam', 'so Brenda can trade', 5, 'fixed', B, undefined, undefined, [AVATAR]); // buyer needs a live offer to trade
     transfer('COMMONS_POOL', B, 50, 'test funding', 'direct', true);                    // give the buyer some beans
     assert(bal(B) === 50, '4. buyer funded with 50 beans');
 

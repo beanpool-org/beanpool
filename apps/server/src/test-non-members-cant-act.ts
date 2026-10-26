@@ -78,6 +78,8 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
@@ -172,13 +174,13 @@ const inviteCount = (pk: string): number =>
     (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?').get(pk) as { n: number }).n;
 
 function offer(author: Id, title: string, credits = 10) {
-    const post = createPost('offer', 'produce', title, `${title}, fresh`, credits, 'fixed', author.pubKeyHex);
+    const post = createPost('offer', 'produce', title, `${title}, fresh`, credits, 'fixed', author.pubKeyHex, undefined, undefined, [TINY_PNG]);
     if (!post) throw new Error(`could not list ${title}`);
     return post;
 }
 
 function event(host: Id, title: string, extra: Record<string, unknown> = {}) {
-    const post = createPost('event', 'community', title, 'Bring a plate', 0, 'fixed', host.pubKeyHex, -28.55, 153.5, [],
+    const post = createPost('event', 'community', title, 'Bring a plate', 0, 'fixed', host.pubKeyHex, -28.55, 153.5, [TINY_PNG],
         false, undefined, false, { eventStartAt: inHours(24), eventPlaceName: 'The old bowls club', ...extra } as any);
     if (!post) throw new Error(`could not post ${title}`);
     return post;
@@ -302,7 +304,7 @@ async function main(): Promise<void> {
     offer(carol, 'Carol plums');
     const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, lockedGroupLine(db, group.id)); // a group chat line is sealed
     const bobGroupPost = createPost('offer', 'produce', 'Bob spare pots', 'For the club', 1, 'fixed', bob.pubKeyHex,
-        undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: group.id });
+        undefined, undefined, [TINY_PNG], false, undefined, false, { audienceScope: 'group', targetGroupId: group.id });
     if (!bobGroupPost) throw new Error('could not post to the group');
     const askGroup = createGroup({ name: 'Seed library NM', createdBy: pruney.pubKeyHex, joinPolicy: 'request_to_join' } as any);
     joinGroup(askGroup.id, carol.pubKeyHex);
@@ -444,7 +446,7 @@ async function main(): Promise<void> {
         const postsBy = () => (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?').get(phoneless.pubKeyHex) as { n: number }).n;
         const posts = postsBy();
         const garlic = (audience: Record<string, unknown>) => ({ type: 'offer', category: 'produce', title: 'Garlic, cheap',
-            description: 'Message me', credits: 1, priceType: 'fixed', authorPublicKey: phoneless.pubKeyHex, ...audience });
+            description: 'Message me', credits: 1, priceType: 'fixed', authorPublicKey: phoneless.pubKeyHex, photos: [TINY_PNG], ...audience });
         const direct = await signedFetch('POST', '/api/marketplace/posts', phoneless, garlic({ audienceScope: 'direct', targetPubkey: alice.pubKeyHex }));
         assert(replaced(direct) && postsBy() === posts, `nor post to Alice as them, and nothing is stored (got ${direct.status} ${JSON.stringify(direct.body)})`);
         const inGroup = await signedFetch('POST', '/api/marketplace/posts', phoneless, garlic({ audienceScope: 'group', targetGroupId: liveGroup.id }));
@@ -772,7 +774,7 @@ async function main(): Promise<void> {
             const own = offer(member, `Control ${status} marmalade`);
             db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, member.pubKeyHex);
             const post = await signedFetch('POST', '/api/marketplace/posts', member, { type: 'offer', category: 'produce', title: `Honey from ${status}`,
-                description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: member.pubKeyHex });
+                description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: member.pubKeyHex, photos: [TINY_PNG] });
             const message = await signedFetch('POST', '/api/messages/send', member,
                 { conversationId: dm.id, authorPubkey: member.pubKeyHex, ...lockedDm() }); // a DM goes in encrypted
             const pause = await signedFetch('POST', '/api/marketplace/posts/pause', member, { postId: own.id, authorPublicKey: member.pubKeyHex });

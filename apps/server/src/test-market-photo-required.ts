@@ -301,7 +301,7 @@ async function main(): Promise<void> {
         description: 'From peer without photos',
         credits: 10,
         priceType: 'fixed',
-        authorPublicKey: 'some-remote-author',
+        authorPublicKey: crypto.randomBytes(32).toString('hex'),
         authorCallsign: 'RemoteAuthor',
         createdAt: new Date().toISOString(),
         updatedAt: null,

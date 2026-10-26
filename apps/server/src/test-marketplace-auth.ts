@@ -85,10 +85,10 @@ async function testMarketplaceActorAuth() {
     adminAssignTreasuryOperator(treasury, bob, 'admin');
 
     // Bob lists an offer to satisfy CONTRIBUTION_REQUIRED
-    createPost('offer', 'services', 'Bob repairs', 'Fixing tools', 5, 'fixed', bob);
+    createPost('offer', 'services', 'Bob repairs', 'Fixing tools', 5, 'fixed', bob, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo=']);
 
     // Alice creates an offer post
-    const offer = createPost('offer', 'food', 'Fresh Carrots', 'Organic carrots', 10, 'fixed', alice)!;
+    const offer = createPost('offer', 'food', 'Fresh Carrots', 'Organic carrots', 10, 'fixed', alice, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
 
     // Bob requests the offer
     const tx = requestPost(offer.id, bob);
@@ -228,7 +228,7 @@ async function testMarketplaceActorAuth() {
     // ── 7. Legitimate author and keeper can remove their own posts ──
     {
         // Alice removes her own post
-        const alicePostToRemove = createPost('offer', 'food', 'Extra Carrots', 'More carrots', 10, 'fixed', alice)!;
+        const alicePostToRemove = createPost('offer', 'food', 'Extra Carrots', 'More carrots', 10, 'fixed', alice, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
         const ctx: any = {
             requestBody: { id: alicePostToRemove.id, authorPublicKey: alice },
             state: { actor: alice }
@@ -238,7 +238,7 @@ async function testMarketplaceActorAuth() {
     }
     {
         // Bob is keeper of CommunityFarm and removes the enterprise post
-        const farmPost = createPost('offer', 'food', 'Farm Basil', 'Organic herbs', 5, 'fixed', treasury)!;
+        const farmPost = createPost('offer', 'food', 'Farm Basil', 'Organic herbs', 5, 'fixed', treasury, undefined, undefined, ['data:image/png;base64,iVBORw0KGgo='])!;
         const ctx: any = {
             requestBody: { id: farmPost.id, authorPublicKey: treasury },
             state: { actor: bob }
@@ -260,7 +260,7 @@ async function testMarketplaceActorAuth() {
         // because edit / pause / remove name the enterprise as the post's author, not as the actor.
         const offerCtx = (actor: string, title: string): any => ({
             params: { treasury }, state: { actor }, get: () => '', set: () => { },
-            requestBody: { category: 'food', title, credits: 5 },
+            requestBody: { category: 'food', title, credits: 5, photos: ['data:image/png;base64,iVBORw0KGgo='] },
         });
         const beforeCtx = await dispatch(entRouter, 'POST', `/api/treasury/${treasury}/offer`, offerCtx(carol, 'Farm eggs'));
         check(beforeCtx.body?.success === true, 'Unsuspended keeper Carol can list an offer for CommunityFarm');

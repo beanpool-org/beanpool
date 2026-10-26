@@ -107,6 +107,7 @@ async function main(): Promise<void> {
         eventStartAt: inHours(30),
         eventPlaceName: 'The old bowls club',
         eventPrivateNote: 'Gate code 1234',
+        photos: [PHOTO],
         ...extra,
     });
 
@@ -179,7 +180,7 @@ async function main(): Promise<void> {
     console.log("\n── 7. A member's own event ──");
     const own = await signedFetch('POST', '/api/marketplace/posts', {
         type: 'event', category: 'community', title: 'Creek swim', credits: 0, priceType: 'fixed',
-        authorPublicKey: stranger.pubKeyHex, lat: -28.55, lng: 153.5, eventStartAt: inHours(30),
+        authorPublicKey: stranger.pubKeyHex, lat: -28.55, lng: 153.5, eventStartAt: inHours(30), photos: [PHOTO],
     }, stranger);
     assert(own.status === 200 && own.body?.success === true,
         `a member hosting their own event through the marketplace route still works (got ${own.status} ${own.error ?? ''})`);

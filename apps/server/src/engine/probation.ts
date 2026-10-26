@@ -311,12 +311,21 @@ function postTimes(pubkey: string, now: number): string[] {
     ).all(pubkey, iso(now - PROBATION.windowMs)) as { created_at: string }[]).map(r => r.created_at);
 }
 
-/** One entry per photo now on a post the member wrote in the window, at the post's creation time. */
+/**
+ * One entry per photo now on a post the member wrote in the window, at the post's creation time. A keeper's listing for
+ * their enterprise is the enterprise's post made by them (created_by): its photos are the keeper's, as their bytes are
+ * (engine/posts.ts createPost), so they count here too. Two indexed halves, not an OR: SQLite scans every local post for one.
+ */
 function photoTimes(pubkey: string, now: number, exceptPostId?: string): string[] {
+    const since = iso(now - PROBATION.windowMs);
+    const except = exceptPostId ?? null;
     return (db.prepare(
         `SELECT p.created_at FROM post_photos ph JOIN posts p ON p.id = ph.post_id
-          WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ? AND p.id IS NOT ?`
-    ).all(pubkey, iso(now - PROBATION.windowMs), exceptPostId ?? null) as { created_at: string }[]).map(r => r.created_at);
+          WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ? AND p.id IS NOT ?
+         UNION ALL
+         SELECT p.created_at FROM post_photos ph JOIN posts p ON p.id = ph.post_id
+          WHERE p.created_by = ? AND p.author_pubkey != ? AND p.origin_node IS NULL AND p.created_at > ? AND p.id IS NOT ?`
+    ).all(pubkey, since, except, pubkey, pubkey, since, except) as { created_at: string }[]).map(r => r.created_at);
 }
 
 /**

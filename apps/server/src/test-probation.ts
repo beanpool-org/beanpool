@@ -21,6 +21,7 @@ import {
     probationState,
     isWordsNewcomer,
     assertMayPost,
+    assertMayAddPhotos,
     assertMayEditPhotos,
     assertMayMessage,
     probationSummary,
@@ -213,6 +214,29 @@ function main(): void {
         }
     }
     assert(caughtPhotoError, 'assertMayPost throws ProbationLimitError when photo limit exceeded');
+
+    // A keeper's listing for their enterprise is the enterprise's post (author_pubkey) made by the keeper (created_by): its
+    // photos are the keeper's, as their bytes are (engine/posts.ts createPost), so they count against the keeper's allowance.
+    const photoKeeper = makeKey();
+    insertMember(photoKeeper, 'PhotoKeeper', nowIso);
+    const photoEnterprise = makeKey();
+    insertMember(photoEnterprise, 'PhotoEnterprise', tenDaysAgoIso);
+    const enterprisePostId = insertPost(photoEnterprise, nowIso);
+    db.prepare('UPDATE posts SET created_by = ? WHERE id = ?').run(photoKeeper, enterprisePostId);
+    for (let i = 1; i <= PROBATION.photos; i++) {
+        insertPostPhoto(enterprisePostId, i);
+    }
+    const refusedLimit = (fn: () => void): string | null => {
+        try { fn(); return null; } catch (err: any) { return err instanceof ProbationLimitError ? err.limit : `threw ${err?.message}`; }
+    };
+    assert(refusedLimit(() => assertMayAddPhotos(photoKeeper, 1, now)) === 'photos',
+        "a keeper whose enterprise listing took the day's photos can't put photos on another one");
+    assert(refusedLimit(() => assertMayPost(photoKeeper, 1, now)) === 'photos',
+        '...nor on a post of their own');
+    assert(probationSummary(photoKeeper, now).limits.photos.used === PROBATION.photos,
+        "...and their own summary counts the enterprise listing's photos as theirs");
+    assert(refusedLimit(() => assertMayEditPhotos(photoKeeper, enterprisePostId, PROBATION.photos, 1, now)) === null,
+        "...while swapping a photo on that listing counts its set once, not twice");
 
     // ── 6. assertMayMessage ──
     console.log('\n6. assertMayMessage...');

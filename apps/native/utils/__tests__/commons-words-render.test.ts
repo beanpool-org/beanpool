@@ -612,6 +612,16 @@ describe('the start-a-project form and the new-poll form in the pseudo-locale', 
         expect(bypassing(), 'form').toEqual([]);
         // The missing-fields line hides itself 3 s later on a bare timer in propose-project.tsx, run here on a fake clock so it
         // never outlives the test: left running, it can fire after the file's jsdom is gone ("window is not defined").
+        // A logo first (Pictures S4): without one Start says "Choose a logo", as the picture button beside it does, and is off.
+        expect(byLabel(pseudoLocalise('Start the project 🌱')), 'no Start before a logo').toBeNull();
+        expect(Array.from(host.querySelectorAll('[aria-label]')).filter((el) => el.getAttribute('aria-label') === pseudoLocalise('Choose a logo')).length,
+            'the picture button and the Start button both say Choose a logo').toBe(2);
+        await click(byLabel(pseudoLocalise('Choose a logo')), 'the logo');
+        const preset = new RegExp(`^${pseudoLocalise('Select {name} avatar').split('{name}').map(escape).join('.+')}$`);
+        await click(Array.from(host.querySelectorAll('[aria-label]')).find((el) => preset.test(el.getAttribute('aria-label') ?? '')), 'a ready-made picture');
+        // The innermost: the sheet's backdrop is a Close button holding the whole sheet, its words too.
+        await click(Array.from(host.querySelectorAll('button')).filter((b) => (b.textContent ?? '').includes(pseudoLocalise('Use Selected Avatar'))).pop(), 'Use Selected Avatar');
+        expect(bypassing(), 'the picture sheet').toEqual([]);
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         const start = byLabel(pseudoLocalise('Start the project 🌱'));
         expect(start, 'Start').toBeTruthy();
@@ -759,16 +769,21 @@ describe('the Commons at 320 dp with 1.3× text, in the pseudo-locale', () => {
     it("its one picture is the logo, said so; the banner photo is its shop's, added next (Marty, 25 Oct)", async () => {
         params.now = { kind: 'ongoing' };
         await renderIn('en', createElement(ProposeProjectScreen));
-        expect(host.textContent).toContain('LOGO (OPTIONAL)');
+        // A logo is required now (Pictures S4): the label says LOGO, never optional, and Start says "Choose a logo" until one is.
+        expect(Array.from(host.querySelectorAll('span')).some((el) => el.textContent === 'LOGO')).toBe(true);
+        expect(host.textContent).not.toContain('LOGO (OPTIONAL)');
         expect(host.textContent).toContain('You can add a banner photo next.');
         expect(host.textContent).not.toContain('COVER PHOTO');
         expect(byLabel('Choose a logo')).not.toBeNull();
+        expect(byLabel('Start the enterprise 🏛️')).toBeNull();
+        expect(host.querySelectorAll('[aria-label="Choose a logo"]').length, 'the picture button and the Start button').toBe(2);
     });
 
     it('a project is not promised a banner next: only an enterprise lands on its page with Add a banner photo (#2502 review)', async () => {
         params.now = { kind: 'bounded' };
         await renderIn('en', createElement(ProposeProjectScreen));
-        expect(host.textContent).toContain('LOGO (OPTIONAL)');
+        expect(Array.from(host.querySelectorAll('span')).some((el) => el.textContent === 'LOGO')).toBe(true);
+        expect(host.textContent).not.toContain('LOGO (OPTIONAL)');
         expect(host.textContent).not.toContain('You can add a banner photo next.');
     });
 

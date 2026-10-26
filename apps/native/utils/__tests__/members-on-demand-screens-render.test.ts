@@ -17,6 +17,11 @@
  * whole directory and no card is removed. Every empty state is worded as §2.3 says, never "Loading" for a list that won't.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+// The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import Module from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { act, createElement, Fragment, useEffect, type ReactNode } from 'react';

@@ -222,6 +222,7 @@ describe('an avatar or a logo from a photo: a square, shown in a circle', () => 
         expect(picker.library).toHaveLength(1);
         expect(picker.library[0].allowsEditing).toBeFalsy();
         expect(picker.library[0].aspect).toBeUndefined();
+        expect(picker.library[0].defaultTab).toBe('albums');
         expect(byId('picture-crop')).not.toBeNull();
         // The photo is first made the working copy, its longest side 1600 px (an old phone's memory; enough for 512 at 3×).
         expect(tools.calls[0]).toMatchObject({ uri: PHOTO.uri, actions: [{ resize: { width: 1600 } }] });
@@ -230,6 +231,14 @@ describe('an avatar or a logo from a photo: a square, shown in a circle', () => 
         expect(f.width).toBe(f.height);
         expect(f.borderRadius).toBe(f.width / 2);
         expect(byId('picture-crop')?.textContent).toContain('Choose the part that shows');
+    });
+
+    it('Browse files opens the legacy document picker and goes through the crop step', async () => {
+        await act(async () => { renderSheet(); });
+        await tap(byLabel('Browse files'), 'Browse files');
+        expect(picker.library).toHaveLength(1);
+        expect(picker.library[0].legacy).toBe(true);
+        expect(byId('picture-crop')).not.toBeNull();
     });
 
     it('what is kept is the part chosen: zoomed in once and moved, cut to the pixel and made 512 px', async () => {

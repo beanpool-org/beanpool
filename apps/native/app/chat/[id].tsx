@@ -744,7 +744,11 @@ function ChatScreen({ id }: { id: string }) {
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
             }},
             { text: t('Gallery'), onPress: async () => {
-                const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+                const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, defaultTab: 'albums' });
+                if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
+            }},
+            { text: t('Browse files'), onPress: async () => {
+                const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, legacy: true });
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
             }},
             { text: t('Cancel'), style: 'cancel' },

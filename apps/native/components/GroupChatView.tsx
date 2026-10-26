@@ -505,7 +505,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); return; }
                 take(() => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 }));
             } },
-            { text: t('Gallery'), onPress: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 })) },
+            { text: t('Gallery'), onPress: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, defaultTab: 'albums' })) },
+            { text: t('Browse files'), onPress: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, legacy: true })) },
             { text: t('Cancel'), style: 'cancel' },
         ]);
     };

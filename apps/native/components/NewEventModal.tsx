@@ -38,6 +38,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, getTreasuries, isRouteMissing, updateEvent } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { askForPostPhoto } from '../utils/post-photo';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
@@ -459,19 +460,11 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setApproximate(true);
     };
 
-    const pickPhoto = async () => {
+    const pickPhoto = () => {
         Keyboard.dismiss();
         try {
-            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: false });
-            if (result.canceled || !result.assets[0]?.uri) return;
-            const out = await ImageManipulator.manipulateAsync(
-                result.assets[0].uri,
-                [{ resize: { width: 800 } }],
-                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-            );
-            if (out.base64) setPhoto(`data:image/jpeg;base64,${out.base64}`);
+            askForPostPhoto((photo) => setPhoto(photo));
         } catch (e: any) {
-            // The phone's own words when it gave some.
             Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
         }
     };

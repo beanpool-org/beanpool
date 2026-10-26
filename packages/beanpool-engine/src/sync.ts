@@ -550,6 +550,8 @@ export interface SyncDirectoryCommunity {
     acceptingKnocks?: boolean | null;
     /** The day it says it closes (YYYY-MM-DD), or null. */
     closingOn?: string | null;
+    /** How promptly the community answers requests to join ('week' | 'slow' | 'none'), or null. */
+    answers?: 'week' | 'slow' | 'none' | null;
 }
 
 /**
@@ -1396,6 +1398,7 @@ function directoryCommunityOfRow(r: any): SyncDirectoryCommunity {
         promise: jsonOrNull(r.promise),
         acceptingKnocks: r.accepting_knocks === 1 ? true : r.accepting_knocks === 0 ? false : null,
         closingOn: r.closing_on ?? null,
+        answers: r.answers ?? null,
     };
 }
 

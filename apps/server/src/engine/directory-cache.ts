@@ -415,6 +415,7 @@ export function mergeReplicatedDirectory(communities: unknown): DirectoryMerge {
                 member_count: c.memberCount, contact_email: c.contactEmail, contact_phone: c.contactPhone, updated_at: c.registryUpdatedAt,
                 // Left out by a main server from before the promise: none of the three.
                 promise: c.promise ?? null, accepting_knocks: c.acceptingKnocks ?? null, closing_on: c.closingOn ?? null,
+                answers: answers((c as any).answers),
             });
             if (!row || row.key !== c.key) { merge.invalid++; continue; }
             const here = current.get(row.key) as { updated_at: string } | undefined;

@@ -107,6 +107,14 @@ describe('pledgeReturnLine: what the project page says happens to the Beans if t
     it('says nothing once its end date is over with nothing pledged: nothing is held to go back', () => {
         expect(pledgeReturnLine({ ...project, currentAmount: 0, deadlineAt: '2026-11-17T10:00:00.000Z' }, NOW)).toBeNull();
         expect(pledgeReturnLine({ ...project, currentAmount: 0, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW)).toBeNull();
+        // In cents: a float residue where every pledge went back is nothing pledged, not Beans due back (review of #2525: the
+        // node's raised figure was 2.2e-16 once 0.1, 0.3, 0.2, 0.6 and 0.7 had gone back). A cent is a pledge.
+        for (const residue of [2.220446049250313e-16, 1.4e-14, 0.004]) {
+            expect(pledgeReturnLine({ ...project, currentAmount: residue, deadlineAt: '2026-11-17T10:00:00.000Z' }, NOW), String(residue)).toBeNull();
+            expect(pledgeReturnLine({ ...project, currentAmount: residue, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW), String(residue)).toBeNull();
+        }
+        expect(pledgeReturnLine({ ...project, currentAmount: 0.01, deadlineAt: '2026-11-01T10:00:00.000Z' }, NOW))
+            .toBe('The goal wasn’t reached by 1 Nov 2026, so everyone’s Beans are due back from 8 Nov 2026.');
     });
 
     it('says nothing for a project that reached its goal, an enterprise with no goal, or a project with no end date', () => {

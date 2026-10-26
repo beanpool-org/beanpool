@@ -2834,7 +2834,8 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     }
     try {
         // Pledges in, less any sent back out of the escrow to a backer (a pledge made after the goal, returned at boot by
-        // engine/stranded-pledges.ts): those never reached the project. The sweep to the enterprise is neither.
+        // engine/stranded-pledges.ts, or an unfunded project's, a week after its end date by engine/unfunded-pledges.ts): those
+        // never reached the project. The sweep to the enterprise is neither.
         const txSum = (db.prepare(`
             SELECT COALESCE(SUM(CASE WHEN from_pubkey = 'escrow_' || ? THEN -amount ELSE amount END), 0) as s FROM transactions
             WHERE project_id = ? AND (
@@ -2843,7 +2844,9 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
             )
         `).get(e.public_key, e.public_key, e.public_key, e.public_key, e.public_key, e.public_key) as any)?.s || 0;
         const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
-        currentAmount = Math.max(currentAmount, txSum, accBal);
+        // The sum in cents, as every pledge is: SQLite's sum of REALs is not 0 where every pledge went back (0.1, 0.2 and 0.7
+        // from one backer, 0.3 and 0.6 from another, leave 2.8e-17), and the update read that as pledges received. Review of #2525.
+        currentAmount = Math.max(currentAmount, Math.round(Number(txSum) * 100) / 100, accBal);
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -3138,7 +3141,8 @@ export function updateCrowdfundProject(
     description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
     assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
-    if (project.current_amount > 0 && Number(goal_amount) !== project.goal_amount) {
+    // In cents, as pledgeToProject reads a goal: a float residue where every pledge went back is no pledge received.
+    if (Math.round(Number(project.current_amount) * 100) > 0 && Number(goal_amount) !== project.goal_amount) {
         throw new Error("Cannot change funding goal after receiving pledges");
     }
 

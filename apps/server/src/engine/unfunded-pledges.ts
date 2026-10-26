@@ -21,7 +21,7 @@
 //
 // HOW. As the stranded return does: transfer() from the escrow to each backer (the escrow floor, fee-exempt, the backer's
 // demurrage settled before the credit), all of a project's payments inside ONE conservingTransaction, each row stamped with
-// the project, its raised figure lowered by what went back. The leader's cancel (db.ts deleteCrowdfundProject) sends the
+// the project, its raised figure set to 0: all of it went back. The leader's cancel (db.ts deleteCrowdfundProject) sends the
 // same pledges back to the same backers, but by raw balance SQL and a resync before it deletes the project, which the ledger
 // rules keep out of anything new; and this keeps the project, whose page says what happened. Every decision is made before
 // the transaction opens (guards outside, mutation inside); inside it only a transfer the ledger refuses can throw, and that
@@ -201,7 +201,11 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
                 // The row names the project, as the delete path's refunds and the stranded return's do: its history shows it went back.
                 db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
             }
-            db.prepare('UPDATE projects SET current_amount = MAX(0, current_amount - ?) WHERE id = ?').run(total, s.projectId);
+            // An ACTIVE project's raised figure is what its escrow holds (pledgeToProject adds each pledge to both), and the escrow
+            // has just paid all of it out: 0. Not the figure less `total`: SQLite adds the pledges up in the order they came and
+            // this adds them up backer by backer, so for amounts not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7) the difference was
+            // 2.2e-16, which the leader's update read as pledges received and the page as Beans held. Review of #2525.
+            db.prepare('UPDATE projects SET current_amount = 0 WHERE id = ?').run(s.projectId);
             // Kept with the money: a crash after the commit still leaves every one of them to read.
             told = [
                 ...backers.map((to) => ({ to, title: backerTitle, body: backerBody, id: keepNotice(to, backerTitle, backerBody, data) })),

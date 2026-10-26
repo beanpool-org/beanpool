@@ -86,16 +86,31 @@ export function shouldShowNotificationCard(record: NotificationPermissionRecord 
     return record.state === 'unanswered';
 }
 
-/** Checks whether notifications are granted at the OS level. */
-export async function checkOsNotificationPermission(): Promise<boolean> {
+/** What the phone itself says about notifications for BeanPool. */
+export interface OsNotificationPermission {
+    /** expo-notifications loaded: false on a build or runner without it, where nothing can be asked or delivered. */
+    available: boolean;
+    granted: boolean;
+    /** Whether the system dialog can still be shown. False after iOS's Don't Allow, a second denial on Android 13+,
+     *  or notifications switched off in the phone's settings: only the phone's settings can turn them on then. */
+    canAskAgain: boolean;
+}
+
+/** Reads the phone's own notification permission. Never throws and never asks. */
+export async function readOsNotificationPermission(): Promise<OsNotificationPermission> {
     try {
         const notif = await getNotificationsModule();
-        if (!notif?.getPermissionsAsync) return false;
-        const { status } = await notif.getPermissionsAsync();
-        return status === 'granted';
+        if (!notif?.getPermissionsAsync) return { available: false, granted: false, canAskAgain: false };
+        const res = await notif.getPermissionsAsync();
+        return { available: true, granted: res?.status === 'granted', canAskAgain: res?.canAskAgain !== false };
     } catch {
-        return false;
+        return { available: false, granted: false, canAskAgain: false };
     }
+}
+
+/** Checks whether notifications are granted at the OS level. */
+export async function checkOsNotificationPermission(): Promise<boolean> {
+    return (await readOsNotificationPermission()).granted;
 }
 
 /**
@@ -145,8 +160,13 @@ export async function turnOnNotifications(publicKey?: string | null, storage: St
     }
 }
 
-/** Tapping "Not now" on the card: marks the state as declined. */
+/**
+ * Tapping "Not now" on the card: marks the state as declined, unless the phone already allows notifications (Android 8–12
+ * always does; so does a member who allowed the old boot prompt): then nothing is stored, as their token keeps
+ * registering and "declined" would be untrue.
+ */
 export async function declineNotifications(storage: StorageLike = AsyncStorage): Promise<void> {
+    if ((await readOsNotificationPermission()).granted) return;
     const existing = await readNotificationPermissionRecord(storage);
     await writeNotificationPermissionRecord({ ...existing, state: 'declined', updatedAt: Date.now() }, storage);
 }
@@ -177,6 +197,9 @@ function defaultAlertPrompt(): Promise<'turn_on' | 'not_now'> {
  * At the first knock or message:
  * If notifications are unanswered or previously declined, ask with the one-line reason first;
  * never ask on subsequent knocks or messages.
+ * The phone is read first: where it already allows notifications (every Android 8–12 phone, and members who allowed the
+ * old boot prompt), the token is registered silently and nothing is shown. Where expo-notifications can't load (no
+ * native module in this build), there is nothing to turn on, so nothing is asked either.
  */
 export async function askNotificationPermissionOnAction(
     action: 'knock' | 'message',
@@ -190,6 +213,13 @@ export async function askNotificationPermissionOnAction(
 
     const alreadyRetried = action === 'knock' ? record.knockRetried : record.messageRetried;
     if (alreadyRetried) return record.state;
+
+    const os = await readOsNotificationPermission();
+    if (os.granted) {
+        await registerPushToken(publicKey);
+        return 'granted';
+    }
+    if (!os.available) return record.state;
 
     const prompter = options?.promptUser ?? defaultAlertPrompt;
     const choice = await prompter();

@@ -34,4 +34,12 @@ describe('notification-permission loads without the push service, identity or ex
         const { checkOsNotificationPermission } = await import('../notification-permission');
         await expect(checkOsNotificationPermission()).resolves.toBe(false);
     });
+
+    it('asks nothing at a first message or knock where expo-notifications cannot load: there is nothing to turn on', async () => {
+        const { askNotificationPermissionOnAction } = await import('../notification-permission');
+        const { Alert } = await import('react-native');
+        await expect(askNotificationPermissionOnAction('message', 'k')).resolves.toBe('unanswered');
+        await expect(askNotificationPermissionOnAction('knock', 'k')).resolves.toBe('unanswered');
+        expect(Alert.alert).not.toHaveBeenCalled();
+    });
 });

@@ -269,6 +269,43 @@ describe('S3: notification permission at the tap, never at account creation', ()
         });
     });
 
+    // #2524 deciding review, finding 2: every Android 8–12 phone, and every member who allowed the old boot prompt, has a
+    // phone that already allows notifications while this record is new (unanswered). They are never asked.
+    describe('the phone already allows notifications', () => {
+        for (const state of ['unanswered', 'declined'] as const) {
+            for (const action of ['knock', 'message'] as const) {
+                it(`record ${state}, first ${action}: no prompt, the token is registered silently, nothing stored as declined`, async () => {
+                    if (state === 'declined') {
+                        notificationsMock.getPermissionsAsync.mockResolvedValueOnce({ status: 'undetermined' } as any);
+                        await declineNotifications();
+                    }
+                    notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
+                    const promptUser = vi.fn(async () => 'not_now' as const);
+
+                    const res = await askNotificationPermissionOnAction(action, 'test-pubkey', { promptUser });
+
+                    expect(promptUser).not.toHaveBeenCalled();
+                    expect(res).toBe('granted');
+                    expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+                    expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledWith('test-pubkey');
+                    expect((await readNotificationPermissionRecord()).state).toBe(state);
+                });
+            }
+        }
+
+        it('Not now on the card stores nothing when the phone already allows notifications', async () => {
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
+            await declineNotifications();
+            expect((await readNotificationPermissionRecord()).state).toBe('unanswered');
+        });
+
+        it('Not now on the card stores declined when the phone has not allowed them', async () => {
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true } as any);
+            await declineNotifications();
+            expect((await readNotificationPermissionRecord()).state).toBe('declined');
+        });
+    });
+
     describe('words and copy', () => {
         it('matches the exact copy decided in design §3.9', () => {
             expect(NOTIFICATION_CARD_WORDS.title).toBe('Turn on notifications?');

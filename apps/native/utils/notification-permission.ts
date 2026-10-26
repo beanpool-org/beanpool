@@ -89,7 +89,7 @@ export async function checkOsNotificationPermission(): Promise<boolean> {
  * Tapping "Turn on" on the card: requests system permission, saves the state, and if granted registers the push token.
  */
 export async function turnOnNotifications(publicKey?: string | null, storage: StorageLike = AsyncStorage): Promise<'granted' | 'declined'> {
-    let status = 'denied';
+    let status: string;
     try {
         const res = await Notifications.requestPermissionsAsync();
         status = res.status;

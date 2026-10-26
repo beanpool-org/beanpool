@@ -16,7 +16,6 @@ import { useIdentity } from '../app/IdentityContext';
 import {
     checkOsNotificationPermission,
     declineNotifications,
-    NOTIFICATION_CARD_WORDS,
     readNotificationPermissionRecord,
     shouldShowNotificationCard,
     turnOnNotifications,

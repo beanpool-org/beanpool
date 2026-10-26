@@ -453,8 +453,8 @@ async function main(): Promise<void> {
     // From here to the end of the part nothing awaits.
     setDeadline(hall, new Date(Date.now() - 8 * DAY).toISOString());
     setNodeRole('backup');
-    let onStandby: { returned: number; left: number } | null = null;
-    let wrapperOnStandby: { returned: number; left: number } | null = null;
+    let onStandby: { returned: number; left: number } | undefined;
+    let wrapperOnStandby: { returned: number; left: number } | null | undefined;
     try {
         onStandby = tick(watched.hooks);
         wrapperOnStandby = tickWrapper()?.() ?? null;
@@ -464,7 +464,7 @@ async function main(): Promise<void> {
     const hallOnStandby = { escrow: escrowOf(hall), ann: balanceOf(ann.pubKeyHex), live: watched.live.length, pushes: watched.pushes.length, kept: keptFor(ann.pubKeyHex).length };
     const wrapper = tickWrapper();
     const onMain = wrapper ? wrapper() : { returned: -1, left: -1 };
-    assert(onStandby?.returned === 0 && (wrapperOnStandby === null || wrapperOnStandby.returned === 0) && near(hallOnStandby.escrow, 6) && near(hallOnStandby.ann, annBeforeHall),
+    assert(onStandby?.returned === 0 && (wrapperOnStandby === null || wrapperOnStandby?.returned === 0) && near(hallOnStandby.escrow, 6) && near(hallOnStandby.ann, annBeforeHall),
         `on a standby nothing moves (${JSON.stringify(onStandby)} ${JSON.stringify(wrapperOnStandby)}, escrow ${hallOnStandby.escrow})`);
     assert(hallOnStandby.live === hallCounts.live && hallOnStandby.pushes === hallCounts.pushes && hallOnStandby.kept === hallCounts.kept, 'and nobody is told');
     assert(onMain.returned === 1 && escrowOf(hall) <= DUST && near(balanceOf(ann.pubKeyHex), annBeforeHall + 6),
@@ -493,6 +493,30 @@ async function main(): Promise<void> {
     assert(keptFor(ann.pubKeyHex).length === benchCounts.kept && watched.live.length === benchCounts.live, 'and nobody is told');
     const finalAudit = runLedgerAudit();
     assert(Math.abs(finalAudit.drift) < 0.0001, `the ledger audit still holds with 0 drift (${finalAudit.drift})`);
+
+    // ── 11. After the return the project is still there: its date moved, then its leader's cancel pays nobody twice ──────
+    // The leader's cancel (POST /api/crowdfund/projects/delete, db.ts deleteCrowdfundProject) refunds the pledges its escrow
+    // holds. The ones that went back a week after the end date are not held any more: refunding them again would pay the
+    // backers twice and leave the escrow below 0.
+    console.log('── 11. The date moved after the return, a new pledge, then the leader cancels ──');
+    const reopened = await signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount: 100, deadlineAt: new Date(Date.now() + 10 * DAY).toISOString() }, lea);
+    assert(reopened.status === 200, `the leader moves the roof's end date after its pledges went back (${reopened.status} ${reopened.body?.error ?? ''})`);
+    assert(keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved' && n.body.includes('"Village Hall Roof"')).length === 0,
+        'nobody is told: nothing of theirs is held');
+    const reopenedPage = await readPage(ann, roof);
+    assert(reopenedPage?.pledgesReturnedAt === null, `its page no longer says they went back: its end date is ahead again (${reopenedPage?.pledgesReturnedAt})`);
+    await pledge(ann, roof, 7, 'treasury');
+    assert(near(escrowOf(roof), 7), `it takes a new pledge (escrow ${escrowOf(roof)})`);
+    const beforeCancel = { ann: balanceOf(ann.pubKeyHex), ben: balanceOf(ben.pubKeyHex), cal: balanceOf(cal.pubKeyHex), sum: sumBalances() };
+    const cancelled = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: roof, creatorPubkey: lea.pubKeyHex }, lea);
+    assert(cancelled.status === 200, `the leader cancels it (${cancelled.status} ${cancelled.body?.error ?? ''})`);
+    assert(near(balanceOf(ann.pubKeyHex), beforeCancel.ann + 7), `Ann gets back only the 7 still held, not her 10 again (${balanceOf(ann.pubKeyHex) - beforeCancel.ann})`);
+    assert(near(balanceOf(ben.pubKeyHex), beforeCancel.ben) && near(balanceOf(cal.pubKeyHex), beforeCancel.cal),
+        `Ben and Cal, paid back a week after the end date, are not paid again (Ben ${balanceOf(ben.pubKeyHex) - beforeCancel.ben}, Cal ${balanceOf(cal.pubKeyHex) - beforeCancel.cal})`);
+    assert(near(escrowOf(roof), 0) && near(sumBalances(), beforeCancel.sum), `its escrow ends at 0, not below (${escrowOf(roof)}), and the total is unchanged`);
+    const cancelAudit = runLedgerAudit();
+    assert(cancelAudit.ok && Math.abs(cancelAudit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${cancelAudit.ok}, drift ${cancelAudit.drift})`);
 
     // ── 10. A node killed in the middle of a return ───────────────────────────────────────────────────────────────────
     console.log('── 10. Killed in the middle of a return, then booted again ──');

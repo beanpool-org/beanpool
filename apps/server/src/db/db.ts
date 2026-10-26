@@ -3330,6 +3330,20 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     onBalanceMutation?.();
 }
 
+/**
+ * The pledges a project's escrow still holds (@escrow, @project): each pledge into it with no row out of it after it. Out of
+ * an ACTIVE project's escrow only the return of its pledges a week after its end date pays (engine/unfunded-pledges.ts), and
+ * it pays out every pledge the escrow holds at once, so the pledges before it went back then. Once its date moves, the
+ * project takes pledges again, and only those are still held. Before any return, every pledge, as it always was.
+ */
+const HELD_PLEDGES_SQL = `
+    SELECT t.from_pubkey, t.amount, t.id FROM transactions t
+    WHERE t.to_pubkey = @escrow AND t.project_id = @project
+      AND NOT EXISTS (
+          SELECT 1 FROM transactions o
+          WHERE o.from_pubkey = @escrow AND o.project_id = @project
+            AND (o.timestamp > t.timestamp OR (o.timestamp = t.timestamp AND o.rowid > t.rowid)))`;
+
 export function deleteCrowdfundProject(projectId: string, requesterPubkey: string) {
     // It refunds the backers from the project's escrow (raw SQL below): never on a standby (config/node-role.ts).
     assertLedgerWritable();
@@ -3358,20 +3372,17 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     // transaction that then rolls back is the exact conservation hazard conservingTransaction exists for
     // (state-engine.ts) — which this module cannot reach.
     if (project.status === 'ACTIVE') {
-        const backers = db.prepare(`
-            SELECT DISTINCT from_pubkey FROM transactions WHERE to_pubkey = ? AND project_id = ?
-        `).all(`escrow_${projectId}`, projectId) as { from_pubkey: string }[];
+        const backers = db.prepare(`SELECT DISTINCT from_pubkey FROM (${HELD_PLEDGES_SQL})`)
+            .all({ escrow: `escrow_${projectId}`, project: projectId }) as { from_pubkey: string }[];
         if (backers.length > 0) onSettleDemurrage?.(backers.map(b => b.from_pubkey));
     }
 
     const executeDelete = db.transaction(() => {
-        // If still ACTIVE, funds are locked in Escrow. Refund them to backers.
+        // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that
+        // already went back a week after the project's end date (HELD_PLEDGES_SQL), which would be paid twice.
         if (project.status === 'ACTIVE') {
             const escrowPubkey = `escrow_${projectId}`;
-            const pledges = db.prepare(`
-                SELECT from_pubkey, amount, id FROM transactions 
-                WHERE to_pubkey = ? AND project_id = ?
-            `).all(escrowPubkey, projectId) as { from_pubkey: string, amount: number, id: string }[];
+            const pledges = db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[];
 
             let totalRefunded = 0;
             for (const pledge of pledges) {

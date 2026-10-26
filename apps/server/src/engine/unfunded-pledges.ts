@@ -29,7 +29,9 @@
 //
 // ONCE. The escrow empties in the commit that pays the backers, so the project is not found again. A crash before the commit
 // leaves nothing moved, and the next tick (or the next boot's) returns it all. Never on a standby (its ledger is its main
-// server's, and the main server's return reaches it with the next copy), nor where this node's Beans are switched off.
+// server's, and the main server's return reaches it with the next copy), nor where this node's Beans are switched off. The
+// project stays ACTIVE, so its leader can still cancel it, or move its date and take pledges again: the cancel refunds only
+// the pledges its escrow still holds (db.ts HELD_PLEDGES_SQL), never one that went back here.
 //
 // TOLD. Each backer and the leader. Their copies are kept (engine/kept-notices.ts) in the same transaction as the money, so
 // the web app shows them at its next open and the phone's background sync posts them, whatever happens after the commit.

@@ -74,7 +74,7 @@ import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import {
-    checkOsNotificationPermission, declineNotifications, readNotificationPermissionRecord,
+    declineNotifications, readNotificationPermissionRecord, readOsNotificationPermission,
     shouldShowNotificationCard, turnOnNotifications,
 } from '../utils/notification-permission';
 import { SavedNodePicker } from '../components/SavedNodePicker';
@@ -189,11 +189,12 @@ export default function WelcomeScreen() {
         if (mode !== 'onboardingGuide') return;
         let live = true;
         const check = async () => {
-            const [record, osGranted] = await Promise.all([
+            const [record, os] = await Promise.all([
                 readNotificationPermissionRecord(),
-                checkOsNotificationPermission(),
+                readOsNotificationPermission(),
             ]);
-            if (live) setNotifVisible(shouldShowNotificationCard(record, osGranted));
+            // Where expo-notifications can't load there is nothing to turn on, so no card (as at a first message).
+            if (live) setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted));
         };
         void check();
         // Back from the phone's settings (Turn on when the phone won't ask again): the card goes once they allow it.

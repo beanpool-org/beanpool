@@ -431,6 +431,12 @@ describe('S3: notification permission at the tap, never at account creation', ()
                 'app/shop/[id].tsx', 'app/treasury-detail.tsx',
             ]));
         });
+
+        it('no screen makes its own first-message ask: it is made once, in createConversationApi', () => {
+            const screens = sources.filter((f) => f.includes(`${path.sep}app${path.sep}`)
+                && /askNotificationPermissionOnAction\('message'/.test(fs.readFileSync(f, 'utf8')));
+            expect(screens.map((f) => path.relative(root, f))).toEqual([]);
+        });
     });
 
     // #2524 deciding review, non-blocking polish.
@@ -454,11 +460,9 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(notNow).toContain('accessibilityState={{ busy, disabled: busy }}');
         });
 
-        it("New message asks before its row's spinner shows", () => {
-            const nm = fs.readFileSync(path.join(root, 'app/new-message.tsx'), 'utf8');
-            const handler = nm.slice(nm.indexOf('const handleSelectMember'), nm.indexOf('setCreating(null);', nm.indexOf('const handleSelectMember')));
-            expect(handler.indexOf("askNotificationPermissionOnAction('message'")).toBeGreaterThan(-1);
-            expect(handler.indexOf("askNotificationPermissionOnAction('message'")).toBeLessThan(handler.indexOf('setCreating(pubkey)'));
+        it('neither card shows where expo-notifications cannot load: there is nothing to turn on', () => {
+            expect(home).toContain('setVisible(os.available && shouldShowNotificationCard(record, os.granted))');
+            expect(welcome).toContain('setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted))');
         });
     });
 

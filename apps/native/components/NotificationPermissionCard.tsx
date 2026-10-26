@@ -14,9 +14,9 @@ import { t } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import {
-    checkOsNotificationPermission,
     declineNotifications,
     readNotificationPermissionRecord,
+    readOsNotificationPermission,
     shouldShowNotificationCard,
     turnOnNotifications,
 } from '../utils/notification-permission';
@@ -30,12 +30,13 @@ export function NotificationPermissionCard({ colors, onAnswered }: { colors: App
         useCallback(() => {
             let live = true;
             const check = async () => {
-                const [record, osGranted] = await Promise.all([
+                const [record, os] = await Promise.all([
                     readNotificationPermissionRecord(),
-                    checkOsNotificationPermission(),
+                    readOsNotificationPermission(),
                 ]);
                 if (live) {
-                    setVisible(shouldShowNotificationCard(record, osGranted));
+                    // Where expo-notifications can't load there is nothing to turn on, so no card (as at a first message).
+                    setVisible(os.available && shouldShowNotificationCard(record, os.granted));
                 }
             };
             void check();

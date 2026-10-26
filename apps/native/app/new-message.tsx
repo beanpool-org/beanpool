@@ -18,7 +18,6 @@ import { joinedWords, pickerEmpty, pickerHeading } from '../utils/community-list
 import { t, tn } from '@beanpool/core';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { signedRequestWords } from '../components/signed-request-lines';
-import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 import { useTheme, useStyles } from './ThemeContext';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────
@@ -254,9 +253,6 @@ export default function NewMessageScreen() {
     // ── Handlers ────────────────────────────────────────────────────────────
     const handleSelectMember = useCallback(async (pubkey: string) => {
         if (!identity?.publicKey || creating) return;
-        // createConversationApi makes the first-message notification ask for every DM start; asked here first only so
-        // this row's spinner isn't showing behind the prompt (it is asked once, so the one inside then does nothing).
-        await askNotificationPermissionOnAction('message', identity.publicKey).catch(() => 'unanswered');
         setCreating(pubkey);
         try {
             const fromNode = nodeResults.find(m => m.public_key === pubkey);

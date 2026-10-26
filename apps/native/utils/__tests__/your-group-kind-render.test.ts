@@ -117,6 +117,21 @@ describe('Your groups names a project a project (§3.1)', () => {
         expect(img).not.toBeNull();
     });
 
+    it("Pictures S4: a group with no picture of its own (made before S4) draws its category's emblem, never the emoji box (#2511 review)", () => {
+        draw(createElement(YourGroupRow, {
+            item: row({ kind: 'group', name: 'Street choir', category: 'guild', avatarUrl: null, role: 'member' }),
+            onPress: () => { },
+        }));
+        expect(container.querySelector('[data-testid="group-avatar-img"]')).not.toBeNull();
+        expect(container.textContent).not.toContain('🛡️');
+    });
+
+    it('Pictures S4: an enterprise row with no logo keeps its emoji box', () => {
+        draw(createElement(YourGroupRow, { item: row({ name: 'Bakery', avatarUrl: null }), onPress: () => { } }));
+        expect(container.querySelector('[data-testid="group-avatar-img"]')).toBeNull();
+        expect(container.textContent).toContain('🥖');
+    });
+
     it('Pictures S4: ChatOwnerHeader draws picture before title when avatarUrl is present', () => {
         draw(createElement(ChatOwnerHeader, {
             kind: 'group',

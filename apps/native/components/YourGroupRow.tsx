@@ -10,7 +10,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { chatEmoji, ownerKindName, previewLine, rowRoleWord, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { chatEmoji, chatPicture, ownerKindName, previewLine, rowRoleWord, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
 import { MemberAvatar } from './MemberAvatar';
 import { t, tn } from '@beanpool/core';
 
@@ -80,6 +80,7 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
     const roleWord = rowRoleWord(item);
     const preview = previewLine(item, myPubkey);
     const time = rowTime(item.lastMessage?.timestamp ?? null);
+    const picture = chatPicture(item.kind, item.avatarUrl, item.category);
 
     return (
         <Pressable
@@ -88,9 +89,9 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
             style={[styles.row, flush && { marginHorizontal: 0 }]}
             onPress={() => onPress(item)}
         >
-            {item.avatarUrl ? (
+            {picture ? (
                 <View style={{ marginRight: 12, flexShrink: 0 }}>
-                    <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.id} callsign={item.name} size={46} />
+                    <MemberAvatar avatarUrl={picture} pubkey={item.id} callsign={item.name} size={46} />
                 </View>
             ) : (
                 <View style={[styles.icon, item.kind === 'enterprise' && styles.iconEnterprise, item.kind === 'event' && styles.iconEvent]}>

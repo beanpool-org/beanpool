@@ -64,7 +64,7 @@ import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GRO
 import { refusedSendNotice } from '../utils/dm-lock';
 import {
     isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, chatLifecycleFromRows,
-    ENTERPRISE_CHAT_NOTICE, ownerKindName,
+    ENTERPRISE_CHAT_NOTICE, ownerKindName, chatPicture,
     type YourChatMute,
 } from '../utils/your-groups';
 import {
@@ -705,7 +705,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         <ChatOwnerHeader
             kind={kind}
             name={name}
-            avatarUrl={group?.avatarUrl || view?.group?.avatarUrl || null}
+            // Its picture, else its category's emblem, once the node has said which group this is: never a guessed emblem
+            // that turns into the group's own picture a moment later.
+            avatarUrl={group || view?.group ? chatPicture(kind, group?.avatarUrl || view?.group?.avatarUrl, category) : null}
             category={category}
             lifecycle={lifecycle}
             detail={detail}

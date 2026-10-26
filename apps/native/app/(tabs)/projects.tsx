@@ -14,8 +14,9 @@ import { DecideSection, proposeRefusal } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import { YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
-import { chatEmoji, chatHref, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
+import { chatHref, chatPicture, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
+import { MemberAvatar } from '../../components/MemberAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
@@ -410,9 +411,8 @@ export default function ProjectsScreen() {
                 onPress={() => isInvited ? router.push(inviteLandingHref(item) as any) : setSelectedGroupForDetail(item)}
             >
                 <View style={styles.cardHeader}>
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={{ fontSize: 20 }}>{chatEmoji('group', item.category)}</Text>
-                    </View>
+                    {/* The group's picture, else its category's emblem, as its Talk row, its chat and the web's card draw it (Pictures S4). */}
+                    <MemberAvatar avatarUrl={chatPicture('group', item.avatarUrl, item.category)} pubkey={item.id} callsign={item.name} updatedAt={item.updatedAt} size={44} />
                     <View style={styles.cardTitleCol}>
                         <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
                         {isInvited ? (

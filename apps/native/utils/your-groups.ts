@@ -8,7 +8,7 @@
  * The helpers below are pure so the row wording and the one-header-for-every-chat label are unit tested.
  */
 
-import { formatDate, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, formatDate, t, tn, word, type WordKey } from '@beanpool/core';
 import type { GroupCategory, GroupItem } from './db';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
@@ -103,6 +103,16 @@ export function chatEmoji(kind: YourChatKind, category?: string | null, lifecycl
     if (kind === 'enterprise') return '🥖';
     if (kind === 'event') return '📅';
     return GROUP_CATEGORY_EMOJI[(category as GroupCategory)] ?? '👥';
+}
+
+/**
+ * The picture a chat's row and header draw (Pictures S4, design §3.1): its own; for a group with none (one made before
+ * every group had a picture: the node sends `avatarUrl: null`), its category's ready-made emblem, as Group info and the
+ * web draw it. An enterprise or event with none has no picture here (null): its row keeps the emoji box.
+ */
+export function chatPicture(kind: YourChatKind, avatarUrl: string | null | undefined, category?: string | null): string | null {
+    if (avatarUrl) return avatarUrl;
+    return kind === 'group' ? bundledGroupEmblem(category) : null;
 }
 
 /**

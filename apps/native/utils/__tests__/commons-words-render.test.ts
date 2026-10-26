@@ -203,7 +203,10 @@ vi.mock('../../components/useYourGroups', () => ({
     yourGroupsStore: { refresh() {} },
 }));
 vi.mock('../../components/GroupDetailModal', () => ({ GroupDetailModal: () => null }));
-vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+vi.mock('../../components/MemberAvatar', () => ({
+    // The picture it was handed, so a card's face is read exactly.
+    MemberAvatar: ({ avatarUrl }: { avatarUrl?: string | null }) => createElement('span', { 'data-avatar': 'true', 'data-face': String(avatarUrl) }),
+}));
 vi.mock('../../components/InfoModal', () => ({
     InfoModal: ({ isOpen, title, tabs }: { isOpen: boolean; title: string; tabs: Array<{ id: string; label: string; content: unknown }> }) => (isOpen
         ? createElement('div', { 'data-modal': 'true', 'data-stand-in': 'InfoModal' },
@@ -820,5 +823,24 @@ describe('the Commons follows a language picked on the phone', () => {
         expect(host.textContent).not.toContain('No description provided.');
         expect(host.textContent).toContain('Garden Crew');
         expect(host.textContent).toContain('We grow food on the corner lot');
+    });
+});
+
+describe("a group's card in Commons → Groups draws its picture, else its category's emblem (Pictures S4; #2511 review)", () => {
+    it("as its Talk row, its chat, Group info and the web's card do: never the category's emoji in a placeholder", async () => {
+        node.groups = [
+            { ...GROUPS[0], avatarUrl: '/api/groups/g1/picture?v=7' },
+            { ...GROUPS[1], avatarUrl: null },
+            { ...GROUPS[2], avatarUrl: null },
+        ];
+        await renderIn('en');
+        await toGroups('en');
+        const card = (name: string) => Array.from(host.querySelectorAll('span')).find((n) => n.textContent === name)?.closest('button');
+        const face = (name: string) => card(name)?.querySelector('[data-face]')?.getAttribute('data-face');
+        expect(face('Garden Crew')).toBe('/api/groups/g1/picture?v=7');
+        expect(face('Knitters')).toBe('bundled://sunflower');
+        expect(face('Night Owls')).toBe('bundled://bean-green');
+        expect(card('Knitters')?.textContent).not.toContain('🌻');
+        expect(card('Night Owls')?.textContent).not.toContain('💬');
     });
 });

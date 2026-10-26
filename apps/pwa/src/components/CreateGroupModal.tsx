@@ -84,6 +84,11 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
             onCreated(group);
             setName('');
             setDescription('');
+            setCategory(CREATE_GROUP_DEFAULTS.category);
+            setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
+            setPicture(bundledGroupEmblem(CREATE_GROUP_DEFAULTS.category));
+            setUserPickedPicture(false);
+            setShowPresetPicker(false);
             onClose();
         } catch (err: any) {
             setError(err.message || t('Failed to create group'));

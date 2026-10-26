@@ -1029,7 +1029,10 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     // the group means "unchanged", as a member's own avatar URL does on a profile save.
     if (updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl)) {
         if (!updates.avatarUrl || !updates.avatarUrl.trim()) {
-            throw new Error(word('A group keeps a picture'));
+            const heldPicture = getGroupPicture(db, groupId);
+            if (heldPicture) {
+                throw new Error(word('A group keeps a picture'));
+            }
         }
     }
     const picture = updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl) ? updates.avatarUrl || null : undefined;

@@ -10737,7 +10737,10 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     assertGroupActorIsMember(convenorPubkey);
     if (updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl)) {
         if (!updates.avatarUrl || !updates.avatarUrl.trim()) {
-            throw new Error(word('A group keeps a picture'));
+            const heldPicture = engine.getGroupPicture(db, groupId);
+            if (heldPicture) {
+                throw new Error(word('A group keeps a picture'));
+            }
         }
     }
     const incomingBytes = incomingPhotoBytes(updates.avatarUrl);

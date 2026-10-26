@@ -125,10 +125,10 @@ async function main() {
     db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'notify_knocks', 'true')`).run(memberOptIn.pk);
 
     // Register push tokens for each
-    putPushTokenRow(owner.pk, pushTokenId('token-owner'), 'ExponentPushToken[owner]', 'android', 'en');
-    putPushTokenRow(admin.pk, pushTokenId('token-admin'), 'ExponentPushToken[admin]', 'android', 'en');
-    putPushTokenRow(memberDefault.pk, pushTokenId('token-default'), 'ExponentPushToken[default]', 'android', 'en');
-    putPushTokenRow(memberOptIn.pk, pushTokenId('token-optin'), 'ExponentPushToken[optin]', 'android', 'en');
+    putPushTokenRow(owner.pk, 'ExponentPushToken[owner]', 'android');
+    putPushTokenRow(admin.pk, 'ExponentPushToken[admin]', 'android');
+    putPushTokenRow(memberDefault.pk, 'ExponentPushToken[default]', 'android');
+    putPushTokenRow(memberOptIn.pk, 'ExponentPushToken[optin]', 'android');
 
     // ── 1. A stranger knocks ──
     const stranger = newId('Stranger');
@@ -140,6 +140,7 @@ async function main() {
         fromNode: 'https://global.beanpool.org/',
     });
     assert(knockRes.status === 201, `knock submitted -> 201 (got ${knockRes.status})`);
+    await new Promise(r => setTimeout(r, 50));
 
     // Admin queue check
     const qOwner = getAdminQueue({ forOwner: true });
@@ -199,6 +200,7 @@ async function main() {
                 VALUES (?, ?, 'OldKnocker', 'Waiting 7 days', 'pending', ?, ?)`).run(oldKnockId, newId('Old').pk, sevenDaysAgo, sevenDaysAgo);
 
     const alertEvents = await checkServerAlerts();
+    await new Promise(r => setTimeout(r, 50));
     const knockAlert = alertEvents.find(e => e.key === 'knock.waiting');
     assert(knockAlert !== undefined, 'knock.waiting alert raised when request waited 7 days');
     assert(knockAlert?.detail === 'A request to join has waited 7 days.', `alert detail is expected sentence (got "${knockAlert?.detail}")`);
@@ -221,9 +223,10 @@ async function main() {
 
     // Helper to insert knock history
     const insertHistory = (id: string, createdDaysAgo: number, decidedDaysAgo: number | null, status: 'approved' | 'declined' | 'pending') => {
-        db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, decided_at, updated_at)
-                    VALUES (?, ?, 'K', 'M', ?, ?, ?, ?)`).run(
+        db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, decided_at, updated_at, invite_code)
+                    VALUES (?, ?, 'K', 'M', ?, ?, ?, ?, ?)`).run(
             id, newId('k').pk, status, t(createdDaysAgo), decidedDaysAgo !== null ? t(decidedDaysAgo) : null, decidedDaysAgo !== null ? t(decidedDaysAgo) : t(createdDaysAgo),
+            status === 'approved' ? `INV-${id}` : null,
         );
     };
 

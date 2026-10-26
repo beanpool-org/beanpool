@@ -462,9 +462,12 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         const form = modal.querySelector('form')!;
         fireEvent.submit(form);
 
+        // The line above the form says it; the Start button says the same words and stays off.
         await waitFor(() => {
-            expect(within(modal).getByText('Choose a logo')).toBeInTheDocument();
+            const lines = within(modal).getAllByText('Choose a logo').filter((el) => el.closest('button') === null);
+            expect(lines).toHaveLength(1);
         });
+        expect(within(modal).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
         expect(createEnterprise).not.toHaveBeenCalled();
     });
 });

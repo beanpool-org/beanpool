@@ -613,7 +613,8 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         const dialog = await screen.findByRole('dialog');
         // The Beans hand-off belongs to Commons, where the project and enterprise forms are.
         expect(within(dialog).queryByTestId('create-group-with-beans')).not.toBeInTheDocument();
-        const nameField = dialog.querySelector('input')!;
+        // By its placeholder: the Picture row's file input comes first now (Pictures S4).
+        const nameField = within(dialog).getByPlaceholderText('e.g. Bindarrabi Garden Crew, Solar Guild');
         fireEvent.change(nameField, { target: { value: 'Bike fixers' } });
         fireEvent.submit(nameField.closest('form')!);
 

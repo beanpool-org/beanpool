@@ -18,6 +18,7 @@ import type * as ExpoNotifications from 'expo-notifications';
 import { t, word } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
 import { registerForPushNotifications } from '../services/push-notifications';
+import { loadIdentity } from './identity';
 
 function getNotificationsModule(): typeof ExpoNotifications | null {
     try {
@@ -115,8 +116,9 @@ export async function turnOnNotifications(publicKey?: string | null, storage: St
     const existing = await readNotificationPermissionRecord(storage);
     if (status === 'granted') {
         await writeNotificationPermissionRecord({ ...existing, state: 'granted', updatedAt: Date.now() }, storage);
-        if (publicKey) {
-            registerForPushNotifications(publicKey).catch((e) => {
+        const activeKey = publicKey || (await loadIdentity().catch(() => null))?.publicKey;
+        if (activeKey) {
+            registerForPushNotifications(activeKey).catch((e) => {
                 console.warn('[Push] Error registering push notifications after permission granted:', e);
             });
         }

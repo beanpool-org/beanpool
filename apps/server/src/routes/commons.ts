@@ -35,7 +35,7 @@ import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } f
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
-import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
 import { isPastDeadline, word } from '@beanpool/core';
@@ -556,7 +556,8 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         ctx.body = { success: true, txId };
     } catch (err: any) {
         ctx.status = err.status || 400;
-        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT), ...(err.code ? { code: err.code } : {}) };
+        // A refusal's code (project_closed, standby), never a server fault's own (SQLITE_CONSTRAINT_TRIGGER: member-error-text.ts).
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT), ...(!isServerFault(err) && typeof err.code === 'string' ? { code: err.code } : {}) };
     }
 });
 

@@ -15,7 +15,7 @@ import {
     seasonBanner, LEDGER_PERIODS, ledgerSince, ledgerLineLabels, signedBeans, plSummaryText, type LedgerPeriod
 } from '../utils/enterprise-season';
 import { approvedApplicantText } from '../utils/keeper-governance';
-import { formatDate, formatNumber, groupKindLine, inCapitalsOf, isWholeCents, keeperWords, t, tn, isSampleId, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
+import { deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, inCapitalsOf, isWholeCents, keeperWords, t, tn, isSampleId, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ReportReasonBox } from '../components/ReportReasonBox';
@@ -495,8 +495,7 @@ export default function TreasuryDetailScreen() {
     /** The deadline badge's words, and whether it has passed (the badge's colour). */
     const getDaysRemaining = (deadline: string | null): { text: string; expired: boolean } | null => {
         if (!deadline) return null;
-        const diff = new Date(deadline).getTime() - new Date().getTime();
-        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        const days = deadlineDaysRemaining(deadline);
         if (days < 0) return { text: t('Expired'), expired: true };
         if (days === 0) return { text: t('Ends today'), expired: false };
         // English has always said "days" for every count.

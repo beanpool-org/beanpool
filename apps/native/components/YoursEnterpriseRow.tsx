@@ -15,7 +15,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { formatNumber, t, tn } from '@beanpool/core';
+import { deadlineDaysRemaining, formatNumber, t, tn } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { MemberAvatar } from './MemberAvatar';
@@ -25,8 +25,7 @@ import type { TreasurySummary } from '../utils/db';
 
 function getDaysRemaining(deadline: string | null | undefined): { text: string; expired: boolean } | null {
     if (!deadline) return null;
-    const diff = new Date(deadline).getTime() - new Date().getTime();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    const days = deadlineDaysRemaining(deadline);
     if (days < 0) return { text: t('Expired'), expired: true };
     if (days === 0) return { text: t('Ends today'), expired: false };
     return { text: tn(days, '{n} days left', '{n} days left'), expired: false };

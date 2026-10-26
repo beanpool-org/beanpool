@@ -26,7 +26,7 @@ import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import {
-    formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
+    deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, upperCase, type WordKey,
 } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
@@ -484,8 +484,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     /** The deadline badge's words, and whether the deadline has passed (the badge's colour): never by comparing words. */
     const getDaysRemaining = (deadline: string | null | undefined): { text: string; expired: boolean } | null => {
         if (!deadline) return null;
-        const diff = new Date(deadline).getTime() - new Date().getTime();
-        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        const days = deadlineDaysRemaining(deadline);
         if (days < 0) return { text: t('Expired'), expired: true };
         if (days === 0) return { text: t('Ends today'), expired: false };
         // English says "days" for every count, as it always has here; another language may not.

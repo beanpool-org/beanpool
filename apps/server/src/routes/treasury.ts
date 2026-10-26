@@ -52,7 +52,7 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlOf, isPastDeadline, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
-import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { getThresholds } from '../config/local-config.js';
 import { answerPotPaused } from '../engine/audit.js';
@@ -580,7 +580,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, txId };
         } catch (err: any) {
             ctx.status = err.status || 400;
-            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT), ...(err.code ? { code: err.code } : {}) };
+            // A refusal's code (project_closed, standby), never a server fault's own (SQLITE_CONSTRAINT_TRIGGER: member-error-text.ts).
+            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT), ...(!isServerFault(err) && typeof err.code === 'string' ? { code: err.code } : {}) };
         }
     };
 

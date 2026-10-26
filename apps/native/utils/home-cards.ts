@@ -37,10 +37,6 @@ import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords, isOwnInviteChange,
     type NeedsYouConversation, type NeedsYouEntry, type NeedsYouKind, type NeedsYouTarget, type NeedsYouTransaction,
 } from './needs-you';
-export {
-    shouldShowNotificationCard, readNotificationPermissionRecord, turnOnNotifications, declineNotifications,
-    type NotificationPermissionRecord, type NotificationPermissionState,
-} from './notification-permission';
 
 // ── The catalogue: core's registry (@beanpool/core home-frame.ts, design CARD-FRAME §2.2) ──────────────────────────
 

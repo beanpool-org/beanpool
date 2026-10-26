@@ -14,19 +14,10 @@
  */
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { t, word } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
 import { registerForPushNotifications } from '../services/push-notifications';
-
-function getNotificationsModule() {
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const mod = require('expo-notifications');
-        return mod?.default ?? mod;
-    } catch {
-        return null;
-    }
-}
 
 export const NOTIFICATION_CARD_WORDS = {
     title: word('Turn on notifications?'),
@@ -87,9 +78,7 @@ export function shouldShowNotificationCard(record: NotificationPermissionRecord 
 /** Checks whether notifications are granted at the OS level. */
 export async function checkOsNotificationPermission(): Promise<boolean> {
     try {
-        const notif = getNotificationsModule();
-        if (!notif?.getPermissionsAsync) return false;
-        const { status } = await notif.getPermissionsAsync();
+        const { status } = await Notifications.getPermissionsAsync();
         return status === 'granted';
     } catch {
         return false;
@@ -102,11 +91,8 @@ export async function checkOsNotificationPermission(): Promise<boolean> {
 export async function turnOnNotifications(publicKey?: string | null, storage: StorageLike = AsyncStorage): Promise<'granted' | 'declined'> {
     let status = 'denied';
     try {
-        const notif = getNotificationsModule();
-        if (notif?.requestPermissionsAsync) {
-            const res = await notif.requestPermissionsAsync();
-            status = res.status;
-        }
+        const res = await Notifications.requestPermissionsAsync();
+        status = res.status;
     } catch {
         status = 'denied';
     }

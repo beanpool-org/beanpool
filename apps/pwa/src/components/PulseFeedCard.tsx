@@ -76,7 +76,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
         setReflectionLoading(true);
         setReflectionError(false);
         try {
-            const itemDate = item.id.startsWith('item_pulse_')
+            const itemDate = item.id?.startsWith('item_pulse_')
                 ? item.id.replace('item_pulse_', '')
                 : (item as any).external_id?.startsWith('daily_pulse_')
                 ? (item as any).external_id.replace('daily_pulse_', '')

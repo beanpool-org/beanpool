@@ -596,6 +596,12 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.notice', { screen: 'nowhere' })).toBe('/(tabs)');
     });
 
+    it('a request to join lands on People → Invites, where it is listed with Invite and Not now, whatever the answer says (front doors S1)', () => {
+        for (const d of [null, { screen: 'people' }, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) {
+            expect(noticeRoute('community.knock', d)).toBe('/(tabs)/people?view=invites');
+        }
+    });
+
     it("a keepers' vote opening lands in the console of the enterprise it names (its Decisions block, S7), its key in the node's own shape; anything else on Home (opus-1767 N4)", () => {
         const ENT = 'e1'.repeat(32);
         expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: ENT })).toBe(`/treasury-manage?publicKey=${ENT}`);

@@ -13,7 +13,7 @@ describe('needs-you core helpers', () => {
     ];
 
     it('NEEDS_YOU_PRIORITY is ordered highest first', () => {
-        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'deal', 'vote', 'invite', 'message', 'group']);
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'deal', 'vote', 'invite', 'message', 'group']);
         expect(NEEDS_YOU_SLOT).toBe(48);
     });
 

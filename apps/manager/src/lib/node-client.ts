@@ -260,6 +260,8 @@ export interface NodeDataPayload {
     posts?: unknown[];
     reportCount?: number;
     escrowDisputesCount?: number;
+    /** Requests to join waiting for an answer (front doors S1); absent from a server from before them. */
+    knockCount?: number;
     /** Each member's posts and messages counts; no member's trades (queue item 29). */
     memberStats?: Record<string, unknown>;
     /** Of trades, only the community's totals: completed deals, their volume in Beans, cancelled. */
@@ -1023,6 +1025,10 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
 
     if (typeof data.escrowDisputesCount === 'number') {
         result.escrowDisputesCount = data.escrowDisputesCount;
+    }
+
+    if (typeof data.knockCount === 'number') {
+        result.knockCount = data.knockCount;
     }
 
     return result;

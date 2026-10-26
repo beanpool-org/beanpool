@@ -47,6 +47,10 @@ export type NeedsYouTarget =
      */
     | { to: 'invite'; id: string }
     | { to: 'invites' }
+    /**
+     * People → Invites, where requests to join are listed with Invite and Not now (front doors S1). The node sends it only
+     * to an app that asks with `lands=people` (utils/home-store.ts homePath).
+     */
     | { to: 'people' };
 
 /** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
@@ -217,14 +221,20 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     // Owners, admins and moderators only, and only while the node's queue holds something (a moderator's queue
     // is the reports alone: the node filters it). The node answers the queue only for a node role anyway; checking the role here as well means a stale queue never outlives a demotion.
     const queue = canManageNode(i.admin?.role) ? i.admin?.queue : null;
-    const adminItems = (queue?.items || []).filter(x => x.count > 0);
-    if (queue && queue.total > 0 && adminItems.length) {
+    const queued = (queue?.items || []).filter(x => x.count > 0);
+    // Requests to join are answered in People → Invites, which Settings has no list for (front doors S1): their own line.
+    const knocks = queued.find(x => x.kind === 'knocks');
+    const adminItems = queued.filter(x => x.kind !== 'knocks');
+    if (queue && adminItems.length) {
         out.push({
-            kind: 'admin', count: queue.total, accent: true,
+            kind: 'admin', count: adminItems.reduce((n, x) => n + x.count, 0), accent: true,
             label: adminLabel(adminItems, { decisions: i.admin?.decisions }),
             // The node lists the most pressing kind first (reports); the tap opens /settings at its section.
             target: { to: 'admin', section: adminItems[0].section },
         });
+    }
+    if (knocks) {
+        out.push({ kind: 'knock', count: knocks.count, accent: true, label: capitalFirst(adminItemInWords(knocks)), target: { to: 'people' } });
     }
 
     const deals = dealsWaiting(i.transactions || [], i.me);

@@ -40,6 +40,7 @@ import { putPushTokenRow } from './services/push-token-seal.js';
 import { checkServerAlerts } from './services/alerts.js';
 import { measureKnockAnswers } from './engine/knocks.js';
 import { listCommunities, insertDirectoryRowForTesting, clearDirectoryForTesting } from './engine/directory-cache.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0;
 let BASE = '';
@@ -162,6 +163,35 @@ async function main() {
     assert(!pushDataStr.includes(stranger.name), 'push data has no knocker name');
     assert(!pushDataStr.includes(stranger.pk), 'push data has no knocker public key');
 
+    // ── 1b. Where an admin lands: People → Invites, which lists the request with Invite and Not now ──
+    const NEW_APP = '/api/home?cards=needs&lands=enterprise,group,invite,people';
+    const OLD_APP = '/api/home?cards=needs&lands=enterprise,group,invite';
+    const needsOf = (r: Res): Array<{ kind: string; count: number; label: string; target: { to: string } }> => r.body?.cards?.needs?.items ?? [];
+    const ownerNew = needsOf(await call(owner, 'GET', NEW_APP));
+    const knockLine = ownerNew.find(i => i.kind === 'knock');
+    assert(knockLine?.target?.to === 'people' && knockLine.count === 1 && knockLine.label === '1 person asked to join',
+        `an owner's Home: "1 person asked to join", its own line, landing on People → Invites (${JSON.stringify(ownerNew)})`);
+    assert(!ownerNew.some(i => i.kind === 'admin'), "...and not in the admin line, which opens the manager, where nobody can be let in");
+    const adminNew = needsOf(await call(admin, 'GET', NEW_APP));
+    assert(adminNew.some(i => i.kind === 'knock' && i.target?.to === 'people'), "an admin's Home: the same line");
+    const ownerOld = needsOf(await call(owner, 'GET', OLD_APP));
+    assert(!ownerOld.some(i => i.kind === 'knock') && ownerOld.some(i => i.kind === 'admin' && /1 person asked to join/.test(i.label)),
+        `an app from before the line (no lands=people) gets no target it can't open: the admin line names it, as before (${JSON.stringify(ownerOld)})`);
+    assert(!needsOf(await call(memberDefault, 'GET', NEW_APP)).some(i => i.kind === 'knock'),
+        "a member's Home has no line for a request only hours old: owners and admins answer first");
+    const listedForAdmin = await call(admin, 'GET', '/api/join/knocks');
+    assert(listedForAdmin.status === 200 && listedForAdmin.body?.knocks?.length === 1 && listedForAdmin.body.knocks[0].callsign === 'Stranger',
+        `the landing's list (GET /api/join/knocks) shows the request to the admin who tapped (${listedForAdmin.status} ${listedForAdmin.body?.total})`);
+    // The manager's Home: the count, no names (its Action Required says where they are answered).
+    const managerData = async (headers: Record<string, string>) => {
+        const res = await fetch(`${BASE}/api/local/admin/data`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: '{}' });
+        return { status: res.status, body: await res.json().catch(() => null) as any };
+    };
+    const forOwner = await managerData(ownerSessionHeaders(owner.pk));
+    assert(forOwner.status === 200 && forOwner.body?.knockCount === 1, `the manager's data carries the count of open requests (${forOwner.status} ${forOwner.body?.knockCount})`);
+    const forNobody = await managerData({});
+    assert((forNobody.status === 401 || forNobody.status === 403) && forNobody.body?.knockCount === undefined, `...to the operator only (${forNobody.status})`);
+
     // ── 2. Decline sends no notice ──
     const openKnocks = db.prepare(`SELECT id FROM join_requests WHERE pubkey = ? AND status = 'pending'`).all(stranger.pk) as { id: string }[];
     assert(openKnocks.length === 1, 'one open knock in database');
@@ -207,6 +237,13 @@ async function main() {
 
     const ownerAlertPush = pushedBatches.find(p => p.to === 'ExponentPushToken[owner]');
     assert(ownerAlertPush !== undefined, 'owner received push for 7-day alert');
+
+    // Waiting more than 3 days on a door any member answers: every member's Home has the line, landing where they can.
+    const memberLines = needsOf(await call(memberDefault, 'GET', NEW_APP));
+    assert(memberLines.some(i => i.kind === 'knock' && i.count === 1 && i.target?.to === 'people'),
+        `a member's Home, once a request has waited 3 days: "1 person asked to join", landing on People → Invites (${JSON.stringify(memberLines)})`);
+    assert(!needsOf(await call(memberDefault, 'GET', OLD_APP)).some(i => i.target?.to === 'people'),
+        "...never to an app that can't open People → Invites from Home");
 
     // Clean up old knock
     db.prepare(`DELETE FROM join_requests WHERE id = ?`).run(oldKnockId);

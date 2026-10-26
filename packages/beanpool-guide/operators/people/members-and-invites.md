@@ -44,7 +44,7 @@ Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** 
 
 Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
 
-**Requests to join and the public directory.** When someone finds your community in the global directory and asks to join, your server tells its owners and admins with a push notification ("Someone asked to join your community.") and a line on Home under Needs you ("2 people asked to join"). Members who opted into "Requests to join" in Notification Preferences are notified too.
+**Requests to join and the public directory.** When someone finds your community in the global directory and asks to join, your server tells its owners and admins with a push notification ("Someone asked to join your community.") and a line on Home under Needs you ("2 people asked to join"). Tapping either opens People → Invites in the app, where the request is listed with **Invite** and **Not now**. The manager's Home counts them under Action Required too; they are answered in the app, not here. Members who opted into "Requests to join" in Notification Preferences are notified too.
 
 If a request waits **3 days** without an answer in an Invite community (any member invites), the Needs you line is shown to all members so someone can welcome them.
 

@@ -214,6 +214,19 @@ export function HomeScreen({
         });
     }
 
+    // Requests to join (front doors S1): answered in the app's People → Invites, which has the list; this card has only
+    // the count, so it says where to go. The row opens Invites & QR, where who may answer is set.
+    const knockCount = typeof nodeData?.knockCount === 'number' ? nodeData.knockCount : 0;
+    if (knockCount > 0) {
+        actionItems.push({
+            key: 'knocks',
+            icon: '🚪',
+            text: `${knockCount === 1 ? '1 person' : `${knockCount} people`} asked to join: answer them in the BeanPool app, under People → Invites`,
+            tab: 'people',
+            sub: 'invites',
+        });
+    }
+
     const pendingDisputesCount = typeof nodeData?.escrowDisputesCount === 'number'
         ? nodeData.escrowDisputesCount
         : null;

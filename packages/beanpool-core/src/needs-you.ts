@@ -4,13 +4,17 @@
  * Shared between phone and web (@beanpool/core).
  */
 
-export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
+/**
+ * `knock`: someone asked to join the community (front doors S1). Its own kind, not the admin's: it is answered in People →
+ * Invites, where the admin line (the manager's Settings) can't take anyone.
+ */
+export type NeedsYouKind = 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
 
 /**
  * Highest first. The highest sits nearest the right-hand controls and keeps its spot as others
  * come and go; the lowest are the first to fold into "•••".
  */
-export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'invite', 'message', 'group'];
+export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'knock', 'deal', 'vote', 'invite', 'message', 'group'];
 
 export const NEEDS_YOU_SLOT = 48;
 

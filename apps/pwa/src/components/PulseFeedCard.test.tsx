@@ -287,6 +287,9 @@ describe('PulseFeedCard Instagram link card (web)', () => {
             const dialog = await screen.findByRole('dialog', { name: /Daily Reflection/i });
             expect(screen.getByText('Loading')).toBeInTheDocument();
             expect(dialog.contains(document.activeElement)).toBe(true);
+            // Shift+Tab from where focus lands on open stays inside too.
+            fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+            expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close' }));
 
             answer({ date: '2026-10-26', headline: 'Plant seeds of kindness', body: 'Kindness is the soil in which trust grows.' });
             await screen.findByRole('dialog', { name: 'Plant seeds of kindness' });

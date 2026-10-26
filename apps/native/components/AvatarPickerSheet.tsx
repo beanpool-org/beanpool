@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
+import { Platform, View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { pickPicture, type WorkingPicture } from '../utils/picture-crop';
@@ -60,7 +60,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
     const [cropping, setCropping] = useState<WorkingPicture | null>(null);
     useEffect(() => { if (!visible) setCropping(null); }, [visible]);
 
-    const pickFrom = async (from: 'camera' | 'library') => {
+    const pickFrom = async (from: 'camera' | 'library' | 'files') => {
         try {
             if (from === 'camera') {
                 const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -80,6 +80,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
     };
     const handleTakePhotos = () => pickFrom('camera');
     const handleGallery = () => pickFrom('library');
+    const handleBrowseFiles = () => pickFrom('files');
 
     const handleSelectBundled = () => {
         if (!selectedAvatarId) return;
@@ -139,13 +140,20 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
                                 <View style={styles.sourceButtonsRow}>
                                     <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel={t('Take photo with camera')} onPress={handleTakePhotos}>
                                         <Text style={styles.sourceEmoji}>📸</Text>
-                                        {/* A longer language's words take a second line in their half of the row, and shrink rather than break mid-word. */}
+                                        {/* A longer language's words take a second line in their portion of the row, and shrink rather than break mid-word. */}
                                         <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Camera')}</Text>
                                     </Pressable>
                                     <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel={t('Choose photo from gallery')} onPress={handleGallery}>
                                         <Text style={styles.sourceEmoji}>🖼️</Text>
                                         <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Gallery')}</Text>
                                     </Pressable>
+                                    {/* Android only: iOS has no separate files door here (the picker's legacy mode is Android's). */}
+                                    {Platform.OS === 'android' && (
+                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel={t('Browse files')} onPress={handleBrowseFiles}>
+                                        <Text style={styles.sourceEmoji}>📁</Text>
+                                        <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Browse files')}</Text>
+                                    </Pressable>
+                                    )}
                                 </View>
 
                                 <Text style={styles.sectionTitle}>{t('Or choose an avatar — swipe for more:')}</Text>
@@ -323,7 +331,7 @@ const makeStyles = (tone: ReturnType<typeof tonesFor>) => StyleSheet.create({
     },
     sourceButtonsRow: {
         flexDirection: 'row',
-        gap: 16,
+        gap: 8,
         marginBottom: 24,
     },
     sourceButton: {
@@ -332,7 +340,8 @@ const makeStyles = (tone: ReturnType<typeof tonesFor>) => StyleSheet.create({
         borderWidth: 2,
         borderColor: tone.sourceBorder,
         borderRadius: 16,
-        padding: 20,
+        paddingVertical: 14,
+        paddingHorizontal: 4,
         alignItems: 'center',
     },
     sourceEmoji: {

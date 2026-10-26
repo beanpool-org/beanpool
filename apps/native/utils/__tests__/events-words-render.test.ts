@@ -465,7 +465,8 @@ describe('the event form in the pseudo-locale', () => {
         // The photo taken off again, and a camera roll that won't open.
         await click(byLabel(xx('Remove photo')), 'Remove photo');
         await click(byLabel(xx('Add a photo')), 'Add a photo');
-        expect(said()).toEqual([xx('Photo not added'), xx('Could not open your photos.')]);
+        // The shared photo sheet (utils/post-photo.ts askPhotoSource); Android: Cancel is Back or a tap outside.
+        expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
         alerts.said.length = 0;
         // Post as the group: who can see it, said for the group.
         await click(byLabel('Seed Savers'), 'Post as Seed Savers');

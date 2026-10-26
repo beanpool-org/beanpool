@@ -22,7 +22,7 @@ In a community with Beans you need a name and a profile photo. Where there are n
 - **Title:** a few words, up to 50 characters on the phone. "Sourdough loaf", "Lift to town on Fridays".
 - **Category:** pick the closest one.
 - **Description:** what, when, where, anything people should know.
-- **Photos:** at least one, up to five. Tap **Camera** or **Gallery**. Every Offer and Need needs at least one photo.
+- **Photos:** at least one, up to five. Tap **Camera**, **Gallery** (which opens on **Albums**), or **Browse files** (to choose from any folder on the device). Every Offer and Need needs at least one photo.
 - **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
 - **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
 - Tap **Post Offer** or **Post Need**.

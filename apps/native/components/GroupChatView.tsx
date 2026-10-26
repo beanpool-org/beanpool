@@ -91,6 +91,7 @@ import { GroupDetailModal } from './GroupDetailModal';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { ReportMessageSheet } from './ReportMessageSheet';
 import { reportedAlertBody } from '../utils/reportReasons';
+import { askPhotoSource } from '../utils/post-photo';
 
 interface Props {
     kind: 'group' | 'enterprise';
@@ -499,15 +500,15 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 Alert.alert(t('Image Failed'), e?.message ? chatLineWords(e.message) : t('Could not process image.'));
             }
         };
-        Alert.alert(t('Send Photo'), t('Choose a source'), [
-            { text: t('Camera'), onPress: async () => {
+        askPhotoSource(t('Send Photo'), {
+            camera: async () => {
                 const perm = await ImagePicker.requestCameraPermissionsAsync();
                 if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); return; }
                 take(() => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 }));
-            } },
-            { text: t('Gallery'), onPress: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 })) },
-            { text: t('Cancel'), style: 'cancel' },
-        ]);
+            },
+            gallery: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, defaultTab: 'albums' })),
+            files: () => take(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, legacy: true })),
+        });
     };
 
     /**

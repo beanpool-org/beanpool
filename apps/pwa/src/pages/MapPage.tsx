@@ -2000,7 +2000,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         );
     }
 
-    const eventPhotoMissing = eventEdit ? (openDraft?.photos && openDraft.photos.length > 0 && newPostPhotos.length === 0) : newPostPhotos.length === 0;
+    const eventPhotoMissing = eventEdit ? (eventEdit.before.photos && eventEdit.before.photos.length > 0 && newPostPhotos.length === 0) : newPostPhotos.length === 0;
     const submitDisabled = newPostType === 'event'
         // An online event has no pin (DESIGN-event-times §9).
         ? (posting || !newPostTitle.trim() || !eventStart || (!eventOnline && postLat == null) || eventPhotoMissing)
@@ -2746,7 +2746,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             />
                         </div>
 
-                        {renderPhotoPicker(!eventEdit || Boolean(openDraft?.photos && openDraft.photos.length > 0))}
+                        {renderPhotoPicker(!eventEdit || Boolean(eventEdit.before.photos && eventEdit.before.photos.length > 0))}
 
                         <div>
                             <label htmlFor="event-note" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Note for people who are going')}</label>

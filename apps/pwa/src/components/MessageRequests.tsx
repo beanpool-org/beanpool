@@ -124,7 +124,8 @@ interface CardProps {
     entry: DmRequestEntry;
     identity: BeanPoolIdentity;
     preview: Preview;
-    avatar: (avatarUrl: string | null | undefined, name: string, size: number) => ReactNode;
+    /** A face: the picture, else the ready-made one chosen from the key (MessagesPage renderAvatar). */
+    avatar: (avatarUrl: string | null | undefined, faceKey: string, size: number) => ReactNode;
     joinedWords: string | null;
     onOpen: () => void;
     onOpenProfile?: () => void;
@@ -138,7 +139,7 @@ function RequestCard({ entry, identity, preview, avatar, joinedWords, onOpen, on
     const name = entry.peerCallsign || peer.slice(0, 8);
     const who = (
         <>
-            {avatar(entry.peerAvatar, name, 44)}
+            {avatar(entry.peerAvatar, peer, 44)}
             <span style={{ fontWeight: 700, fontSize: '1rem', overflowWrap: 'anywhere' }}>{name}</span>
         </>
     );
@@ -233,7 +234,8 @@ interface ListProps {
     identity: BeanPoolIdentity;
     /** The cards' lines, kept by the page (useRequestPreviews). */
     store: RequestPreviews;
-    avatar: (avatarUrl: string | null | undefined, name: string, size: number) => ReactNode;
+    /** A face: the picture, else the ready-made one chosen from the key (MessagesPage renderAvatar). */
+    avatar: (avatarUrl: string | null | undefined, faceKey: string, size: number) => ReactNode;
     /** When the sender joined, in words, where this page holds their card. */
     joinedWordsOf: (pubkey: string) => string | null;
     onOpen: (entry: DmRequestEntry) => void;

@@ -1492,14 +1492,26 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return member?.callsign || otherPubkey.substring(0, 12) + '…';
     }
 
-    /** Render an avatar circle — shows resolved image or deterministic preset (no bare initial disc, Pictures S4) */
     /** A group chat's face, as the phone's rows and header draw it: the group's picture, else its category's emblem. */
     function groupChatPicture(conv: Conversation): string {
         return conv.avatarUrl || bundledGroupEmblem(conv.category);
     }
 
-    function renderAvatar(avatarUrl: string | null | undefined, fallbackChar: string, size = 40, style?: React.CSSProperties, pubkey?: string | null) {
-        const resolved = resolveAvatarUrl(avatarUrl, pubkey || fallbackChar) || '/avatars/avatar_bean_green.jpg';
+    /**
+     * The key a chat's ready-made face is chosen from when it has no picture: a DM's other person, else the chat's own id
+     * (an enterprise thread's id is the enterprise's key). The list row and the chat's header both ask here, so they agree.
+     */
+    function chatFaceKey(conv: Conversation): string {
+        return (conv.type === 'dm' && conv.participants?.find(p => p !== identity.publicKey)) || conv.id;
+    }
+
+    /**
+     * An avatar circle: the picture, else the ready-made picture chosen from `faceKey` (no bare initial, Pictures S4).
+     * A key, never a name: People, MemberAvatar and the phone choose a photoless member's face from their key, and a
+     * callsign here gave the same person another face one tap later (#2511 review).
+     */
+    function renderAvatar(avatarUrl: string | null | undefined, faceKey: string, size = 40, style?: React.CSSProperties) {
+        const resolved = resolveAvatarUrl(avatarUrl, faceKey) || '/avatars/avatar_bean_green.jpg';
         return (
             <img
                 src={resolved}
@@ -1592,7 +1604,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', color: 'var(--text-primary)',
                 }}
             >
-                {renderAvatar(p.avatarUrl, p.callsign, 36)}
+                {renderAvatar(p.avatarUrl, p.publicKey, 36)}
                 <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>{p.callsign}</span>
             </button>
         );
@@ -1686,7 +1698,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             width: '36px', height: '36px', borderRadius: '50%',
                             overflow: 'hidden', flexShrink: 0,
                         }}>
-                            {renderAvatar(m.avatarUrl, m.callsign, 36)}
+                            {renderAvatar(m.avatarUrl, m.publicKey, 36)}
                         </div>
                         <span style={{ fontWeight: 600 }}>{m.callsign}</span>
                     </div>
@@ -1809,8 +1821,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             const body = (
                                 <>
                                     {activeConv.type === 'group_thread'
-                                        ? renderAvatar(groupChatPicture(activeConv), title, 32)
-                                        : renderAvatar(activeConv.peerAvatar, title, 32, undefined, peerPubkey || activeConv.id)}
+                                        ? renderAvatar(groupChatPicture(activeConv), activeConv.id, 32)
+                                        : renderAvatar(activeConv.peerAvatar, chatFaceKey(activeConv), 32)}
                                     <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
                                         <span style={{ fontWeight: 600, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {title}
@@ -3329,7 +3341,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             width: '22px', height: '22px', borderRadius: '50%',
                                             border: '2px solid var(--bg-primary)', overflow: 'hidden',
                                         }}>
-                                            {renderAvatar(conv.peerAvatar, getConversationTitle(conv), 22)}
+                                            {renderAvatar(conv.peerAvatar, chatFaceKey(conv), 22)}
                                         </div>
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
@@ -3343,8 +3355,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 ) : (
                                     <div style={{ position: 'relative', flexShrink: 0 }}>
                                         {conv.type === 'group_thread'
-                                            ? renderAvatar(groupChatPicture(conv), getConversationTitle(conv), 44, { border: '1px solid var(--border-primary)' })
-                                            : renderAvatar(conv.peerAvatar, getConversationTitle(conv), 44)}
+                                            ? renderAvatar(groupChatPicture(conv), conv.id, 44, { border: '1px solid var(--border-primary)' })
+                                            : renderAvatar(conv.peerAvatar, chatFaceKey(conv), 44)}
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
                                                 position: 'absolute', top: '-4px', right: '-4px',

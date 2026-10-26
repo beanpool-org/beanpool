@@ -68,6 +68,7 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 import { lockedDm } from './dm-test-payload.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { listingPhotoUrlsIn, withListingPhotoKeysNormalised } from './takeover-parity-compare.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -1234,9 +1235,20 @@ async function main(): Promise<void> {
         const feedHere = await api(p, 'GET', '/api/activity/feed', { as: bo });
         assert(feedHere.status === 200 && JSON.stringify(feedHere.body) === JSON.stringify(mainFeed.body),
             `the activity list answers as M's did (${feedHere.status}, ${Array.isArray(feedHere.body?.items ?? feedHere.body?.feed ?? feedHere.body) ? 'a list' : JSON.stringify(feedHere.body).slice(0, 80)})`);
+        // But for its listings' photo URLs' keys: made from each server's own photoKeySecret, which a standby never copies, so
+        // a take-over changes every one (engine/photo-keys.ts; test-takeover-parity's note above its KNOWN_GAPS). Each URL
+        // the promoted server hands out must open there, unsigned, as an <img> asks.
         const guideHere = await api(p, 'GET', '/api/pricing-guide', { as: bo });
-        assert(guideHere.status === 200 && JSON.stringify(guideHere.body) === JSON.stringify(mainGuide.body),
-            `the pricing guide answers as M's did: the admin's edit, the pin and the prices M worked out (${guideHere.status})`);
+        assert(guideHere.status === 200 && JSON.stringify(withListingPhotoKeysNormalised(guideHere.body)) === JSON.stringify(withListingPhotoKeysNormalised(mainGuide.body)),
+            `the pricing guide answers as M's did: the admin's edit, the pin and the prices M worked out, its listing photo keys aside (${guideHere.status})`);
+        const guidePhotos = [...new Set(listingPhotoUrlsIn(guideHere.body))];
+        const guidePhotoStatuses = await Promise.all(guidePhotos.map(async (u) => {
+            const r = await fetch(`${p}${u}`);
+            await r.arrayBuffer();
+            return r.status;
+        }));
+        assert(guidePhotos.length === new Set(listingPhotoUrlsIn(mainGuide.body)).size && guidePhotos.length > 0 && guidePhotoStatuses.every((st) => st === 200),
+            `every listing photo URL in the promoted server's pricing guide opens there, unsigned (${guidePhotoStatuses.filter((st) => st === 200).length} of ${guidePhotos.length} answered 200)`);
         await offer2(p, gwen, 'Plum jam', 3);
         const lineHere = await standby.send('last-activity-id');
         assert(typeof mainLastLine === 'number' && lineHere === mainLastLine + 1, `the next activity line is numbered after M's last (${mainLastLine} → ${lineHere})`);

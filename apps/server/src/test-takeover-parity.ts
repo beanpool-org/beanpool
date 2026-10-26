@@ -50,7 +50,7 @@ import { lockedDm } from './dm-test-payload.js';
 import { makeGroupEpochRecord, makeGroupTopUp, makeKeySuccession, sealGroupLine } from '@beanpool/core';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import {
-    diffDatabases, diffSettings, normaliseAnswer, idsIn, faceUrlsIn, firstDifferences, checkKnownGaps,
+    diffDatabases, diffSettings, normaliseAnswer, idsIn, faceUrlsIn, listingPhotoUrlsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
 } from './takeover-parity-compare.js';
 
@@ -91,8 +91,9 @@ const KNOWN_GAPS: KnownGap[] = [
 ];
 // Not a gap but a difference the comparison leaves out: a face URL's key (SEC-PUB-02, #2049) is made from the server's own
 // avatarKeySecret, which a standby never copies, as listing photos' photoKeySecret, so a take-over changes every face URL
-// (accepted: review of #2049, B2, option 1). The keys are normalised (takeover-parity-compare.ts), and section 10 checks
-// that a phone's next sync gets every face at a URL that opens on the promoted server.
+// (accepted: review of #2049, B2, option 1) and every listing photo's URL (engine/photo-keys.ts: the phones' next sync
+// heals them). Both keys are normalised (takeover-parity-compare.ts), and section 10 checks that a phone's next sync gets
+// every face and every listing photo at a URL that opens on the promoted server.
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -662,7 +663,24 @@ async function main(): Promise<void> {
         await both('the board, as a member', get(eve, '/api/marketplace/posts'));
         await both('the board, as a keeper', get(kip, '/api/marketplace/posts'));
         await both("a phone's full sync", get(dee, '/api/marketplace/posts?sync=true'));
-        await both("a phone's delta from before the take-over", get(dee, `/api/marketplace/posts?sync=true&updatedAfter=${encodeURIComponent(cursorBefore)}`));
+        // A take-over changes every listing photo's URL (above KNOWN_GAPS), so the promoted server answers a phone's delta
+        // from before it whole (engine/photo-keys.ts photoHealFor): the delta's rows first, as main sends them, then the
+        // node's other listings, so the phone gets each at its new URL. The twin's URLs never changed, and it sends the
+        // delta alone. So the call compares the promoted server's rows up to the twin's count, and every row after them
+        // must be a listing the delta left out, as the twin's whole read has it. Section 10 opens their photos.
+        const deltaRoute = `/api/marketplace/posts?sync=true&updatedAfter=${encodeURIComponent(cursorBefore)}`;
+        const deltaT = await api(t, 'GET', deltaRoute, { as: dee });
+        const deltaS = await api(s, 'GET', deltaRoute, { as: dee });
+        const twinDelta: any[] = Array.isArray(deltaT.body) ? deltaT.body : [];
+        const healRows: any[] = Array.isArray(deltaS.body) ? deltaS.body.slice(twinDelta.length) : [];
+        await both("a phone's delta from before the take-over", async (base) => (base === t ? deltaT
+            : { ...deltaS, body: Array.isArray(deltaS.body) ? deltaS.body.slice(0, twinDelta.length) : deltaS.body }));
+        const twinWhole: any[] = (await api(t, 'GET', '/api/marketplace/posts?sync=true', { as: dee })).body ?? [];
+        const asTwinHasIt = new Map(twinWhole.map((x: any) => [x.id as string, JSON.stringify(normaliseAnswer(x, knownIds))]));
+        const inTwinDelta = new Set(twinDelta.map((x: any) => x.id as string));
+        const healedAsTwin = healRows.filter((x: any) => !inTwinDelta.has(x.id) && asTwinHasIt.get(x.id) === JSON.stringify(normaliseAnswer(x, knownIds)));
+        assert(deltaS.status === 200 && healRows.length > 0 && healedAsTwin.length === healRows.length,
+            `the promoted server answers that delta whole: after the twin's ${twinDelta.length} rows, ${healRows.length} listings the delta left out, each as the twin's whole read has it (${healedAsTwin.length} of ${healRows.length})`);
         await both('every balance', async (base) => Object.fromEntries(await Promise.all(
             [...everyone.map((w) => [w.name, w.pk]), ['Probe Co', probe.publicKey], ['Seed Fund', seed.publicKey], ['Wind Co', wind.publicKey]]
                 .map(async ([n, pk]) => [n, (await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: gwen })).body]))));
@@ -732,6 +750,25 @@ async function main(): Promise<void> {
         }));
         assert(facesOnS.size >= 5 && [...facesOnS].every((u) => /[?&]k=[A-Za-z0-9_-]{22}/.test(u)) && faceStatuses.every((st) => st === 200),
             `every face URL the promoted server hands out carries its key and opens on it, unsigned (${faceStatuses.filter((st) => st === 200).length} of ${facesOnS.size} answered 200)`);
+        // Every listing photo's URL too (above KNOWN_GAPS). The same phone asks for the listings changed since, and the
+        // promoted server answers with every listing it shows with a photo, at its own URL, as a whole read has them
+        // (engine/photo-keys.ts photoHealFor); each URL it hands out must open there, unsigned, as an <img> asks.
+        const photosOf = (list: unknown) => new Map((Array.isArray(list) ? list : []).filter((x: any) => Array.isArray(x?.photos) && x.photos.length > 0)
+            .map((x: any) => [x.id as string, JSON.stringify(x.photos)]));
+        const listingsS = photosOf((await api(s, 'GET', '/api/marketplace/posts?sync=true', { as: dee })).body);
+        const phoneListingsRead = (await api(s, 'GET', `/api/marketplace/posts?sync=true&updatedAfter=${encodeURIComponent(phoneCursor)}`, { as: dee })).body;
+        const phoneListingsS = photosOf(phoneListingsRead);
+        const healed = [...listingsS].filter(([id, urls]) => phoneListingsS.get(id) === urls);
+        assert(listingsS.size >= 5 && healed.length === listingsS.size,
+            `a phone's listings delta from before the take-over brings every listing photo at the promoted server's URL (${healed.length} of ${listingsS.size})`);
+        const listingPhotosOnS = [...new Set(listingPhotoUrlsIn(phoneListingsRead))];
+        const photoStatuses = await Promise.all(listingPhotosOnS.map(async (u) => {
+            const r = await fetch(`${s}${u}`);
+            await r.arrayBuffer();
+            return r.status;
+        }));
+        assert(listingPhotosOnS.length >= 5 && listingPhotosOnS.every((u) => /[?&]k=[A-Za-z0-9_-]{22}/.test(u)) && photoStatuses.every((st) => st === 200),
+            `every listing photo URL that delta hands out carries its key and opens on the promoted server, unsigned (${photoStatuses.filter((st) => st === 200).length} of ${listingPhotosOnS.length} answered 200)`);
         const check = checkKnownGaps(differences, KNOWN_GAPS);
         assert(check.unlisted.length === 0, `every difference is a known gap (unlisted: ${check.unlisted.join(' | ') || 'none'})`);
         assert(check.noLongerDiffer.length === 0,

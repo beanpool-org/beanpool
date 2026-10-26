@@ -126,6 +126,18 @@ describe("a keeper editing their enterprise's listing on the web", () => {
         expect(screen.queryByText('✏️ Edit Post')).toBeNull();
     });
 
+    it('a keeper who signs out on the open listing: no Edit, the enterprises they kept go with them', async () => {
+        stubNode([eggs], [ENT]);
+        const page = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-eggs" onPostOpened={() => {}} transactions={[]} />);
+        await screen.findByRole('heading', { name: /Dozen eggs/ });
+        await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());
+
+        page.rerender(<MarketplacePage identity={null} isMember={null as any} openPostId="offer-eggs" onPostOpened={() => {}} transactions={[]} />);
+        await settle();
+        expect(screen.getByRole('heading', { name: /Dozen eggs/ })).toBeInTheDocument();
+        expect(screen.queryByText('✏️ Edit Post')).toBeNull();
+    });
+
     it("a keeper and a listing that isn't for everyone here (a group's): no Edit, as the node takes none", async () => {
         const forGroup = { ...eggs, audienceScope: 'group', targetGroupId: 'g1' };
         stubNode([forGroup], [ENT]);

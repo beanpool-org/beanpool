@@ -859,7 +859,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // rule, so read where those are the reader's own as well (app/post/[id].tsx).
     const readsKeepers = useReadsOwn('enterprises', canLoadBalance);
     useEffect(() => {
-        if (!identity || !canLoadBalance || !(readsBalance || readsKeepers)) return;
+        // Signed out, or no longer reading them: the enterprises a member kept go with them.
+        if (!identity || !canLoadBalance || !(readsBalance || readsKeepers)) { setKeeperOf([]); return; }
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => {
@@ -1281,7 +1282,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // A keeper of the enterprise that listed it may edit it, as on the phone (app/post/[id].tsx isOperatorOfAuthor): the
         // node takes the edit signed with the keeper's own key (apps/server engine/posts.ts updatePost), for a listing here
         // for everyone. Edit only: pausing and deleting it stay as they were on this page.
-        const keepsAuthor = !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
+        const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
             && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 
         // #143 step 5 — the link this member keeps for the community this listing actually came from, or

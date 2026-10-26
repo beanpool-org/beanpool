@@ -165,7 +165,10 @@ describe('every door on the web lands on the enterprise page', () => {
         const app = src('App.tsx');
         const handlers = [...app.matchAll(/onOpenProfile=\{([^}]*\}?)\}/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
         expect(handlers.length).toBeGreaterThanOrEqual(5);
-        for (const h of handlers) expect(h).toBe('(pubkey) => setOpenProfilePubkey(pubkey)');
+        // The one overlay, directly; or (the shop page, #2484) after closing the shop page that covers it: only those resets,
+        // and the overlay last — never another way to draw a profile.
+        const viaShop = /^\(pubkey\) => \{ setOpenShopId\(null\); setShopFromYourShop\(false\); setOpenProfilePubkey\(pubkey\); \}$/;
+        for (const h of handlers) expect(h === '(pubkey) => setOpenProfilePubkey(pubkey)' || viaShop.test(h), h).toBe(true);
         // The profile overlay's hand-over: the profile closes and the enterprise page opens on the same key.
         const overlay = app.slice(app.indexOf('<PublicProfilePage'), app.indexOf('/>', app.indexOf('<PublicProfilePage')));
         const handOver = overlay.match(/onOpenTreasury=\{\(pubkey\) => \{([^}]*)\}\}/);
@@ -197,9 +200,11 @@ describe('every door on the web lands on the enterprise page', () => {
         }
         // §1.1's eleven web components (the header's own-profile button included), and a message request's sender on its
         // card and in the chat's header (message requests S3): each opens someone by key through onOpenProfile, which
-        // App.tsx (above) sends to the one profile overlay.
+        // App.tsx (above) sends to the one profile overlay. App's mobile header row (AppHeader.tsx, out of App.tsx for
+        // PR #2478) hands App's onOpenProfile to that own-profile button, as App.tsx did.
         expect(doors.sort()).toEqual([
             path.join('components', 'ActivityWaterfall.tsx'),
+            path.join('components', 'AppHeader.tsx'),
             path.join('components', 'EventCard.tsx'),
             path.join('components', 'HeaderControls.tsx'),
             path.join('components', 'MarketplaceCard.tsx'),
@@ -211,6 +216,7 @@ describe('every door on the web lands on the enterprise page', () => {
             path.join('pages', 'MessagesPage.tsx'),
             path.join('pages', 'PeoplePage.tsx'),
             path.join('pages', 'PulsePage.tsx'),
+            path.join('pages', 'ShopDetailPage.tsx'),
             path.join('pages', 'TreasuryDetailPage.tsx'),
         ].sort());
     });

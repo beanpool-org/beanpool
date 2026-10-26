@@ -786,7 +786,7 @@ describe('A thing', () => {
         await click('thing-list');
         await waitFor(() => expect(props.onComposer).toHaveBeenCalledTimes(1));
         expect(props.onComposer).toHaveBeenCalledWith({
-            type: 'offer', title: 'Cordless drill', category: 'tools', credits: null, priceType: null, repeatable: false, cashAlsoNeeded: false,
+            type: 'offer', title: 'Cordless drill', category: 'tools', credits: null, priceType: null, repeatable: false, cashAlsoNeeded: false, shop: true,
             description: "Clean it.\n\nIf it's lost or broken: $120. That is settled between us; BeanPool doesn't hold or collect it.\n\nLent for up to 7 days at a time.",
             photos: ['data:image/jpeg;base64,cGhvdG81'],
         });

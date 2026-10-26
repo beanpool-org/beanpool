@@ -42,7 +42,7 @@ You can invite people on the phone and in the web app. On the phone, a new group
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**). A short key prefix appears under each person's name so you can tell people with the same name apart.
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations in **Commons** yet: there, the line in **Needs you** opens the group, and they tap **Accept invitation**. When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, "You were invited to join a group.", and a line in **Needs you** on their Home (on the phone and in the web app, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so.
 
 If you take an invitation back and invite the same person again, they get no second alert within the hour. Someone who has blocked you still gets the invitation, with no alert.
 
@@ -62,7 +62,7 @@ A group's chat is end-to-end encrypted: only the group's members can read it, no
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
 - If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **An earlier message was removed when this chat was locked**, and several in a row show as one line, such as **11 earlier messages removed when this chat was locked**.
 
-In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, search the chat and report someone's message (**Report**, under it). Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
+In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, delete, remove, mute notifications, search the chat and report someone's message (**Report**, under it). Tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see "Messages".
 
 ## Talking in a group's chat
 
@@ -79,7 +79,7 @@ Two or more messages in a row that their authors deleted show as one line, such 
 
 Under your own message: a clock while it is sending, a tick once the group's server has it, or **! not delivered** if it could not be sent — tap that to **Resend** or **Discard** it. There are no blue double ticks in a group: a group has no single reader.
 
-In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. On the phone it can be deleted like any message (the author; a convenor can remove it).
+In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. It can be deleted like any message (the author; a convenor can remove it), on the phone and the web.
 
 A deal cannot be started in a group's chat: deals belong in a chat between two people. See "Messages".
 
@@ -103,7 +103,7 @@ At the end your phone says what happened: **Done** only when it handed every key
 
 ## Joining a group
 
-On the phone, in **Commons**, under **Groups**, the list below **Yours** shows what you could join, with a heading that names what is shown (such as **Groups, projects and enterprises here**, changing with the chips **All**, **Projects**, **Enterprises** and **Chat groups**). In the web app, **Groups** lists every group you can see, yours marked with your role; **My groups** shows only yours. Each one shows the start of its description. Open a group to read all of it, then:
+In **Commons**, under **Groups**, the groups you are in are first under **Yours**. Below them, the list shows what you could join, with a heading that names what is shown (such as **Groups, projects and enterprises here**, changing with the chips **All**, **Projects**, **Enterprises** and **Chat groups**). Each one shows the start of its description. Open a group to read all of it, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do.
@@ -120,9 +120,9 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
+When someone invites you to a group, your phone gets an alert, "You were invited to join a group.", and **Needs you** shows the invitation, on Home and, on the phone and in the web app, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off.
 
-A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
+A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.
@@ -130,7 +130,7 @@ A group you are invited to also shows in **Commons**, under **Groups**, marked *
 - If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.
 - If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**.
 
-The web app does not mark invitations in **Commons** yet. Tap the line in **Needs you** on Home, or open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it.
+In the web app, tap the line in **Needs you** on Home, or the group marked **INVITED** in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it.
 
 ## Posting to a group
 
@@ -150,7 +150,7 @@ Beside a name in the **Roster**, any convenor can:
 - change a member's or an observer's role (**Role** on the phone, a drop-down in the web app), including making them a convenor;
 - remove a member or an observer (**✕**).
 
-A convenor removes a post from the post itself, and on the phone a message in the chat. A group's name and description cannot be changed in the app yet.
+A convenor removes a post from the post itself, and a message in the chat. A group's name and description cannot be changed in the app yet.
 
 Only the **lead convenor** can remove a convenor, or take the convenor role off someone. Beside a row you cannot act on, no **Role** or **✕** is shown at all — that is the app telling you it is not yours to do.
 

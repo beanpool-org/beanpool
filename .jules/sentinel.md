@@ -31,6 +31,7 @@ The batch size limit (e.g. 200 items maximum) is **STILL WANTED**. Sentinel may 
 3. Proof of non-zero diff: run `git diff --stat origin/main` to confirm files are changed before opening the PR.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #109)
+- 2026-10-26 #2491: Resolved — do NOT re-file: verifyAutomationToken length check (#2491).
 
 ### 2026-09-22 — "require admin auth for the commons decision tick" (#1021) — LANDED, CLAIM OVERSTATED.
 The route was never unauthenticated: `requireSignature` already demanded a valid signature on every mutating /api/

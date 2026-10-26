@@ -2692,11 +2692,12 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
+/** `photos`: JPEG data URLs, at most five (utils/post-photo.ts), checked by the node as a member's own listing's are. */
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }) {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
@@ -8854,3 +8855,4 @@ export async function markThreadReadOnNode(conversationId: string, myPubkey: str
     markConversationReadLocally(conversationId, myPubkey).catch(() => { });
     await _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId });
 }
+

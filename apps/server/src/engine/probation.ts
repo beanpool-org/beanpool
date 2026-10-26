@@ -311,12 +311,21 @@ function postTimes(pubkey: string, now: number): string[] {
     ).all(pubkey, iso(now - PROBATION.windowMs)) as { created_at: string }[]).map(r => r.created_at);
 }
 
-/** One entry per photo now on a post the member wrote in the window, at the post's creation time. */
+/**
+ * One entry per photo now on a post the member wrote in the window, at the post's creation time. A keeper's listing for
+ * their enterprise is the enterprise's post made by them (created_by): its photos are the keeper's, as their bytes are
+ * (engine/posts.ts createPost), so they count here too. Two indexed halves, not an OR: SQLite scans every local post for one.
+ */
 function photoTimes(pubkey: string, now: number, exceptPostId?: string): string[] {
+    const since = iso(now - PROBATION.windowMs);
+    const except = exceptPostId ?? null;
     return (db.prepare(
         `SELECT p.created_at FROM post_photos ph JOIN posts p ON p.id = ph.post_id
-          WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ? AND p.id IS NOT ?`
-    ).all(pubkey, iso(now - PROBATION.windowMs), exceptPostId ?? null) as { created_at: string }[]).map(r => r.created_at);
+          WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ? AND p.id IS NOT ?
+         UNION ALL
+         SELECT p.created_at FROM post_photos ph JOIN posts p ON p.id = ph.post_id
+          WHERE p.created_by = ? AND p.author_pubkey != ? AND p.origin_node IS NULL AND p.created_at > ? AND p.id IS NOT ?`
+    ).all(pubkey, since, except, pubkey, pubkey, since, except) as { created_at: string }[]).map(r => r.created_at);
 }
 
 /**
@@ -328,6 +337,16 @@ export function assertMayPost(pubkey: string, photoCount: number, now: number = 
     if (!rules) return;
     const posts = inWindow(postTimes(pubkey, now), now);
     if (posts.used >= rules.posts) throw refusal(rules, 'posts', posts.resetsAtMs!, now);
+    assertPhotosFit(rules, pubkey, photoCount, now);
+}
+
+/**
+ * Before a keeper's new listing for their enterprise (routes/treasury.ts): its photos against the keeper's own allowance, as
+ * their own post's would be. The listing itself counts against the enterprise's limits (engine/writer-bounds.ts).
+ */
+export function assertMayAddPhotos(pubkey: string, photoCount: number, now: number = Date.now()): void {
+    const rules = probationRules(pubkey, now);
+    if (!rules) return;
     assertPhotosFit(rules, pubkey, photoCount, now);
 }
 
@@ -349,9 +368,13 @@ export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize
     if (newPhotoCount <= 0) return;
     const rules = probationRules(pubkey, now);
     if (!rules) return;
-    const row = db.prepare('SELECT created_at FROM posts WHERE id = ?').get(postId) as { created_at?: string } | undefined;
+    const row = db.prepare('SELECT created_at, author_pubkey, created_by FROM posts WHERE id = ?').get(postId) as
+        { created_at?: string; author_pubkey?: string; created_by?: string | null } | undefined;
     const createdMs = row?.created_at ? Date.parse(row.created_at) : NaN;
-    const inside = Number.isFinite(createdMs) && createdMs > now - rules.windowMs;
+    // The whole set is charged only when the post sits in this member's own tally (photoTimes: theirs, or a listing they
+    // made for an enterprise). Another keeper editing it, or a listing with no maker, pays only for what they bring in.
+    const theirs = row?.author_pubkey === pubkey || row?.created_by === pubkey;
+    const inside = theirs && Number.isFinite(createdMs) && createdMs > now - rules.windowMs;
     assertPhotosFit(rules, pubkey, inside ? photoSetSize : newPhotoCount, now, inside ? postId : undefined);
 }
 

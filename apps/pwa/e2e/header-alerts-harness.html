@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Header Alerts Harness</title>
+    <script>
+        window.process = { env: {} };
+        // The chip's last sync, as lib/sync.ts keeps it, before that module reads it: an hour-old sync draws "Offline" with
+        // "59m ago" under it (?chip=ago, its widest), none "Offline" alone (?chip=plain). No node answers here.
+        try {
+            var plain = new URLSearchParams(location.search).get('chip') === 'plain';
+            localStorage.setItem('beanpool-sync-state', JSON.stringify({ connected: false, lastSyncTime: plain ? null : Date.now() - 59 * 60000, merkleRoot: null, accountCount: 0 }));
+        } catch (e) { /* private window */ }
+    </script>
+</head>
+<body class="bg-surface-canvas text-text-primary antialiased">
+    <div id="root"></div>
+    <script type="module" src="./header-alerts-harness.tsx"></script>
+</body>
+</html>

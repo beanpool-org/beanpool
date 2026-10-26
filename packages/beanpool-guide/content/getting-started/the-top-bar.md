@@ -13,7 +13,13 @@ On the phone, the bar at the top of the screen is the same on every tab. From le
 - **The "needs you" icons:** only while something is waiting for you.
 - **The ? icon, the invite icon, Settings and your picture.**
 
-In a web browser the top bar is simpler. It has the connection status on the left, the page's name, and your profile, the **?** and Settings on the right. It has no bean sheet, no "needs you" icons and no invite icon: **Invites** is under **People**. The tabs are along the bottom, or down the left side on a wide screen.
+In a web browser the top bar is simpler. It has the connection status on the left, the page's name, and your profile, the **?** and Settings on the right. It has no bean sheet and no invite icon: **Invites** is under **People**. The tabs are along the bottom, or down the left side on a wide screen.
+
+The web app has the "needs you" icons too, where there is room for them:
+
+- **On a phone:** in the top bar, between the page's name and your profile. The page's name always comes first. Where there is not room for every icon, the last ones fold into **•••**. Where there is room for less than one icon, a small number shows how many things need you. Where there is no room at all, they don't show. Tap **•••** or the number to see them all.
+- **On the Map tab on a phone:** they don't show, so they never cover **BeanPool** at the top.
+- **On a wide screen:** at the bottom of the side bar, above the connection status, the **?** and Settings.
 
 ## The bean
 
@@ -41,7 +47,7 @@ Between the bean and the buttons on the right, small icons appear only while som
 - **An envelope:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.
 - **A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.
 - **A group of people:** new lines in your groups, enterprise chats or event chats. Chats you have muted stay quiet here. The tap opens the chat, or **Talk**, at **Groups**, if there are several.
-- **A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too.
+- **A shield:** only for people who help run your community (on the phone). It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too. On the web, open your community's settings directly.
 
 The icons stack from the right. The most important one sits next to the ? icon, and keeps its place as others come and go.
 

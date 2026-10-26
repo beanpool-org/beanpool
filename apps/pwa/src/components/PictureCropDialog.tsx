@@ -100,7 +100,7 @@ export function PictureCropDialog({ picture, shape, onCancel, onDone, onFailed }
     }, []);
 
     // The mouse wheel zooms: a listener of its own, as React's is passive and could not keep the page from scrolling.
-    useEffect(() => {
+    useLayoutEffect(() => {
         const el = stageRef.current;
         if (!el) return;
         const onWheel = (e: WheelEvent) => {
@@ -187,7 +187,9 @@ export function PictureCropDialog({ picture, shape, onCancel, onDone, onFailed }
         else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
     };
-    useEffect(() => {
+    // A layout effect, as the focus-in above: the keys are heard from the commit that adds the dialog. A passive effect
+    // can lag a frame or more on a slow device, and a key in that frame was lost (the crop kept the middle square).
+    useLayoutEffect(() => {
         const listen = (e: KeyboardEvent) => onKey.current(e);
         window.addEventListener('keydown', listen, true);
         return () => window.removeEventListener('keydown', listen, true);

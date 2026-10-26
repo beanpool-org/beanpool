@@ -18,7 +18,6 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getShutdownSentinelPath, getShutdownReportPath } from './engine/shutdown-recovery.js';
@@ -43,36 +42,12 @@ function assert(cond: boolean, msg: string): void {
     }
 }
 
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const port = (s.address() as net.AddressInfo).port;
-            s.close(() => resolve(port));
-        });
-    });
-}
-
-function canListen(port: number): Promise<boolean> {
-    return new Promise((resolve) => {
-        const s = net.createServer();
-        s.once('error', () => resolve(false));
-        s.listen(port, '0.0.0.0', () => s.close(() => resolve(true)));
-    });
-}
-
-/** index.ts listens on PORT_HTTP, PORT_HTTPS, PORT_P2P and PORT_P2P + 1: four free ports, none fixed. */
+// Flake cause: freePorts previously probed ephemeral ports up to 50 times trying to find an unused number p2p
+// where p2p + 1 was also free because index.ts hardcoded PORT_P2P_WS = PORT_P2P + 1. Under heavy load, ephemeral
+// ports are recycled rapidly, causing "no free pair of ports for libp2p". Passing port 0 lets the OS kernel allocate
+// ports atomically without collisions.
 async function freePorts(): Promise<Record<string, string>> {
-    const http = await freePort();
-    const https = await freePort();
-    for (let tries = 0; tries < 50; tries++) {
-        const p2p = await freePort();
-        if (p2p < 65_000 && ![http, https].includes(p2p + 1) && await canListen(p2p + 1)) {
-            return { PORT_HTTP: String(http), PORT_HTTPS: String(https), PORT_P2P: String(p2p) };
-        }
-    }
-    throw new Error('no free pair of ports for libp2p');
+    return { PORT_HTTP: '0', PORT_HTTPS: '0', PORT_P2P: '0', PORT_P2P_WS: '0' };
 }
 
 interface Node { child: ChildProcess; output: () => string; exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }> }

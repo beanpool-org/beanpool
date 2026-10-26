@@ -11,6 +11,10 @@ import {
     getTreasuryDetail, getBalance, createConversationApi, treasuryPledge, reportAbuse, requestToJoinEnterprise,
     getEnterpriseThread, postEnterpriseThreadMessage, getEnterpriseLedger, type EnterpriseLedgerResponse
 } from '../utils/db';
+import { changeEnterpriseShop } from '../utils/shop';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePictureCrop } from '../components/PictureCrop';
+import { pickBannerPhoto } from '../utils/banner-photo';
 import {
     seasonBanner, LEDGER_PERIODS, ledgerSince, ledgerLineLabels, signedBeans, plSummaryText, type LedgerPeriod
 } from '../utils/enterprise-season';
@@ -105,6 +109,50 @@ export default function TreasuryDetailScreen() {
     const [ledgerPeriod, setLedgerPeriod] = useState<LedgerPeriod>('all');
     const [ledgerShown, setLedgerShown] = useState(LEDGER_PAGE);
     const ledgerRequest = useRef(0);
+
+    const [bannerDismissed, setBannerDismissed] = useState(false);
+    const [pickingBanner, setPickingBanner] = useState(false);
+    const cropper = usePictureCrop(colors);
+
+    useEffect(() => {
+        if (!treasuryKey) return;
+        let live = true;
+        setBannerDismissed(false);
+        AsyncStorage.getItem(`bp_banner_prompt_dismissed_${treasuryKey}`)
+            .then((val) => { if (live) setBannerDismissed(val === '1'); })
+            .catch(() => {});
+        return () => { live = false; };
+    }, [treasuryKey]);
+
+    const handleDismissBanner = () => {
+        setBannerDismissed(true);
+        if (treasuryKey) {
+            AsyncStorage.setItem(`bp_banner_prompt_dismissed_${treasuryKey}`, '1').catch(() => {});
+        }
+    };
+
+    const handlePickBanner = async () => {
+        if (!treasuryKey || pickingBanner) return;
+        setPickingBanner(true);
+        let photo: string | null = null;
+        try {
+            photo = await pickBannerPhoto(cropper.crop);
+        } catch {
+            Alert.alert(t('Error'), t("That picture couldn't be read. Try another."));
+            setPickingBanner(false);
+            return;
+        }
+        if (photo) {
+            try {
+                await changeEnterpriseShop(treasuryKey, { photo });
+                setDetail((d: any) => d ? { ...d, shop: { ...d.shop, photoUrl: photo } } : d);
+                load();
+            } catch (e: any) {
+                Alert.alert(t('Error'), e?.message ? signedRequestWords(e.message) : t('Could not save banner photo.'));
+            }
+        }
+        setPickingBanner(false);
+    };
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -225,6 +273,45 @@ export default function TreasuryDetailScreen() {
 
         emptyNote: { fontSize: 13, color: colors.text.muted, fontStyle: 'italic', paddingVertical: 12 },
         centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+        bannerPromptRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            marginTop: 10,
+            marginBottom: 16,
+            flexWrap: 'wrap',
+        },
+        addBannerBtn: {
+            flex: 1,
+            minWidth: 160,
+            minHeight: 48,
+            backgroundColor: colors.brand.fill,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 16,
+        },
+        addBannerBtnText: {
+            color: colors.text.inverse,
+            fontSize: 15,
+            fontWeight: '700',
+        },
+        notNowBtn: {
+            minHeight: 48,
+            paddingHorizontal: 16,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.card,
+        },
+        notNowBtnText: {
+            color: colors.text.secondary,
+            fontSize: 14,
+            fontWeight: '600',
+        },
     }));
 
     const load = useCallback(() => {
@@ -394,6 +481,9 @@ export default function TreasuryDetailScreen() {
      */
     const kw = keeperWords(detail?.lifecycle);
     const project = kw.kind === 'project';
+    const hasBanner = !!shopPhotoOf(detail?.shop);
+    const faceOpen = !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
+    const showAddBanner = !elsewhere && !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed && faceOpen;
     // Manage, its keepers' console: a keeper of it, or whom the node says leads it or administers the node. In a preview,
     // what a keeper would see, saying why it lives in a local community.
     const showsManage = isEffectivePreview || (!!treasuryKey && !!detail && mayManage(detail, isKeeperOfThis));
@@ -564,6 +654,29 @@ export default function TreasuryDetailScreen() {
                             fallbackEmoji={detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
                             lines={[categorySinceLine(shopCategoryOf(detail?.shop), sinceLine(detail?.since)), groupKindLine(detail?.lifecycle)]}
                         />
+
+                        {showAddBanner && (
+                            <View style={styles.bannerPromptRow}>
+                                <Pressable
+                                    onPress={handlePickBanner}
+                                    style={[styles.addBannerBtn, pickingBanner && { opacity: 0.6 }]}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Add a banner photo')}
+                                    disabled={pickingBanner}
+                                >
+                                    <Text style={styles.addBannerBtnText}>{t('Add a banner photo')}</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleDismissBanner}
+                                    style={[styles.notNowBtn, pickingBanner && { opacity: 0.5 }]}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Not now')}
+                                    disabled={pickingBanner}
+                                >
+                                    <Text style={styles.notNowBtnText}>{t('Not now')}</Text>
+                                </Pressable>
+                            </View>
+                        )}
 
                         {/* State banner every member sees (docs/the-commons.md §2.2) */}
                         {banner && (() => {
@@ -1185,6 +1298,7 @@ export default function TreasuryDetailScreen() {
                 </KeyboardAvoidingView>
             )}
 
+            {cropper.element}
         </SafeAreaView>
     );
 }

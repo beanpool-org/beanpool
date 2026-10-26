@@ -226,6 +226,8 @@ async function refusalError(res: Response): Promise<Error> {
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
+    // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
+    if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
     return error;
 }
 
@@ -1013,6 +1015,13 @@ export async function getMessageAttachmentApi(messageId: string): Promise<Messag
  * whether they may post, and, on a node that locks group chats, `encryption` (the current epoch, whether it is stale,
  * this member's first epoch). A node from before locked chats answers without `encryption`.
  */
+export interface YourChatMute {
+    conversationId: string;
+    /** null while muted for good. */
+    mutedUntil: string | null;
+    always: boolean;
+}
+
 export interface GroupChatAnswer {
     conversation: Conversation;
     messages: (ApiMessage & { authorCallsign?: string | null })[];
@@ -1021,11 +1030,24 @@ export interface GroupChatAnswer {
     readOnly?: boolean;
     closedAt?: string | null;
     isConvenor?: boolean;
+    mute?: YourChatMute | null;
     encryption?: { current: number | null; stale: boolean; fromEpoch: number | null };
 }
 
 export async function getGroupChat(groupId: string, limit = 50): Promise<GroupChatAnswer> {
     return request('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`);
+}
+
+export async function deleteMessageApi(messageId: string): Promise<{ success: boolean; message?: ApiMessage }> {
+    return request('POST', '/api/messages/delete', { messageId });
+}
+
+export async function removeGroupChatMessage(groupId: string, messageId: string): Promise<{ success: boolean; message?: any }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/chat/remove`, { messageId });
+}
+
+export async function muteChatApi(conversationId: string, duration: '8h' | '1w' | 'always' | 'off'): Promise<{ success: boolean; mute: YourChatMute | null }> {
+    return request('POST', '/api/messages/mute', { conversationId, duration });
 }
 
 export async function getConversationMessages(conversationId: string, limit = 50): Promise<{
@@ -1158,6 +1180,8 @@ export interface MarketplacePost {
     /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
     distanceKm?: number | null;
     photos?: string[];
+    /** The shop this listing belongs to, or null/undefined. */
+    shopId?: string | null;
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
@@ -1324,6 +1348,8 @@ export async function createMarketplacePost(post: {
     eventTz?: string;
     eventOnline?: boolean;
     eventLink?: string;
+    /** A shop only: author's own shop id to put the offer into. */
+    shopId?: string;
     /** How it repeats (the pattern only; the node adds the clock and length) and its last date; null = a one-off. */
     eventRepeat?: RepeatPattern | null;
     eventRepeatUntil?: string | null;
@@ -1387,6 +1413,36 @@ export async function getGroups(filter?: { category?: string; q?: string; member
     if (filter?.offset) params.set('offset', String(filter.offset));
     const qs = params.toString();
     return request('GET', `/api/groups${qs ? `?${qs}` : ''}`);
+}
+
+export interface YourChat {
+    kind: 'group' | 'enterprise' | 'event';
+    badge: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
+    id: string;
+    conversationId: string;
+    name: string;
+    avatarUrl: string | null;
+    role: string;
+    category?: string;
+    joinPolicy?: string;
+    eventStartAt?: string | null;
+    eventEndAt?: string | null;
+    readOnly?: boolean;
+    lastMessage?: any;
+    unreadCount?: number;
+    mute?: any;
+    lastActivityAt?: string;
+}
+
+export interface YourGroupsResponse {
+    items: YourChat[];
+    totalUnread?: number;
+    invites?: any[];
+}
+
+export async function getYourGroups(): Promise<YourGroupsResponse> {
+    return request('GET', '/api/your-groups');
 }
 
 export async function getGroup(id: string): Promise<Group> {
@@ -1621,6 +1677,7 @@ export async function updateMarketplacePost(
         lng?: number;
         repeatable?: boolean;
         photos?: string[];
+        shopId?: string | null;
         // Events (docs/events-on-the-map.md §2.2). A cleared end is '' — the node sets start + 2 hours.
         eventStartAt?: string;
         eventEndAt?: string;
@@ -1683,6 +1740,20 @@ export async function requestMarketplacePost(
     postId: string, buyerPublicKey: string, hours?: number
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
     return request('POST', '/api/marketplace/posts/request', { postId, buyerPublicKey, hours });
+}
+
+/**
+ * The code beside an accept or a request refused because the member already has a deal under way on that listing, asked
+ * for or held in trust (the node's apps/server engine/escrow.ts DEAL_OPEN_CODE). Its sentence is the member's language and
+ * is never read.
+ */
+export const DEAL_OPEN_CODE = 'deal_open';
+
+/** The member's deal under way that a refused accept or request names (`{}` when the node named none), or null for any other refusal. */
+export function openDealIn(e: unknown): { transactionId?: string } | null {
+    const err = (e ?? {}) as { code?: unknown; transactionId?: unknown };
+    if (err.code !== DEAL_OPEN_CODE) return null;
+    return typeof err.transactionId === 'string' ? { transactionId: err.transactionId } : {};
 }
 
 export async function approveMarketplaceRequest(
@@ -2184,7 +2255,7 @@ export interface Treasury {
     lng?: number | null;
     locationAuthSigner?: string | null;
     locationUpdatedAt?: string | null;
-    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null }>;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null; suspended?: boolean }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *
@@ -2382,11 +2453,12 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 }
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
-// requireSignature spoof-guard, which pins body *pubkey fields to the signer).
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }): Promise<{ success: boolean; post: any }> {
+// requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
+// (lib/photo-resize.ts), checked by the node as a member's own listing's are.
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 /**

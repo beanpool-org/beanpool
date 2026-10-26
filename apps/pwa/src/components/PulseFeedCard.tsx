@@ -10,7 +10,7 @@
  * - Responsive at 320dp and 1.3x font scale without horizontal overflow.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import {
     isWebUrl,
     platformMeta,
@@ -24,6 +24,7 @@ import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ReportModal } from './ReportModal';
 import { Sentence } from './Sentence';
+import { useDialogFocus } from './dialog-focus';
 
 interface Props {
     item: PulseFeedItem;
@@ -95,21 +96,8 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
         void fetchReflection();
     };
 
-    const closeReflection = () => {
-        setShowReflection(false);
-        triggerRef.current?.focus();
-    };
-
-    useEffect(() => {
-        if (!showReflection) return;
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                closeReflection();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [showReflection]);
+    // Focus goes back to the card on close (useDialogFocus in ReflectionDialog).
+    const closeReflection = () => setShowReflection(false);
 
     const handleOpenPost = () => {
         if (!item.url) return;
@@ -366,12 +354,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
                     onClick={closeReflection}
                 >
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby={`daily-pulse-headline-${item.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
+                    <ReflectionDialog
+                        headlineId={reflection ? `daily-pulse-headline-${item.id}` : undefined}
+                        onClose={closeReflection}
+                        fallback={() => triggerRef.current}
                     >
                         {reflectionLoading ? (
                             <div className="py-8 text-center text-sm font-medium text-nature-500 dark:text-nature-400">
@@ -419,7 +405,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 {t('Close')}
                             </button>
                         </div>
-                    </div>
+                    </ReflectionDialog>
                 </div>
             )}
 
@@ -511,5 +497,33 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 />
             )}
         </article>
+    );
+}
+
+/**
+ * The reflection's dialog box: focus moves in on open (the box itself, so its name is read), Tab stays inside, Escape
+ * closes, focus goes back to the card. Named by the headline once it has loaded, by "Daily Reflection" while it loads
+ * or fails.
+ */
+function ReflectionDialog({ headlineId, onClose, fallback, children }: {
+    headlineId?: string;
+    onClose: () => void;
+    fallback: () => HTMLElement | null;
+    children: ReactNode;
+}) {
+    const box = useRef<HTMLDivElement>(null);
+    useDialogFocus(box, onClose, { fallback, initialFocus: () => box.current });
+    return (
+        <div
+            ref={box}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            {...(headlineId ? { 'aria-labelledby': headlineId } : { 'aria-label': t('🌱 Daily Reflection') })}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto focus:outline-none"
+        >
+            {children}
+        </div>
     );
 }

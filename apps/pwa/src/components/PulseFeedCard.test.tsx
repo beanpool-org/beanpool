@@ -277,6 +277,28 @@ describe('PulseFeedCard Instagram link card (web)', () => {
             expect(document.activeElement).toBe(trigger);
         });
 
+        it('focus moves into the dialog, which has a name while loading, and Tab stays inside it', async () => {
+            let answer: (v: { date: string; headline: string; body: string }) => void = () => {};
+            vi.mocked(getDailyPulse).mockReturnValueOnce(new Promise((r) => { answer = r; }));
+
+            render(<PulseFeedCard item={dailyPulseItem} />);
+            fireEvent.click(screen.getByRole('button', { name: /Daily Reflection/i }));
+
+            const dialog = await screen.findByRole('dialog', { name: /Daily Reflection/i });
+            expect(screen.getByText('Loading')).toBeInTheDocument();
+            expect(dialog.contains(document.activeElement)).toBe(true);
+
+            answer({ date: '2026-10-26', headline: 'Plant seeds of kindness', body: 'Kindness is the soil in which trust grows.' });
+            await screen.findByRole('dialog', { name: 'Plant seeds of kindness' });
+
+            const close = screen.getByRole('button', { name: 'Close' });
+            close.focus();
+            fireEvent.keyDown(window, { key: 'Tab' });
+            expect(dialog.contains(document.activeElement)).toBe(true);
+            fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+            expect(dialog.contains(document.activeElement)).toBe(true);
+        });
+
         it('shows a line in the app words with Retry on failed read, and Retry re-fetches', async () => {
             vi.mocked(getDailyPulse).mockRejectedValueOnce(new Error('Network error'));
 

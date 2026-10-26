@@ -660,7 +660,7 @@ console.log('\n— 9. the real node (index.ts) waits while the lock is held —'
         s.once('error', () => resolve(false));
         s.listen(port, '0.0.0.0', () => s.close(() => resolve(true)));
     });
-    /** index.ts listens on PORT_HTTP, PORT_HTTPS, PORT_P2P and PORT_P2P + 1 (test-clean-stop's freePorts). */
+    /** Probe ephemeral ports for index.ts's four listeners (PORT_HTTP, PORT_HTTPS, PORT_P2P, and PORT_P2P + 1). */
     const ports = async () => {
         const http = await freePort();
         const https = await freePort();

@@ -86,6 +86,12 @@ const CAPPED_BYTES = 6 * 1024 * 1024;
 const BULK_PHOTOS = 1200;
 /** Step 15's new listing photos, which a whole copy brings while S's orphan sweep runs. */
 const NEW_PHOTOS = 60;
+/**
+ * The slots steps 7 and 15 write their photos in, behind the routes: past any a listing's own photos take (0 to 4, five at
+ * most: state-engine.ts MAX_POST_PHOTOS), and apart from each other's.
+ */
+const BULK_SLOTS_FROM = 1000;
+const NEW_SLOTS_FROM = 5000;
 /** A delta's pages of changes at most (BACKUP_DELTA_PAGES, S's default). */
 const DELTA_PAGES = 4;
 
@@ -282,16 +288,19 @@ async function main(): Promise<void> {
         await step('7. listing photos M can\'t read: left out of the copy and named, and S keeps its own through the swap', async () => {
             const [photo] = await main.send('rows', { sql: 'SELECT post_id, order_num FROM post_photos' });
             require_(!!photo, 'M has a listing photo');
+            // Every listing has its photo, so M holds others than this one's: counted before, as the copies count them.
+            const [{ n: held }] = await main.send('rows', { sql: 'SELECT COUNT(*) AS n FROM post_photos' });
+            const [{ n: own }] = await main.send('rows', { sql: 'SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?', args: [photo.post_id] });
             // More photos of that listing, as many as a lost images directory would leave unreadable at once: past the thousand
             // SQLite would take as one list of terms, which the stager's carry-over must not be.
             await main.send('sql', {
                 sql: `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${BULK_PHOTOS})
-                      INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) SELECT ?, ?, i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
+                      INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) SELECT ?, ?, ${BULK_SLOTS_FROM} + i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
                 args: [photo.post_id, TINY_PNG],
             });
             const w7 = await wholeCopy();
             const onS0 = await standby.send('rows', { sql: 'SELECT post_id, order_num FROM post_photos ORDER BY order_num' });
-            require_(w7.ok === true && onS0.length === BULK_PHOTOS + 1, `S holds M's ${BULK_PHOTOS + 1} photos (${onS0.length}; ${JSON.stringify(w7)})`);
+            require_(w7.ok === true && onS0.length === held + BULK_PHOTOS, `S holds M's ${held + BULK_PHOTOS} photos (${onS0.length}; ${JSON.stringify(w7)})`);
             // Every one unreadable on M now: each names an object its store doesn't have.
             await main.send('sql', {
                 sql: `UPDATE post_photos SET photo_data = NULL, storage_key = 'post-photos/gone/' || order_num || '.png', sha256 = ?, bytes = 70, mime = 'image/png' WHERE post_id = ?`,
@@ -303,18 +312,20 @@ async function main(): Promise<void> {
             const lastCopy = px.copies.get(px.opened[px.opened.length - 1] ?? '');
             const last = lastCopy ? JSON.parse(lastCopy.pages.get(Math.max(...lastCopy.pages.keys()))!) : null;
             const opening = lastCopy ? JSON.parse(lastCopy.pages.get(0)!) : null;
-            assert(p7.ok === true && p7.staged === true && last?.photosOmitted?.length === BULK_PHOTOS + 1
-                && opening?.rowCounts?.photos === BULK_PHOTOS + 1 && last?.rowsSent?.photos === 0,
-                `the copy names the ${last?.photosOmitted?.length} photos it left out: counted in the opening page (${opening?.rowCounts?.photos}), not sent (${last?.rowsSent?.photos}), and the closing check lets it through (${JSON.stringify(p7)})`);
-            assert(onS.length === BULK_PHOTOS + 1 && onS.every((r: any, i: number) => r.order_num === onS0[i].order_num && (r.photo_data ?? r.storage_key) !== null)
-                && r7.lastWhole?.exact === true && r7.lastWhole?.photosLeftOut === BULK_PHOTOS + 1,
+            // That listing's photos are the ones left out; the other listings' go in the copy as ever.
+            const unreadable = own + BULK_PHOTOS;
+            assert(p7.ok === true && p7.staged === true && last?.photosOmitted?.length === unreadable
+                && opening?.rowCounts?.photos === held + BULK_PHOTOS && last?.rowsSent?.photos === held - own,
+                `the copy names the ${last?.photosOmitted?.length} photos it left out (of ${unreadable}): counted in the opening page (${opening?.rowCounts?.photos} of ${held + BULK_PHOTOS}), not sent (${last?.rowsSent?.photos} sent, the other listings' ${held - own}), and the closing check lets it through (${JSON.stringify(p7)})`);
+            assert(onS.length === held + BULK_PHOTOS && onS.every((r: any, i: number) => r.order_num === onS0[i].order_num && (r.photo_data ?? r.storage_key) !== null)
+                && r7.lastWhole?.exact === true && r7.lastWhole?.photosLeftOut === unreadable,
                 `S keeps its own ${onS.length} rows of them through the swap, and the copy is exact but for them (${JSON.stringify({ whole: r7.lastWhole })})`);
             // M's photos readable again, and the extra ones gone, for the steps after: the next copy carries it.
             await main.send('sql', {
-                sql: `UPDATE post_photos SET photo_data = ?, storage_key = NULL, sha256 = NULL, bytes = NULL, mime = NULL WHERE post_id = ? AND order_num = ?`,
-                args: [TINY_PNG, photo.post_id, photo.order_num],
+                sql: `UPDATE post_photos SET photo_data = ?, storage_key = NULL, sha256 = NULL, bytes = NULL, mime = NULL WHERE post_id = ? AND order_num < ?`,
+                args: [TINY_PNG, photo.post_id, BULK_SLOTS_FROM],
             });
-            await main.send('sql', { sql: 'DELETE FROM post_photos WHERE post_id = ? AND order_num > ?', args: [photo.post_id, photo.order_num] });
+            await main.send('sql', { sql: 'DELETE FROM post_photos WHERE post_id = ? AND order_num > ?', args: [photo.post_id, BULK_SLOTS_FROM] });
             const w7b = await wholeCopy();
             assert(w7b.ok === true && (await exactNow()).length === 0, `M's photo readable again, the next whole copy brings it and S is M's (${JSON.stringify(w7b)})`);
         });
@@ -529,9 +540,11 @@ async function main(): Promise<void> {
             require_(!!honey, 'M has the honey listing');
             await main.send('sql', {
                 sql: `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${NEW_PHOTOS})
-                      INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) SELECT ?, ?, 100 + i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
+                      INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) SELECT ?, ?, ${NEW_SLOTS_FROM} + i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
                 args: [honey.id, TINY_PNG],
             });
+            // Every listing's photos and these: what a copy's staging holds once its photos' pages are in.
+            const [{ n: onM }] = await main.send('rows', { sql: 'SELECT COUNT(*) AS n FROM post_photos' });
             const liveKeys = new Set((await standby.send('photo-objects')).keys as string[]);
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '1000' } });
             const pulling = pullAndSwap(true);
@@ -539,7 +552,7 @@ async function main(): Promise<void> {
             let staged: { storage_key: string }[] = [];
             const midway = await until('the new photos in the staging', async () => {
                 staged = (await standby.send('staged-photos')) ?? [];
-                return staged.length >= NEW_PHOTOS + 1 && (await standby.send('staging')).building !== null;
+                return staged.length >= onM && (await standby.send('staging')).building !== null;
             });
             const fresh = staged.map((r) => r.storage_key).filter((k) => !liveKeys.has(k));
             require_(midway && fresh.length === NEW_PHOTOS, `the copy is part-built, and its staging alone names the ${fresh.length} new photos`);
@@ -555,7 +568,7 @@ async function main(): Promise<void> {
             const p15 = await pulling;
             const photos = await standby.send('photo-objects');
             const r15 = await standby.send('record');
-            assert(p15.ok === true && p15.staged === true && photos.keys.length >= NEW_PHOTOS + 1 && photos.missing.length === 0 && r15.lastWhole?.exact === true,
+            assert(p15.ok === true && p15.staged === true && photos.keys.length >= onM && photos.missing.length === 0 && r15.lastWhole?.exact === true,
                 `the copy lands, and every one of S's ${photos.keys.length} listing photos has its object (missing ${JSON.stringify(photos.missing.slice(0, 3))}; ${JSON.stringify(p15)})`);
             const after = await standby.send('sweep', { aheadMs: 2 * 60 * 60_000 });
             const plantedGone = (await standby.send('missing-objects', { keys: [planted] })).length === 1;
@@ -569,7 +582,7 @@ async function main(): Promise<void> {
             let staged2: { storage_key: string }[] = [];
             await until('the photos in the staging', async () => {
                 staged2 = (await standby.send('staged-photos')) ?? [];
-                return staged2.length >= NEW_PHOTOS + 1 && (await standby.send('staging')).building !== null;
+                return staged2.length >= onM && (await standby.send('staging')).building !== null;
             });
             const lost = staged2.map((r) => r.storage_key).find((k) => fresh.includes(k)) ?? '';
             await standby.send('rm-object', { key: lost });

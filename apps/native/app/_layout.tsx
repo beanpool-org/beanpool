@@ -10,7 +10,8 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { registerForPushNotifications, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { checkOsNotificationPermission } from '../utils/notification-permission';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
@@ -763,6 +764,18 @@ function RootLayoutNav() {
         const notice = landing === DEFAULT_MEMBER_LANDING ? takeOpenAfterLanding(identity.publicKey, nodeUrl) : null;
         if (notice) router.push(notice);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
+
+    // When OS notification permission is already active (e.g. Android <= 12, or a restored account on a
+    // device where permission was already granted), silently register the push token for this identity
+    // without prompting.
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        void checkOsNotificationPermission().then((granted) => {
+            if (granted) {
+                registerForPushNotifications(identity.publicKey).catch(console.warn);
+            }
+        });
+    }, [identity?.publicKey]);
 
     // Kick a sync whenever the active identity changes. The boot sync
     // (initDB().then(requestSync) above) is a one-shot mount effect, so a recovery /

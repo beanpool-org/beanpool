@@ -278,3 +278,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-23 - Batch pre-fetch own decision votes in group and enterprise decision routes
 **Learning:** In `apps/server/src/routes/group-decisions.ts` and `apps/server/src/routes/enterprise-decisions.ts`, rendering decision cards ran `getOwnDecisionVotes(actor, [d.id])` individually inside `.map()` loops over decision items, triggering N+1 separate SQLite query executions per list request.
 **Action:** Batch pre-fetched all own decision votes for the listed decisions in a single call (`getOwnDecisionVotes(actor, decisions.map(d => d.id))`) prior to mapping cards, passing the resulting lookup Map into `card(...)` for O(1) vote retrievals.
+
+## 2026-10-27 - O(1) Keeper and Group Member Lookups in Native EnterpriseDecisions
+**Learning:** In `apps/native/components/EnterpriseDecisions.tsx`, `nameOf` in `EnterpriseDecisions` and `GroupDecisions` executed `keepers.find(...)` and `people.find(...)` on every decision card and author name resolution during component rendering.
+**Action:** Pre-computed `keepersMap` and `peopleMap` using `useMemo` indexed by public key, converting keeper callsign and group person name lookups into constant-time O(1) Map retrievals.

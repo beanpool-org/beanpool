@@ -528,7 +528,7 @@ export function notifyKnockReceived(_now = Date.now()): void {
         SELECT nr.member_pubkey AS pk
         FROM node_roles nr
         JOIN members m ON m.public_key = nr.member_pubkey
-        WHERE nr.role IN ('owner', 'admin') AND m.status = 'active'
+        WHERE nr.role IN ('owner', 'admin') AND m.status = 'active' AND m.is_visitor = 0
     `).all() as { pk: string }[];
     const adminPks = adminRows.map(r => r.pk);
 
@@ -538,7 +538,7 @@ export function notifyKnockReceived(_now = Date.now()): void {
             SELECT mp.public_key AS pk
             FROM member_preferences mp
             JOIN members m ON m.public_key = mp.public_key
-            WHERE mp.pref_key = 'notify_knocks' AND mp.pref_value = 'true' AND m.status = 'active'
+            WHERE mp.pref_key = 'notify_knocks' AND mp.pref_value = 'true' AND m.status = 'active' AND m.is_visitor = 0
         `).all() as { pk: string }[];
         memberPks = memberRows.map(r => r.pk);
     }

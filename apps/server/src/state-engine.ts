@@ -9923,6 +9923,8 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     word("Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.");
 export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = word('Only a member of this community shows as a connection in common.');
+/** Requests to join go to members who may answer (front doors S1, design §5.2): a visitor's row can't, so it isn't told. */
+export const KNOCK_PUSH_MEMBERS_ONLY_MESSAGE = word('Only a member of this community is told when someone asks to join.');
 /** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
     `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
@@ -9995,6 +9997,8 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     const namesHome = Object.keys(body).some(isHomeKey);
     if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
     if (Object.prototype.hasOwnProperty.call(body, SHOW_AS_CONNECTION_PREF) && !getActingMember(publicKey)) throw new Error(SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE);
+    // Turning it off is anyone's (the web app saves every switch at once); turning it on, a member's alone.
+    if (body.notify_knocks === true && !getActingMember(publicKey)) throw new Error(KNOCK_PUSH_MEMBERS_ONLY_MESSAGE);
     const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);

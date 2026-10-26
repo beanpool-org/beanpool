@@ -42,6 +42,7 @@ import { measureKnockAnswers, knockAnswersForDirectory } from './engine/knocks.j
 import { listingFields } from './engine/directory-promise.js';
 import { listCommunities, insertDirectoryRowForTesting, clearDirectoryForTesting } from './engine/directory-cache.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { registerVisitor } from './engine/members.js';
 
 let PORT = 0;
 let BASE = '';
@@ -192,6 +193,35 @@ async function main() {
     assert(forOwner.status === 200 && forOwner.body?.knockCount === 1, `the manager's data carries the count of open requests (${forOwner.status} ${forOwner.body?.knockCount})`);
     const forNobody = await managerData({});
     assert((forNobody.status === 401 || forNobody.status === 403) && forNobody.body?.knockCount === undefined, `...to the operator only (${forNobody.status})`);
+
+    // ── 1c. A visitor's row is never told: it can't answer (design §5.2, "members who may answer") ──
+    const visitor = newId('Visitor');
+    registerVisitor(visitor.pk, visitor.name);
+    putPushTokenRow(visitor.pk, 'ExponentPushToken[visitor]', 'android');
+    const optIn = await call(visitor, 'POST', '/api/members/preferences', { publicKey: visitor.pk, preferences: { notify_knocks: true } });
+    assert(optIn.status === 400 && optIn.body?.error === 'Only a member of this community is told when someone asks to join.'
+        && db.prepare(`SELECT 1 FROM member_preferences WHERE public_key = ? AND pref_key = 'notify_knocks'`).get(visitor.pk) === undefined,
+        `a visitor's row can't turn on requests to join, and nothing is stored (${optIn.status} ${JSON.stringify(optIn.body)})`);
+    const optOut = await call(visitor, 'POST', '/api/members/preferences', { publicKey: visitor.pk, preferences: { notify_chat: true, notify_knocks: false } });
+    assert(optOut.status === 200, `...turning it off, with its other switches (as the web app saves them), still saves (${optOut.status})`);
+    const memberOptsIn = await call(memberDefault, 'POST', '/api/members/preferences', { publicKey: memberDefault.pk, preferences: { notify_knocks: true } });
+    assert(memberOptsIn.status === 200, `a member turns it on (${memberOptsIn.status})`);
+    await call(memberDefault, 'POST', '/api/members/preferences', { publicKey: memberDefault.pk, preferences: { notify_knocks: false } });
+    // A row stored before this rule, and a visitor's row holding admin from before it: neither is in the recipients.
+    db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'notify_knocks', 'true')`).run(visitor.pk);
+    const visitorAdmin = newId('VisitorAdmin');
+    registerVisitor(visitorAdmin.pk, visitorAdmin.name);
+    db.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_at) VALUES (?, 'admin', ?)`).run(visitorAdmin.pk, new Date().toISOString());
+    putPushTokenRow(visitorAdmin.pk, 'ExponentPushToken[visitor-admin]', 'android');
+    pushedBatches.length = 0;
+    const knocker3 = newId('KnockerThree');
+    const knock3 = await call(knocker3, 'POST', '/api/join/knock', { callsign: 'KnockerThree', message: 'Hello from three', fromNode: 'https://global.beanpool.org/' });
+    await new Promise(r => setTimeout(r, 50));
+    const told3 = pushedBatches.map(p => p.to);
+    assert(knock3.status === 201 && told3.includes('ExponentPushToken[owner]') && told3.includes('ExponentPushToken[optin]')
+        && !told3.includes('ExponentPushToken[visitor]') && !told3.includes('ExponentPushToken[visitor-admin]'),
+        `a knock tells the owner and the opted-in member, and neither visitor's row (${told3.join(', ')})`);
+    db.prepare(`DELETE FROM join_requests WHERE pubkey = ?`).run(knocker3.pk);
 
     // ── 2. Decline sends no notice ──
     const openKnocks = db.prepare(`SELECT id FROM join_requests WHERE pubkey = ? AND status = 'pending'`).all(stranger.pk) as { id: string }[];

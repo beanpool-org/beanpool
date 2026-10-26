@@ -29,6 +29,9 @@
  *     tick.
  * 10. A node killed in the middle of a return (separate processes on one data dir of their own): nothing of it was kept;
  *     at its next boot the main server's own minute tick returns every pledge exactly once, and a third boot moves nothing.
+ * 11. After the return, the date moved and a new pledge: the leader's cancel pays nobody twice.
+ * 12. The leader moves an end date that is over again and again, to dates over or a moment from over, renaming it too:
+ *     each backer is told once a day, and once more when it is taken off; a day on, a move tells them again.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-unfunded-pledges-return
  */
@@ -52,6 +55,7 @@ import { db, createCrowdfundProject, pledgeToProject } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { isPastDeadline } from '@beanpool/core';
 
 // Loaded so that this suite runs to the end on a tree without the return (it fails there, with a count, rather than
 // stopping at the import).
@@ -114,6 +118,7 @@ interface KeptRow { id: string; recipient: string; title: string; body: string; 
 const keptFor = (pubkey: string): KeptRow[] =>
     db.prepare('SELECT id, recipient, title, body, data FROM moderation_notices WHERE recipient = ? ORDER BY created_at, rowid').all(pubkey) as KeptRow[];
 const kindOf = (row: { data: string }) => { try { return JSON.parse(row.data)?.kind as string | undefined; } catch { return undefined; } };
+const enterpriseOf = (row: { data: string }) => { try { return JSON.parse(row.data)?.enterprise as string | undefined; } catch { return undefined; } };
 
 type Signed = { status: number; body: any };
 /** The replay-proof scheme the real middleware requires: method + path (without its query) + timestamp + nonce + body. */
@@ -517,6 +522,60 @@ async function main(): Promise<void> {
     assert(near(escrowOf(roof), 0) && near(sumBalances(), beforeCancel.sum), `its escrow ends at 0, not below (${escrowOf(roof)}), and the total is unchanged`);
     const cancelAudit = runLedgerAudit();
     assert(cancelAudit.ok && Math.abs(cancelAudit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${cancelAudit.ok}, drift ${cancelAudit.drift})`);
+
+    // ── 12. The leader moves an end date that is over again and again: each backer is told once a day ──────────────────
+    // Review of #2525: the update route takes a date back to 36 hours ago (routes/project-deadline.ts, "today anywhere"),
+    // and one more than a day old is already over. Moved from one date over to another, request after request, the backers
+    // were told every time (6 moves, 6 notices and 6 pushes each), and each copy kept pushed one of their other notices out
+    // (kept-notices.ts KEPT_NOTICES.perMember). Refusing a date already over would not stop it: one a moment from over is
+    // taken, and is over a moment later. The notice names no date, so another the same day only repeats it.
+    console.log('── 12. The end date moved again and again ──');
+    const racks = await makeProject(lea, 'Bike Racks', 60, new Date(Date.now() + 10 * DAY).toISOString());
+    await pledge(ann, racks, 6, 'treasury');
+    await pledge(ben, racks, 4, 'crowdfund');
+    // Its end date 5 days gone: in the week. Not due at this process's real time, so its own tick leaves it alone.
+    setDeadline(racks, new Date(Date.now() - 5 * DAY).toISOString());
+    const toldOfRacks = (who: Id) => keptFor(who.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved' && enterpriseOf(n) === racks);
+    const moveRacks = (deadlineAt: string, title = 'Bike Racks') => signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: racks, creatorPubkey: lea.pubKeyHex, title, description: 'Bike Racks, for the valley', goalAmount: 60, deadlineAt }, lea);
+    const moves: number[] = [];
+    // Each time to another date already over, a second apart, and renamed every other time: the notice's words change too.
+    for (let i = 0; i < 6; i++) moves.push((await moveRacks(new Date(Date.now() - 30 * HOUR - i * 1000).toISOString(), i % 2 ? 'Bike Racks' : 'Bike Racks!')).status);
+    assert(moves.every((s) => s === 200), `the leader moves the date six times, each time to another date already over (${moves.join(' ')})`);
+    for (const who of [ann, ben]) {
+        const kept = toldOfRacks(who);
+        assert(kept.length === 1 && kept[0].body.includes('"Bike Racks') && /has moved the date/.test(kept[0].body),
+            `${who.callsign} is told once, not six times (${kept.length}: "${kept[0]?.body}")`);
+    }
+    const nearlyOver = new Date(Date.now() - DAY + 3000).toISOString();
+    const nearly = await moveRacks(nearlyOver);
+    while (!isPastDeadline(nearlyOver, Date.now())) await new Promise((r) => setTimeout(r, 250));
+    const fromNearly = await moveRacks(new Date(Date.now() - 30 * HOUR).toISOString());
+    assert(nearly.status === 200 && fromNearly.status === 200,
+        `a date a moment from over is taken, and moved again once it is over (${nearly.status} ${fromNearly.status} ${nearly.body?.error ?? ''}${fromNearly.body?.error ?? ''})`);
+    assert([ann, ben].every((who) => toldOfRacks(who).length === 1), `and nobody is told again (${toldOfRacks(ann).length}, ${toldOfRacks(ben).length})`);
+    // Taking off an end date that is over says something else: no date, so nothing goes back on its own. That is told, the
+    // same day.
+    const takenOff = await moveRacks('');
+    assert(takenOff.status === 200 && [ann, ben].every((who) => toldOfRacks(who).length === 2 && /taken the end date off/.test(toldOfRacks(who)[1]?.body ?? '')),
+        `taking the end date off is told, once (${takenOff.status}: ${toldOfRacks(ann).length}, "${toldOfRacks(ann)[1]?.body}")`);
+    // A date again (none was over, so nobody is told), and off again: not told twice in a day either.
+    const dateAgain = await moveRacks(new Date(Date.now() - 30 * HOUR).toISOString());
+    const offAgain = await moveRacks('');
+    assert(dateAgain.status === 200 && offAgain.status === 200 && [ann, ben].every((who) => toldOfRacks(who).length === 2),
+        `a date again and off again tells nobody again (${dateAgain.status} ${offAgain.status}: ${toldOfRacks(ann).length}, ${toldOfRacks(ben).length})`);
+    // A day on, a move tells them again: once a day, not once.
+    const dayOn = Date.now() + DAY + MINUTE;
+    const movesDayOn = watchedHooks();
+    setDeadline(racks, new Date(dayOn + 10 * DAY).toISOString());
+    const toldDayOn = unfunded?.noticeEndDateMoved(movesDayOn.hooks, racks, new Date(dayOn - 3 * DAY).toISOString(), lea.pubKeyHex, dayOn) ?? -1;
+    assert(toldDayOn === 2 && [ann, ben].every((who) => toldOfRacks(who).length === 3 && /has moved the date/.test(toldOfRacks(who)[2]?.body ?? '')),
+        `a day on, a move tells both backers again (${toldDayOn}: ${toldOfRacks(ann).length}, ${toldOfRacks(ben).length})`);
+    const pushDayOn = movesDayOn.pushes.filter((p) => p.data?.kind === 'project_end_date_moved');
+    assert(pushDayOn.length === 1 && [...pushDayOn[0].targets].sort().join() === [ann, ben].map((m) => m.pubKeyHex).sort().join()
+        && pushDayOn[0].kind === 'community.notice' && pushDayOn[0].category === 'escrow',
+        `with one push to the two of them (${pushDayOn.length}, ${pushDayOn[0]?.targets.length}, ${pushDayOn[0]?.kind}, ${pushDayOn[0]?.category})`);
+    assert(near(escrowOf(racks), 10) && rowsOutOf(racks).length === 0, `and nothing went back meanwhile (escrow ${escrowOf(racks)})`);
 
     // ── 10. A node killed in the middle of a return ───────────────────────────────────────────────────────────────────
     console.log('── 10. Killed in the middle of a return, then booted again ──');

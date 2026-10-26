@@ -1138,6 +1138,7 @@
   "Failed to delete": "Không thể xóa",
   "Post remains active after completion for repeat business.": "Bài đăng vẫn hoạt động sau khi hoàn tất để tiếp tục nhận giao dịch.",
   "Photos ({n}/{max})": "Ảnh ({n}/{max})",
+  "Add photo": "Thêm ảnh",
   "Failed to save": "Không thể lưu",
   "Failed to delete post as convenor": "Không thể xóa bài đăng với tư cách người điều phối",
   "Loading Location Services...": "Đang tải dịch vụ vị trí...",

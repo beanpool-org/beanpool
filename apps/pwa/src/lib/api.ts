@@ -2444,11 +2444,12 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 }
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
-// requireSignature spoof-guard, which pins body *pubkey fields to the signer).
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }): Promise<{ success: boolean; post: any }> {
+// requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
+// (lib/photo-resize.ts), checked by the node as a member's own listing's are.
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 /**

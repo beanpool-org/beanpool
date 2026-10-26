@@ -1164,6 +1164,7 @@
   "Failed to delete": "Silinemedi",
   "Post remains active after completion for repeat business.": "Tekrar eden işler için ilan tamamlandıktan sonra da aktif kalır.",
   "Photos ({n}/{max})": "Fotoğraflar ({n}/{max})",
+  "Add photo": "Fotoğraf ekle",
   "Failed to save": "Kaydedilemedi",
   "Failed to delete post as convenor": "Yönetici olarak gönderi silinemedi",
   "Loading Location Services...": "Konum Servisleri Yükleniyor...",

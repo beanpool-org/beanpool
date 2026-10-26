@@ -1233,6 +1233,7 @@
   "Failed to delete": "মুছে ফেলা যায়নি",
   "Post remains active after completion for repeat business.": "পুনরায় ব্যবসার জন্য কাজ শেষ হওয়ার পরও পোস্টটি সক্রিয় থাকে।",
   "Photos ({n}/{max})": "ছবি ({n}/{max})",
+  "Add photo": "ছবি যোগ করুন",
   "Failed to save": "সংরক্ষণ করা যায়নি",
   "Failed to delete post as convenor": "আহ্বায়ক হিসেবে পোস্ট মুছতে ব্যর্থ হয়েছে",
   "Loading Location Services...": "অবস্থান পরিষেবা লোড হচ্ছে...",

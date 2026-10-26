@@ -331,6 +331,16 @@ export function assertMayPost(pubkey: string, photoCount: number, now: number = 
     assertPhotosFit(rules, pubkey, photoCount, now);
 }
 
+/**
+ * Before a keeper's new listing for their enterprise (routes/treasury.ts): its photos against the keeper's own allowance, as
+ * their own post's would be. The listing itself counts against the enterprise's limits (engine/writer-bounds.ts).
+ */
+export function assertMayAddPhotos(pubkey: string, photoCount: number, now: number = Date.now()): void {
+    const rules = probationRules(pubkey, now);
+    if (!rules) return;
+    assertPhotosFit(rules, pubkey, photoCount, now);
+}
+
 function assertPhotosFit(rules: ProbationRules, pubkey: string, adding: number, now: number, exceptPostId?: string): void {
     if (adding <= 0) return;
     const photos = inWindow(photoTimes(pubkey, now, exceptPostId), now);

@@ -226,7 +226,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
 
         await type('Title', 'Tend the flock');
         await click(byLabel('Choose a category'), 'Choose a category');
-        await click(byLabel('Food & Produce'), 'Food & Produce');
+        await click(byLabel('Food'), 'Food');
         await type('Price in Beans', '10');
         await click(button('POST NEED'), 'POST NEED');
         expect(net.args.get('treasuryPostNeed')).toEqual([ENT, {

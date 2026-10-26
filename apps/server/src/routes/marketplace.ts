@@ -39,7 +39,7 @@ import { postOutOfSight } from '../engine/post-sight.js';
 import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
-import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
+import { CONVENOR_PAUSED_CODE, ENTERPRISE_CLOSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
 import { routePhotosRefusal, photoRefusalText } from '../engine/avatar.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { respondShopRefusal } from './shop-refusal.js';
@@ -872,8 +872,9 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
-        // The answer is the post as its author has it, and for an event a convenor may edit, that is someone else, with
-        // their name. The engine refuses a non-member convenor on every node (updatePost); here the visitors' view answers first.
+        // The answer is the post as its author has it, and for an event a convenor may edit, or an enterprise's Offer or Need
+        // its keeper may (engine/posts.ts updatePost), that is someone else, with their name. The engine refuses a non-member
+        // convenor or keeper on every node; here the visitors' view answers first.
         if (!membersOnlyHere(ctx)) return;
         // G3, global profile: an edit publishes too, so a muted member can't make one; on probation, an edit can't
         // bring in photos past the day's allowance. A photo the post already has comes back as its own URL.
@@ -901,8 +902,9 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         if (respondShopRefusal(ctx, e)) return;
-        // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
-        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
+        // A convenor whose account is suspended, editing their group's event, or a keeper of a closed enterprise
+        // (engine/posts.ts updatePost): 403.
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE || e?.code === ENTERPRISE_CLOSED_CODE ? 403 : 400;
         ctx.body = { error: memberErrorText(e, word('Failed to update post')) };
     }
 });

@@ -5619,7 +5619,10 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
-    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey, out);
+    // A keeper may edit their enterprise's Offer or Need signed with their own key: the signed caller only, by the rule the
+    // enterprise's create and remove routes use.
+    const keeps = actorPubkey ? (enterprise: string) => isTreasuryKey(enterprise) && canOperateTreasury(actorPubkey, enterprise) : undefined;
+    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey, out, keeps);
 }
 
 /**

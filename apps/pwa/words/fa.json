@@ -1233,6 +1233,7 @@
   "Failed to delete": "حذف انجام نشد",
   "Post remains active after completion for repeat business.": "پست پس از تکمیل برای سفارش‌های مجدد فعال می‌ماند.",
   "Photos ({n}/{max})": "عکس‌ها ({n}/{max})",
+  "Add photo": "افزودن عکس",
   "Failed to save": "ذخیره انجام نشد",
   "Failed to delete post as convenor": "حذف پست به عنوان هماهنگ‌کننده ناموفق بود",
   "Loading Location Services...": "در حال بارگذاری موقعیت مکانی...",

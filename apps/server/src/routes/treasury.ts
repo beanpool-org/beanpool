@@ -45,6 +45,7 @@ import { stripImageValue } from '../storage/image-metadata.js';
 import { photoValueRefusal, routePhotoValueRefusal, routePhotosRefusal, photoRefusalText, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
+import { assertMayAddPhotos } from '../engine/probation.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { respondShopRefusal } from './shop-refusal.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
@@ -876,6 +877,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
             assertNotMuted(actor);
             assertNotMuted(treasury);
+            // Its photos count against the keeper's own allowance on probation, as their own post's do, and their bytes are
+            // the keeper's (engine/posts.ts createPost, createdBy).
+            if (Array.isArray(b.photos)) assertMayAddPhotos(actor, Math.min(b.photos.length, 5));
             // What a keeper puts up for the enterprise counts against the enterprise's own 1,000 new posts a day, never the
             // keeper's 100 (W-main), and against the keeper's 1,000 for every enterprise they keep together; once the
             // enterprise's 1,000 are up, against the keeper's own 100 instead (engine/writer-bounds.ts). Checked by the
@@ -908,6 +912,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
+            if (Array.isArray(b.photos)) assertMayAddPhotos(actor, Math.min(b.photos.length, 5));
             const limit = enterprisePostLimit(treasury, actor);
             // A Need never goes in a shop: a `shopId` sent is refused in the engine's words, never dropped.
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });

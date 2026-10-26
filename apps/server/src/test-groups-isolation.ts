@@ -17,9 +17,10 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
+import { wrapCreatePost } from './post-test-helper.js';
 import { db, initSchema } from './db/db.js';
 import {
-    createPost,
+    createPost: rawCreatePost,
     updatePost,
     getPosts,
     getActivePostCount,
@@ -45,6 +46,7 @@ import {
     addWsClient,
     removeWsClient
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { listingsForPeer } from './federation-listings.js';
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';

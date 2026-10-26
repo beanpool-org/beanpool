@@ -17,9 +17,11 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, createGroup, inviteGroupMember, joinGroup, removeGroupMember, updateGroupPolicy, createPost,
+    initStateEngine, createGroup, inviteGroupMember, joinGroup, removeGroupMember, updateGroupPolicy, createPost: rawCreatePost,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { createGroupRoutes } from './routes/groups.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -215,7 +217,7 @@ async function main() {
     {
         const attempt = async (pk: string, groupId: string) => {
             const res = await call(market, 'POST', '/api/marketplace/posts', pk, {
-                type: 'offer', title: 'Probe', authorPublicKey: pk, audienceScope: 'group', targetGroupId: groupId,
+                type: 'offer', title: 'Probe', authorPublicKey: pk, audienceScope: 'group', targetGroupId: groupId, photos: TEST_PHOTOS,
             });
             return `${res.status} ${res.body?.error}`;
         };

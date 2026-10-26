@@ -31,11 +31,13 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost, createGroup, joinGroup, inviteGroupMember, approveGroupMember,
+    initStateEngine, transfer, createPost: rawCreatePost, createGroup, joinGroup, inviteGroupMember, approveGroupMember,
     postGroupThreadMessage, postEventThreadMessage, getGroupLead, seedGenesisMember,
     adminEmergencySuspend, adminLiftSuspension,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { getConvenorSilence } from './engine/group-succession.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';

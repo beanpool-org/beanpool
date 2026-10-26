@@ -14,9 +14,11 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, createGroup, inviteGroupMember, joinGroup, removeGroupMember, createPost,
+    initStateEngine, createGroup, inviteGroupMember, joinGroup, removeGroupMember, createPost: rawCreatePost,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { createGroupRoutes } from './routes/groups.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { setMemberPhoto } from '@beanpool/engine';

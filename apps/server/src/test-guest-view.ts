@@ -291,8 +291,10 @@ function personValues(value: unknown, allow: (p: string, v: string) => boolean, 
 async function main(): Promise<void> {
     console.log(`\n=== The listings, not the people (G9a) ${MODE} ===\n`);
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    const { initStateEngine, createPost, createGroup, getPosts } = se;
+    const { initStateEngine, createGroup, getPosts } = se;
+    const createPost = wrapCreatePost(se.createPost);
     const https = await import('./https-server.js') as any;
     const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
     const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');

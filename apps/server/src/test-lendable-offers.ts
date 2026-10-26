@@ -42,10 +42,12 @@ import { initTls } from './services/tls.js';
 import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, getBalance, hasLiveOffer,
+    initStateEngine, transfer, createPost: rawCreatePost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, getBalance, hasLiveOffer,
     runMarketplaceHygiene, adminPruneUser, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, getPosts,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
@@ -195,7 +197,7 @@ async function main(): Promise<void> {
     ledgerAddsUp('the members are seeded');
 
     const offer = (who: Id, body: Record<string, unknown>) => signed('/api/marketplace/posts', who, {
-        type: 'offer', category: 'tools', description: '', credits: 0, authorPublicKey: who.pk, ...body,
+        type: 'offer', category: 'tools', description: '', credits: 0, authorPublicKey: who.pk, photos: TEST_PHOTOS, ...body,
     });
     const edit = (who: Id, id: string, body: Record<string, unknown>) => signed('/api/marketplace/posts/update', who, { id, authorPublicKey: who.pk, ...body });
     const ask = (who: Id, postId: string, hours?: number) => signed('/api/marketplace/posts/request', who, { postId, buyerPublicKey: who.pk, ...(hours !== undefined ? { hours } : {}) });
@@ -260,11 +262,11 @@ async function main(): Promise<void> {
         const r = await offer(dave, { title: 'Bad flag', lendable: flag });
         assert(r.status === 400 && r.body?.error === LENDABLE_NOT_A_FLAG && postsTitled('Bad flag') === 0, `lendable ${JSON.stringify(flag)} is refused (${brief(r)})`);
     }
-    const need = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a drill', description: 'Anyone?', credits: 0, authorPublicKey: dave.pk, lendable: true });
+    const need = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a drill', description: 'Anyone?', credits: 0, authorPublicKey: dave.pk, photos: TEST_PHOTOS, lendable: true });
     assert(need.status === 400 && need.body?.error === LEND_OFFERS_ONLY && postsTitled('Need a drill') === 0, `a Need can't be lent (${brief(need)})`);
     // An event is built from the whole body (routes/event-post.ts), so it gets the same refusals, not its lend fields dropped.
     const event = (title: string, body: Record<string, unknown>) => signed('/api/marketplace/posts', dave, {
-        type: 'event', title, description: 'Bring gloves', authorPublicKey: dave.pk, lat: -33.8688, lng: 151.2093,
+        type: 'event', title, description: 'Bring gloves', authorPublicKey: dave.pk, lat: -33.8688, lng: 151.2093, photos: TEST_PHOTOS,
         eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventPlaceName: 'The hall', ...body,
     });
     const eventLent = await event('Tool swap', { lendable: true });
@@ -518,7 +520,7 @@ async function main(): Promise<void> {
     const restart = await edit(dave, drill, { lendable: true, replacementValue: '$120', lendMaxDays: 7 });
     assert(restart.status === 200 && postRow(drill).lendable === 1 && postRow(drill).repeatable === 1 && postRow(drill).replacement_value === '$120',
         `and on again (${brief(restart)})`);
-    const needMade = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a hand', description: 'Moving day', credits: 2, authorPublicKey: dave.pk });
+    const needMade = await signed('/api/marketplace/posts', dave, { type: 'need', category: 'tools', title: 'Need a hand', description: 'Moving day', credits: 2, authorPublicKey: dave.pk, photos: TEST_PHOTOS });
     const needLend = await edit(dave, needMade.body?.post?.id, { lendable: true });
     assert(needMade.status === 200 && needLend.status === 400 && needLend.body?.error === LEND_OFFERS_ONLY, `a Need can't be made lendable by an edit (${brief(needLend)})`);
 

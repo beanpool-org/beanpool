@@ -27,10 +27,12 @@ process.env.ADMIN_PASSWORD = 'KeeperReadOnly123!';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, createPost, createTreasury, getAvailableBacking, transfer,
+    initStateEngine, seedGenesisMember, createPost: rawCreatePost, createTreasury, getAvailableBacking, transfer,
     requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';

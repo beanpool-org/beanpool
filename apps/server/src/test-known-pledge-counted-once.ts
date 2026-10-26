@@ -36,10 +36,12 @@ process.env.ADMIN_PASSWORD = 'KnownPledgeOnce123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import * as se from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, getBalance, getEnterpriseUnderlyingFloor,
+    initStateEngine, transfer, seedGenesisMember, createPost: rawCreatePost, acceptPost, getBalance, getEnterpriseUnderlyingFloor,
     getMemberTrustProfile, adminAssignTreasuryOperator, applyDueKeeperChanges, getCommonsBalanceExact,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';

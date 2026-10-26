@@ -19,12 +19,14 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine, exportSyncState, importRemoteState, setNodeRole,
     createGroup, getGroup, listGroups, joinGroup, removeGroupMember, inviteGroupMember, approveGroupMember,
     handOverGroupLead, getGroupLead,
-    setMemberRole, isGroupMember, getMemberGroupIds, createPost, getPosts, signSyncPayload,
+    setMemberRole, isGroupMember, getMemberGroupIds, createPost: rawCreatePost, getPosts, signSyncPayload,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';

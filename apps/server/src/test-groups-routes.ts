@@ -7,7 +7,9 @@
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { db, initSchema } from './db/db.js';
-import { createPost } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { createPost as rawCreatePost } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { createGroupRoutes } from './routes/groups.js';
 import { setMemberPhoto } from '@beanpool/engine';
 

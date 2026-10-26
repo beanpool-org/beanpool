@@ -35,6 +35,7 @@ import { ledger } from './engine/ledger.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine,
     moveToCommons,
@@ -43,7 +44,7 @@ import {
     conservingTransaction,
     createTreasury,
     adminAssignTreasuryOperator,
-    createPost,
+    createPost: rawCreatePost,
     requestPost,
     approvePostRequest,
     acceptPost,
@@ -56,6 +57,7 @@ import {
     persistCommonsBalance,
     reconcileLedgerFromDb,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {

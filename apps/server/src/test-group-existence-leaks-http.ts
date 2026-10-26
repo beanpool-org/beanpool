@@ -45,10 +45,12 @@ process.env.ADMIN_PASSWORD = 'GroupLeaksHttp123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost, createGroup, joinGroup, inviteGroupMember, removeGroupMember, seedGenesisMember,
+    initStateEngine, transfer, createPost: rawCreatePost, createGroup, joinGroup, inviteGroupMember, removeGroupMember, seedGenesisMember,
     rsvpEvent, createConversation, sendMessage, adminPruneUser,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { postEventThreadMessage } from './engine/event-thread.js';
 import { dueEventReminders } from './engine/event-reminders.js';
 import { eventGoingPubkeys } from './engine/posts.js';
@@ -229,7 +231,7 @@ async function main(): Promise<void> {
         ['POST', '/api/messages/mute', { conversationId: '{G}', duration: '8h' }],
         // Posting into it.
         ['POST', '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Into the circle', description: 'x', credits: 5,
-            priceType: 'fixed', authorPublicKey: '{ME}', audienceScope: 'group', targetGroupId: '{G}' }],
+            priceType: 'fixed', authorPublicKey: '{ME}', audienceScope: 'group', targetGroupId: '{G}', photos: TEST_PHOTOS }],
         ['GET', '/api/marketplace/posts?targetGroupId={G}'],
     ];
     const POST_ROUTES: [string, string, unknown?][] = [

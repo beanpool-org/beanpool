@@ -6,6 +6,7 @@ import {
     CREATE_GROUP_DEFAULTS,
     START_ENTERPRISE_BRIDGE,
     bundledGroupEmblem,
+    AVATAR_PICTURE,
     type GroupCategory,
     type JoinPolicy,
 } from '@beanpool/core';
@@ -55,7 +56,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-            const cropped = await cropper.crop(file, 1);
+            const cropped = await cropper.crop(file, AVATAR_PICTURE);
             if (cropped) {
                 setUserPickedPicture(true);
                 setPicture(cropped);

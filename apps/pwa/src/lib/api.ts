@@ -863,6 +863,7 @@ export interface Conversation {
     unreadCount?: number;
     peerCallsign?: string;
     peerAvatar?: string | null;
+    avatarUrl?: string | null;
     peerLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
     /** The member's mute on this chat (set on the phone), null when not muted. */

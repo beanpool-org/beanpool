@@ -87,7 +87,7 @@ describe('MemberAvatar (native) — no bare initials (Marty addition)', () => {
                 pubkey,
                 callsign: 'Charlie',
                 size: 40,
-            }));
+            }) as any);
         });
 
         // Must NOT render bare initial 'C'
@@ -108,7 +108,7 @@ describe('MemberAvatar (native) — no bare initials (Marty addition)', () => {
                 pubkey,
                 callsign: 'Dana',
                 size: 40,
-            }));
+            }) as any);
         });
 
         const img1 = host.querySelector('img')?.getAttribute('data-source');
@@ -119,7 +119,7 @@ describe('MemberAvatar (native) — no bare initials (Marty addition)', () => {
                 pubkey,
                 callsign: 'Dana',
                 size: 40,
-            }));
+            }) as any);
         });
 
         const img2 = host.querySelector('img')?.getAttribute('data-source');

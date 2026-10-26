@@ -53,7 +53,7 @@ import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { formatDate, listPhotoUrl, removedRunText, t, tn, word, bundledGroupEmblem, type WordKey } from '@beanpool/core';
+import { formatDate, listPhotoUrl, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn } from '../lib/features';
 

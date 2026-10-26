@@ -14,7 +14,7 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { GROUP_CLOSED_NOTE, bundledGroupEmblem, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { usePictureCrop } from './PictureCropDialog';
@@ -102,7 +102,7 @@ export function GroupDetailModal({
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-            const cropped = await cropper.crop(file, 1);
+            const cropped = await cropper.crop(file, AVATAR_PICTURE);
             if (cropped) {
                 await handleChangePicture(cropped);
             }

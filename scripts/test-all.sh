@@ -68,12 +68,14 @@ if [ $FORCE_ALL -eq 0 ] && [ $FAST -eq 0 ]; then
     CHANGED_FILES=$(git diff --name-only "$BASE_REF"... 2>/dev/null; git status --porcelain 2>/dev/null | awk '{print $2}')
     
     if [ -n "$CHANGED_FILES" ]; then
-      echo "$CHANGED_FILES" | grep -q "^packages/beanpool-core/" || HAS_CORE_CHANGES=0
-      echo "$CHANGED_FILES" | grep -q "^packages/beanpool-engine/" || HAS_ENGINE_CHANGES=0
+      # Here-strings, not echo | grep -q: under pipefail a match can end grep before echo has written everything, and the
+      # SIGPIPE would read as "no change here" and skip that package's suites.
+      grep -q "^packages/beanpool-core/" <<<"$CHANGED_FILES" || HAS_CORE_CHANGES=0
+      grep -q "^packages/beanpool-engine/" <<<"$CHANGED_FILES" || HAS_ENGINE_CHANGES=0
       # The sign-in checks in packages/beanpool-signin are the server's: its sso and keeper suites cover them. So is a
       # change to the list of server suites or the runner that runs them.
-      echo "$CHANGED_FILES" | grep -q -E "^(apps/server|packages/beanpool-signin)/|^scripts/(run-)?server-suites\.mjs$" || HAS_SERVER_CHANGES=0
-      echo "$CHANGED_FILES" | grep -q "^apps/native/" || HAS_NATIVE_CHANGES=0
+      grep -q -E "^(apps/server|packages/beanpool-signin)/|^scripts/(run-)?server-suites\.mjs$" <<<"$CHANGED_FILES" || HAS_SERVER_CHANGES=0
+      grep -q "^apps/native/" <<<"$CHANGED_FILES" || HAS_NATIVE_CHANGES=0
     fi
   fi
 fi

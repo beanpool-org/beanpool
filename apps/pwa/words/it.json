@@ -3627,5 +3627,6 @@
   "Photo message": "Messaggio con foto",
   "Full-size photo": "Foto a grandezza naturale",
   "Dismiss full-size photo": "Chiudi foto a grandezza naturale",
-  "Close photo": "Chiudi foto"
+  "Close photo": "Chiudi foto",
+  "It will read \"This message was deleted\" for both of you.": "Comparirà \"Questo messaggio è stato eliminato\" per entrambi."
 }

@@ -3876,5 +3876,6 @@
   "Photo message": "Фотосообщение",
   "Full-size photo": "Полноразмерное фото",
   "Dismiss full-size photo": "Закрыть полноразмерное фото",
-  "Close photo": "Закрыть фото"
+  "Close photo": "Закрыть фото",
+  "It will read \"This message was deleted\" for both of you.": "У обоих отобразится «Это сообщение удалено»."
 }

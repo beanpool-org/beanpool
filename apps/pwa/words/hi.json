@@ -3626,5 +3626,6 @@
   "Photo message": "फ़ोटो संदेश",
   "Full-size photo": "पूर्ण आकार की फ़ोटो",
   "Dismiss full-size photo": "पूर्ण आकार की फ़ोटो हटाएँ",
-  "Close photo": "फ़ोटो बंद करें"
+  "Close photo": "फ़ोटो बंद करें",
+  "It will read \"This message was deleted\" for both of you.": "आप दोनों के लिए \"यह संदेश हटा दिया गया था\" लिखा आएगा।"
 }

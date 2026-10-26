@@ -3501,5 +3501,6 @@
   "Photo message": "사진 메시지",
   "Full-size photo": "원본 사진",
   "Dismiss full-size photo": "사진 닫기",
-  "Close photo": "사진 닫기"
+  "Close photo": "사진 닫기",
+  "It will read \"This message was deleted\" for both of you.": "두 사람 모두에게 \"삭제된 메시지입니다\"라고 표시돼요."
 }

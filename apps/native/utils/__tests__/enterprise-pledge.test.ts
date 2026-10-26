@@ -6,11 +6,17 @@
  *
  * The screens cannot be rendered here (see vitest.config.ts): their wiring is read from their source.
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { pledgeClosedLine } from '../enterprise-pledge';
+import { deadlineDaysRemaining } from '@beanpool/core';
+import { isPastDeadline, pledgeClosedLine } from '../enterprise-pledge';
 import { enterpriseCardStatus } from '../enterprise-card';
+
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const CLOSED = "This project's deadline has passed: it takes no more pledges.";
 
 /** Code only: what a comment says is not what the screen does. */
 const code = (s: string) => s.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -50,8 +56,18 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
         const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
         expect(pledgeClosedLine('active', 'bounded', past)).toBe("This project's deadline has passed: it takes no more pledges.");
 
+        // An hour after the deadline's instant is still its end date: the badge says "Ends today", and pledges are open.
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        expect(pledgeClosedLine('active', 'bounded', oneHourAgo)).toBe("This project's deadline has passed: it takes no more pledges.");
+        expect(pledgeClosedLine('active', 'bounded', oneHourAgo)).toBeNull();
+    });
+
+    it("stays open all through its end date: 23 h 59 m after the deadline's instant open, 24 h after closed", () => {
+        const now = Date.now();
+        const ago = (ms: number) => new Date(now - ms).toISOString();
+        expect(isPastDeadline(ago(DAY - MINUTE), now)).toBe(false);
+        expect(pledgeClosedLine('active', 'bounded', ago(DAY - MINUTE), now)).toBeNull();
+        expect(isPastDeadline(ago(DAY), now)).toBe(true);
+        expect(pledgeClosedLine('active', 'bounded', ago(DAY), now)).toBe(CLOSED);
     });
 });
 
@@ -104,6 +120,23 @@ describe('The Commons card says "Pledge Beans" only while the enterprise takes p
         expect(enterpriseCardStatus({ ...project, deadlineAt: past }).takesPledges).toBe(false);
     });
 
+    describe('closes exactly when the deadline badge says Expired (its number below 0), never before', () => {
+        const NOW = Date.parse('2026-10-26T09:30:00.000Z');
+        afterEach(() => { vi.useRealTimers(); });
+
+        it('the card and the pledge box ask the rule the badge counts with', () => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(NOW);
+            for (let minutes = -3 * 24 * 60; minutes <= 3 * 24 * 60; minutes += 7) {
+                const deadlineAt = new Date(NOW - minutes * MINUTE).toISOString();
+                const expired = deadlineDaysRemaining(deadlineAt) < 0;
+                expect(isPastDeadline(deadlineAt), deadlineAt).toBe(expired);
+                expect(pledgeClosedLine('active', 'bounded', deadlineAt), deadlineAt).toBe(expired ? CLOSED : null);
+                expect(enterpriseCardStatus({ ...project, deadlineAt }).takesPledges, deadlineAt).toBe(!expired);
+            }
+        });
+    });
+
     it('the card shows its Pledge Beans line from takesPledges', () => {
         // The card is its own component (the Commons list and its preview draw the same one: review of #2063, B2).
         const card = code(fs.readFileSync(path.resolve(__dirname, '../../components/EnterpriseCard.tsx'), 'utf-8'));
@@ -111,5 +144,20 @@ describe('The Commons card says "Pledge Beans" only while the enterprise takes p
         expect(card).not.toContain('{hasGoal && !isFunded && (');
         expect(source('(tabs)/projects.tsx')).toContain('const renderEnterpriseItem = ({ item }: { item: TreasurySummary }) => <EnterpriseCard item={item} />;');
         expect(source('(tabs)/projects.tsx')).not.toContain('Pledge Beans');
+    });
+});
+
+describe("The phone's three deadline badges count with core's deadlineDaysRemaining, the pledge gate's own rule", () => {
+    // The card and the Yours row are rendered in enterprise-deadline-badge-render.test.ts; the screen is read here.
+    it.each([
+        ['components/EnterpriseCard.tsx', 'function getDaysRemaining('],
+        ['components/YoursEnterpriseRow.tsx', 'function getDaysRemaining('],
+        ['app/treasury-detail.tsx', 'const getDaysRemaining = ('],
+    ])('%s: no arithmetic of its own', (file, start) => {
+        const badge = slice(code(fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf-8')), start, "tn(days, '{n} days left', '{n} days left')");
+        expect(badge).toContain('const days = deadlineDaysRemaining(deadline);');
+        expect(badge).toContain("if (days < 0) return { text: t('Expired'), expired: true };");
+        expect(badge).toContain("if (days === 0) return { text: t('Ends today'), expired: false };");
+        expect(badge).not.toMatch(/Math\.|getTime\(|Date\.now\(|new Date\(/);
     });
 });

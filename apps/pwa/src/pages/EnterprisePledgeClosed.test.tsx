@@ -115,4 +115,22 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Amount (🫘)')).not.toBeInTheDocument();
     });
+
+    // The badge and the box are one rule, the node's (#2500, its deciding review): a deadline is the chosen day, so on that
+    // day the badge says "Ends today" in the OK colour beside the box, and once it is over "Expired" beside the sentence.
+    it.each([
+        ['an hour after its deadline: "Ends today", and the box', 1, 'Ends today', true],
+        ['23 hours after: "Ends today", and the box', 23, 'Ends today', true],
+        ['25 hours after: "Expired", and the sentence', 25, 'Expired', false],
+    ] as const)('%s', async (_when, hoursAgo, badge, open) => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            ...well('active', 5),
+            deadlineAt: new Date(Date.now() - hoursAgo * 3600 * 1000).toISOString(),
+        } as any);
+        render(<TreasuryDetailPage identity={member} isMember={true} pubkey="enterprise-well-pubkey" onBack={() => {}} />);
+        await screen.findByRole('heading', { level: 1, name: 'Village Well' });
+        expect(screen.getByText(`⏳ ${badge}`).className).toContain(open ? 'bg-bp-chip-ok-tint' : 'bg-bp-chip-danger-tint');
+        expect(screen.queryByRole('button', { name: /Pledge Beans/ }) !== null).toBe(open);
+        expect(screen.queryByText("This project's deadline has passed: it takes no more pledges.") !== null).toBe(!open);
+    });
 });

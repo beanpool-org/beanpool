@@ -170,6 +170,8 @@ async function main(): Promise<void> {
     await bad({ eventPlaceName: 'x'.repeat(81) }, /80 characters/, 'a place name over 80 characters is refused');
     await bad({ eventPrivateNote: 'x'.repeat(1001) }, /1000 characters/, 'a going-note over 1000 characters is refused');
     await bad({ photos: Array(6).fill(PHOTO) }, /at most 5 photos/, 'more than five photos is refused');
+    await bad({ photos: [] }, /Add a photo first/, 'an event without photos is refused');
+    await bad({ lat: undefined, lng: undefined, photos: [] }, /needs a place on the map/, 'coordinates error precedes photos');
     const noTitle = await signedFetch('POST', eventPath, event({ title: '' }), keeper);
     assert(noTitle.status === 400 && /title is required/.test(noTitle.error ?? ''),
         `an event with no title is refused (got ${noTitle.status} "${noTitle.error ?? ''}")`);

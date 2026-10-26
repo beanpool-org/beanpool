@@ -168,12 +168,13 @@ test('now global is open, the page tells newcomers how to find it on the first s
     assert.doesNotMatch(HTML, /<!-- OPEN-GLOBAL/);
 });
 
-test('carries the apple-itunes-app smart banner meta for Safari with the global link app-argument', () => {
+test('while IOS_OPEN_DOOR_LIVE is false, carries no apple-itunes-app meta tag (S14 flips both)', () => {
     const meta = MARKUP.match(/<meta\s+name="apple-itunes-app"\s+content="([^"]*)"/i);
-    assert.ok(meta, 'apple-itunes-app meta tag');
-    const content = meta[1];
-    assert.match(content, /\bapp-id=6761870086\b/);
-    assert.match(content, /\bapp-argument=https:\/\/beanpool\.org\/global\b/);
+    assert.equal(meta, null, 'no apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false');
+});
+
+test('defines IOS_OPEN_DOOR_LIVE = false constant in script', () => {
+    assert.match(SCRIPT, /\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*false\b/);
 });
 
 test('Android: the app by its link, beanpool.org/global, else Google Play with the referrer; once, on arrival at beanpool.org', () => {
@@ -208,13 +209,13 @@ test('Android inside an app\'s web view: Google Play, never an intent link it ma
     assert.ok(els.get('play').classList.contains('btn-primary'));
 });
 
-test('iPhone and iPad: the App Store, once, on arrival at beanpool.org', () => {
+test('iPhone and iPad: while IOS_OPEN_DOOR_LIVE is false, browser line first and no redirect to store', () => {
     for (const who of [{ ua: UA.iphone }, { ua: UA.mac, touch: true }]) {
         const { els, went } = visit(who);
-        assert.deepEqual(went, [['href', APP_STORE]], who.ua);
+        assert.deepEqual(went, [], who.ua + ' must not redirect to App Store while iOS door is not live');
         assert.equal(els.get('door-play').hidden, true);
         assert.equal(els.get('door-ios').hidden, false);
-        assert.ok(els.get('app-store').classList.contains('btn-primary'));
+        assert.ok(!els.get('app-store').classList.contains('btn-primary'), 'App Store is ghost, not primary');
         assert.equal(els.get('browser').hidden, false);
         assert.deepEqual(visit({ ...who, arrival: 'back_forward' }).went, []);
     }

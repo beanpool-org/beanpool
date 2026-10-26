@@ -33,6 +33,10 @@ function isInternalHref(href) {
     if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) {
         return false;
     }
+    // API routes are served by the registrar / backend worker, not static website files
+    if (href.startsWith('/api/') || /^https?:\/\/beanpool\.org\/api\//i.test(href)) {
+        return false;
+    }
     if (/^https?:\/\/beanpool\.org(?:\/|$)/i.test(href)) {
         return true;
     }

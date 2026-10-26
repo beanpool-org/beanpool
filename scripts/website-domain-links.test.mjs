@@ -37,12 +37,12 @@ function isPlaceholder(domain, text, index) {
     return false;
 }
 
-test('door 1 on the home page points to /global', () => {
+test('door 1 on the home page points to relative global', () => {
     const html = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
     const clean = html.replace(/<!--[\s\S]*?-->/g, '');
     const door1Match = clean.match(/<div\s+class="hero-door">[\s\S]*?<a\s+href="([^"]+)"\s+class="btn\s+btn-primary\s+font-header">Try it now, worldwide<\/a>/);
     assert.ok(door1Match, 'door 1 button exists in hero-door');
-    assert.equal(door1Match[1], '/global', 'door 1 href must be /global');
+    assert.equal(door1Match[1], 'global', 'door 1 href must be global');
 });
 
 test('no English page says "private preview", "opens to everyone soon", or "comes soon" about global', () => {
@@ -96,11 +96,8 @@ test('every domain name in visible text across English pages is a hyperlink', ()
     }
 });
 
-test('global.html carries apple-itunes-app meta tag for Safari', () => {
+test('global.html carries NO apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false (S14 flips both)', () => {
     const html = fs.readFileSync(path.join(SITE, 'global.html'), 'utf8');
     const metaMatch = html.match(/<meta\s+name="apple-itunes-app"\s+content="([^"]*)"/i);
-    assert.ok(metaMatch, 'global.html has apple-itunes-app meta tag');
-    const content = metaMatch[1];
-    assert.match(content, /\bapp-id=6761870086\b/);
-    assert.match(content, /\bapp-argument=https:\/\/beanpool\.org\/global\b/);
+    assert.equal(metaMatch, null, 'global.html must not carry apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false');
 });

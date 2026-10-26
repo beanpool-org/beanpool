@@ -62,7 +62,8 @@ export const TRANSLATED_PAGES = Object.freeze([
     'post-extraction.html',
     'rules.html',
     'safety.html',
-    'status.html'
+    'status.html',
+    '404.html'
 ]);
 
 /** Legal pages on the website: banner mechanism built, but translations deferred until lawyer's text is final. */
@@ -441,14 +442,22 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
 
     // Rewrite any links that point to the English root for pages that are translated
     // e.g. href="../rules.html" inside a translated page should be href="rules.html"
-    // Also rewrite root-relative links like href="/global" to href="global.html"
+    // Also rewrite root-relative links: Door 1 is href="global" in every copy
     for (const trPage of TRANSLATED_PAGES) {
         const re = new RegExp(`\\bhref="\\.\\./${trPage}(#[^"]*)?"`, 'g');
         out = out.replace(re, `href="${trPage}$1"`);
         const base = trPage.replace(/\.html$/, '');
         const rootRe = new RegExp(`\\bhref="/(?:${trPage}|${base})(#[^"]*)?"`, 'g');
-        out = out.replace(rootRe, `href="${trPage}$1"`);
+        const replacement = base === 'global' ? 'global' : trPage;
+        out = out.replace(rootRe, `href="${replacement}$1"`);
     }
+
+    // (b) on the 24 copies, the browser link is https://global.beanpool.org/?lang=<lang> and the Play link carries &hl=<lang>
+    out = out.replace(/\bhref="https:\/\/global\.beanpool\.org(\/)?(?:\?lang=[^"&]*)?"/g, `href="https://global.beanpool.org/?lang=${lang}"`);
+    out = out.replace(/\bhref="https:\/\/play\.google\.com\/store\/apps\/details\?([^"]*)"/g, (match, query) => {
+        let cleanQuery = query.replace(/&(?:amp;)?hl=[a-zA-Z-]+/g, '');
+        return `href="https://play.google.com/store/apps/details?${cleanQuery}&amp;hl=${lang}"`;
+    });
 
     // 5. Insert hreflang tags
     const hreflangBlock = buildHreflangTags(page);
@@ -676,6 +685,17 @@ export function checkWebsite() {
                 }
             }
 
+            // S0 amendment (a): build check that no /<lang>/ page links /global
+            if (/\bhref=["']\/global(?:\.html)?(?:#[^"']*)?["']/i.test(actualHtml)) {
+                errors.push(`apps/website/${lang}/${page} links /global instead of relative global`);
+            }
+
+            // S0 amendment (b): verify that visible global.beanpool.org link carries ?lang=<lang>
+            const cleanVisible = actualHtml.replace(/<!--[\s\S]*?-->/g, '');
+            if (cleanVisible.includes('https://global.beanpool.org') && !cleanVisible.includes(`https://global.beanpool.org/?lang=${lang}`)) {
+                errors.push(`apps/website/${lang}/${page} has global.beanpool.org link without ?lang=${lang}`);
+            }
+
             // Verify translated pages link to the guide page in their language when guide/<lang>/<slug> exists
             const guideLinks = actualHtml.matchAll(/href=["'](?:\.\.\/)+guide\/([^"'\s#?]+)[^"']*["']/gi);
             for (const gMatch of guideLinks) {
@@ -803,9 +823,20 @@ if (process.argv[1] === __filename) {
     } else if (args[0] === '--mark-current') {
         const lang = args[1];
         const page = args[2];
-        if (!lang || !page) {
-            console.error('Usage: node scripts/website-build.mjs --mark-current <lang> <page>');
-            process.exit(1);
+        if (!lang) {
+            for (const l of GUIDE_LANGS) {
+                for (const p of TRANSLATED_PAGES) {
+                    try { markCurrent(l, p); } catch (e) {}
+                }
+            }
+            console.log('✓ Marked all translations current.');
+            process.exit(0);
+        } else if (!page) {
+            for (const p of TRANSLATED_PAGES) {
+                try { markCurrent(lang, p); } catch (e) {}
+            }
+            console.log(`✓ Marked all ${lang} translations current.`);
+            process.exit(0);
         }
         try {
             const hash = markCurrent(lang, page);

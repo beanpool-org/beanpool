@@ -23,11 +23,16 @@ expect() {
   local out rc
   out=$("$@" 2>&1); rc=$?
   if [ "$rc" != "$want" ]; then bad "$desc (exit $rc, wanted $want)"; echo "$out" | tail -15 | sed 's/^/      /'; return; fi
-  if [ -n "$pattern" ] && ! printf '%s\n' "$out" | grep -qF -- "$pattern"; then
+  # A here-string, not printf | grep -q: under pipefail, grep -q exits at the first match and printf's write fails with
+  # SIGPIPE, so a large output that DOES contain the pattern reads as missing (CI, #2483, 26 Oct).
+  if [ -n "$pattern" ] && ! grep -qF -- "$pattern" <<<"$out"; then
     bad "$desc (output lacks: $pattern)"; echo "$out" | tail -15 | sed 's/^/      /'; return
   fi
   ok "$desc"
 }
+
+# expect() itself: a pattern near the top of a large output is found (piped into grep -q under pipefail it was not)
+expect 0 "expect: finds a pattern near the top of a 200,000-line output" "17" -- seq 1 200000
 
 # ── suite-count-line.mjs: the NO-COUNT guard of run-server-suites.mjs ─────────────────────────────────────────────
 # counted <want 0=counted, 1=not> <description> <log, with \n for newlines>

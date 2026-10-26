@@ -11,6 +11,7 @@ import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
 import { VISITOR_WORDS, visitorDistanceText, visitorKmText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
+import { CategoryTile } from './CategoryTile';
 import { listPhotoUrl, t } from '@beanpool/core';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
@@ -63,10 +64,10 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
             aria-label={visitorCardName(post, beans, distanceKm)}
             className="self-start w-full min-w-0 text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 shadow-sm flex flex-row gap-3 cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
         >
-            <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-nature-100 dark:bg-nature-800 flex items-center justify-center">
+            <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
                 {photo
                     ? <img src={listPhotoUrl(photo)} alt="" className="w-full h-full object-cover" />
-                    : <span className="text-3xl" aria-hidden="true">{cat?.emoji ?? '📦'}</span>}
+                    : <CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />}
             </span>
             <span className="flex-1 min-w-0 flex flex-col gap-1">
                 <span className="font-extrabold text-base leading-snug text-nature-950 dark:text-white break-words">{post.title}</span>
@@ -133,6 +134,11 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                         )}
                     </div>
                     <div className="p-4">
+                        {photos.length === 0 && (
+                            <div className="w-full aspect-[3/1] rounded-xl overflow-hidden mb-3">
+                                <CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="banner" />
+                            </div>
+                        )}
                         <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight break-words">{post.title}</h2>
 
                         {photos.length > 0 && (

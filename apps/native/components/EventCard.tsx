@@ -15,6 +15,7 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'rea
 import { Image } from 'expo-image';
 import { listPhotoUrl, t } from '@beanpool/core';
 import { router } from 'expo-router';
+import { CategoryTile } from './CategoryTile';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
@@ -146,8 +147,8 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
               * card's own Pressable and has no onPress of its own, so it never becomes a second tap target.
               * Without a photo the card is exactly the stack it has always been.
               */}
-            <View style={photo ? styles.photoRow : undefined}>
-                {photo && (
+            <View style={styles.photoRow}>
+                {photo ? (
                     <Image
                         source={{ uri: listPhotoUrl(photo) }}
                         style={styles.photo}
@@ -156,8 +157,12 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                         cachePolicy="memory-disk"
                         transition={150}
                     />
+                ) : (
+                    <View style={[styles.photo, { overflow: 'hidden' }]}>
+                        <CategoryTile kind="event" size="thumb" />
+                    </View>
                 )}
-                <View style={photo ? styles.photoRowText : undefined}>
+                <View style={styles.photoRowText}>
                     <View style={styles.whenRow}>
                         {badge && (
                             <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>

@@ -3,7 +3,7 @@ slug: learn
 title: Spazio Impara
 summary: Brevi video su BeanPool e le relative pagine della guida a cui fanno riferimento.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Cosa contiene
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Sul telefono, apri il **Polso** e tocca **Impara**. Nell'app web, apri il Polso e tocca **Come funziona** in alto. Contiene:
 
 - video di BeanPool su come funziona;
-- la **Riflessione del giorno**, un breve pensiero che cambia ogni mattina. È solo un titolo; non c'è nulla da aprire.
+- la **Riflessione del giorno**, un breve pensiero che cambia ogni mattina. Toccalo per aprire la riflessione del giorno.
 
 I membri possono anche aggiungere i propri canali guida a Impara, scegliendo l'argomento **Come funziona** quando aggiungono un canale. Quei video appartengono ai membri, non a BeanPool: controlla chi ha pubblicato un video prima di seguirne i consigli.
 

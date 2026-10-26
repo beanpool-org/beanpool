@@ -893,6 +893,7 @@
   "Camera Unavailable": "Kamera Tidak Tersedia",
   "Could not launch camera.": "Tidak dapat membuka kamera.",
   "Gallery": "Galeri",
+  "Browse files": "Jelajahi file",
   "Offer": "Penawaran",
   "Need": "Permintaan",
   "● DAILY PULSE": "● KABAR HARIAN",
@@ -5872,5 +5873,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} percobaan, {ms} ms per percobaan ({expected} diperkirakan rata-rata)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” sudah terpasang, tetapi tidak ada di tokomu. Untuk memasukkannya, buka, ketuk Edit Postingan, lalu centang Masukkan ini ke tokomu.",
   "✓ Friend": "✓ Teman",
-  "✓ nonce issued": "✓ nonce diterbitkan"
+  "✓ nonce issued": "✓ nonce diterbitkan",
+  "Failed to load": "Gagal memuat"
 }

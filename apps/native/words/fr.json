@@ -941,6 +941,7 @@
   "Camera Unavailable": "Appareil photo indisponible",
   "Could not launch camera.": "Impossible d'ouvrir l'appareil photo.",
   "Gallery": "Galerie",
+  "Browse files": "Parcourir les fichiers",
   "Offer": "Offre",
   "Need": "Demande",
   "● DAILY PULSE": "● POULS DU JOUR",
@@ -6111,5 +6112,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} essais, {ms} ms par essai ({expected} attendus en moyenne)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "« {title} » est publiée, mais pas dans votre boutique. Pour l'y mettre, ouvrez-la, touchez Modifier l'annonce et cochez Mettre ceci dans votre boutique.",
   "✓ Friend": "✓ Ami",
-  "✓ nonce issued": "✓ nonce émis"
+  "✓ nonce issued": "✓ nonce émis",
+  "Failed to load": "Échec du chargement"
 }

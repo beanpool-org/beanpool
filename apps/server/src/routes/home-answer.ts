@@ -62,7 +62,7 @@
  */
 import {
     PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
-    HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
+    HOME_FRAME_LIMITS, dealsNeedingMe, openDeals as coreOpenDeals, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
     type TourRecord,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
@@ -517,13 +517,9 @@ const muted = (mute: { mutedUntil: string | null; always?: boolean } | null | un
 
 /** The signer's open marketplace trades (requested or in progress), newest first: the deals card's and the needs line's. */
 function openDeals(me: string) {
-    return [...getMarketplaceTransactions(me, { status: 'requested' }, 200), ...getMarketplaceTransactions(me, { status: 'pending' }, 200)]
-        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const raw = [...getMarketplaceTransactions(me, { status: 'requested' }, 200), ...getMarketplaceTransactions(me, { status: 'pending' }, 200)];
+    return coreOpenDeals(raw, me);
 }
-
-/** A step that is the member's to take: accept a request made to them, or finish a deal in progress (needs-you.ts dealsWaiting). */
-const waitsOn = (t: { status: string; buyerPublicKey: string; sellerPublicKey: string }, me: string) =>
-    (t.status === 'requested' && t.sellerPublicKey === me) || (t.status === 'pending' && (t.buyerPublicKey === me || t.sellerPublicKey === me));
 
 /**
  * The enterprise keepers' votes the member is on the roll of (decisions-engine openScopedDecisionsFor), never counted for
@@ -559,7 +555,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
 
     // H0b: the signer's own trades, where escrow is on.
     if (c.switches.escrow) {
-        const deals = openDeals(me).filter(t => waitsOn(t, me));
+        const deals = dealsNeedingMe(openDeals(me), me, c.now);
         if (deals.length) {
             const [first] = deals;
             items.push({
@@ -701,18 +697,19 @@ function dealsCard(c: Ctx): HomeCards['deals'] | undefined {
     const me = c.me!;
     const open = openDeals(me);
     if (!open.length) return undefined;
-    const waiting = open.filter(t => waitsOn(t, me));
+    const waiting = dealsNeedingMe(open, me, c.now);
+    const waitingSet = new Set(waiting.map(t => t.id));
     const first = waiting[0];
     // W3 (§2): the rows, the ones waiting on the signer first, then the newest. Each is the signer's own trade
     // (getMarketplaceTransactions reads only theirs), so the other party's name is one a party of the deal reads.
-    const items = [...waiting, ...open.filter(t => !waitsOn(t, me))]
+    const items = [...waiting, ...open.filter(t => !waitingSet.has(t.id))]
         .filter(t => !!bounded(t.id, ID_CHARS) && !!bounded(t.postId, ID_CHARS))
         .slice(0, DEAL_ITEMS)
         .map((t): DealItem => {
             const other = t.buyerPublicKey === me ? t.sellerCallsign : t.buyerCallsign;
             return {
                 txId: t.id, postId: t.postId, title: clip(t.postTitle ?? '', TITLE_CHARS), with: other ? clip(other, NAME_CHARS) : null,
-                waitsOnMe: waitsOn(t, me), at: bounded(t.createdAt, ID_CHARS),
+                waitsOnMe: waitingSet.has(t.id), at: bounded(t.createdAt, ID_CHARS),
             };
         });
     // A deal whose listing row is gone has no title (the read's LEFT JOIN): an empty one, never the card lost to a throw.

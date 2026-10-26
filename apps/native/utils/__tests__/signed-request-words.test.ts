@@ -149,8 +149,9 @@ describe('the screens that show them pass the message through the table (read fr
         // What is left raw: the trade gate reading the message (worded on its way out, above), and the camera's own words.
         expect(rawLines(src)).toEqual([
             "const raw = String(e?.message || e || t('Something went wrong'));",
-            "Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));",
         ]);
+        // The camera's own words moved with the photo sheet into utils/post-photo.ts (#2512), still given as the camera says them.
+        expect(source('utils/post-photo.ts')).toContain("Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'))");
         expect((src.match(/signedRequestWords\(/g) ?? []).length).toBeGreaterThanOrEqual(15);
     });
 

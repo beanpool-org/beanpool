@@ -13,6 +13,7 @@ import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type Ma
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { formatNumber, listPhotoUrl, t } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { CategoryTile } from './CategoryTile';
 
 /** A listing's type on its badge (the badge's `uppercase` class puts it in capitals); a type this build doesn't know, as written. */
 function typeWords(type: string): string {
@@ -122,8 +123,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 className={`bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl px-4 py-2.5 shadow-sm cursor-pointer transition-all duration-300 hover:shadow-md flex flex-row items-center justify-between w-full relative overflow-hidden ${elderStyleList}`}
             >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Compact Category Emoji */}
-                    <span className="text-xl flex-shrink-0">{emoji}</span>
+                    {/* Compact Category Picture / Tile */}
+                    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                        {hasPhoto ? (
+                            <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
+                        ) : (
+                            <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
+                        )}
+                    </div>
                     
                     {/* Title and Author */}
                     <div className="flex-1 min-w-0">
@@ -218,9 +225,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
                         </button>
                     ) : (
-                        <div className="w-full h-full bg-oat-50 dark:bg-nature-800 flex justify-center items-center">
-                            <span className="text-2xl opacity-40">{emoji}</span>
-                        </div>
+                        <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                     )}
                 </div>
                 
@@ -425,8 +430,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     )}
                 </div>
             ) : (
-                <div className={`relative w-full rounded-xl bg-oat-50 dark:bg-nature-900 flex items-center justify-center shadow-inner h-[110px] mb-3`}>
-                    <span className={`text-3xl opacity-20`}>{emoji}</span>
+                <div className={`relative w-full rounded-xl overflow-hidden shadow-inner h-[110px] mb-3`}>
+                    <CategoryTile
+                        category={post.category}
+                        kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
+                        size="grid"
+                    />
 
                     {/* Status Overlays */}
                     <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>

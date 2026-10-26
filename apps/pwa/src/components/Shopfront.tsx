@@ -14,6 +14,7 @@ import { formatCount, listPhotoUrl, t, type ShopCategory } from '@beanpool/core'
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { Sentence } from './Sentence';
+import { CategoryTile } from './CategoryTile';
 import {
     categoryEmoji, categoryLabel, keeperBadgeLine, keeperRoleWord, listingPriceLine, listingStateLine,
     type ShopfrontKeeper, type ShopfrontListing, type ShopSection,
@@ -68,7 +69,9 @@ export function ShopfrontHeader({ name, logoUrl, bannerUrl, category, fallbackEm
             >
                 {showBanner ? (
                     <img data-testid="shopfront-banner-photo" src={banner!} alt="" onError={() => setBannerFailed(banner)} className="w-full h-full object-cover" />
-                ) : (category ? categoryEmoji(category) : fallbackEmoji)}
+                ) : (
+                    <CategoryTile category={category} size="banner" />
+                )}
             </div>
             <div data-testid="shopfront-logo" className="-mt-8 ml-3 w-[4.5rem] h-[4.5rem] rounded-full border-4 border-white dark:border-nature-950 bg-white dark:bg-nature-950 overflow-hidden relative">
                 {showLogo ? (
@@ -166,13 +169,17 @@ export function ShopfrontText({ title, text, boxed, lines = 4, testID }: { title
     );
 }
 
-/** A listing's picture: its own photo (the node's small copy), or its category's emoji on a quiet ground. */
-function ListingPicture({ l, className, emojiClass }: { l: ShopfrontListing; className: string; emojiClass: string }) {
+/** A listing's picture: its own photo (the node's small copy), or its category tile. */
+function ListingPicture({ l, className, size = 'thumb' }: { l: ShopfrontListing; className: string; emojiClass?: string; size?: 'grid' | 'thumb' }) {
     const [failed, setFailed] = useState(false);
     const url = l.photo && !failed ? resolveAvatarUrl(listPhotoUrl(l.photo)) : null;
     return (
         <span className={`${className} bg-nature-100 dark:bg-nature-800 flex items-center justify-center overflow-hidden`} aria-hidden="true">
-            {url ? <img src={url} alt="" onError={() => setFailed(true)} className="w-full h-full object-cover" /> : <span className={emojiClass}>{categoryEmoji(l.category)}</span>}
+            {url ? (
+                <img src={url} alt="" onError={() => setFailed(true)} className="w-full h-full object-cover" />
+            ) : (
+                <CategoryTile category={l.category} size={size} />
+            )}
         </span>
     );
 }
@@ -196,7 +203,7 @@ export function ShopfrontFeatured({ listings, showsBeans, onOpen }: { listings: 
                             aria-label={price ? t('{title}, {price}', { title: l.title, price }) : l.title}
                             className="min-w-0 p-0 flex flex-col justify-start text-left rounded-xl overflow-hidden bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 cursor-pointer hover:border-nature-400 dark:hover:border-nature-600 transition-colors"
                         >
-                            <ListingPicture l={l} className="block w-full aspect-square" emojiClass="text-4xl" />
+                            <ListingPicture l={l} className="block w-full aspect-square" size="grid" />
                             <span className="block p-2">
                                 <span className="block text-sm font-bold leading-snug text-nature-900 dark:text-white line-clamp-2 break-words">{l.title}</span>
                                 {price && <span className="block text-sm font-extrabold text-bp-ink-brand mt-0.5">{price}</span>}
@@ -260,7 +267,7 @@ export function ShopfrontSections({ sections, showsBeans, empty, note, onOpen }:
                                             disabled={!onOpen}
                                             className="w-full min-h-[56px] py-1.5 flex items-center gap-2.5 text-left bg-transparent border-none cursor-pointer rounded-lg hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors"
                                         >
-                                            <ListingPicture l={l} className="w-12 h-12 shrink-0 rounded-lg" emojiClass="text-2xl" />
+                                            <ListingPicture l={l} className="w-12 h-12 shrink-0 rounded-lg" size="thumb" />
                                             <span className="flex-1 min-w-0">
                                                 <span className="block text-sm font-semibold text-nature-900 dark:text-white line-clamp-2 break-words">{l.title}</span>
                                                 {lines.length > 0 && (

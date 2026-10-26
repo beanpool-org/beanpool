@@ -941,6 +941,7 @@
   "Camera Unavailable": "Fotocamera non disponibile",
   "Could not launch camera.": "Impossibile avviare la fotocamera.",
   "Gallery": "Galleria",
+  "Browse files": "Sfoglia file",
   "Offer": "Offerta",
   "Need": "Richiesta",
   "● DAILY PULSE": "● NOTIZIE DEL GIORNO",
@@ -6111,5 +6112,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} tentativi, {ms} ms a tentativo ({expected} previsti in media)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” è online, ma non nel tuo negozio. Per metterlo dentro, aprilo, tocca Modifica annuncio e spunta Metti questo nel tuo negozio.",
   "✓ Friend": "✓ Amico",
-  "✓ nonce issued": "✓ nonce emesso"
+  "✓ nonce issued": "✓ nonce emesso",
+  "Failed to load": "Caricamento non riuscito"
 }

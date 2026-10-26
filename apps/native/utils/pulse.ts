@@ -26,6 +26,8 @@ export interface PulseFeedItem {
     publishedAt: string | null;
     source: string;
     isVerified: boolean;
+    external_id?: string | null;
+    channel_id?: string | null;
 }
 
 /**
@@ -338,6 +340,43 @@ export const PULSE_REPORT_REASONS = REPORT_REASONS;
 /** A signed-in member can report an item that is not theirs. Fixture items are not on any node. */
 export function canReportPulseItem(item: PulseFeedItem, currentPubkey?: string | null): boolean {
     return Boolean(currentPubkey && item.ownerPubkey && item.ownerPubkey !== currentPubkey && !item.id.startsWith('item_fix_'));
+}
+
+export interface DailyPulseReflection {
+    date: string;
+    headline: string;
+    body: string;
+}
+
+/**
+ * Fetches the day's reflection from GET /api/pulse/daily.
+ */
+export async function fetchDailyPulse(date?: string): Promise<DailyPulseReflection> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const path = `/api/pulse/daily${query}`;
+    try {
+        const { signedGet } = await import('./db');
+        const res = await signedGet(path);
+        if (!res.ok) {
+            throw new Error(`Failed to load Daily Pulse (${res.status})`);
+        }
+        return await res.json();
+    } catch (e: any) {
+        // If signedGet succeeded in reaching the server and returned an HTTP error, do not retry unauthenticated
+        if (e?.message?.includes('Failed to load Daily Pulse')) {
+            throw e;
+        }
+        // Fallback for environments without AsyncStorage / db (like standalone tests)
+        const url = await anchorUrl().catch(() => null);
+        if (!url) throw e;
+        const res = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
+            headers: { 'Accept': 'application/json' },
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to load Daily Pulse (${res.status})`);
+        }
+        return await res.json();
+    }
 }
 
 /**

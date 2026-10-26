@@ -293,6 +293,7 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         expect(host.textContent).toContain('Where should the market go?');
         expect(host.textContent).toContain('Repair café');
         expect(byTestId('page-title-market')).not.toBeNull();
+        expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
         expect(bracketed()).toBeGreaterThan(30);
         expect(bypassing()).toEqual([]);
     });
@@ -301,8 +302,10 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         await renderIn('xx');
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Grid view')}"]`), 'the view toggle');
         expect(byTestId('grid-badge-row')).not.toBeNull();
+        expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
         expect(bypassing()).toEqual([]);
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Compact view')}"]`), 'the view toggle, again');
+        expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
         expect(host.textContent).toContain('Kofi');
         expect(bypassing()).toEqual([]);
     });

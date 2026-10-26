@@ -941,6 +941,7 @@
   "Camera Unavailable": "Kamera Haipatikani",
   "Could not launch camera.": "Haikuweza kufungua kamera.",
   "Gallery": "Matunzio",
+  "Browse files": "Vinjari faili",
   "Offer": "Ofa",
   "Need": "Hitaji",
   "● DAILY PULSE": "● MAPIGO YA KILA SIKU",
@@ -6111,5 +6112,6 @@
   "In two weeks": "Baada ya wiki mbili",
   "In a month": "Baada ya mwezi",
   "Remove community?": "Ondoa jumuiya?",
-  "Remove {name} from your saved list?": "Kumwondoa {name} kwenye orodha yako uliyohifadhi?"
+  "Remove {name} from your saved list?": "Kumwondoa {name} kwenye orodha yako uliyohifadhi?",
+  "Failed to load": "Imeshindwa kupakia"
 }

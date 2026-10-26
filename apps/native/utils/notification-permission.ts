@@ -134,6 +134,27 @@ async function registerPushToken(publicKey?: string | null): Promise<void> {
     }
 }
 
+/**
+ * Registers this phone's push token for the account each time the phone is seen to allow notifications when it didn't
+ * at the last look: at start (Android 8–12, or a restored account on a phone that already allowed them) and on each
+ * return to the app (app/_layout.tsx), so a member who turned them on in the phone's settings (Turn on → Open Settings →
+ * allow → back) is registered then, not at the next cold start (#2524 deciding review). Never asks. Resolves whether it
+ * registered.
+ */
+export function registerWhenNotificationsAllowed(
+    publicKey: string,
+    read: () => Promise<OsNotificationPermission> = readOsNotificationPermission,
+): () => Promise<boolean> {
+    let allowed = false;
+    return async () => {
+        const now = (await read()).granted;
+        const turnedOn = now && !allowed;
+        allowed = now;
+        if (turnedOn) await registerPushToken(publicKey);
+        return turnedOn;
+    };
+}
+
 export type TurnOnResult = 'granted' | 'declined' | 'settings';
 
 export interface TurnOnOptions {

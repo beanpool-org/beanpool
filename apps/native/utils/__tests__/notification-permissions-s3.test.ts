@@ -72,6 +72,7 @@ import {
     declineNotifications,
     askNotificationPermissionOnAction,
     NOTIFICATIONS_OFF_IN_SETTINGS,
+    registerWhenNotificationsAllowed,
     type NotificationPermissionRecord,
 } from '../notification-permission';
 
@@ -463,6 +464,45 @@ describe('S3: notification permission at the tap, never at account creation', ()
         it('neither card shows where expo-notifications cannot load: there is nothing to turn on', () => {
             expect(home).toContain('setVisible(os.available && shouldShowNotificationCard(record, os.granted))');
             expect(welcome).toContain('setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted))');
+        });
+    });
+
+    // #2524 deciding review: Turn on → Open Settings → allow → back hid the card but registered no token until the next
+    // cold start.
+    describe('a phone that starts allowing notifications registers when the member comes back', () => {
+        const allows = (granted: boolean) => async () => ({ available: true, granted, canAskAgain: !granted });
+
+        it('registers at start when the phone already allows them, and not again while it still does', async () => {
+            const registerIfAllowed = registerWhenNotificationsAllowed('member-key', allows(true));
+            expect(await registerIfAllowed()).toBe(true);
+            expect(await registerIfAllowed()).toBe(false);
+            await vi.waitFor(() => expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledTimes(1));
+            expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledWith('member-key');
+        });
+
+        it('registers on the return after the phone settings turned them on; nothing while they are off', async () => {
+            let granted = false;
+            const registerIfAllowed = registerWhenNotificationsAllowed('member-key', () => allows(granted)());
+            expect(await registerIfAllowed()).toBe(false);
+            expect(await registerIfAllowed()).toBe(false);
+            expect(pushServiceMock.registerForPushNotifications).not.toHaveBeenCalled();
+            granted = true; // allowed in the phone's settings, then back to BeanPool
+            expect(await registerIfAllowed()).toBe(true);
+            await vi.waitFor(() => expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledTimes(1));
+            granted = false; // off again, then on again: registered again
+            expect(await registerIfAllowed()).toBe(false);
+            granted = true;
+            expect(await registerIfAllowed()).toBe(true);
+            await vi.waitFor(() => expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledTimes(2));
+            expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+        });
+
+        it('_layout.tsx looks again each time the app comes back, for the account on the phone', () => {
+            const layoutSource = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf8');
+            const effect = layoutSource.slice(layoutSource.indexOf('registerWhenNotificationsAllowed(identity.publicKey)'));
+            expect(effect.length).toBeLessThan(layoutSource.length);
+            expect(effect.slice(0, 400)).toMatch(/AppState\.addEventListener\('change', \(next\) => \{\s*if \(next === 'active'\) void registerIfAllowed\(\);/);
+            expect(effect.slice(0, 400)).toContain('return () => sub.remove();');
         });
     });
 

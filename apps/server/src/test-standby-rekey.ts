@@ -277,11 +277,12 @@ async function child(): Promise<void> {
         'social-setup': async (a: { owner: string; members: string[]; friend: string }) => {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
+            const { TEST_PHOTOS } = await import('./post-test-helper.js');
             // A photo, which posting asks of its author.
             setMemberPhoto(db, a.owner, 'data:image/png;base64,iVBORw0KGgo=');
             const kept = se.createGroup({ name: 'Garden', createdBy: a.owner, joinPolicy: 'open' });
             const left = se.createGroup({ name: 'Choir', createdBy: a.owner, joinPolicy: 'open' });
-            const event = se.createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', a.owner, -28.55, 153.5, [], false, undefined, false,
+            const event = se.createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', a.owner, -28.55, 153.5, TEST_PHOTOS, false, undefined, false,
                 { eventStartAt: new Date(Date.now() + DAY_MS).toISOString(), eventPlaceName: 'The old bowls club', eventPrivateNote: 'Gate code 1234' });
             if (!event) throw new Error('no event');
             for (const pk of [...a.members, a.friend]) {

@@ -526,6 +526,7 @@ async function main(): Promise<void> {
         for (const who of [gwen, cy, nia]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string) => {
             const tx = built(`${buyer.name} asks for ${seller.name}'s listing`, await S_(buyer, '/api/marketplace/posts/request', { postId, buyerPublicKey: buyer.pk })).transaction;
@@ -541,10 +542,10 @@ async function main(): Promise<void> {
         built('Kip pledges backing to Probe Co (its credit floor, to hire with)', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 2 }));
         // Probe Co hiring its own keeper while it holds nothing: refused, and the wage is owed (engine/escrow.ts isPayeeKeeper).
         const bikeCheck = built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', repeatable: true,
+            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', repeatable: true, photos: [TINY_PNG],
         }));
         const job = built('and a job it needs done', await S_(cy, `/api/treasury/${probe.publicKey}/need`, {
-            title: 'Workshop tidy', description: 'Sort the parts bins', credits: 2, category: 'tools',
+            title: 'Workshop tidy', description: 'Sort the parts bins', credits: 2, category: 'tools', photos: [TINY_PNG],
         }));
         const bid = built('Kip offers to do it', await S_(kip, '/api/marketplace/posts/request', { postId: (job.post ?? job).id, buyerPublicKey: kip.pk })).transaction;
         const wage = await S_(cy, `/api/treasury/${probe.publicKey}/approve`, { transactionId: bid.id });

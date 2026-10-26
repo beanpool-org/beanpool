@@ -217,6 +217,7 @@ async function main(): Promise<void> {
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             built('Bo offers eggs on M after its restart', await As(bo, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title: 'Eggs', description: 'Eggs', credits: 2, priceType: 'fixed', authorPublicKey: bo.pk,
+                photos: [TINY_PNG],
             }));
             const d4 = await standby.send('pull', {});
             assert(d4.ok === true && d4.mode === 'delta', `within the interval, the next pull is a delta, and it lands (${JSON.stringify(d4)})`);

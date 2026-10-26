@@ -638,6 +638,7 @@ async function main(): Promise<void> {
         const event = built('Ann hosts an event', await S_(ann, '/api/marketplace/posts', {
             type: 'event', title: 'Street picnic', description: 'Bring a plate', authorPublicKey: ann.pk, lat: -28.55, lng: 153.5,
             eventStartAt: new Date(startMs).toISOString(), eventEndAt: new Date(startMs + 3 * 3600_000).toISOString(), eventPlaceName: 'The park',
+            photos: [TINY_PNG],
         }));
         const eventId = (event.post?.id ?? event.id) as string;
         built('Bo is going', await S_(bo, `/api/marketplace/posts/${eventId}/rsvp`, { status: 'going' }));
@@ -651,6 +652,7 @@ async function main(): Promise<void> {
         // Listings, a deal, and a line from 40 days ago that the hourly prune takes.
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (credit to buy with)', await A('POST', `/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
         await offer(gwen, 'Sourdough loaf', 4);
@@ -1267,6 +1269,7 @@ function phone2(base: string, who: Id, t: string, registeredAt: number): Promise
 async function offer2(base: string, who: Id, title: string, credits: number): Promise<void> {
     const r = await api(base, 'POST', '/api/marketplace/posts', { as: who, body: {
         type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        photos: [TINY_PNG],
     } });
     require_(r.status >= 200 && r.status < 300, `the promoted server: ${who.name} offers ${title} (${brief(r)})`);
 }

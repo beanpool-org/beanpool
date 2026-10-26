@@ -435,6 +435,7 @@ async function main(): Promise<void> {
         }
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string) => {
             const tx = built(`${buyer.name} asks for ${seller.name}'s listing`, await S_(buyer, '/api/marketplace/posts/request', { postId, buyerPublicKey: buyer.pk })).transaction;
@@ -457,7 +458,7 @@ async function main(): Promise<void> {
         built('Dee pledges backing to Probe Co', await S_(dee, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 1 }));
         require_(await main.send('legacy-floor', { pk: probe.publicKey, floor: 200 }), 'M: Probe Co keeps a legacy credit floor of 200 (an enterprise older than Slice 4)');
         const check = built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools',
+            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', photos: [TINY_PNG],
         }));
         const checkId = (check.post ?? check).id as string;
         const sale = built('Ann, no keeper, asks for it', await S_(ann, '/api/marketplace/posts/request', { postId: checkId, buyerPublicKey: ann.pk })).transaction;
@@ -818,7 +819,7 @@ async function main(): Promise<void> {
         assert(pins.status === 200 && JSON.stringify(pins.body).includes(probe.publicKey), `Probe Co is on the map (${brief(pins)})`);
         const resumed = await P_(cy, `/api/treasury/${probe.publicKey}/resume`);
         assert(resumed.status === 200, `its lead resumes it (${brief(resumed)})`);
-        const posted = await P_(kip2, `/api/treasury/${probe.publicKey}/offer`, { title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools' });
+        const posted = await P_(kip2, `/api/treasury/${probe.publicKey}/offer`, { title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools', photos: [TINY_PNG] });
         assert(posted.status === 200, `and its keeper, re-keyed, posts for it (${brief(posted)})`);
         const board = await boardOn(p);
         assert(board.includes(checkId), 'the resumed enterprise\'s listing is back on the board');

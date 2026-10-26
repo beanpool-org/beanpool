@@ -294,16 +294,16 @@ async function main(): Promise<void> {
     const bikesShopRow = shopRowOf(bikes);
     const bikesShop = bikesShopRow?.id ?? '';
     assert(!!bikesShopRow && bikesShopRow.name === null && bikesShopRow.owner_pubkey === bikes, 'an enterprise\'s shop is made with it, owned by the enterprise');
-    const entOffer = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Bike tune-up', credits: 0, shopId: bikesShop, lat: MULLUM.lat, lng: MULLUM.lng });
+    const entOffer = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Bike tune-up', credits: 0, shopId: bikesShop, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     assert(entOffer.status === 200 && entOffer.body?.post?.shopId === bikesShop && shopIdOf(entOffer.body?.post?.id) === bikesShop,
         `a keeper puts the enterprise's Offer in its shop through its own route (${show(entOffer)})`);
     const keeperOwnIntoEnt = await offer(bo, 'Bo\'s own pump', { shopId: bikesShop });
     const boShop: string = (await call('PUT', bo, MINE, {})).body?.shop?.id;
-    const entIntoKeeper = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Into Bo\'s', credits: 0, shopId: boShop });
-    const entNeed = await call('POST', bo, `/api/treasury/${bikes}/need`, { category: 'transport', title: 'Need tubes', credits: 0, shopId: bikesShop });
+    const entIntoKeeper = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Into Bo\'s', credits: 0, shopId: boShop, photos: TEST_PHOTOS });
+    const entNeed = await call('POST', bo, `/api/treasury/${bikes}/need`, { category: 'transport', title: 'Need tubes', credits: 0, shopId: bikesShop, photos: TEST_PHOTOS });
     const entPostsBefore = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
     const entEvent = await call('POST', bo, `/api/treasury/${bikes}/event`, { title: 'Bike repair night', description: 'Bring a bike',
-        lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: bikesShop });
+        lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: bikesShop, photos: TEST_PHOTOS });
     const entPostsAfter = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
     assert(keeperOwnIntoEnt.status === 403 && keeperOwnIntoEnt.body?.code === 'shop_not_yours' && entIntoKeeper.status === 403 && entIntoKeeper.body?.code === 'shop_not_yours',
         `a keeper's own Offer can't go in the enterprise's shop, nor the enterprise's in the keeper's (${show(keeperOwnIntoEnt)}; ${show(entIntoKeeper)})`);

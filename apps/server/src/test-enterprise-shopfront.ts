@@ -572,7 +572,7 @@ async function main(): Promise<void> {
     const otherShop = shopIdOf(other);
     setMemberPhoto(db, other, png(60, 90, 120));
     const otherOffer = async (title: string): Promise<string> => {
-        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop });
+        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop, photos: TEST_PHOTOS });
         if (r.status !== 200 || !(r.body?.post?.id ?? r.body?.id)) throw new Error(`setup: Ida could not post ${title} for her enterprise: ${show(r)}`);
         return r.body?.post?.id ?? r.body?.id;
     };

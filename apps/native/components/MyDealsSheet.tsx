@@ -444,14 +444,31 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
-    const underWayCount = openDeals(transactions, identity?.publicKey).length;
-    const needingMeCount = dealsNeedingMe(transactions, identity?.publicKey || '').length;
+    const effectiveTxs = useMemo(() => {
+        if (!transactions.length || !posts.length) return transactions;
+        const postMap = new Map(posts.map(p => [p.id, p]));
+        return transactions.map(t => {
+            if (t.postAuthorPublicKey && t.postType) return t;
+            const p = postMap.get(t.postId);
+            if (!p) return t;
+            return {
+                ...t,
+                postAuthorPublicKey: t.postAuthorPublicKey ?? p.author_pubkey ?? p.authorPublicKey,
+                postType: t.postType ?? p.type,
+                postRepeatable: t.postRepeatable ?? p.repeatable,
+                postLendable: t.postLendable ?? p.lendable,
+            };
+        });
+    }, [transactions, posts]);
+
+    const underWayCount = openDeals(effectiveTxs, identity?.publicKey).length;
+    const needingMeCount = dealsNeedingMe(effectiveTxs, identity?.publicKey || '').length;
     const titleRowText = needingMeCount === 1
         ? t('{n} under way · 1 needs you', { n: underWayCount })
         : t('{n} under way · {m} need you', { n: underWayCount, m: needingMeCount });
 
     const pendingDeals = useMemo(() => {
-        const list = openDeals(transactions, identity?.publicKey);
+        const list = openDeals(effectiveTxs, identity?.publicKey);
         return list.slice().sort((a, b) => {
             const aMe = dealStep(a, identity?.publicKey || '').needsMe;
             const bMe = dealStep(b, identity?.publicKey || '').needsMe;
@@ -459,12 +476,12 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             if (!aMe && bMe) return 1;
             return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
         });
-    }, [transactions, identity?.publicKey]);
+    }, [effectiveTxs, identity?.publicKey]);
 
     const pendingCount = pendingDeals.length;
 
     const getData = () => {
-        if (dealsTab === 'active') return myPosts.filter(p => (p.status === 'active' || p.status === 'paused') && p.author_pubkey === identity?.publicKey);
+        if (dealsTab === 'active') return myPosts.filter(p => (p.status === 'active' || p.status === 'paused' || p.status === 'pending') && p.author_pubkey === identity?.publicKey);
         if (dealsTab === 'pending') return pendingDeals;
         // History
         let txs = transactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');

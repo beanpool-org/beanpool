@@ -213,7 +213,24 @@ export function MyDealsModal({
     if (!visible || !effectiveIdentity) return null;
 
     const currentPubkey = (preview ? effectiveIdentity : identity)?.publicKey || '';
-    const effectiveTxs = preview ? effectiveTransactions : transactions;
+    const rawTxs = preview ? effectiveTransactions : transactions;
+    const postsList = preview ? effectivePosts : posts;
+    const effectiveTxs = useMemo(() => {
+        if (!rawTxs.length || !postsList.length) return rawTxs;
+        const postMap = new Map(postsList.map(p => [p.id, p]));
+        return rawTxs.map(t => {
+            if (t.postAuthorPublicKey && t.postType) return t;
+            const p = postMap.get(t.postId);
+            if (!p) return t;
+            return {
+                ...t,
+                postAuthorPublicKey: t.postAuthorPublicKey ?? p.authorPublicKey ?? (p as any).author_pubkey,
+                postType: t.postType ?? p.type,
+                postRepeatable: t.postRepeatable ?? p.repeatable,
+                postLendable: t.postLendable ?? (p as any).lendable,
+            };
+        });
+    }, [rawTxs, postsList]);
 
     const underWayCount = openDeals(effectiveTxs, currentPubkey).length;
     const needingMeCount = dealsNeedingMe(effectiveTxs, currentPubkey).length;
@@ -235,7 +252,7 @@ export function MyDealsModal({
     }, [effectiveTxs, currentPubkey]);
 
     const myPosts = (preview ? effectivePosts : posts)
-        .filter(p => (p.status === 'active' || p.status === 'paused') && (p.authorPublicKey === currentPubkey || (p as any).author_pubkey === currentPubkey))
+        .filter(p => (p.status === 'active' || p.status === 'paused' || p.status === 'pending') && (p.authorPublicKey === currentPubkey || (p as any).author_pubkey === currentPubkey))
         .sort((a, b) => {
             if (a.status === 'active' && b.status !== 'active') return -1;
             if (b.status === 'active' && a.status !== 'active') return 1;

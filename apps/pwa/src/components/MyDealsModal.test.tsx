@@ -360,10 +360,10 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(screen.getByText('+ 10')).toHaveClass('text-emerald-500', 'dark:text-emerald-400');
 
             // Partner line is present on In Progress with bold callsign
-            expect(screen.getByText(/Bought from/)).toBeInTheDocument();
-            expect(screen.getByText('Kofi')).toHaveClass('font-bold');
-            expect(screen.getByText(/Sold to/)).toBeInTheDocument();
-            expect(screen.getByText('Tama')).toHaveClass('font-bold');
+            expect(screen.getAllByText(/Bought from/).length).toBeGreaterThanOrEqual(1);
+            expect(screen.getAllByText('Kofi')[0]).toHaveClass('font-bold');
+            expect(screen.getAllByText(/Sold to/).length).toBeGreaterThanOrEqual(1);
+            expect(screen.getAllByText('Tama')[0]).toHaveClass('font-bold');
 
             // Switch to My Posts tab
             fireEvent.click(screen.getByRole('button', { name: /My Posts/ }));

@@ -3505,5 +3505,8 @@
   "Close photo": "사진 닫기",
   "It will read \"This message was deleted\" for both of you.": "두 사람 모두에게 \"삭제된 메시지입니다\"라고 표시돼요.",
   "🌱 Daily Reflection": "🌱 오늘의 생각",
-  "Loading": "불러오는 중"
+  "Loading": "불러오는 중",
+  "⚠️ Action Required": "⚠️ 필요 작업 있음",
+  "⏳ Awaiting Approval": "⏳ 승인 대기 중",
+  "⏸ PAUSED": "⏸ 일시중지됨"
 }

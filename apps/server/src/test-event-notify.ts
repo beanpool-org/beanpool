@@ -154,7 +154,7 @@ async function main(): Promise<void> {
 
     // Only events notify: cancelling an ordinary listing must not push on this path.
     const offer = createPostEngine(capture, 'offer', 'other', 'Spare tomatoes', 'Free to a good home', 5,
-        'fixed', stranger, undefined, undefined, [], false)!;
+        'fixed', stranger, undefined, undefined, [PHOTO], false)!;
     pushes = [];
     assert(removePost(capture, offer.id, stranger, pushSpy) === true, 'an offer can still be removed');
     assert(pushes.length === 0, 'removing an offer sends no event notification');

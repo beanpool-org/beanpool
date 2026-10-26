@@ -209,7 +209,7 @@ async function main(): Promise<void> {
     // group" confirmed the group's event to someone who can't see it, an invite-only group's included.
     assertThrows(() => rsvpEvent(capture, groupEvents[0].id, stranger, 'going'), /^Event not found$/, 'a non-member cannot RSVP to a group-only event, and is told "Event not found"');
     assert(rsvpEvent(capture, groupEvents[0].id, groupie, 'going').post!.goingCount === 1, 'a group member can RSVP to a group-only event');
-    const offer = createPost('offer', 'food', 'Carrots', 'Fresh', 5, 'fixed', stranger, undefined, undefined, [])!;
+    const offer = createPost('offer', 'food', 'Carrots', 'Fresh', 5, 'fixed', stranger, undefined, undefined, [PHOTO])!;
     assertThrows(() => rsvpEvent(capture, offer.id, goer, 'going'), /Event not found/, 'RSVP to a post that is not an event is refused');
 
     // The route: actor comes from auth, never the body.

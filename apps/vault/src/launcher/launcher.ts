@@ -33,7 +33,7 @@ import { compareVersions, resolveChain, sha256Hex, type ReleaseManifest } from '
  * and nothing else at or below the newest release it has switched to is ever taken.
  *
  * Messages over the child's IPC channel: `{type: 'ready'}` and `{type: 'switch', id, request}` from a child;
- * `{type: 'switch-result', id, ok, reason?}` and `{type: 'drain'}` to it.
+ * `{type: 'ready-ack'}`, `{type: 'switch-result', id, ok, reason?}` and `{type: 'drain'}` to it.
  */
 
 export interface LauncherOptions {

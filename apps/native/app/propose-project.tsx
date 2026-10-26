@@ -123,7 +123,7 @@ export default function ProposeProjectModal() {
         submittingRef.current = true;
         setSubmitting(true);
         try {
-            await createEnterpriseApi({
+            const res = await createEnterpriseApi({
                 name: title.trim(),
                 purpose: description.trim(),
                 description: description.trim(),
@@ -133,13 +133,17 @@ export default function ProposeProjectModal() {
                 photos,
                 avatar: photos.length > 0 ? photos[0] : undefined,
             });
-            Alert.alert(
-                lifecycle === 'bounded' ? t('Project started 🌱') : t('Enterprise started 🏛️'),
-                lifecycle === 'bounded'
-                    ? t('Your project is open for backing.')
-                    : t('Your enterprise is in the Commons.'),
-                [{ text: t('OK'), onPress: () => router.back() }]
-            );
+            if (lifecycle === 'ongoing' && res?.publicKey) {
+                router.replace({ pathname: '/treasury-detail', params: { publicKey: res.publicKey, name: title.trim() } });
+            } else {
+                Alert.alert(
+                    lifecycle === 'bounded' ? t('Project started 🌱') : t('Enterprise started 🏛️'),
+                    lifecycle === 'bounded'
+                        ? t('Your project is open for backing.')
+                        : t('Your enterprise is in the Commons.'),
+                    [{ text: t('OK'), onPress: () => router.back() }]
+                );
+            }
         } catch (e: any) {
             // The node's own words as it sent them (slice S4).
             Alert.alert(t('Creation Failed'), e.message ? signedRequestWords(e.message) : t('Could not start enterprise.'));
@@ -313,11 +317,14 @@ export default function ProposeProjectModal() {
                         </>
                     )}
 
-                    {/* Its logo, the one picture made with it (its avatar, drawn round). Its banner is its shop's photo, which a
-                        keeper chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
+                    {/* Its logo, the one picture made with it (its avatar, drawn round). Its banner is its shop's photo (Marty, 24 Oct
+                        2026: "avatar and cover photo are different"): an enterprise is offered it right after Start, so only an
+                        enterprise's form says so; a project's is still chosen later in Manage. */}
                     <View style={styles.field}>
                         <Text style={styles.label}>{t('LOGO (OPTIONAL)')}</Text>
-                        <Text style={{ fontSize: 13, lineHeight: 19, color: colors.text.secondary }}>{t('Its banner photo is chosen later, in Manage.')}</Text>
+                        {lifecycle === 'ongoing' && (
+                            <Text style={{ fontSize: 13, lineHeight: 19, color: colors.text.secondary }}>{t('You can add a banner photo next.')}</Text>
+                        )}
                         <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, padding: 4 }}>
                             {photos.map((uri, idx) => (
                                 uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (

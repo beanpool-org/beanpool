@@ -74,12 +74,7 @@ async function startNode(dataDir: string): Promise<Node> {
         child.on('exit', (code, signal) => resolve({ code, signal }));
     });
     const startedAt = Date.now();
-    let ready = false;
-    while (!ready) {
-        if (out.includes(READY_LINE)) {
-            ready = true;
-            break;
-        }
+    while (!out.includes(READY_LINE)) {
         if (child.exitCode !== null || child.signalCode !== null) {
             throw new Error(`the node exited before it was ready\n${out.slice(-3000)}`);
         }

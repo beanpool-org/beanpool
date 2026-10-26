@@ -23,15 +23,11 @@ export async function pickBannerPhoto(crop: CropPicture, from?: 'library' | 'fil
         Alert.alert(t('Add Photo'), t('Choose a source'), [
             {
                 text: t('Gallery'),
-                onPress: () => {
-                    pickPicture('library').then(resolve, reject);
-                },
+                onPress: () => pickPicture('library').then(resolve, reject),
             },
             {
                 text: t('Browse files'),
-                onPress: () => {
-                    pickPicture('files').then(resolve, reject);
-                },
+                onPress: () => pickPicture('files').then(resolve, reject),
             },
             { text: t('Cancel'), style: 'cancel', onPress: () => resolve(null) },
         ]);

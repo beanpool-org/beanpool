@@ -5,8 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Picker } from '@react-native-picker/picker';
 import * as Crypto from 'expo-crypto';
 import { 

@@ -757,11 +757,19 @@ describe('the Commons at 320 dp with 1.3× text, in the pseudo-locale', () => {
     });
 
     it("its one picture is the logo, said so; the banner photo is its shop's, added next (Marty, 25 Oct)", async () => {
+        params.now = { kind: 'ongoing' };
         await renderIn('en', createElement(ProposeProjectScreen));
         expect(host.textContent).toContain('LOGO (OPTIONAL)');
         expect(host.textContent).toContain('You can add a banner photo next.');
         expect(host.textContent).not.toContain('COVER PHOTO');
         expect(byLabel('Choose a logo')).not.toBeNull();
+    });
+
+    it('a project is not promised a banner next: only an enterprise lands on its page with Add a banner photo (#2502 review)', async () => {
+        params.now = { kind: 'bounded' };
+        await renderIn('en', createElement(ProposeProjectScreen));
+        expect(host.textContent).toContain('LOGO (OPTIONAL)');
+        expect(host.textContent).not.toContain('You can add a banner photo next.');
     });
 
     it('labels in capitals carry them in their words: none is upper-cased by the phone', async () => {

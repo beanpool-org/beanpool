@@ -495,6 +495,17 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         expect(within(dialog).queryByText(/Cover Photo/i)).toBeNull();
     });
 
+    it('a project is not promised a banner next: only an enterprise lands on its page with Add a banner photo (#2502 review)', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await screen.findByText('Community Garden Solar Irrigation');
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const startSheet = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(startSheet).getByRole('button', { name: /^Project/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(within(dialog).getByLabelText('Logo (optional)')).toHaveAttribute('type', 'file');
+        expect(within(dialog).queryByText('You can add a banner photo next.')).toBeNull();
+    });
+
     it('a 4032x3024 camera photo is sent as the 512 px square the member chose, a re-encoded JPEG, and the raw file is not', async () => {
         vi.clearAllMocks();
         const originalImage = window.Image;

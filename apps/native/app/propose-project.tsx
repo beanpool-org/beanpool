@@ -317,11 +317,14 @@ export default function ProposeProjectModal() {
                         </>
                     )}
 
-                    {/* Its logo, the one picture made with it (its avatar, drawn round). Its banner is its shop's photo, which a
-                        keeper chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
+                    {/* Its logo, the one picture made with it (its avatar, drawn round). Its banner is its shop's photo (Marty, 24 Oct
+                        2026: "avatar and cover photo are different"): an enterprise is offered it right after Start, so only an
+                        enterprise's form says so; a project's is still chosen later in Manage. */}
                     <View style={styles.field}>
                         <Text style={styles.label}>{t('LOGO (OPTIONAL)')}</Text>
-                        <Text style={{ fontSize: 13, lineHeight: 19, color: colors.text.secondary }}>{t('You can add a banner photo next.')}</Text>
+                        {lifecycle === 'ongoing' && (
+                            <Text style={{ fontSize: 13, lineHeight: 19, color: colors.text.secondary }}>{t('You can add a banner photo next.')}</Text>
+                        )}
                         <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, padding: 4 }}>
                             {photos.map((uri, idx) => (
                                 uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (

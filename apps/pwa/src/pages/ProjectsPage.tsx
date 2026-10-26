@@ -1154,13 +1154,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </div>
                             )}
 
-                            {/* Its logo, the one picture made with it (its avatar). Its banner is its shop's photo, which a keeper
-                                chooses later in Manage (Marty, 24 Oct 2026: "avatar and cover photo are different"). */}
+                            {/* Its logo, the one picture made with it (its avatar). Its banner is its shop's photo (Marty, 24 Oct 2026:
+                                "avatar and cover photo are different"): an enterprise is offered it right after Start, so only an
+                                enterprise's form says so; a project's is still chosen later in Manage. */}
                             <div>
                                 <label htmlFor="propose-logo" className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
                                     {t('Logo (optional)')}
                                 </label>
-                                <p className="m-0 mb-1 text-xs text-nature-400">{t('You can add a banner photo next.')}</p>
+                                {newLifecycle === 'ongoing' && (
+                                    <p className="m-0 mb-1 text-xs text-nature-400">{t('You can add a banner photo next.')}</p>
+                                )}
                                 <input
                                     id="propose-logo"
                                     type="file"

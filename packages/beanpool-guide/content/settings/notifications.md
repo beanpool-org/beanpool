@@ -70,7 +70,9 @@ Reminders arrive with your **Marketplace Activity** alerts, so they stop if you 
 
 ## No alerts at all?
 
-Check that your phone allows notifications for BeanPool, in your phone's own settings.
+BeanPool asks for notification permission only when you tap to turn it on: from the card at the end of How it Works, on **Home** until answered, or when you send your first message or request to join. It never asks at install or when you create your account, and nothing is asked after you restore an account.
+
+If you tapped **Not now** and want them later, or your phone turned them off, check that your phone allows notifications for BeanPool in your phone's own settings.
 
 ## One chat at a time
 

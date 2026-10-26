@@ -82,7 +82,9 @@ async function child(): Promise<void> {
     delete process.env.CF_ZONE_ID;
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    (se as any).createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     // Loaded when a command needs it, so the servers boot on a tree without it (the fail-first run on origin/main).

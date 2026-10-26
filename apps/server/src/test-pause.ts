@@ -225,7 +225,9 @@ async function main() {
     // ── The upgrade: this version boots on it, and serves ──
     const upgradedAt = new Date().toISOString();
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    (se as any).createPost = wrapCreatePost(se.createPost);
     const de = await import('./decisions-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');

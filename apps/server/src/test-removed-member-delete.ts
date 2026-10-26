@@ -43,10 +43,12 @@ process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost,
+    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost: rawCreatePost,
     createTreasury, adminAssignTreasuryOperator, proposeKeeperRemoval, requestToJoinEnterprise, approveKeeperRequest, getLeadInactivity,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { createDecision, executeDecision, getDecision } from './decisions-engine.js';
 import { openJoinTaken } from './engine/open-join.js';
 import { startHttpsServer } from './https-server.js';

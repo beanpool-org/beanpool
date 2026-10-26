@@ -26,6 +26,7 @@ delete process.env.NEARBY_LISTINGS_RADIUS_KM;
 delete process.env.NEARBY_LISTINGS_MAX;
 process.env.NODE_PROFILE = 'global';
 
+import { TEST_PHOTOS } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -96,7 +97,7 @@ async function main(): Promise<void> {
     const day = 86_400_000;
     const clockIn = (days: number) => new Date(Date.now() + days * day).toISOString().slice(0, 11) + '20:50';
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
-        type: 'event', title: 'Vibe coding', description: 'Bring a laptop', authorPublicKey: who.pubKeyHex, ...body,
+        type: 'event', title: 'Vibe coding', description: 'Bring a laptop', authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...body,
     }, who);
     const idOf = (r: { body: any }) => r.body?.post?.id ?? r.body?.id;
 

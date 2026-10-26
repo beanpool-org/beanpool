@@ -17,6 +17,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -60,7 +61,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 
 const post = (title: string, extra: Record<string, unknown> = {}) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', ...extra,
+    credits: 20, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
 });
 
 async function main() {

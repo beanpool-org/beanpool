@@ -42,7 +42,9 @@ async function main(): Promise<void> {
     const { ed25519 } = await import('@noble/curves/ed25519.js');
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    (se as any).createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
     const { addConnector, removeConnector } = await import('./connector-manager.js');

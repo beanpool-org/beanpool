@@ -135,7 +135,9 @@ function openSocket(url: string): Promise<Sock> {
 async function main() {
     console.log('Privacy by default, on a local node as it ships...\n');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    (se as any).createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer, PUBLIC_READ_EXACT } = await import('./https-server.js');
     const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
     const { db } = await import('./db/db.js');

@@ -53,7 +53,9 @@ async function main(): Promise<void> {
     console.log('Repeatable pushes fold to one an hour...\n');
     if (!process.env.BEANPOOL_DATA_DIR) throw new Error('BEANPOOL_DATA_DIR must be set to a fresh directory');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    (se as any).createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');

@@ -87,9 +87,16 @@ describe('pledgeReturnLine: what the project page says happens to the Beans if t
             .toBe('The goal wasn’t reached by 17 Nov 2026. Everyone’s Beans go back on 24 Nov 2026, unless the end date moves before then.');
     });
 
-    it('from the day they are due until the node has returned them: they are going back', () => {
+    it('from the day they are due until the node has returned them: due back from that day, and no more than that', () => {
         expect(pledgeReturnLine({ ...project, deadlineAt: '2026-11-13T10:00:00.000Z' }, NOW))
-            .toBe('The goal wasn’t reached by 13 Nov 2026, so everyone’s Beans are going back.');
+            .toBe('The goal wasn’t reached by 13 Nov 2026, so everyone’s Beans are due back from 20 Nov 2026.');
+        // A node that left them for its operator (a backer it can't pay) never says they are on their way, however long
+        // they wait (review of #2525).
+        for (const days of [8, 30, 400]) {
+            const line = pledgeReturnLine({ ...project, deadlineAt: '2026-11-13T10:00:00.000Z' }, Date.parse('2026-11-13T10:00:00.000Z') + days * DAY);
+            expect(line, `${days} days on`).toBe('The goal wasn’t reached by 13 Nov 2026, so everyone’s Beans are due back from 20 Nov 2026.');
+            expect(line, `${days} days on`).not.toMatch(/going back/);
+        }
     });
 
     it('once the node has returned them: they went back, on the day it did', () => {
@@ -118,6 +125,6 @@ describe('pledgeReturnLine: what the project page says happens to the Beans if t
         expect(pledgeReturnLine({ ...project, deadlineAt: deadline }, at + DAY - 1)).toMatch(/^If the goal isn’t reached by /);
         expect(pledgeReturnLine({ ...project, deadlineAt: deadline }, at + DAY)).toMatch(/unless the end date moves before then\.$/);
         expect(pledgeReturnLine({ ...project, deadlineAt: deadline }, at + 7 * DAY - 1)).toMatch(/unless the end date moves before then\.$/);
-        expect(pledgeReturnLine({ ...project, deadlineAt: deadline }, at + 7 * DAY)).toMatch(/so everyone’s Beans are going back\.$/);
+        expect(pledgeReturnLine({ ...project, deadlineAt: deadline }, at + 7 * DAY)).toMatch(/so everyone’s Beans are due back from 17 Nov 2026\.$/);
     });
 });

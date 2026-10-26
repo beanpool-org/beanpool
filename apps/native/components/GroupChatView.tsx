@@ -705,6 +705,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         <ChatOwnerHeader
             kind={kind}
             name={name}
+            avatarUrl={group?.avatarUrl || view?.avatarUrl || null}
             category={category}
             lifecycle={lifecycle}
             detail={detail}

@@ -628,6 +628,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         let photoUrl = avatar;
         if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
+        // S4 (§4.2, §6): a create with no avatar and no photos is given bundled://bean-green and accepted (never on sync/ingest)
+        if (!photoUrl) {
+            photoUrl = 'bundled://bean-green';
+        }
         // G9a-3: the projects row below stores it too, not only createTreasury, and the crowdfund listing hands it out
         // as stored, so it is held to the photo rule (#2082: own only).
         const photoRefusal = routePhotoValueRefusal(photoUrl);

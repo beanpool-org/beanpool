@@ -321,7 +321,7 @@ export default function ProposeProjectModal() {
                         2026: "avatar and cover photo are different"): an enterprise is offered it right after Start, so only an
                         enterprise's form says so; a project's is still chosen later in Manage. */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>{t('LOGO (OPTIONAL)')}</Text>
+                        <Text style={styles.label}>{t('LOGO')}</Text>
                         {lifecycle === 'ongoing' && (
                             <Text style={{ fontSize: 13, lineHeight: 19, color: colors.text.secondary }}>{t('You can add a banner photo next.')}</Text>
                         )}
@@ -374,19 +374,21 @@ export default function ProposeProjectModal() {
                 {!keyboardVisible && (
                     <View style={styles.footer}>
                         <Pressable
-                            style={[styles.submitBtn, (!lifecycle || submitting) && styles.submitBtnDisabled]}
+                            style={[styles.submitBtn, (!lifecycle || submitting || photos.length < 1) && styles.submitBtnDisabled]}
                             onPress={handleSubmit}
-                            disabled={!lifecycle || submitting}
+                            disabled={!lifecycle || submitting || photos.length < 1}
                             accessibilityRole="button"
                             accessibilityLabel={
                                 submitting
                                     ? (lifecycle === 'bounded' ? t('Starting the project...') : t('Starting the enterprise...'))
                                     : !lifecycle
                                         ? t('Choose a project or an enterprise first')
+                                        : photos.length < 1
+                                        ? t('Choose a logo')
                                         : (lifecycle === 'bounded' ? t('Start the project 🌱') : t('Start the enterprise 🏛️'))
                             }
                             accessibilityHint={t('Creates enterprise or project and opens it for community backing')}
-                            accessibilityState={{ disabled: !lifecycle || submitting, busy: submitting }}
+                            accessibilityState={{ disabled: !lifecycle || submitting || photos.length < 1, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
@@ -394,6 +396,8 @@ export default function ProposeProjectModal() {
                                 <Text style={styles.submitBtnText}>
                                     {!lifecycle
                                         ? t('Choose a project or an enterprise first')
+                                        : photos.length < 1
+                                        ? t('Choose a logo')
                                         : (lifecycle === 'bounded' ? t('Start the project 🌱') : t('Start the enterprise 🏛️'))}
                                 </Text>
                             )}

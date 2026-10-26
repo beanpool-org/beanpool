@@ -26,6 +26,7 @@ On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterpri
 
 - On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.
 - In the web app, open **Commons**, then **Groups**, and tap **Start something** and pick **Chat group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.
+- Every group has a picture: the one chosen for its kind is already there. Tap it to choose another, or a photo.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
 - Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. **Social Circle** is chosen for you.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.

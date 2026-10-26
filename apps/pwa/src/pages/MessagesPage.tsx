@@ -53,7 +53,7 @@ import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { formatDate, listPhotoUrl, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { formatDate, listPhotoUrl, removedRunText, t, tn, word, bundledGroupEmblem, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn } from '../lib/features';
 
@@ -1492,30 +1492,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return member?.callsign || otherPubkey.substring(0, 12) + '…';
     }
 
-    /** Render an avatar circle — shows image if avatarUrl present, letter fallback otherwise */
-    function renderAvatar(avatarUrl: string | null | undefined, fallbackChar: string, size = 40, style?: React.CSSProperties) {
-        const resolved = resolveAvatarUrl(avatarUrl);
-        if (resolved) {
-            return (
-                <img
-                    src={resolved}
-                    alt=""
-                    style={{
-                        width: `${size}px`, height: `${size}px`, borderRadius: '50%',
-                        objectFit: 'cover', flexShrink: 0, ...style,
-                    }}
-                />
-            );
-        }
+    /** Render an avatar circle — shows resolved image or deterministic preset (no bare initial disc, Pictures S4) */
+    function renderAvatar(avatarUrl: string | null | undefined, fallbackChar: string, size = 40, style?: React.CSSProperties, pubkey?: string | null) {
+        const resolved = resolveAvatarUrl(avatarUrl, pubkey || fallbackChar) || '/avatars/avatar_bean_green.jpg';
         return (
-            <div style={{
-                width: `${size}px`, height: `${size}px`, borderRadius: '50%',
-                background: 'var(--bg-hover)', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', fontSize: `${size * 0.45}px`, fontWeight: 700,
-                color: 'var(--text-muted)', flexShrink: 0, ...style,
-            }}>
-                {fallbackChar.charAt(0).toUpperCase()}
-            </div>
+            <img
+                src={resolved}
+                alt=""
+                style={{
+                    width: `${size}px`, height: `${size}px`, borderRadius: '50%',
+                    objectFit: 'cover', flexShrink: 0, ...style,
+                }}
+            />
         );
     }
 
@@ -1815,7 +1803,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             const title = getConversationTitle(activeConv);
                             const body = (
                                 <>
-                                    {renderAvatar(activeConv.peerAvatar, title, 32)}
+                                    {renderAvatar(activeConv.avatarUrl || activeConv.peerAvatar, title, 32, undefined, peerPubkey || activeConv.id)}
                                     <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
                                         <span style={{ fontWeight: 600, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {title}

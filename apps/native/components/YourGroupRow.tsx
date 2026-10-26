@@ -11,6 +11,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { chatEmoji, ownerKindName, previewLine, rowRoleWord, rowSpokenName, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { MemberAvatar } from './MemberAvatar';
 import { t, tn } from '@beanpool/core';
 
 /** The whole spoken label: the row's name phrase, then its unread count and muting, then the last line, as sentences. */
@@ -87,9 +88,15 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
             style={[styles.row, flush && { marginHorizontal: 0 }]}
             onPress={() => onPress(item)}
         >
-            <View style={[styles.icon, item.kind === 'enterprise' && styles.iconEnterprise, item.kind === 'event' && styles.iconEvent]}>
-                <Text style={styles.iconText} allowFontScaling={false}>{chatEmoji(item.kind, item.category, item.lifecycle)}</Text>
-            </View>
+            {item.avatarUrl ? (
+                <View style={{ marginRight: 12, flexShrink: 0 }}>
+                    <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.id} callsign={item.name} size={46} />
+                </View>
+            ) : (
+                <View style={[styles.icon, item.kind === 'enterprise' && styles.iconEnterprise, item.kind === 'event' && styles.iconEvent]}>
+                    <Text style={styles.iconText} allowFontScaling={false}>{chatEmoji(item.kind, item.category, item.lifecycle)}</Text>
+                </View>
+            )}
             <View style={styles.body}>
                 <View style={styles.top}>
                     <Text style={[styles.name, unread > 0 && styles.nameUnread]} numberOfLines={1}>{item.name}</Text>

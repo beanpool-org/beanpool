@@ -25,8 +25,9 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, inCapitalsOf, t, word, type GroupPerson, type WordKey } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, inCapitalsOf, t, word, bundledGroupEmblem, type GroupPerson, type WordKey } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
+import { AvatarPickerSheet } from './AvatarPickerSheet';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { Sentence } from './Sentence';
@@ -87,6 +88,7 @@ export function GroupDetailModal({
     const [rosterRefused, setRosterRefused] = useState(false);
     const [groupData, setGroupData] = useState<GroupItem | null>(group);
     const [showPolicyPicker, setShowPolicyPicker] = useState(false);
+    const [pickingPicture, setPickingPicture] = useState(false);
     const insets = useSafeAreaInsets();
 
     const loadDetails = useCallback(async () => {
@@ -690,7 +692,15 @@ export function GroupDetailModal({
             <View style={styles.backdrop}>
                 <View style={[styles.sheet, { paddingBottom: insets.bottom }]}>
                     <View style={styles.header}>
-                        <Text style={styles.title} numberOfLines={1}>{groupData.name}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                            <MemberAvatar
+                                avatarUrl={groupData.avatarUrl || bundledGroupEmblem(groupData.category)}
+                                pubkey=""
+                                callsign={groupData.name}
+                                size={36}
+                            />
+                            <Text style={styles.title} numberOfLines={1}>{groupData.name}</Text>
+                        </View>
                         <Pressable
                             style={styles.closeBtn}
                             onPress={onClose}
@@ -731,6 +741,19 @@ export function GroupDetailModal({
                                 </View>
                             )}
                         </View>
+
+                        {isConvenor && !closed && (
+                            <Pressable
+                                onPress={() => setPickingPicture(true)}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Change the picture')}
+                                style={{ alignSelf: 'flex-start', marginTop: 8 }}
+                            >
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.brand.primary }}>
+                                    {t('Change the picture')}
+                                </Text>
+                            </Pressable>
+                        )}
 
                         {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
                         {roster.leadCallsign ? (
@@ -1028,6 +1051,26 @@ export function GroupDetailModal({
                     </ScrollView>
                 </View>
             </View>
+            <AvatarPickerSheet
+                visible={pickingPicture}
+                title={t('Group Picture')}
+                colors={colors}
+                onClose={() => setPickingPicture(false)}
+                onSelectImage={async (uri) => {
+                    setPickingPicture(false);
+                    try {
+                        setActionLoading(true);
+                        await updateGroupApi(groupData.id, { avatarUrl: uri });
+                        hapticSuccess();
+                        await loadDetails();
+                        if (onMembershipChanged) onMembershipChanged();
+                    } catch (e: any) {
+                        Alert.alert(t('Update Failed'), e?.message ? signedRequestWords(e.message) : t('Failed to update group picture'));
+                    } finally {
+                        setActionLoading(false);
+                    }
+                }}
+            />
         </Modal>
     );
 }

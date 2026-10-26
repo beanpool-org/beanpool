@@ -89,7 +89,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
 
     async function handleFinish() {
         if (!navigator.onLine) { setError(t('You need to be online to save your profile.')); return; }
-        if (!nameOk || !avatarOk) return;
+        if (!nameOk) return;
         setSaving(true);
         setError(null);
         try {
@@ -190,8 +190,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                         {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button
                             onClick={() => { setError(null); setStep('guide'); }}
-                            disabled={!avatarOk}
-                            className={`w-full py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md ${avatarOk ? 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90 cursor-pointer' : 'bg-nature-300 dark:bg-nature-700 text-white/70 cursor-not-allowed'}`}
+                            className="w-full py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90 cursor-pointer"
                         >
                             {t('Next →')}
                         </button>

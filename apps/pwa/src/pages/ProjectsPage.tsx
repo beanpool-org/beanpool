@@ -23,7 +23,7 @@ import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
 import { type CommunityInfo } from '../lib/api';
-import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
+import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, bundledGroupEmblem, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
 import { TOOL_APPS } from '../tools';
 import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
@@ -932,17 +932,24 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     }}
                                     className="p-4 bg-white dark:bg-nature-950/70 hover:bg-oat-50 dark:hover:bg-nature-900/80 border border-nature-200 dark:border-nature-800 hover:border-nature-300 dark:hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 >
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0 flex-1">
-                                            <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
-                                                    🏷️ {named(CATEGORY_WORDS, g.category, g.category.replace(/_/g, ' '))}
-                                                </span>
-                                                <span className="text-nature-600 dark:text-nature-400">•</span>
-                                                <span className="text-[11px] text-nature-600 dark:text-nature-400">
-                                                    {tn(g.memberCount || 0, '{n} member', '{n} members')}
-                                                </span>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                                            <img
+                                                src={resolveAvatarUrl(g.avatarUrl) || resolveAvatarUrl(bundledGroupEmblem(g.category)) || ''}
+                                                alt=""
+                                                className="w-10 h-10 rounded-full object-cover shrink-0 border border-nature-200 dark:border-nature-800"
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
+                                                        🏷️ {named(CATEGORY_WORDS, g.category, g.category.replace(/_/g, ' '))}
+                                                    </span>
+                                                    <span className="text-nature-600 dark:text-nature-400">•</span>
+                                                    <span className="text-[11px] text-nature-600 dark:text-nature-400">
+                                                        {tn(g.memberCount || 0, '{n} member', '{n} members')}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                         {g.viewerStatus === 'invited' ? (
@@ -1159,7 +1166,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 enterprise's form says so; a project's is still chosen later in Manage. */}
                             <div>
                                 <label htmlFor="propose-logo" className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                    {t('Logo (optional)')}
+                                    {t('LOGO')}
                                 </label>
                                 {newLifecycle === 'ongoing' && (
                                     <p className="m-0 mb-1 text-xs text-nature-400">{t('You can add a banner photo next.')}</p>
@@ -1207,7 +1214,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={creating || preparingPhoto || !newLifecycle}
+                                    disabled={creating || preparingPhoto || !newLifecycle || newPhotos.length < 1}
                                     className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
                                     {creating
@@ -1216,6 +1223,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         ? t('Preparing photo…')
                                         : !newLifecycle
                                         ? t('Choose a project or an enterprise first')
+                                        : newPhotos.length < 1
+                                        ? t('Choose a logo')
                                         : newLifecycle === 'bounded'
                                         ? t('Start the project 🌱')
                                         : t('Start the enterprise 🏛️')}

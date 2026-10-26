@@ -14,8 +14,10 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, bundledGroupEmblem, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { AvatarPresetPicker } from './AvatarPresetPicker';
+import { usePictureCrop } from './PictureCropDialog';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
@@ -77,6 +79,35 @@ export function GroupDetailModal({
     // The signer's moderation mute: the node refuses a muted convenor's invitation (assertNotMuted), so the button
     // waits for this answer and never shows on a guess (null: not known).
     const [muted, setMuted] = useState<boolean | null>(null);
+    const [pickingPicture, setPickingPicture] = useState(false);
+    const cropper = usePictureCrop();
+
+    const handleChangePicture = async (newUrl: string) => {
+        if (!groupData) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            await updateGroup(groupData.id, { avatarUrl: newUrl });
+            await loadDetails();
+            setPickingPicture(false);
+            if (onMembershipChanged) onMembershipChanged();
+        } catch (err: any) {
+            setError(err.message || t('Failed to update group picture'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const cropped = await cropper.crop(file, 1);
+            if (cropped) {
+                await handleChangePicture(cropped);
+            }
+        } catch { /* cancelled */ }
+    };
 
     const loadCard = useCallback(async () => {
         if (!group?.id) return;
@@ -311,8 +342,12 @@ export function GroupDetailModal({
             >
                 {/* Header */}
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xl" aria-hidden="true">👥</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <img
+                            src={resolveAvatarUrl(groupData.avatarUrl) || resolveAvatarUrl(bundledGroupEmblem(groupData.category)) || ''}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover border border-nature-300 dark:border-nature-700 shrink-0"
+                        />
                         <h2 id="group-detail-title" className="text-lg font-black text-nature-950 dark:text-white truncate">
                             {groupData.name}
                         </h2>
@@ -328,25 +363,57 @@ export function GroupDetailModal({
                 </div>
 
                 <div className="p-4 space-y-4">
-                    {/* Tags */}
-                    <div className="flex flex-wrap gap-2">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🏷️ </span>{categoryPill(groupData.category)}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🚪 </span>{policyWords(groupData.joinPolicy)}
-                        </span>
-                        {closed && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
-                                <span aria-hidden="true">🔒 </span>{t('Closed', undefined, 'a group')}
+                    {/* Tags & Picture actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap gap-2">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
+                                <span aria-hidden="true">🏷️ </span>{categoryPill(groupData.category)}
                             </span>
-                        )}
-                        {isConvenor && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
-                                <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? t('Lead convenor', undefined, 'group role') : t('Convenor', undefined, 'group role')}
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
+                                <span aria-hidden="true">🚪 </span>{policyWords(groupData.joinPolicy)}
                             </span>
+                            {closed && (
+                                <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
+                                    <span aria-hidden="true">🔒 </span>{t('Closed', undefined, 'a group')}
+                                </span>
+                            )}
+                            {isConvenor && (
+                                <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
+                                    <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? t('Lead convenor', undefined, 'group role') : t('Convenor', undefined, 'group role')}
+                                </span>
+                            )}
+                        </div>
+                        {isConvenor && !closed && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPickingPicture((p) => !p)}
+                                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                >
+                                    {t('Change the picture')}
+                                </button>
+                                <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer">
+                                    {t('Choose a photo')}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="sr-only"
+                                    />
+                                </label>
+                            </div>
                         )}
                     </div>
+
+                    {pickingPicture && (
+                        <div className="p-3 bg-nature-200/50 dark:bg-nature-900/50 rounded-xl border border-nature-300 dark:border-nature-700">
+                            <AvatarPresetPicker
+                                selected={groupData.avatarUrl}
+                                onSelect={handleChangePicture}
+                            />
+                        </div>
+                    )}
+                    {cropper.dialog}
 
                     {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
                     {roster.leadCallsign && (

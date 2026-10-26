@@ -651,6 +651,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
+    const [keeperOf, setKeeperOf] = useState<string[]>([]);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [acceptHours, setAcceptHours] = useState('1');
@@ -860,14 +861,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const canLoadBalance = !!identity && isMember !== false && isMember !== null;
     // Gate 1 is a Beans rule (the server holds it only where they are on): in preview the balance is never asked.
     const readsBalance = useReadsOwn('beans', canLoadBalance);
+    // The enterprises this member keeps (the balance's keeperOf), for Edit on their listings, as on the phone: an enterprises
+    // rule, so read where those are the reader's own as well (app/post/[id].tsx).
+    const readsKeepers = useReadsOwn('enterprises', canLoadBalance);
     useEffect(() => {
-        if (!identity || !canLoadBalance || !readsBalance) return;
+        // Signed out, or no longer reading them: the enterprises a member kept go with them.
+        if (!identity || !canLoadBalance || !(readsBalance || readsKeepers)) { setKeeperOf([]); return; }
         let cancelled = false;
         getBalance(identity.publicKey)
-            .then(b => { if (!cancelled) setBlockedFromTrading(!!b.isBlockedFromTrading); })
+            .then(b => {
+                if (cancelled) return;
+                if (readsBalance) setBlockedFromTrading(!!b.isBlockedFromTrading);
+                setKeeperOf(readsKeepers && Array.isArray(b.keeperOf) ? b.keeperOf : []);
+            })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity, canLoadBalance, readsBalance]);
+    }, [identity, canLoadBalance, readsBalance, readsKeepers]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -1276,6 +1285,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
         const isPulsePost = (selectedPost.authorCallsign || (selectedPost as any).author_callsign) === 'Daily Pulse';
+        // A keeper of the enterprise that listed it may edit it, as on the phone (app/post/[id].tsx isOperatorOfAuthor): the
+        // node takes the edit signed with the keeper's own key (apps/server engine/posts.ts updatePost), for a listing here
+        // for everyone. Edit only: pausing and deleting it stay as they were on this page.
+        const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
+            && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 
         // #143 step 5 — the link this member keeps for the community this listing actually came from, or
         // undefined. Keyed on `originNode` ONLY, never on `_remoteNode`: a client-side peer browse is not a
@@ -2418,13 +2432,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
-                {isOwnPost && selectedPost.status !== 'pending' && (
+                {(isOwnPost || keepsAuthor) && selectedPost.status !== 'pending' && (
                     <div className="flex flex-col gap-2 mt-4">
                         {!editMode ? (
                             <>
                                 {/* Active/Paused toggle (Offers only). A live Offer counts toward your
                                     credit line (offer covenant, v3); pausing it drops it from the feed. */}
-                                {selectedPost.type === 'offer' && (
+                                {isOwnPost && selectedPost.type === 'offer' && (
                                     <button
                                         onClick={async () => {
                                             if (!identity || !selectedPost) return;
@@ -2498,7 +2512,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 >
                                     {t('✏️ Edit Post')}
                                 </button>
-                                <button
+                                {isOwnPost && <button
                                     onClick={async () => {
                                         if (!identity || !selectedPost) return;
                                         if (!confirm(t('Delete this post?'))) return;
@@ -2520,7 +2534,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }`}
                                 >
                                     {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Post')}
-                                </button>
+                                </button>}
                             </>
                         ) : (
                             <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">

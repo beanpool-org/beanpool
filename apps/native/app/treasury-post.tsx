@@ -9,6 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
+import { PostPhotoRow } from '../components/PostPhotoRow';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
 import { amountRefusalWords, ANY_DECIMALS, formatNumber, inCapitalsOf, isAmbiguousAmount, isShopCategory, parseAmount, t, word, type WordKey } from '@beanpool/core';
@@ -78,6 +79,9 @@ export default function TreasuryPostScreen() {
     const [priceType, setPriceType] = useState<string>('fixed');
     const [footerHeight, setFooterHeight] = useState(0);
     const [description, setDescription] = useState('');
+    // Its photos, added while posting it, as the member's own composer adds them (Damo, 26 Oct: the only way was to post it,
+    // then edit it to add one).
+    const [photos, setPhotos] = useState<string[]>([]);
     const [repeatable, setRepeatable] = useState(!isNeed); // offers recur by default; needs don't
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -127,6 +131,7 @@ export default function TreasuryPostScreen() {
             credits: priceValue,
             priceType,
             repeatable,
+            ...(photos.length > 0 ? { photos } : {}),
         };
         try {
             if (isNeed) {
@@ -252,6 +257,11 @@ export default function TreasuryPostScreen() {
                             multiline
                             textAlignVertical="top"
                         />
+                    </View>
+
+                    {/* Photos */}
+                    <View style={styles.field}>
+                        <PostPhotoRow photos={photos} onChange={setPhotos} testID="treasury-post-photos" />
                     </View>
 
                     {/* Recurring */}

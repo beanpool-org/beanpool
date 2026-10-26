@@ -70,6 +70,8 @@ Open your post. If no deal is under way on it:
 - **Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.
 - **Delete Post** removes it. Anyone still asking for it sees their request marked declined.
 
+If you keep an enterprise, you can change its Offers and Needs the same way: open one and tap **Edit Post**. It stays the enterprise's. See "Projects and enterprises".
+
 While someone is asking for your post, you can still change its words and photos, but not its price: the app says so. While beans are held on a post, you cannot edit it at all. The exception is a Repeatable post (it can have several deals at once): you can still change its words and photos, but not its price. To change the price, decline or cancel that deal first.
 
 In a local community, posts do not expire. Delete them when they are done.

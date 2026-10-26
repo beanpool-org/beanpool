@@ -1138,6 +1138,7 @@
   "Failed to delete": "刪除失敗",
   "Post remains active after completion for repeat business.": "交易完成後貼文依然有效，以便再次接單。",
   "Photos ({n}/{max})": "照片 ({n}/{max})",
+  "Add photo": "新增照片",
   "Failed to save": "儲存失敗",
   "Failed to delete post as convenor": "作為召集人刪除貼文失敗",
   "Loading Location Services...": "正在載入定位服務...",

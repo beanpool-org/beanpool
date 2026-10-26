@@ -1138,6 +1138,7 @@
   "Failed to delete": "삭제하지 못했어요",
   "Post remains active after completion for repeat business.": "반복 거래를 위해 완료 후에도 게시물이 활성 상태로 유지돼요.",
   "Photos ({n}/{max})": "사진 ({n}/{max})",
+  "Add photo": "사진 추가",
   "Failed to save": "저장하지 못했어요",
   "Failed to delete post as convenor": "소집자 권한으로 게시물을 삭제하지 못했어요",
   "Loading Location Services...": "위치 서비스 불러오는 중...",

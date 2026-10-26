@@ -1233,6 +1233,7 @@
   "Failed to delete": "Löschen fehlgeschlagen",
   "Post remains active after completion for repeat business.": "Eintrag bleibt nach Abschluss aktiv für weitere Tauschangebote.",
   "Photos ({n}/{max})": "Fotos ({n}/{max})",
+  "Add photo": "Foto hinzufügen",
   "Failed to save": "Speichern fehlgeschlagen",
   "Failed to delete post as convenor": "Löschen als Koordinator fehlgeschlagen",
   "Loading Location Services...": "Standortdienste werden geladen...",

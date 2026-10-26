@@ -30,6 +30,7 @@ import {
     isAmbiguousAmount, parseAmount, upperCase, type WordKey,
 } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
+import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
@@ -221,6 +222,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [postPriceType, setPostPriceType] = useState('fixed');
     const [postDescription, setPostDescription] = useState('');
     const [postRepeatable, setPostRepeatable] = useState(true);
+    // Its photos, added while posting it, as the member's own composer adds them (Damo, 26 Oct: the only way was to post
+    // it, then edit it to add one).
+    const [postPhotos, setPostPhotos] = useState<string[]>([]);
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState<string | null>(null);
 
@@ -910,6 +914,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     priceType: postPriceType,
                     description: postDescription.trim() || undefined,
                     repeatable: postRepeatable,
+                    ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                 });
             } else {
                 await treasuryPostNeed(pubkey, {
@@ -918,12 +923,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     credits: creditsNum,
                     priceType: postPriceType,
                     description: postDescription.trim() || undefined,
+                    ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
                 });
             }
             setPostModalMode(null);
             setPostTitle('');
             setPostDescription('');
             setPostCredits('');
+            setPostPhotos([]);
             const offer = postModalMode === 'offer';
             setActionFeedback({
                 type: 'success',
@@ -2864,6 +2871,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     className="w-full bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 />
                             </div>
+
+                            <PostPhotoPicker photos={postPhotos} onChange={setPostPhotos}
+                                label={t('Photos ({n}/{max})', { n: postPhotos.length, max: MAX_POST_PHOTOS })} />
 
                             {postModalMode === 'offer' && (
                                 <label className="flex items-center gap-2 cursor-pointer pt-1">

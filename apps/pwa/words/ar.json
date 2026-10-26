@@ -1345,6 +1345,7 @@
   "Failed to delete": "فشل الحذف",
   "Post remains active after completion for repeat business.": "يظل المنشور نشطًا بعد الإتمام للتعاملات المتكررة.",
   "Photos ({n}/{max})": "الصور ({n}/{max})",
+  "Add photo": "إضافة صورة",
   "Failed to save": "فشل الحفظ",
   "Failed to delete post as convenor": "فشل حذف المنشور كمنسق",
   "Loading Location Services...": "جارٍ تحميل خدمات الموقع...",

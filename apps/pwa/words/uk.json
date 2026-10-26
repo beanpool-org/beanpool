@@ -1216,6 +1216,7 @@
   "Failed to delete": "Не вдалося видалити",
   "Post remains active after completion for repeat business.": "Допис залишається активним після завершення для повторних замовлень.",
   "Photos ({n}/{max})": "Фото ({n}/{max})",
+  "Add photo": "Додати фото",
   "Failed to save": "Не вдалося зберегти",
   "Failed to delete post as convenor": "Не вдалося видалити допис як організатор",
   "Loading Location Services...": "Завантаження служб геолокації...",

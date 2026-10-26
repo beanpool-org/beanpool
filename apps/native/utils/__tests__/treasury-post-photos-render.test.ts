@@ -235,7 +235,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         expect(device.asked.filter((a) => a.includes('library'))).toEqual([]);
     });
 
-    it('the camera refused: no photo, and nothing else asked; posted without one, no photos are sent', async () => {
+    it('the camera refused: no photo, and Submit stays disabled with "📷 Add a photo" until one is picked', async () => {
         device.cameraGranted = false;
         await open('offer');
         await click(byLabel('Add photo'), 'Add photo');
@@ -246,8 +246,10 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
 
         await type('Title', 'Dozen eggs');
         await type('Price in Beans', '6');
-        await click(button('POST OFFER'), 'POST OFFER');
-        expect(net.args.get('treasuryPostOffer')?.[1]).not.toHaveProperty('photos');
+        const submit = button('📷 Add a photo');
+        expect(submit).not.toBeNull();
+        await click(submit, '📷 Add a photo');
+        expect(net.calls).not.toContain('db.treasuryPostOffer');
     });
 
     it('five at most: the + goes once five are on', async () => {

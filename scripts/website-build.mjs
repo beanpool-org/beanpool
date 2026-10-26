@@ -441,9 +441,13 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
 
     // Rewrite any links that point to the English root for pages that are translated
     // e.g. href="../rules.html" inside a translated page should be href="rules.html"
+    // Also rewrite root-relative links like href="/global" to href="global.html"
     for (const trPage of TRANSLATED_PAGES) {
         const re = new RegExp(`\\bhref="\\.\\./${trPage}(#[^"]*)?"`, 'g');
         out = out.replace(re, `href="${trPage}$1"`);
+        const base = trPage.replace(/\.html$/, '');
+        const rootRe = new RegExp(`\\bhref="/(?:${trPage}|${base})(#[^"]*)?"`, 'g');
+        out = out.replace(rootRe, `href="${trPage}$1"`);
     }
 
     // 5. Insert hreflang tags
@@ -665,8 +669,9 @@ export function checkWebsite() {
             // Verify no English-only link where a translated page exists
             for (const trPage of TRANSLATED_PAGES) {
                 if (trPage === page) continue;
-                // Looking for links like href="../trPage" or href="/trPage" where trPage exists in this lang
-                if (new RegExp(`href=["'](?:\\.\\./|/)${trPage}["']`, 'i').test(actualHtml)) {
+                // Looking for links like href="../trPage", href="/trPage", or href="/base" where trPage exists in this lang
+                const base = trPage.replace(/\.html$/, '');
+                if (new RegExp(`href=["'](?:\\.\\./|/)(?:${trPage}|${base})(#[^"']*)?["']`, 'i').test(actualHtml)) {
                     errors.push(`apps/website/${lang}/${page} has English-only link to ${trPage} which exists translated`);
                 }
             }

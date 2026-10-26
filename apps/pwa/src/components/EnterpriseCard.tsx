@@ -9,6 +9,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import { LocalCommunityPill } from './LocalCommunityMark';
 import { Sentence } from './Sentence';
+import { CategoryTile } from './CategoryTile';
 
 /** Energy Balance sentence (docs/the-commons.md §2.2). */
 function energySentence(energyBalance: number): string {
@@ -71,7 +72,7 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                 {sample && <div><LocalCommunityPill /></div>}
                 {/* Top row: Avatar + Name + Lifecycle Tag */}
                 <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center overflow-hidden shrink-0 text-xl font-bold text-emerald-400">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 flex items-center justify-center">
                         {avatarSrc ? (
                             <img
                                 src={avatarSrc}
@@ -80,7 +81,7 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                                 className="w-full h-full object-cover"
                             />
                         ) : (
-                            <span aria-hidden="true">🌱</span>
+                            <CategoryTile category="general" size="thumb" />
                         )}
                     </div>
                     <div className="flex-1 min-w-0">

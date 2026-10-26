@@ -26,6 +26,7 @@ import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
+import { CategoryTile } from '../../components/CategoryTile';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
@@ -1124,6 +1125,17 @@ export default function PostDetailModal() {
                                 ? t('Only {group} can see this', { group: post.target_group_name || post.targetGroupName })
                                 : t('Only group members can see this')}
                         </Text>
+                    </View>
+                )}
+
+                {/* Photos or CategoryTile Banner */}
+                {photos.length === 0 && (
+                    <View style={{ width: '100%', aspectRatio: 3 / 1, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
+                        <CategoryTile
+                            category={post.category}
+                            kind={isPulsePost ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
+                            size="banner"
+                        />
                     </View>
                 )}
 

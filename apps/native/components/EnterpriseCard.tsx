@@ -9,6 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { TreasurySummary } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
+import { CategoryTile } from './CategoryTile';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
@@ -113,8 +114,8 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                     // which React Native's Image cannot.
                     <MemberAvatar avatarUrl={item.avatar} pubkey={item.publicKey} callsign={item.name || item.callsign || ''} size={44} />
                 ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={{ fontSize: 22 }}>{hasGoal ? '🌱' : '🏛️'}</Text>
+                    <View style={[styles.avatar, { overflow: 'hidden' }]}>
+                        <CategoryTile category="general" size="thumb" />
                     </View>
                 )}
                 <View style={styles.cardTitleCol}>

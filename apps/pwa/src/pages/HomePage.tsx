@@ -74,6 +74,7 @@ import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
 } from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
+import { CategoryTile } from '../components/CategoryTile';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../components/HomeCard';
@@ -336,9 +337,9 @@ function MarketListingItem({
                         className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
                     />
                 ) : (
-                    <span aria-hidden="true" className="w-full h-24 rounded-lg flex items-center justify-center text-2xl bg-bg-hover mb-2">
-                        {cat?.emoji ?? '🌱'}
-                    </span>
+                    <div className="w-full h-24 rounded-lg overflow-hidden mb-2">
+                        <CategoryTile category={item.category} size="grid" />
+                    </div>
                 )}
                 <div className="min-w-0 flex-1">
                     <div className="mb-1">
@@ -375,9 +376,9 @@ function MarketListingItem({
                     className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
                 />
             ) : (
-                <span aria-hidden="true" className="shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-xl bg-bg-hover">
-                    {cat?.emoji ?? '🌱'}
-                </span>
+                <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden">
+                    <CategoryTile category={item.category} size="thumb" />
+                </div>
             )}
             <span className="min-w-0 flex-1">
                 <span className="block break-words">

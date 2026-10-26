@@ -6,6 +6,7 @@ import type { AppColors } from '../../constants/colors';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { MemberAvatar } from '../MemberAvatar';
 import { ExampleListings } from '../ExampleListings';
+import { CategoryTile, type CategoryTileKind } from '../CategoryTile';
 import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { eventHomeWhen, formatDistance } from '../../utils/events';
 import { closesInWords, type NeedsYouEntry } from '../../utils/needs-you';
@@ -336,10 +337,14 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
     );
 }
 
-function Thumb({ uri, emoji, colors }: { uri: string | null; emoji: string; colors: AppColors }) {
+function Thumb({ uri, category, kind, colors }: { uri: string | null; category?: string | null; kind?: CategoryTileKind; colors: AppColors }) {
     const s = homeStyles(colors);
     if (uri) return <Image source={{ uri }} style={s.thumb} contentFit="cover" accessibilityIgnoresInvertColors />;
-    return <View style={[s.thumb, s.thumbEmpty]}><Text style={{ fontSize: 22 }} importantForAccessibility="no">{emoji}</Text></View>;
+    return (
+        <View style={[s.thumb, { overflow: 'hidden' }]}>
+            <CategoryTile category={category} kind={kind} size="thumb" />
+        </View>
+    );
 }
 
 export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSeeAll }: {
@@ -380,7 +385,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
             sub={facts || category}
             a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))} emoji={categoryEmoji(p.category)} colors={colors} />}
+            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))} category={p.category} kind="listing" colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
             testID={testID}
         />
@@ -543,7 +548,7 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
                         sub={sub}
                         a11y={a11y}
                         onPress={() => router.push('/(tabs)/pulse')}
-                        left={<Thumb uri={resolvePulseThumbnailUrl(nodeUrl, p)} emoji="📡" colors={colors} />}
+                        left={<Thumb uri={resolvePulseThumbnailUrl(nodeUrl, p)} kind="pulse" colors={colors} />}
                         testID={`home-pulse-${p.id}`}
                     />
                 );

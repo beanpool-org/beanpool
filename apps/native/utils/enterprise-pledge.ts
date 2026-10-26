@@ -43,9 +43,10 @@ export interface PledgeReturnInput {
 /**
  * What a project's page says happens to its backers' Beans if its goal isn't reached (Marty, board, 27 Oct 2026): they go
  * back a week after its end date (core's pledgeReturnAt, the node's own rule), unless the end date moves before then; and
- * once the node has given them back, that they went back. The dates are days on the reader's own clock. Null for an
- * enterprise with no goal, a project with no end date or one that reached its goal, and one whose end date is over with
- * nothing pledged.
+ * once the node has given them back, that they went back. Until it has, only the day they are due back from: a node that
+ * can't pay one of the backers leaves the whole project for its operator (apps/server/src/engine/unfunded-pledges.ts), so
+ * the page never says they are on their way. The dates are days on the reader's own clock. Null for an enterprise with no
+ * goal, a project with no end date or one that reached its goal, and one whose end date is over with nothing pledged.
  */
 export function pledgeReturnLine(p: PledgeReturnInput, now: number = Date.now()): string | null {
     const goal = Number(p.goalAmount ?? 0);
@@ -67,5 +68,5 @@ export function pledgeReturnLine(p: PledgeReturnInput, now: number = Date.now())
     if (!isPledgeReturnDue(p.deadlineAt, now)) {
         return t('The goal wasn’t reached by {date}. Everyone’s Beans go back on {returnDate}, unless the end date moves before then.', { date, returnDate });
     }
-    return t('The goal wasn’t reached by {date}, so everyone’s Beans are going back.', { date });
+    return t('The goal wasn’t reached by {date}, so everyone’s Beans are due back from {returnDate}.', { date, returnDate });
 }

@@ -206,7 +206,10 @@ const byText = (shown: string) => Array.from(host.querySelectorAll('button')).fi
 /** The form's photo, from the camera roll: Create waits for one. */
 const addPhoto = async () => {
     roll.gives = true;
+    // The photo button opens the shared source sheet (#2512): Camera, Gallery, Browse files.
     await click(byLabel(xx('Add a photo')), 'Add a photo');
+    await pressAlert('Gallery');
+    alerts.said.length = 0;
     roll.gives = false;
     expect(byLabel(xx('Event photo')), 'the photo, shown').not.toBeNull();
 };

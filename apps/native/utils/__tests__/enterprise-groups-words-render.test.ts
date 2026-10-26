@@ -525,7 +525,7 @@ describe('posting an enterprise\'s Offer or Need in the pseudo-locale (words S3h
         // A photo from the Gallery: then it is POST OFFER, and it says what else is missing.
         alerts.said.length = 0;
         await click(byLabel(xx('Add photo')), 'Add photo');
-        expect(alerts.said).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Cancel')]);
+        expect(alerts.said).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
         await pressAlertButton(xx('Gallery'));
         await settle();
         expect(byLabel(xx('Post photo')), 'the photo, shown').not.toBeNull();

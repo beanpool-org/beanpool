@@ -57,7 +57,9 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 async function child(): Promise<void> {
     await runNodeChild({
         'setup-primary': async (a: { replicationToken: string; pat: string; hana: string; olly: string; pia: string }) => {
+            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
+            (se as any).createPost = wrapCreatePost(se.createPost);
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             const genesis = crypto.randomBytes(32).toString('hex');
@@ -102,7 +104,9 @@ async function child(): Promise<void> {
             }
         },
         change: async (a: { mill: string; pat: string; hana: string; olly: string; pia: string }) => {
+            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
+            (se as any).createPost = wrapCreatePost(se.createPost);
             se.initiateWindUp(a.mill, a.pat);
             se.setHolidayMode(a.hana, true);
             const paused = se.adminEmergencySuspend(a.pia, 'owner:password', 'Threats made to another member at the market');
@@ -126,7 +130,9 @@ async function child(): Promise<void> {
         },
         row: async (a: { key: string }) => {
             const { db } = await import('./db/db.js');
+            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
+            (se as any).createPost = wrapCreatePost(se.createPost);
             // Every column, so a node without board_standing_changed_at answers null rather than failing.
             const r = db.prepare('SELECT * FROM members WHERE public_key = ?').get(a.key) as Record<string, any> | undefined;
             return {
@@ -135,7 +141,9 @@ async function child(): Promise<void> {
             };
         },
         delta: async (a: { since: string }) => {
+            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
+            (se as any).createPost = wrapCreatePost(se.createPost);
             return se.getPosts({ updatedAfter: a.since, sync: true, types: ['offer', 'need', 'poll', 'event'], limit: 1000 })
                 .map(p => ({ id: p.id, status: p.status }));
         },

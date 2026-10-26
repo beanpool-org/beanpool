@@ -56,10 +56,12 @@ process.env.ADMIN_PASSWORD = 'ShopsPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
     initStateEngine, seedGenesisMember, adminPruneUser, purgeMemberSelf, exportSyncState, signSyncPayload, importRemoteState,
-    setNodeRole, reconcileLedgerFromDb, createProject, updateProject, createPost,
+    setNodeRole, reconcileLedgerFromDb, createProject, updateProject, createPost: rawCreatePost,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { SHOPS_NEAR_MAX } from './routes/shops.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -174,7 +176,7 @@ async function main(): Promise<void> {
 
     const offer = async (who: Id, title: string, extra: Record<string, unknown> = {}) => call('POST', who, '/api/marketplace/posts', {
         type: 'offer', category: 'tools', title, description: `${title}, in good order`, credits: 0, authorPublicKey: who.pk,
-        lat: MULLUM.lat, lng: MULLUM.lng, ...extra,
+        lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra,
     });
     const offerId = async (who: Id, title: string, extra: Record<string, unknown> = {}): Promise<string> => {
         const r = await offer(who, title, extra);
@@ -238,9 +240,9 @@ async function main(): Promise<void> {
     const ladderId = await offerId(dave, 'Ladder', { shopId: daveShop, lendable: true, lendMaxDays: 7 });
     const tentId = await offerId(dave, 'Tent', { shopId: daveShop });
     const postsBefore = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
-    const need = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk, shopId: daveShop });
+    const need = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk, shopId: daveShop, photos: TEST_PHOTOS });
     const event = await call('POST', dave, '/api/marketplace/posts', { type: 'event', title: 'Tool swap', description: 'Bring one, take one', authorPublicKey: dave.pk,
-        lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: daveShop });
+        lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: daveShop, photos: TEST_PHOTOS });
     const others = await offer(dave, 'Into Ann\'s', { shopId: annShop });
     const madeUp = await offer(dave, 'Into nowhere', { shopId: 'no-such-shop' });
     const notText = await offer(dave, 'Into a number', { shopId: 12 });
@@ -262,7 +264,7 @@ async function main(): Promise<void> {
     const toggledOut = await edit(dave, oldOfferId, { shopId: null });
     assert(toggledOut.status === 200 && !('shopId' in (toggledOut.body?.post ?? { shopId: 1 })) && shopIdOf(oldOfferId) === null && (postRow(oldOfferId)?.updated_at ?? '') > stampIn,
         `and takes it out again, the row restamped for the copies (${show(toggledOut)})`);
-    const daveNeed = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk });
+    const daveNeed = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk, photos: TEST_PHOTOS });
     const needIntoShop = await edit(dave, daveNeed.body?.post?.id, { shopId: daveShop });
     const editOthers = await edit(dave, oldOfferId, { shopId: annShop });
     assert(needIntoShop.status === 400 && needIntoShop.body?.code === 'shop_offers_only' && shopIdOf(daveNeed.body?.post?.id) === null

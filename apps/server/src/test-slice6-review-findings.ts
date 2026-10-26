@@ -22,14 +22,16 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 
+import { wrapCreatePost } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator, adminSetOperator, setUserStatusRow,
-    keeperOf, getBalance, createProject, createConversation, sendMessage, addFriend, createPost, requestPost,
+    keeperOf, getBalance, createProject, createConversation, sendMessage, addFriend, createPost: rawCreatePost, requestPost,
     approvePostRequest, transfer, ensureEnterpriseThread, exportSyncState, reconcileLedgerFromDb,
     canOperateTreasury,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import {
     approvePostRequest as approvePostRequestEngine,
     completePostTransaction as completePostTransactionEngine,

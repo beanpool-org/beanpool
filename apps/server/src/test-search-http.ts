@@ -22,7 +22,9 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, createPost } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { initStateEngine, createPost: rawCreatePost } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';

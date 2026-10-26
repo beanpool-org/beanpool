@@ -27,6 +27,7 @@ process.env.ADMIN_PASSWORD = 'ShopCategoriesPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -168,7 +169,7 @@ async function main(): Promise<void> {
     console.log('\n── 4. a shop\'s new listings start in its category ──');
     const annShop: string = both.body?.shop?.id ?? '';
     const post = (who: Id, title: string, extra: Record<string, unknown>) => call('POST', who, '/api/marketplace/posts', {
-        type: 'offer', title, description: `${title}, in good order`, credits: 0, authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, ...extra,
+        type: 'offer', title, description: `${title}, in good order`, credits: 0, authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra,
     });
     const inShop = await post(ann, 'Tomato seedlings', { shopId: annShop });
     assert(inShop.status === 200 && inShop.body?.post?.shopId === annShop && inShop.body.post.category === 'garden',
@@ -179,10 +180,10 @@ async function main(): Promise<void> {
     assert(outside.status === 200 && outside.body?.post?.category === 'other' && !outside.body.post.shopId, `one outside a shop is as before (${show(outside)})`);
 
     const fixitShop: string = entOld.body?.shop?.id ?? '';
-    const entOffer = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'Phone screen swap', credits: 0, shopId: fixitShop, lat: MULLUM.lat, lng: MULLUM.lng });
+    const entOffer = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'Phone screen swap', credits: 0, shopId: fixitShop, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     assert(entOffer.status === 200 && entOffer.body?.post?.shopId === fixitShop && entOffer.body.post.category === 'services',
         `an enterprise's Offer put in its shop with no category starts in the shop's (${show(entOffer)})`);
-    const entNeither = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'No category, no shop', credits: 0, lat: MULLUM.lat, lng: MULLUM.lng });
+    const entNeither = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'No category, no shop', credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     assert(entNeither.status === 400, `one with neither a category nor a shop is still refused (${show(entNeither)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

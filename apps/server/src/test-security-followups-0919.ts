@@ -17,6 +17,7 @@
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-security-followups-0919.ts
  */
 
+import { wrapCreatePost } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import {
     initStateEngine,
@@ -27,9 +28,10 @@ import {
     createGroup,
     joinGroup,
     transfer,
-    createPost,
+    createPost: rawCreatePost,
     acceptPost,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import * as decisionsEngine from './decisions-engine.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';

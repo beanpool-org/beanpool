@@ -3423,7 +3423,7 @@ export async function updatePost(id: string, updates: any) {
         credits: updates.credits,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
-        photos: updates.photos ? JSON.parse(updates.photos) : undefined,
+        photos: updates.photos !== undefined ? (updates.photos ? JSON.parse(updates.photos) : []) : undefined,
         // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
         ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });

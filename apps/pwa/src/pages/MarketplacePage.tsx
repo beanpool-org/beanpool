@@ -2636,7 +2636,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* Photos */}
                                 <div className="mb-5">
-                                    <p className="text-xs font-bold text-nature-400 uppercase tracking-widest mb-2">{t('Photos ({n}/{max})', { n: editPhotos.length, max: 5 })}</p>
+                                    <p className="text-xs font-bold text-nature-400 uppercase tracking-widest mb-2">
+                                        {t('Photos ({n}/{max})', { n: editPhotos.length, max: 5 })}
+                                        {Boolean(selectedPost.photos && selectedPost.photos.length > 0) && <span className="text-red-500 font-bold"> *</span>}
+                                    </p>
                                     <div className="flex gap-2 flex-wrap">
                                         {editPhotos.map((photo, i) => (
                                             <div key={i} className="relative">
@@ -2708,6 +2711,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <button
                                         onClick={async () => {
                                             if (!identity || !selectedPost || !editTitle.trim()) return;
+                                            if (selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0) {
+                                                setError(t('Add a photo first'));
+                                                return;
+                                            }
                                             // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, never
                                             // saved as 0. Any decimals, as before; an empty box is 0, as before.
                                             const price = parseAmount(editCredits, undefined, ANY_DECIMALS);
@@ -2736,9 +2743,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setSaving(false);
                                             }
                                         }}
-                                        disabled={saving || !editTitle.trim()}
+                                        disabled={saving || !editTitle.trim() || Boolean(selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0)}
                                         className={`flex-1 py-3 rounded-xl font-bold text-[15px] transition-colors shadow-sm ${
-                                            saving || !editTitle.trim() ? 'bg-nature-300 text-white cursor-not-allowed' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
+                                            saving || !editTitle.trim() || Boolean(selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0) ? 'bg-nature-300 text-white cursor-not-allowed' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                         }`}
                                     >
                                         {saving ? t('Saving...') : t('💾 Save')}

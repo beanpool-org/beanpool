@@ -221,3 +221,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 **Vulnerability:** `GET /api/messages/:conversationId` in `apps/server/src/routes/messaging.ts` gated the non-participant authorization check behind `ENFORCE_READ_AUTH`. When `ENFORCE_READ_AUTH` was disabled or unconfigured, any caller could fetch private conversation metadata and messages by conversation ID.
 **Learning:** Private resources like direct message conversations must enforce participant authorization (`conv.participants.includes(actor)`) unconditionally, regardless of server-level public read settings (`ENFORCE_READ_AUTH`).
 **Prevention:** Check `!conv.participants.includes(ctx.state.actor)` directly without checking `ENFORCE_READ_AUTH` so non-participants are always denied access (403).
+
+## 2026-10-26 - [Sentinel] Bound DM Conversation Participants Limit
+**Vulnerability:** `POST /api/messages/conversation` in `apps/server/src/routes/messaging.ts` accepted an unbounded `participants` array without checking its length prior to executing array iteration and set allocations, exposing the route to CPU and memory DoS.
+**Learning:** Direct message endpoints expecting a small fixed set of participants (e.g. 2) must bound array size immediately before running validation loops or allocating Sets on large user-controlled inputs.
+**Prevention:** Check `participants.length > 10` upfront, returning HTTP 400 immediately when exceeded.

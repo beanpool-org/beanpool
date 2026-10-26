@@ -105,6 +105,9 @@ async function main() {
     const a15group = await signedFetch('POST', '/api/messages/conversation', C,
         { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex, B.pubKeyHex], name: 'old style' });
     assert(a15group.status === 410, `the removed chat group answers 410 Gone (got ${a15group.status} ${a15group.error ?? ''})`);
+    const a15overbound = await signedFetch('POST', '/api/messages/conversation', C,
+        { type: 'dm', createdBy: C.pubKeyHex, participants: Array(50).fill(C.pubKeyHex) });
+    assert(a15overbound.status === 400, `overbound participants array is REJECTED with 400 (got ${a15overbound.status} ${a15overbound.error ?? ''})`);
 
     // Send message — spoof check (signed by A but claiming to be B) is DENIED.
     const msgSpoofed = await signedFetch('POST', '/api/messages/send', A,

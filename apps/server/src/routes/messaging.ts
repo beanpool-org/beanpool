@@ -125,6 +125,11 @@ router.post('/api/messages/conversation', async (ctx) => {
         ctx.body = { error: 'participants must be an array' };
         return;
     }
+    if (participants.length > 10) {
+        ctx.status = 400;
+        ctx.body = { error: 'DM conversations must have exactly 2 distinct participants' };
+        return;
+    }
     if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= MAX_PARTICIPANT_KEY_LENGTH)) {
         ctx.status = 400;
         ctx.body = { error: 'All participants must be valid public keys' };

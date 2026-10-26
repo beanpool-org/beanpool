@@ -8,7 +8,7 @@
  * (READ_MEDIA_IMAGES stays in app.json's blockedPermissions, #1284). The picker and the image tools are loaded when a photo
  * is picked, not when a screen that offers one opens (as utils/picture-crop.ts).
  */
-import { Alert } from 'react-native';
+import { Alert, Platform, type AlertButton } from 'react-native';
 import { t } from '@beanpool/core';
 
 /** The longest a listing photo's width is sent. */
@@ -45,6 +45,24 @@ export async function postPhotoFromFiles(): Promise<string | null> {
     return !result.canceled && result.assets?.[0]?.uri ? postPhotoOf(result.assets[0].uri) : null;
 }
 
+/**
+ * The photo-source sheet every Add photo uses. Android's Alert shows at most three buttons and, unless cancelable, can't be
+ * closed by Back or a tap outside (review of #2512): there it is Camera, Gallery, Browse files, closed by Back or a tap
+ * outside. iOS has no separate files door (the picker's legacy mode is Android-only, so it would open the same library
+ * twice): there it is Camera, Gallery, Cancel. `camera` left out: Gallery, Browse files, Cancel on Android. Every way of
+ * leaving without a choice calls `onCancel`.
+ */
+export function askPhotoSource(title: string, sources: { camera?: () => void; gallery: () => void; files: () => void }, onCancel?: () => void): void {
+    const cancel: AlertButton = { text: t('Cancel'), style: 'cancel', onPress: onCancel };
+    const buttons: AlertButton[] = [
+        ...(sources.camera ? [{ text: t('Camera'), onPress: sources.camera }] : []),
+        { text: t('Gallery'), onPress: sources.gallery },
+        ...(Platform.OS === 'android' ? [{ text: t('Browse files'), onPress: sources.files }] : []),
+    ];
+    if (buttons.length < 3) buttons.push(cancel);
+    Alert.alert(title, t('Choose a source'), buttons, { cancelable: true, onDismiss: onCancel });
+}
+
 /** Asks Camera, Gallery, or Browse files, then hands the picked photo to `add`. Nothing is asked of the phone until one is tapped. */
 export function askForPostPhoto(add: (photo: string) => void, title?: string): void {
     const take = (pick: () => Promise<string | null>, failed?: (e: any) => void) => async () => {
@@ -56,10 +74,9 @@ export function askForPostPhoto(add: (photo: string) => void, title?: string): v
             else Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
         }
     };
-    Alert.alert(title ?? t('Add Photo'), t('Choose a source'), [
-        { text: t('Camera'), onPress: take(postPhotoFromCamera, (e) => Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'))) },
-        { text: t('Gallery'), onPress: take(postPhotoFromLibrary) },
-        { text: t('Browse files'), onPress: take(postPhotoFromFiles) },
-        { text: t('Cancel'), style: 'cancel' },
-    ]);
+    askPhotoSource(title ?? t('Add Photo'), {
+        camera: take(postPhotoFromCamera, (e) => Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'))),
+        gallery: take(postPhotoFromLibrary),
+        files: take(postPhotoFromFiles),
+    });
 }

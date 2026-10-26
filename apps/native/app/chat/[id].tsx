@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
@@ -736,23 +737,22 @@ function ChatScreen({ id }: { id: string }) {
                 sendingRef.current = false;
             }
         };
-        Alert.alert(t('Send Photo'), t('Choose a source'), [
-            { text: t('Camera'), onPress: async () => {
+        askPhotoSource(t('Send Photo'), {
+            camera: async () => {
                 const perm = await ImagePicker.requestCameraPermissionsAsync();
                 if (!perm.granted) { Alert.alert(t('Permission needed'), t('Camera access is required.')); return; }
                 const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
-            }},
-            { text: t('Gallery'), onPress: async () => {
+            },
+            gallery: async () => {
                 const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, defaultTab: 'albums' });
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
-            }},
-            { text: t('Browse files'), onPress: async () => {
+            },
+            files: async () => {
                 const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, legacy: true });
                 if (!r.canceled && r.assets[0]?.uri) sendUri(r.assets[0]);
-            }},
-            { text: t('Cancel'), style: 'cancel' },
-        ]);
+            },
+        });
     };
 
     const handleReleaseCredits = async () => {

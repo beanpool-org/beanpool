@@ -9,7 +9,7 @@
  * The picker and the image tools are loaded when a photo is picked, not when a screen that offers one opens (as
  * app/welcome.tsx loads expo-application): the console and Your shop open without either.
  */
-import { Alert } from 'react-native';
+import { askPhotoSource } from './post-photo';
 import { BANNER_PICTURE, t } from '@beanpool/core';
 import { pickPicture, type CropPicture, type WorkingPicture } from './picture-crop';
 
@@ -20,17 +20,10 @@ import { pickPicture, type CropPicture, type WorkingPicture } from './picture-cr
  */
 export async function pickBannerPhoto(crop: CropPicture, from?: 'library' | 'files'): Promise<string | null> {
     const picture = from ? await pickPicture(from) : await new Promise<WorkingPicture | null>((resolve, reject) => {
-        Alert.alert(t('Add Photo'), t('Choose a source'), [
-            {
-                text: t('Gallery'),
-                onPress: () => pickPicture('library').then(resolve, reject),
-            },
-            {
-                text: t('Browse files'),
-                onPress: () => pickPicture('files').then(resolve, reject),
-            },
-            { text: t('Cancel'), style: 'cancel', onPress: () => resolve(null) },
-        ]);
+        askPhotoSource(t('Add Photo'), {
+            gallery: () => { pickPicture('library').then(resolve, reject); },
+            files: () => { pickPicture('files').then(resolve, reject); },
+        }, () => resolve(null));
     });
     return picture ? crop(picture, BANNER_PICTURE) : null;
 }

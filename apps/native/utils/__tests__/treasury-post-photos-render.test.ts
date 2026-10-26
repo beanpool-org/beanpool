@@ -189,7 +189,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         expect(device.asked).toEqual([]);
 
         await click(byLabel('Add photo'), 'Add photo');
-        expect(alerts.said.slice(-6)).toEqual(['Add Photo', 'Choose a source', 'Camera', 'Gallery', 'Browse files', 'Cancel']);
+        expect(alerts.said.slice(-5)).toEqual(['Add Photo', 'Choose a source', 'Camera', 'Gallery', 'Browse files']); // Android: Cancel is Back or a tap outside
         // Tapping + asks the phone for nothing: the member chooses first.
         expect(device.asked).toEqual([]);
 

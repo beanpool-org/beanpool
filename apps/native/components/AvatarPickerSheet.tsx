@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
+import { Platform, View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { pickPicture, type WorkingPicture } from '../utils/picture-crop';
@@ -147,10 +147,13 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors, tit
                                         <Text style={styles.sourceEmoji}>🖼️</Text>
                                         <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Gallery')}</Text>
                                     </Pressable>
+                                    {/* Android only: iOS has no separate files door here (the picker's legacy mode is Android's). */}
+                                    {Platform.OS === 'android' && (
                                     <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel={t('Browse files')} onPress={handleBrowseFiles}>
                                         <Text style={styles.sourceEmoji}>📁</Text>
                                         <Text style={styles.sourceLabel} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Browse files')}</Text>
                                     </Pressable>
+                                    )}
                                 </View>
 
                                 <Text style={styles.sectionTitle}>{t('Or choose an avatar — swipe for more:')}</Text>

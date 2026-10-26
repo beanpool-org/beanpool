@@ -557,7 +557,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentInner}>
                                 {reflectionLoading ? (
                                     <View style={styles.modalLoadingWrap}>
-                                        <ActivityIndicator size="small" color={colors.primary} />
+                                        <ActivityIndicator size="small" color={colors.brand.primary} />
                                         <Text style={styles.modalLoadingText}>{t('Loading')}</Text>
                                     </View>
                                 ) : reflectionError ? (

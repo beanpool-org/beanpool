@@ -48,7 +48,7 @@ Before you switch to Known, give at least one person the owner or admin role (Pe
 
 If a request waits **3 days** without an answer in an Invite community (any member invites), the Needs you line is shown to all members so someone can welcome them.
 
-If a request waits **7 days** with no answer, the server sends an operator alert (`knock.waiting`: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
+If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
 
 Your server measures how promptly requests are answered over its last 90 days and publishes this line to the directory:
 - **"Usually answers within a week"** when at least 80% of requests were answered within 7 days and none is older than 14 days.

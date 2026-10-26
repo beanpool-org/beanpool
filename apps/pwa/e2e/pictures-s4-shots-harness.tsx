@@ -121,6 +121,13 @@ function Harness() {
                     <PostAuthorTrust callsign="Sam (no photo)" publicKey={'c3'.repeat(32)} avatarUrl={null} mode="compact" />
                     <PostAuthorTrust callsign="Lena (a preset)" publicKey={'d9'.repeat(32)} avatarUrl="bundled://leaf" />
                 </div>
+            </div>
+        );
+    }
+
+    if (view === 'roster') {
+        return (
+            <div className="min-h-screen bg-oat-100 dark:bg-nature-950">
                 <GroupDetailModal
                     group={{ id: 'g-faces', name: 'Seed Library', slug: 'seed-library', category: 'general', joinPolicy: 'request_to_join', createdBy: 'e1'.repeat(32), createdAt: '2026-01-01T00:00:00.000Z', avatarUrl: 'bundled://bean-green' } as any}
                     isOpen={true}

@@ -54,6 +54,7 @@ function answer(url) {
         return { silence: { convenorPubkey: null, convenorCallsign: null, lastActiveAt: null, daysInactive: 0, isSilent: false, isEligible: false, electorate: 'convenors' }, proposals: [], canPropose: false };
     }
     if (p.endsWith('/decisions')) return { decisions: [], myPoolVoting: null };
+    if (p.startsWith('/api/marketplace/transactions')) return [];
     if (/\/api\/(members|friends|blocks|groups)(\/|$|\?)/.test(p + '/')) return [];
     return {};
 }
@@ -67,7 +68,8 @@ const browser = await chromium.launch();
 const shots = [
     { id: 'fix1-group-chats-list', view: 'group-chats', ready: 'text=Garden crew' },
     { id: 'fix1-group-chat-header', view: 'group-chats', ready: 'text=Garden crew', open: 'text=Garden crew', then: '[data-testid="chat-owner-header"]' },
-    { id: 'fix1-faces', view: 'faces', ready: 'text=Nell (no photo)' },
+    { id: 'fix1-market-author', view: 'faces', ready: 'text=Rowan (no photo)' },
+    { id: 'fix1-group-info-roster', view: 'roster', ready: 'text=Nell (no photo)', scrollTo: 'text=Nell (no photo)' },
 ];
 
 try {
@@ -84,20 +86,25 @@ try {
                 }
                 return route.continue();
             });
-            await page.addInitScript((dark) => {
-                document.addEventListener('DOMContentLoaded', () => {
-                    document.documentElement.style.fontSize = '130%';
-                    document.documentElement.classList.toggle('dark', dark);
-                });
-            }, theme === 'dark');
+            // The theme as the app sets it (lib/useTheme): html.dark.dark-theme, or html.light-theme.
+            const setLook = (dark) => {
+                const root = document.documentElement;
+                root.style.fontSize = '130%';
+                root.classList.toggle('dark', dark);
+                root.classList.toggle('dark-theme', dark);
+                root.classList.toggle('light-theme', !dark);
+            };
             await page.goto(`${base}?view=${s.view}`);
-            await page.evaluate((dark) => { document.documentElement.style.fontSize = '130%'; document.documentElement.classList.toggle('dark', dark); }, theme === 'dark');
+            await page.evaluate(setLook, theme === 'dark');
             await page.waitForSelector(s.ready, { timeout: 20000 });
             if (s.open) {
                 await page.click(s.open);
                 await page.waitForSelector(s.then, { timeout: 20000 });
             }
+            if (s.scrollTo) await page.locator(s.scrollTo).first().evaluate((el) => el.scrollIntoView({ block: 'center' }));
             await page.waitForTimeout(700);
+            await page.evaluate(setLook, theme === 'dark');
+            await page.waitForTimeout(100);
             const width = await page.evaluate(() => document.documentElement.scrollWidth);
             const out = path.join(OUT_DIR, `${s.id}-${theme}.png`);
             await page.screenshot({ path: out });

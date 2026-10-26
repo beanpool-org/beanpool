@@ -131,11 +131,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">App Store থেকে BeanPool সংগ্রহ করুন</a>
-                <p id="ios-note">iPhone এবং iPad-এর জন্য।</p>
+                <p id="ios-note" data-ios-note="iPhone অ্যাপটি এর পরবর্তী আপডেট থেকে বিশ্ব সম্প্রদায়ে যোগ দিতে পারবে।">iPhone এবং iPad-এর জন্য।</p>
             </div>
         </div>
         <p class="global-note" id="global-first-screen">অ্যাপে নতুন? এর প্রথম স্ক্রিনে <strong>সারা বিশ্বে BeanPool ঘুরে দেখুন</strong>-এ ট্যাপ করুন।</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org/?lang=bn">অথবা আপনার ব্রাউজারে বিশ্ব সম্প্রদায় খুলুন</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="আপনার ব্রাউজারে বিশ্ব সম্প্রদায় খুলুন" href="https://global.beanpool.org/?lang=bn">অথবা আপনার ব্রাউজারে বিশ্ব সম্প্রদায় খুলুন</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">বিশ্ব সম্প্রদায় হলো অনেক সম্প্রদায়ের মধ্যে একটি। আপনার নিজস্ব সম্প্রদায় তার নিজস্ব সার্ভারে চলে এবং এর কখনোই বিশ্ব সম্প্রদায়ের প্রয়োজন হয় না।</p>
     </main>
@@ -192,12 +192,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = browserLink.textContent.replace(/^(?:or|o|ou|oder|oppure|или|або|أو|یا|অথবা|அல்லது|അല്ലെങ്കിൽ|atau|au|veya|hoặc|ή|または|또는|或者|或)\s*/i, '');
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

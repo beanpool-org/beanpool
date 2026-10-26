@@ -1,4 +1,4 @@
-<!-- source-hash: 7d1f507efe4dedc0 -->
+<!-- source-hash: f7c812a815d0f741 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,11 +76,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">在 App Store 获取 BeanPool</a>
-                <p id="ios-note">适用于 iPhone 和 iPad。</p>
+                <p id="ios-note" data-ios-note="iPhone 应用将在下次更新后可以加入全球社区。">适用于 iPhone 和 iPad。</p>
             </div>
         </div>
         <p class="global-note" id="global-first-screen">初次使用该应用？在其首屏上，点击<strong>探索全球 BeanPool</strong>。</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org">或者在浏览器中打开全球社区</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="在浏览器中打开全球社区" href="https://global.beanpool.org">或者在浏览器中打开全球社区</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">全球社区是众多社区中的一个。属于你自己的社区运行在自己的服务器上，绝不需要依赖全球社区。</p>
     </main>
@@ -137,12 +137,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = browserLink.textContent.replace(/^(?:or|o|ou|oder|oppure|или|або|أو|یا|অথবা|அல்லது|അല്ലെങ്കിൽ|atau|au|veya|hoặc|ή|または|또는|或者|或)\s*/i, '');
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

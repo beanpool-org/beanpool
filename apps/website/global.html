@@ -131,12 +131,12 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">Get BeanPool on the App Store</a>
-                <p id="ios-note">For iPhone and iPad.</p>
+                <p id="ios-note" data-ios-note="The iPhone app can join the global community from its next update.">For iPhone and iPad.</p>
             </div>
         </div>
 
         <p class="global-note" id="global-first-screen">New to the app? On its first screen, tap <strong>Explore BeanPool worldwide</strong>.</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org">or open the global community in your browser</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="Open the global community in your browser" href="https://global.beanpool.org">or open the global community in your browser</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">The global community is one community among many. Your own community runs on its own server and never needs it.</p>
     </main>
@@ -193,12 +193,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = 'open the global community in your browser';
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

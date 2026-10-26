@@ -131,11 +131,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">Завантажити BeanPool в App Store</a>
-                <p id="ios-note">Для iPhone та iPad.</p>
+                <p id="ios-note" data-ios-note="Застосунок для iPhone зможе приєднатися до глобальної спільноти з наступного оновлення.">Для iPhone та iPad.</p>
             </div>
         </div>
         <p class="global-note" id="global-first-screen">Вперше в додатку? На першому екрані торкніться <strong>Дослідити BeanPool у світі</strong>.</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org/?lang=uk">або відкрити глобальну спільноту в браузері</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="Відкрити глобальну спільноту в браузері" href="https://global.beanpool.org/?lang=uk">або відкрити глобальну спільноту в браузері</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">Глобальна спільнота — одна серед багатьох. Ваша власна спільнота працює на окремому сервері й не залежить від неї.</p>
     </main>
@@ -192,12 +192,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = browserLink.textContent.replace(/^(?:or|o|ou|oder|oppure|или|або|أو|یا|অথবা|அல்லது|അല്ലെങ്കിൽ|atau|au|veya|hoặc|ή|または|또는|或者|或)\s*/i, '');
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

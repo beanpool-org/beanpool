@@ -55,6 +55,7 @@ function elementsById() {
             classes,
             classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
             text: decode(MARKUP.slice(m.index + m[0].length, end).replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim(),
+            getAttribute: (name) => { const v = attrs.match(new RegExp('\\b' + name + '="([^"]*)"')); return v ? decode(v[1]) : null; },
         });
     }
     return els;
@@ -218,6 +219,28 @@ test('iPhone and iPad: while IOS_OPEN_DOOR_LIVE is false, browser line first and
         assert.ok(!els.get('app-store').classList.contains('btn-primary'), 'App Store is ghost, not primary');
         assert.equal(els.get('browser').hidden, false);
         assert.deepEqual(visit({ ...who, arrival: 'back_forward' }).went, []);
+        assert.equal(els.get('browser').textContent, 'Open the global community in your browser', 'the browser line reads as its own button');
+        assert.match(els.get('ios-note').textContent, /iPhone app can join the global community from its next update/);
+    }
+});
+
+// Each language's page carries its own iPhone wording (no English sentence, no word stripped off by a pattern: the
+// old "or" stripper turned German "oder öffne" into "der öffne").
+test('every language copy of /global has its own iPhone button text and note, read from the page, never stripped', () => {
+    const langs = fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && fs.existsSync(path.join(SITE, d.name, 'global.html'))).map((d) => d.name);
+    assert.ok(langs.length >= 24, 'all 24 language copies: ' + langs.length);
+    const englishNote = MARKUP.match(/data-ios-note="([^"]*)"/)[1];
+    for (const lang of langs) {
+        const page = fs.readFileSync(path.join(SITE, lang, 'global.html'), 'utf8');
+        const text = page.match(/<a id="browser" data-ios-text="([^"]+)"[^>]*>([^<]*)</);
+        const note = page.match(/<p id="ios-note" data-ios-note="([^"]+)"/);
+        assert.ok(text && note, lang + ': both attributes on the page');
+        assert.notEqual(note[1], englishNote, lang + ': the iPhone note is in its own language');
+        assert.ok(text[2].trim().length > text[1].length, lang + ': the button text is the line without its leading "or" word');
+        assert.ok(text[2].includes(text[1].slice(1)), lang + ': the button text is the same words as the line (' + text[1] + ')');
+        assert.doesNotMatch(page, /textContent\.replace\(/, lang + ': no pattern rewrites the words');
+        assert.match(page, /getAttribute\('data-ios-text'\)/, lang);
     }
 });
 

@@ -131,11 +131,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">App Store-ൽ BeanPool നേടുക</a>
-                <p id="ios-note">iPhone, iPad എന്നിവയ്ക്കായി.</p>
+                <p id="ios-note" data-ios-note="അടുത്ത അപ്ഡേറ്റ് മുതൽ iPhone ആപ്പിന് ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരാനാകും.">iPhone, iPad എന്നിവയ്ക്കായി.</p>
             </div>
         </div>
         <p class="global-note" id="global-first-screen">ആപ്പിൽ പുതിയതാണോ? ആദ്യ സ്ക്രീനിൽ, <strong>ലോകമെമ്പാടുമുള്ള BeanPool കാണൂ</strong> എന്നത് ടാപ്പ് ചെയ്യുക.</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org/?lang=ml">അല്ലെങ്കിൽ നിങ്ങളുടെ ബ്രൗസറിൽ ആഗോള കമ്മ്യൂണിറ്റി തുറക്കുക</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="നിങ്ങളുടെ ബ്രൗസറിൽ ആഗോള കമ്മ്യൂണിറ്റി തുറക്കുക" href="https://global.beanpool.org/?lang=ml">അല്ലെങ്കിൽ നിങ്ങളുടെ ബ്രൗസറിൽ ആഗോള കമ്മ്യൂണിറ്റി തുറക്കുക</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">നിരവധി കമ്മ്യൂണിറ്റികളിൽ ഒന്നാണ് ആഗോള കമ്മ്യൂണിറ്റി. നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റി സ്വന്തം സെർവറിലാണ് പ്രവർത്തിക്കുന്നത്, അതിന് ഒരിക്കലും ഇതിന്റെ ആവശ്യമില്ല.</p>
     </main>
@@ -192,12 +192,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = browserLink.textContent.replace(/^(?:or|o|ou|oder|oppure|или|або|أو|یا|অথবা|அல்லது|അല്ലെങ്കിൽ|atau|au|veya|hoặc|ή|または|또는|或者|或)\s*/i, '');
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

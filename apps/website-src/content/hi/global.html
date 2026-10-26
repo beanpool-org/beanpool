@@ -1,4 +1,4 @@
-<!-- source-hash: 7d1f507efe4dedc0 -->
+<!-- source-hash: f7c812a815d0f741 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,11 +76,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">App Store पर BeanPool पाएँ</a>
-                <p id="ios-note">iPhone और iPad के लिए।</p>
+                <p id="ios-note" data-ios-note="iPhone ऐप अपने अगले अपडेट से वैश्विक समुदाय से जुड़ सकेगा।">iPhone और iPad के लिए।</p>
             </div>
         </div>
         <p class="global-note" id="global-first-screen">ऐप में नए हैं? इसकी पहली स्क्रीन पर, <strong>पूरी दुनिया में BeanPool देखें</strong> पर टैप करें।</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org">या अपने ब्राउज़र में वैश्विक समुदाय खोलें</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="अपने ब्राउज़र में वैश्विक समुदाय खोलें" href="https://global.beanpool.org">या अपने ब्राउज़र में वैश्विक समुदाय खोलें</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">वैश्विक समुदाय कई समुदायों में से एक समुदाय है। आपका अपना समुदाय अपने स्वयं के सर्वर पर चलता है और उसे कभी भी इसकी आवश्यकता नहीं होती है।</p>
     </main>
@@ -137,12 +137,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = browserLink.textContent.replace(/^(?:or|o|ou|oder|oppure|или|або|أو|یا|অথবা|அல்லது|അല്ലെങ്കിൽ|atau|au|veya|hoặc|ή|または|또는|或者|或)\s*/i, '');
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

@@ -1,4 +1,4 @@
-<!-- source-hash: 7d1f507efe4dedc0 -->
+<!-- source-hash: f7c812a815d0f741 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,11 +76,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">Tải BeanPool trên App Store</a>
-                <p id="ios-note">Dành cho iPhone và iPad.</p>
+                <p id="ios-note" data-ios-note="Ứng dụng iPhone sẽ có thể tham gia cộng đồng toàn cầu từ bản cập nhật tiếp theo.">Dành cho iPhone và iPad.</p>
             </div>
         </div>
         <p class="global-note" id="global-first-screen">Bạn mới dùng ứng dụng? Trên màn hình đầu tiên, hãy nhấn vào <strong>Khám phá BeanPool trên toàn thế giới</strong>.</p>
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org">hoặc mở cộng đồng toàn cầu trong trình duyệt của bạn</a></p>
+        <p class="global-browser"><a id="browser" data-ios-text="Mở cộng đồng toàn cầu trong trình duyệt của bạn" href="https://global.beanpool.org">hoặc mở cộng đồng toàn cầu trong trình duyệt của bạn</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">Cộng đồng toàn cầu là một cộng đồng trong số nhiều cộng đồng. Cộng đồng của riêng bạn hoạt động trên máy chủ riêng và không bao giờ cần đến nó.</p>
     </main>
@@ -137,12 +137,12 @@
                 if (live && arrived) location.href = appStore;
             } else {
                 var iosNote = byId('ios-note');
-                if (iosNote) iosNote.textContent = "The iPhone app's open door comes in its next update";
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
                 var firstScreen = byId('global-first-screen');
                 if (firstScreen) firstScreen.hidden = true;
                 var browserLink = byId('browser');
                 if (browserLink) {
-                    browserLink.textContent = browserLink.textContent.replace(/^(?:or|o|ou|oder|oppure|или|або|أو|یا|অথবা|அல்லது|അല്ലെങ്കിൽ|atau|au|veya|hoặc|ή|または|또는|或者|或)\s*/i, '');
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
                     browserLink.classList.add('btn-primary');
                 }
                 var main = byId('global-door-main');

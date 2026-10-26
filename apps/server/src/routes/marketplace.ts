@@ -1424,7 +1424,8 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
-        const success = pausePost(postId, authorPublicKey);
+        const actor = ctx.state?.actor as string | undefined;
+        const success = pausePost(postId, authorPublicKey, actor);
         if (success) {
             syncPulseMarketplaceGate();
             ctx.body = { success: true };
@@ -1434,7 +1435,7 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         ctx.status = 400;
         ctx.body = { success: false, error: word('Post not found, not active, or not owned by author') };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === ENTERPRISE_CLOSED_CODE ? 403 : 400;
         ctx.body = { error: memberErrorText(e, word('Failed to pause post')) };
     }
 });
@@ -1451,7 +1452,8 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         // Putting a post back up publishes it, so a muted member (G3) can't; pausing one stays open.
         assertNotMuted(ctx.state?.actor as string | undefined);
         assertNotMuted(authorPublicKey);
-        const success = resumePost(postId, authorPublicKey);
+        const actor = ctx.state?.actor as string | undefined;
+        const success = resumePost(postId, authorPublicKey, actor);
         if (success) {
             syncPulseMarketplaceGate();
             ctx.body = { success: true };
@@ -1464,7 +1466,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         if (respondProfileRefusal(ctx, e)) return;
         // One of a shop's Offers while the shop is closed for now: 409 shop_paused (engine/shops.ts).
         if (respondShopRefusal(ctx, e)) return;
-        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === ENTERPRISE_CLOSED_CODE ? 403 : 400;
         ctx.body = { error: memberErrorText(e, word('Failed to resume post')) };
     }
 });

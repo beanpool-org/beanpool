@@ -1285,9 +1285,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
         const isPulsePost = (selectedPost.authorCallsign || (selectedPost as any).author_callsign) === 'Daily Pulse';
-        // A keeper of the enterprise that listed it may edit it, as on the phone (app/post/[id].tsx isOperatorOfAuthor): the
-        // node takes the edit signed with the keeper's own key (apps/server engine/posts.ts updatePost), for a listing here
-        // for everyone. Edit only: pausing and deleting it stay as they were on this page.
+        // A keeper of the enterprise that listed it may edit or pause/resume it, as on the phone (app/post/[id].tsx isOperatorOfAuthor):
+        // the node takes the mutation signed with the keeper's own key (apps/server engine/posts.ts updatePost, pausePost, resumePost),
+        // for a listing here for everyone. Deleting it stays the author's alone on this page.
         const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
             && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 
@@ -2438,7 +2438,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <>
                                 {/* Active/Paused toggle (Offers only). A live Offer counts toward your
                                     credit line (offer covenant, v3); pausing it drops it from the feed. */}
-                                {isOwnPost && selectedPost.type === 'offer' && (
+                                {(isOwnPost || keepsAuthor) && selectedPost.type === 'offer' && (
                                     <button
                                         onClick={async () => {
                                             if (!identity || !selectedPost) return;

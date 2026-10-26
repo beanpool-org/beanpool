@@ -1085,6 +1085,52 @@ export const ENTERPRISE_CLOSED_TO_EDITS = word('This enterprise has been closed,
 export const ENTERPRISE_CLOSED_CODE = 'enterprise_closed';
 
 /**
+ * Resolves who is mutating a post (editing, pausing, or resuming): either the author themselves, or an entitled keeper
+ * of the enterprise that authored it, signed with the keeper's own key.
+ *
+ * For a keeper:
+ *  - Only on a public, local post (an enterprise's Offer or Need).
+ *  - The keeper must be an active member of this node (assertNodeMember).
+ *  - If the enterprise is closed, mutation is refused with ENTERPRISE_CLOSED_CODE (403).
+ *
+ * Returns `{ authorPublicKey: string, isKeeper: boolean }` where `authorPublicKey` is the post's real author (the enterprise
+ * for a keeper), or `null` if the caller is not entitled to mutate this post.
+ */
+export function resolvePostMutator(
+    post: { author_pubkey?: string; authorPublicKey?: string; audience_scope?: string | null; audienceScope?: string | null; origin_node?: string | null; originNode?: string | null },
+    claimedAuthorPublicKey: string,
+    actorPubkey?: string,
+    keeps?: (enterprisePubkey: string) => boolean,
+): { authorPublicKey: string; isKeeper: boolean } | null {
+    const postAuthor = post.authorPublicKey ?? post.author_pubkey;
+    if (!postAuthor) return null;
+    const audienceScope = post.audienceScope ?? post.audience_scope;
+    const originNode = post.originNode ?? post.origin_node;
+
+    if (postAuthor === claimedAuthorPublicKey) {
+        // Their own post, from its author only while a member here: an edit publishes under their name (4109713263).
+        assertNodeMember(claimedAuthorPublicKey);
+        return { authorPublicKey: postAuthor, isKeeper: false };
+    }
+
+    if (actorPubkey && keeps && audienceScope === 'public' && !originNode && keeps(postAuthor)) {
+        // A keeper acting on their enterprise's Offer or Need, signed with their own key as the phone and the web send it
+        // (the signature middleware refuses the enterprise's key in a body). Entitled as the enterprise's create and
+        // remove routes entitle them; the post stays the enterprise's. A group's or a direct post stays its author's
+        // alone, and anyone else is answered as before.
+        assertNodeMember(actorPubkey);
+        // Closed, it takes no edit or pause/resume, as it takes no new listing (routes/treasury.ts requireOperator, assertMemberActive).
+        const status = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(postAuthor) as { status: string | null } | undefined)?.status;
+        if (status === 'disabled' || status === 'suspended' || status === 'pruned' || status === 'completed') {
+            throw Object.assign(new Error(ENTERPRISE_CLOSED_TO_EDITS), { status: 403, statusCode: 403, code: ENTERPRISE_CLOSED_CODE });
+        }
+        return { authorPublicKey: postAuthor, isKeeper: true };
+    }
+
+    return null;
+}
+
+/**
  * `keeps`: whether the signed caller (`actorPubkey`) keeps this enterprise, as state-engine canOperateTreasury says. Passed
  * in, not imported: state-engine imports this module. Only a route's signed caller has one.
  */
@@ -1121,25 +1167,11 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let keeperPays: string | null = null;
     if (existingPost.type === 'event') {
         authorPublicKey = existingPost.authorPublicKey;
-    } else if (existingPost.authorPublicKey === authorPublicKey) {
-        // Their own post, from its author only while a member here: an edit publishes under their name (4109713263).
-        assertNodeMember(authorPublicKey);
-    } else if (actorPubkey && keeps && existingPost.audienceScope === 'public' && !existingPost.originNode
-        && keeps(existingPost.authorPublicKey)) {
-        // A keeper editing their enterprise's Offer or Need, signed with their own key as the phone and the web send it
-        // (the signature middleware refuses the enterprise's key in a body). Entitled as the enterprise's create and
-        // remove routes entitle them; the post stays the enterprise's. A group's or a direct post stays its author's
-        // alone, and anyone else is answered as before.
-        assertNodeMember(actorPubkey);
-        // Closed, it takes no edit, as it takes no new listing (routes/treasury.ts requireOperator, assertMemberActive).
-        const status = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(existingPost.authorPublicKey) as { status: string | null } | undefined)?.status;
-        if (status === 'disabled' || status === 'suspended' || status === 'pruned' || status === 'completed') {
-            throw Object.assign(new Error(ENTERPRISE_CLOSED_TO_EDITS), { status: 403, statusCode: 403, code: ENTERPRISE_CLOSED_CODE });
-        }
-        authorPublicKey = existingPost.authorPublicKey;
-        keeperPays = actorPubkey;
     } else {
-        return null;
+        const mutator = resolvePostMutator(existingPost, authorPublicKey, actorPubkey, keeps);
+        if (!mutator) return null;
+        authorPublicKey = mutator.authorPublicKey;
+        if (mutator.isKeeper && actorPubkey) keeperPays = actorPubkey;
     }
     // G3: an edit goes out under the author's name, so a muted author's post takes none, whoever makes it: a keeper
     // or convenor editing a muted enterprise's or member's event is refused as the author would be. The route checks
@@ -2013,18 +2045,24 @@ export function votePoll(
 }
 
 /**
- * The author's pause: a live post goes off the board. One of theirs already paused is taken too, and changes nothing on
- * the board: paused by its shop's "closed for now", the pause becomes theirs (the shop holds it no more, so its reopen
- * leaves it down, engine/shops.ts); paused by them, it stays so. Anyone else's, or one ended, is false.
+ * The author's (or their enterprise's keeper's) pause: a live post goes off the board. One of theirs already paused is
+ * taken too, and changes nothing on the board: paused by its shop's "closed for now", the pause becomes theirs (the shop
+ * holds it no more, so its reopen leaves it down, engine/shops.ts); paused by them, it stays so. Anyone else's, or one
+ * ended, is false.
  */
-export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {
-    const postRow = db.prepare("SELECT audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
+    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+    if (!postRow) return false;
+    const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
+    if (!mutator) return false;
+    const effectiveAuthor = mutator.authorPublicKey;
+
     let paused = false;
     let theirsAlready = false;
     db.transaction(() => {
-        paused = db.prepare(`UPDATE posts SET status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'active'`).run(postId, authorPublicKey).changes > 0;
+        paused = db.prepare(`UPDATE posts SET status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'active'`).run(postId, effectiveAuthor).changes > 0;
         if (paused) return;
-        const held = db.prepare("SELECT shop_id FROM posts WHERE id = ? AND author_pubkey = ? AND active = 1 AND status = 'paused'").get(postId, authorPublicKey) as { shop_id: string | null } | undefined;
+        const held = db.prepare("SELECT shop_id FROM posts WHERE id = ? AND author_pubkey = ? AND active = 1 AND status = 'paused'").get(postId, effectiveAuthor) as { shop_id: string | null } | undefined;
         if (!held) return;
         if (held.shop_id) forgetPausedPost(held.shop_id, postId);
         theirsAlready = true;
@@ -2032,11 +2070,11 @@ export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKe
     if (theirsAlready) return true;
     if (paused) {
         let recipients: string[] | undefined;
-        if (postRow?.audience_scope === 'group' && postRow.target_group_id) {
+        if (postRow.audience_scope === 'group' && postRow.target_group_id) {
             const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
             recipients = rows.map(r => r.member_pubkey);
-        } else if (postRow?.audience_scope === 'direct') {
-            recipients = Array.from(new Set([authorPublicKey, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
+        } else if (postRow.audience_scope === 'direct') {
+            recipients = Array.from(new Set([effectiveAuthor, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
         }
         broadcast({ type: 'post_updated', id: postId }, recipients);
         return true;
@@ -2044,21 +2082,28 @@ export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKe
     return false;
 }
 
-export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {
-    const postRow = db.prepare("SELECT author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
+    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
+    if (!postRow) return false;
+    const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
+    if (!mutator) return false;
+    const effectiveAuthor = mutator.authorPublicKey;
+
     // Putting a post back up publishes it again, an event for everyone going: only from an author who is still a member
     // here (4109713263). A post that isn't theirs stays a plain false. Suspended and disabled authors pass, as before.
-    if (postRow?.author_pubkey === authorPublicKey) assertNodeMember(authorPublicKey);
+    // (resolvePostMutator asserted node membership for the author or keeper).
+    // G3: an author (including an enterprise) must not be muted when putting a post back up.
+    assertNotMuted(effectiveAuthor);
     // One of a shop's Offers, while the shop is closed for now: back up with the shop's reopen, never alone (engine/shops.ts).
-    if (postRow?.author_pubkey === authorPublicKey) assertShopOpenForResume(postId);
-    const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, authorPublicKey);
+    assertShopOpenForResume(postId);
+    const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, effectiveAuthor);
     if (res.changes > 0) {
         let recipients: string[] | undefined;
-        if (postRow?.audience_scope === 'group' && postRow.target_group_id) {
+        if (postRow.audience_scope === 'group' && postRow.target_group_id) {
             const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
             recipients = rows.map(r => r.member_pubkey);
-        } else if (postRow?.audience_scope === 'direct') {
-            recipients = Array.from(new Set([authorPublicKey, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
+        } else if (postRow.audience_scope === 'direct') {
+            recipients = Array.from(new Set([effectiveAuthor, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
         }
         broadcast({ type: 'post_updated', id: postId }, recipients);
         return true;

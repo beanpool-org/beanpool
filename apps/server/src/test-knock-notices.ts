@@ -301,7 +301,7 @@ async function main() {
         closingOn: null,
     });
 
-    const listRes = listCommunities({ point });
+    const listRes = listCommunities({ point, limit: 10, offset: 0 });
     const keysInOrder = listRes.communities.map(c => c.key);
     assert(keysInOrder.indexOf('comm_none') > keysInOrder.indexOf('comm_week'), 'community with answers: none sorts after comm_week');
     assert(keysInOrder.indexOf('comm_none') > keysInOrder.indexOf('comm_slow'), 'community with answers: none sorts after comm_slow');

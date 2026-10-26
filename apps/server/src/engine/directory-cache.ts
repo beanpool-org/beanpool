@@ -494,8 +494,8 @@ export interface CommunityQuery {
     point?: { lat: number; lng: number } | null;
     /** A name search, as the reader typed it. */
     q?: string | null;
-    limit: number;
-    offset: number;
+    limit?: number;
+    offset?: number;
     /**
      * The shuffle among communities at the same distance (a whole number from 0 to 2^32 - 1), the reader's own: the same
      * one on every page walks one order. Left out, a new one for this read.
@@ -575,7 +575,9 @@ export function listCommunities(query: CommunityQuery): { communities: Community
         }
         return byName(a, b);
     });
-    const page = rows.slice(query.offset, query.offset + query.limit)
+    const offset = query.offset ?? 0;
+    const limit = query.limit !== undefined ? query.limit : rows.length;
+    const page = rows.slice(offset, offset + limit)
         .map(x => toCommunity(x.r, x.d === null ? null : Math.round(x.d * 10) / 10));
     return { communities: page, total: rows.length };
 }

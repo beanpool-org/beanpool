@@ -13,6 +13,7 @@
  *  6. A muted enterprise: resume is refused (403).
  *  7. A closed enterprise: pause and resume refused (403).
  *  8. A post in a shop keeps its shop bookkeeping (forgetPausedPost, shop_id, 409 while closed).
+ *  9. The read the enterprise page uses returns paused listings to that enterprise's keeper only; strangers, visitors and other keepers get none; resumed listing appears in the normal list.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-post-pause-http.ts
  */
@@ -57,7 +58,8 @@ async function signedFetch(method: 'POST' | 'GET' | 'PUT', path: string, body: u
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonicalPath = path.split('?')[0];
+        const canonical = `${method}\n${canonicalPath}\n${ts}\n${nonce}\n${bodyString}`;
         headers['X-Public-Key'] = id.pubKeyHex;
         headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
         headers['X-Timestamp'] = String(ts);
@@ -256,6 +258,56 @@ async function main(): Promise<void> {
     }, keeper);
     assert(keeperResumeShopOffer.status === 200, `keeper resumes post after shop reopened (${show(keeperResumeShopOffer)})`);
     assert(rowOf(shopOfferId)?.status === 'active', 'post is now active');
+
+    // ── 7. Enterprise page read returns paused posts for keeper only ────────────────────────
+    console.log('\n── 7. Enterprise page read returns paused posts for keeper only ──');
+    // Keeper pauses the offer again
+    const pRes = await signedFetch('POST', '/api/marketplace/posts/pause', {
+        postId: offerId, authorPublicKey: keeper.pubKeyHex,
+    }, keeper);
+    assert(pRes.status === 200 && pRes.body?.success === true, `keeper pauses Offer for read test (${show(pRes)})`);
+    assert(rowOf(offerId)?.status === 'paused', 'Offer is paused');
+
+    // Keeper reading: with keeper=1 (the read the enterprise page uses for a keeper), returns the paused offer
+    const keeperPageRead = await signedFetch('GET', `/api/marketplace/posts?author=${enterprise}&keeper=1&limit=200`, null, keeper);
+    assert(keeperPageRead.status === 200, `keeper reads enterprise posts (${show(keeperPageRead)})`);
+    const keeperPosts: any[] = Array.isArray(keeperPageRead.body) ? keeperPageRead.body : [];
+    const keeperPaused = keeperPosts.filter(p => p.id === offerId && p.status === 'paused');
+    assert(keeperPaused.length === 1, `keeper gets paused Offer in read (${keeperPaused.length})`);
+
+    // Non-keeper member: gets no paused row even if keeper=1 is sent
+    const strangerPageRead = await signedFetch('GET', `/api/marketplace/posts?author=${enterprise}&keeper=1&limit=200`, null, stranger);
+    assert(strangerPageRead.status === 200, `stranger reads enterprise posts (${show(strangerPageRead)})`);
+    const strangerPosts: any[] = Array.isArray(strangerPageRead.body) ? strangerPageRead.body : [];
+    assert(strangerPosts.every(p => p.status !== 'paused'), 'stranger gets no paused rows');
+    assert(!strangerPosts.some(p => p.id === offerId), 'stranger does not get paused Offer');
+
+    // Visitor: gets no paused row (on a local node without open membership, reads for specific authors are members-only 401; either way, no paused rows)
+    const visitorPageRead = await signedFetch('GET', `/api/marketplace/posts?author=${enterprise}&keeper=1&limit=200`, null, null);
+    assert(visitorPageRead.status === 401 || visitorPageRead.status === 200, `visitor reads enterprise posts (${show(visitorPageRead)})`);
+    const visitorPosts: any[] = Array.isArray(visitorPageRead.body) ? visitorPageRead.body : [];
+    assert(visitorPosts.every(p => p.status !== 'paused'), 'visitor gets no paused rows');
+    assert(!visitorPosts.some(p => p.id === offerId), 'visitor does not get paused Offer');
+
+    // Keeper of another enterprise: gets no paused row
+    const otherKeeperPageRead = await signedFetch('GET', `/api/marketplace/posts?author=${enterprise}&keeper=1&limit=200`, null, otherKeeper);
+    assert(otherKeeperPageRead.status === 200, `other keeper reads enterprise posts (${show(otherKeeperPageRead)})`);
+    const otherKeeperPosts: any[] = Array.isArray(otherKeeperPageRead.body) ? otherKeeperPageRead.body : [];
+    assert(otherKeeperPosts.every(p => p.status !== 'paused'), 'other keeper gets no paused rows');
+    assert(!otherKeeperPosts.some(p => p.id === offerId), 'other keeper does not get paused Offer');
+
+    // Resume Offer
+    const rRes = await signedFetch('POST', '/api/marketplace/posts/resume', {
+        postId: offerId, authorPublicKey: keeper.pubKeyHex,
+    }, keeper);
+    assert(rRes.status === 200 && rRes.body?.success === true, `keeper resumes Offer (${show(rRes)})`);
+    assert(rowOf(offerId)?.status === 'active', 'Offer is active again');
+
+    // After resume, appears in the normal list
+    const normalRead = await signedFetch('GET', `/api/marketplace/posts?author=${enterprise}&limit=200`, null, keeper);
+    assert(normalRead.status === 200, `normal read returns 200 (${show(normalRead)})`);
+    const normalPosts: any[] = Array.isArray(normalRead.body) ? normalRead.body : [];
+    assert(normalPosts.some(p => p.id === offerId && p.status === 'active'), 'resumed Offer appears in normal list');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

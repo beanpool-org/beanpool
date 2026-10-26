@@ -47,7 +47,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -120,53 +119,12 @@ async function until(what: string, cond: () => Promise<boolean> | boolean, ms = 
 
 // ── Nodes ──────────────────────────────────────────────────────────────────────────────────
 
-function freePort(): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const s = net.createServer();
-        s.once('error', reject);
-        s.listen(0, '127.0.0.1', () => {
-            const port = (s.address() as net.AddressInfo).port;
-            s.close(() => resolve(port));
-        });
-    });
-}
-function canListen(port: number): Promise<boolean> {
-    return new Promise((resolve) => {
-        const s = net.createServer();
-        s.once('error', () => resolve(false));
-        s.listen(port, '0.0.0.0', () => s.close(() => resolve(true)));
-    });
-}
-/** Every port handed to a node: the nodes start side by side, and a port free a moment ago is free for each of them. */
-const handedOut = new Set<number>();
-async function unusedPort(): Promise<number> {
-    for (;;) {
-        const p = await freePort();
-        if (!handedOut.has(p)) return p;
-    }
-}
-/** Probe ephemeral ports for index.ts's four listeners (PORT_HTTP, PORT_HTTPS, PORT_P2P, and PORT_P2P + 1): four free ports, none fixed. */
-let picking: Promise<unknown> = Promise.resolve();
-function freePorts(): Promise<{ http: number; https: number; p2p: number }> {
-    // One node's four at a time, so two nodes starting together never pick the same one.
-    const next = picking.then(pickPorts);
-    picking = next.catch(() => {});
-    return next;
-}
-async function pickPorts(): Promise<{ http: number; https: number; p2p: number }> {
-    const http = await unusedPort();
-    let https = await unusedPort();
-    while (https === http) https = await unusedPort();
-    // macOS hands out a listener's port 0 in order through 49152-65535, so near the top every try is above any bound short
-    // of the last port: only p2p + 1 must exist.
-    for (let tries = 0; tries < 200; tries++) {
-        const p2p = await unusedPort();
-        if (p2p < 65_535 && ![http, https].includes(p2p) && ![http, https].includes(p2p + 1) && !handedOut.has(p2p + 1) && await canListen(p2p + 1)) {
-            for (const p of [http, https, p2p, p2p + 1]) handedOut.add(p);
-            return { http, https, p2p };
-        }
-    }
-    throw new Error('no free pair of ports for libp2p');
+// Flake cause: freePorts previously probed ephemeral ports up to 200 times trying to find an unused number p2p
+// where p2p + 1 was also free because index.ts hardcoded PORT_P2P_WS = PORT_P2P + 1. Under heavy load, ephemeral
+// ports are recycled rapidly, causing "no free pair of ports for libp2p". Passing port 0 lets the OS kernel allocate
+// ports atomically without collisions.
+async function freePorts(): Promise<Record<string, string>> {
+    return { PORT_HTTP: '0', PORT_HTTPS: '0', PORT_P2P: '0', PORT_P2P_WS: '0' };
 }
 
 /**
@@ -202,8 +160,8 @@ async function startNode(root: string, name: string, extraEnv: Record<string, st
     const dir = path.join(root, name);
     fs.mkdirSync(dir, { recursive: true });
     const callsFile = path.join(root, `${name}.outside-calls.jsonl`);
-    let ports = await freePorts();
-    const base = { url: `https://127.0.0.1:${ports.https}` };
+    const ports = await freePorts();
+    const base = { url: '' };
     let out = '';
     let child: ChildProcess | null = null;
     let stopped = false;
@@ -215,11 +173,11 @@ async function startNode(root: string, name: string, extraEnv: Record<string, st
     /** Three starts in a row ended before they were live: not started again. */
     let gaveUp = false;
     const env = (): NodeJS.ProcessEnv => {
-        const base = Object.fromEntries(Object.entries(process.env).filter(([k]) => !NOT_A_SELF_HOSTERS.test(k)));
+        const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !NOT_A_SELF_HOSTERS.test(k)));
         return {
-            ...base,
+            ...baseEnv,
             BEANPOOL_DATA_DIR: dir,
-            PORT_HTTP: String(ports.http), PORT_HTTPS: String(ports.https), PORT_P2P: String(ports.p2p),
+            ...ports,
             OUTSIDE_CALLS_FILE: callsFile,
             // The nodes' own self-signed certificates: a standby copies its main server over HTTPS on loopback.
             NODE_TLS_REJECT_UNAUTHORIZED: '0',
@@ -237,7 +195,11 @@ async function startNode(root: string, name: string, extraEnv: Record<string, st
             const s = d.toString();
             out += s;
             mine += s;
-            if (!run.live && mine.includes(READY_LINE)) {
+            const match = mine.match(/listening on https:\/\/0\.0\.0\.0:(\d+)/);
+            if (match) {
+                base.url = `https://127.0.0.1:${match[1]}`;
+            }
+            if (!run.live && mine.includes(READY_LINE) && base.url) {
                 run.live = true;
                 run.liveAt = Date.now();
             }
@@ -248,13 +210,11 @@ async function startNode(root: string, name: string, extraEnv: Record<string, st
             run.exit = code ?? (signal ? -1 : 0);
             if (stopped) return;
             if (!run.live) {
-                // The four ports were free a moment ago and another process took one (a listener's EADDRINUSE; the DNS
-                // shim's own on :53 is not fatal): new ones, as test-clean-stop does. Anything else is a failure to start.
+                // The ports were free a moment ago and another process took one (a listener's EADDRINUSE; the DNS
+                // shim's own on :53 is not fatal): new ones. Anything else is a failure to start.
                 const portTaken = /UnsupportedListenAddressesError|listen EADDRINUSE/.test(mine);
                 bootFailures.push(portTaken ? 'a port was taken' : `exit ${run.exit}`);
                 if (++failedBeforeLive >= 3) gaveUp = true;
-                // Stopped while the new ports were picked: no start that nothing would stop (review 4305779746).
-                else if (portTaken) void freePorts().then((p) => { ports = p; base.url = `https://127.0.0.1:${p.https}`; if (!stopped) launch(); });
                 else launch();
                 return;
             }

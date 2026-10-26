@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
-import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
+import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isPastDeadline, isSelfAvatarUrl, isSyntheticAccount, isWholeCents, replaceLoneSurrogates, word } from '@beanpool/core';
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -2976,6 +2976,8 @@ export const PROJECT_ID_TAKEN_ERROR = word('A new project needs an id nothing el
 
 /** A pledge to a project that has reached its goal: refused before anything moves (pledgeToProject). */
 export const PROJECT_FUNDED_NO_PLEDGES_ERROR = word('This project has already reached its goal, so it is not taking more pledges. Your Beans have not moved.');
+/** A pledge to a project whose deadline has passed: refused before anything moves (pledgeToProject). */
+export const PROJECT_DEADLINE_PASSED_ERROR = word("This project's deadline has passed: it takes no more pledges.");
 
 /**
  * Is `id` free for a new crowdfund project? A project's id is its enterprise's key, its account's and its escrow's
@@ -3234,12 +3236,19 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             : 'This project is no longer taking pledges. Your Beans have not moved.');
     }
     const entPub = (project as any).enterprise_pubkey || project.id;
-    const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
+    const ent = db.prepare('SELECT is_treasury, paused, status, deadline_at FROM members WHERE public_key = ?').get(entPub) as any;
     if (ent?.is_treasury) {
         if (ent.paused === 1) throw new Error("Enterprise is paused — not accepting pledges");
         if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error("Enterprise is not accepting pledges");
         // The goal also marks the enterprise's own row (below): read that too, for a projects row made above from it.
         if (ent.status === 'funded') throw new Error(PROJECT_FUNDED_NO_PLEDGES_ERROR);
+    }
+    const deadline = project.deadline_at ?? ent?.deadline_at;
+    if (isPastDeadline(deadline)) {
+        const err: any = new Error(PROJECT_DEADLINE_PASSED_ERROR);
+        err.code = 'project_closed';
+        err.status = 409;
+        throw err;
     }
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow

@@ -17,8 +17,9 @@ import {
     SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word,
     type ShopCategory, type TierName, type WordKey,
 } from '@beanpool/core';
-import { getMarketplacePosts } from './api';
+import { getMarketplacePosts, signedFetch } from './api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
+import { readShop, type MyShop } from './shop';
 
 // ── listings ────────────────────────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,8 @@ export interface ShopfrontListing {
     audienceScope: string | null;
     /** Its first photo, as the node sends it (its own 800 px copy, on this same origin), or null. */
     photo: string | null;
+    /** The least credit of its author's tier, as every member reads it on a listing; null when not sent. */
+    authorTierCredit: number | null;
 }
 
 const LIVE = new Set(['active', 'pending']);
@@ -65,6 +68,7 @@ export function readShopfrontListing(raw: unknown): ShopfrontListing | null {
         shopId: text(p.shopId),
         audienceScope: text(p.audienceScope),
         photo: typeof first === 'string' && first.trim() ? first : null,
+        authorTierCredit: typeof p.authorEnergyCycled === 'number' && Number.isFinite(p.authorEnergyCycled) ? p.authorEnergyCycled : null,
     };
 }
 
@@ -223,10 +227,11 @@ export function leadKeeperOf(keepers: readonly ShopfrontKeeper[]): ShopfrontKeep
     return keepers.find((k) => k.isLead) ?? (keepers.length === 1 ? keepers[0] : null);
 }
 
-/** The Message button: to an enterprise's lead keeper or a project's leader, named. */
-export function messageLabel(name: string, kind: 'enterprise' | 'project'): string {
+/** The Message button: to an enterprise's lead keeper, a project's leader, or a shop's owner, named. */
+export function messageLabel(name: string, kind: 'enterprise' | 'project' | 'shop'): string {
     if (kind === 'enterprise') return t('Message {name} (lead keeper)', { name });
-    return t('Message {name} (leader)', { name });
+    if (kind === 'project') return t('Message {name} (leader)', { name });
+    return t('Message {name}', { name });
 }
 
 // ── lines ───────────────────────────────────────────────────────────────────────────────────────
@@ -357,3 +362,59 @@ export async function readOwnerListings(owner: string): Promise<ShopfrontListing
         return null;
     }
 }
+
+// ── shops ───────────────────────────────────────────────────────────────────────────────────────
+
+/** A shop as a member reads it, with whose it is. */
+export interface ShopfrontShop extends MyShop {
+    ownerPublicKey: string;
+    enterprise: boolean;
+    /** When it opened, or null. */
+    openedAt: string | null;
+}
+
+/** A member's view of a shop (GET /api/shops/:id), or null when it is none (a visitor's view included). */
+export function readShopfrontShop(raw: unknown): ShopfrontShop | null {
+    const shop = readShop(raw);
+    const s = raw as Record<string, unknown> | null;
+    if (!shop || typeof s?.ownerPublicKey !== 'string' || !s.ownerPublicKey) return null;
+    return { ...shop, ownerPublicKey: s.ownerPublicKey, enterprise: s.enterprise === true, openedAt: text(s.openedAt) };
+}
+
+/** A shop's page: a member's shop, an enterprise's (its own page draws it), a visitor's view, none, or no answer. */
+export type ShopPageRead =
+    | { state: 'shop'; shop: ShopfrontShop }
+    | { state: 'enterprise'; ownerPublicKey: string; name: string }
+    | { state: 'visitor' }
+    | { state: 'none' }
+    | { state: 'offline' };
+
+export async function readShopPage(id: string): Promise<ShopPageRead> {
+    try {
+        const res = await signedFetch('GET', `/api/shops/${encodeURIComponent(id)}`);
+        if (res.status === 404) return { state: 'none' };
+        if (!res.ok) return { state: 'offline' };
+        const json = await res.json().catch(() => null);
+        if (json && typeof json === 'object' && typeof (json as Record<string, unknown>).id === 'string' && !('ownerPublicKey' in json)) return { state: 'visitor' };
+        const shop = readShopfrontShop(json);
+        if (!shop) return { state: 'offline' };
+        if (shop.enterprise) return { state: 'enterprise', ownerPublicKey: shop.ownerPublicKey, name: shop.name ?? shop.ownerName };
+        return { state: 'shop', shop };
+    } catch {
+        return { state: 'offline' };
+    }
+}
+
+/** A shop's Offers as the reader may see them; null with no answer. */
+export async function readShopListingsForReader(shopId: string): Promise<ShopfrontListing[] | null> {
+    try {
+        const res = await signedFetch('GET', `/api/marketplace/posts?shop=${encodeURIComponent(shopId)}&type=offer&limit=200`);
+        if (!res.ok) return null;
+        const json = await res.json().catch(() => null);
+        if (!Array.isArray(json)) return null;
+        return json.map((row) => readShopfrontListing(row)).filter((l): l is ShopfrontListing => !!l);
+    } catch {
+        return null;
+    }
+}
+

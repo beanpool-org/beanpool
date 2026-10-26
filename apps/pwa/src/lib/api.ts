@@ -1180,6 +1180,8 @@ export interface MarketplacePost {
     /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
     distanceKm?: number | null;
     photos?: string[];
+    /** The shop this listing belongs to, or null/undefined. */
+    shopId?: string | null;
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
@@ -1342,6 +1344,8 @@ export async function createMarketplacePost(post: {
     eventTz?: string;
     eventOnline?: boolean;
     eventLink?: string;
+    /** A shop only: author's own shop id to put the offer into. */
+    shopId?: string;
     /** How it repeats (the pattern only; the node adds the clock and length) and its last date; null = a one-off. */
     eventRepeat?: RepeatPattern | null;
     eventRepeatUntil?: string | null;
@@ -1405,6 +1409,36 @@ export async function getGroups(filter?: { category?: string; q?: string; member
     if (filter?.offset) params.set('offset', String(filter.offset));
     const qs = params.toString();
     return request('GET', `/api/groups${qs ? `?${qs}` : ''}`);
+}
+
+export interface YourChat {
+    kind: 'group' | 'enterprise' | 'event';
+    badge: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
+    id: string;
+    conversationId: string;
+    name: string;
+    avatarUrl: string | null;
+    role: string;
+    category?: string;
+    joinPolicy?: string;
+    eventStartAt?: string | null;
+    eventEndAt?: string | null;
+    readOnly?: boolean;
+    lastMessage?: any;
+    unreadCount?: number;
+    mute?: any;
+    lastActivityAt?: string;
+}
+
+export interface YourGroupsResponse {
+    items: YourChat[];
+    totalUnread?: number;
+    invites?: any[];
+}
+
+export async function getYourGroups(): Promise<YourGroupsResponse> {
+    return request('GET', '/api/your-groups');
 }
 
 export async function getGroup(id: string): Promise<Group> {
@@ -1639,6 +1673,7 @@ export async function updateMarketplacePost(
         lng?: number;
         repeatable?: boolean;
         photos?: string[];
+        shopId?: string | null;
         // Events (docs/events-on-the-map.md §2.2). A cleared end is '' — the node sets start + 2 hours.
         eventStartAt?: string;
         eventEndAt?: string;
@@ -2216,7 +2251,7 @@ export interface Treasury {
     lng?: number | null;
     locationAuthSigner?: string | null;
     locationUpdatedAt?: string | null;
-    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null }>;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null; suspended?: boolean }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *
@@ -2414,11 +2449,12 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 }
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
-// requireSignature spoof-guard, which pins body *pubkey fields to the signer).
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }): Promise<{ success: boolean; post: any }> {
+// requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
+// (lib/photo-resize.ts), checked by the node as a member's own listing's are.
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 /**

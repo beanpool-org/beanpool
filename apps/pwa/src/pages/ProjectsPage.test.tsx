@@ -126,6 +126,7 @@ vi.mock('../lib/api', () => ({
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(async () => []),
+    getYourGroups: vi.fn(async () => ({ items: [] })),
     createDecision: vi.fn(async () => ({ success: true, decision: { id: 'dec-1' } })),
     proposeDecision: vi.fn(async () => ({ success: true })),
     castDecisionVote: vi.fn(async () => ({ success: true })),
@@ -333,7 +334,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         expect(within(tabs).queryByText('Enterprises')).toBeNull();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
+        for (const text of ['Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
     });
@@ -388,7 +389,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
             expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
         });
         const row = screen.getByTestId('group-filter-chips');
-        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
         // All: the enterprises and the chat groups together.
         expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument();
         fireEvent.click(within(row).getByText('👥 Chat groups'));
@@ -481,7 +482,7 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Done' }));
     };
 
-    it("its one picture is the logo, said so; the banner photo is its shop's, chosen later in Manage (Marty, 24 Oct)", async () => {
+    it("its one picture is the logo, said so; the banner photo is its shop's, added next (Marty, 25 Oct)", async () => {
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
         fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
@@ -490,8 +491,19 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
         const picker = within(dialog).getByLabelText('Logo (optional)');
         expect(picker).toHaveAttribute('type', 'file');
-        expect(within(dialog).getByText('Its banner photo is chosen later, in Manage.')).toBeInTheDocument();
+        expect(within(dialog).getByText('You can add a banner photo next.')).toBeInTheDocument();
         expect(within(dialog).queryByText(/Cover Photo/i)).toBeNull();
+    });
+
+    it('a project is not promised a banner next: only an enterprise lands on its page with Add a banner photo (#2502 review)', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await screen.findByText('Community Garden Solar Irrigation');
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const startSheet = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(startSheet).getByRole('button', { name: /^Project/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(within(dialog).getByLabelText('Logo (optional)')).toHaveAttribute('type', 'file');
+        expect(within(dialog).queryByText('You can add a banner photo next.')).toBeNull();
     });
 
     it('a 4032x3024 camera photo is sent as the 512 px square the member chose, a re-encoded JPEG, and the raw file is not', async () => {
@@ -648,7 +660,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         // Groups alone is no choice (audit item 5): the switcher goes with Decide.
         await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
-        expect(screen.getByText('Groups:')).toBeInTheDocument();
+        expect(screen.getByTestId('commons-yours')).toBeInTheDocument();
         expect(screen.queryByText(/Propose Community Action/)).toBeNull();
         expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
         expect(screen.getByRole('button', { name: /Start something/i })).toBeInTheDocument();
@@ -674,11 +686,11 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
         // Enterprises in preview: no Projects or Enterprises chip, which could only ever be empty here.
         fireEvent.click(screen.getByRole('button', { name: /Groups/ }));
-        expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
+        expect(kindChips()).toEqual(['All', '👥 Chat groups']);
     });
 
     it('and with Decisions off and enterprises on: Decide tab in preview, no sample enterprise, the real Commons pool', async () => {
-        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
+        const info = { ...globalInfo, features: { ...globalInfo.features, beans: true, decisions: false, enterprises: true, showcase: true } };
         vi.mocked(communityInfoOnce).mockResolvedValue(info);
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByText('Commons Pool')).toBeInTheDocument();
@@ -687,7 +699,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(sectionTabs()).toHaveLength(2);
         expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
         // Enterprises live: the kind chips are all there.
-        expect(kindChips()).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        expect(kindChips()).toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
         // Switching to Decide tab shows the sample decision and voice credits card
         fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
         expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
@@ -701,8 +713,8 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
         expect(screen.queryByTestId('voice-credits-card')).toBeNull();
         expect(sectionTabs()).toHaveLength(2);
-        expect(kindChips()).toEqual(['All', 'My groups', '👥 Chat groups']);
-        expect(screen.getByText('Groups:')).toBeInTheDocument();
+        expect(kindChips()).toEqual(['All', '👥 Chat groups']);
+        expect(screen.getByTestId('commons-yours')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Start something/i })).toBeInTheDocument();
         // Switching to Decide tab shows the sample decision and voice credits card
         fireEvent.click(screen.getByRole('button', { name: /Decide/ }));
@@ -710,14 +722,14 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(screen.getByTestId('voice-credits-card')).toHaveTextContent('582');
     });
 
-    it('a local node: both tabs and all five kind chips, as before', async () => {
+    it('a local node: both tabs and all four kind chips, as before', async () => {
         vi.mocked(communityInfoOnce).mockResolvedValue({ ...globalInfo, profile: 'local' as never, features: {} });
         render(<ProjectsPage identity={backerIdentity} />);
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
         expect(sectionTabs()).toHaveLength(2);
         fireEvent.click(screen.getByRole('button', { name: /Groups/ }));
-        expect(kindChips()).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        expect(kindChips()).toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
     });
 
     // Rehearsal 14 Oct, S2: on global "+ Propose a Project" opened a Beans form the node answers 404 "Enterprises are
@@ -765,8 +777,9 @@ describe('Commons with members on demand (review of #1861, N1)', () => {
         const globalInfo = { ...localInfo, profile: 'global' as const, features: { beans: false, decisions: false, membersOnDemand: true } };
         vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
         render(<ProjectsPage identity={backerIdentity} />);
-        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument());
+        expect(screen.queryByText('Community Garden Solar Irrigation')).toBeNull();
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
         expect(getTreasuries).toHaveBeenCalled();
         expect(getAllMembers).not.toHaveBeenCalled();

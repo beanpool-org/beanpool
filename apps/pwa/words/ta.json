@@ -1164,6 +1164,7 @@
   "Failed to delete": "நீக்குவதில் தோல்வி",
   "Post remains active after completion for repeat business.": "மீண்டும் மீண்டும் வர்த்தகம் செய்வதற்காக முடிந்த பிறகும் பதிவு செயலில் இருக்கும்.",
   "Photos ({n}/{max})": "புகைப்படங்கள் ({n}/{max})",
+  "Add photo": "புகைப்படம் சேர்",
   "Failed to save": "சேமிப்பதில் தோல்வி",
   "Failed to delete post as convenor": "ஒருங்கிணைப்பாளராகப் பதிவை நீக்குவதில் தோல்வி",
   "Loading Location Services...": "இருப்பிடச் சேவைகள் ஏற்றப்படுகின்றன...",
@@ -2738,7 +2739,6 @@
   "Save Profile Changes": "சுயவிவர மாற்றங்களைச் சேமி",
   "That photo could not be read. Please choose another one.": "அந்தப் புகைப்படத்தைப் படிக்க முடியவில்லை. வேறொன்றைத் தேர்ந்தெடுக்கவும்.",
   "Decide": "தீர்மானி",
-  "My groups": "என் குழுக்கள்",
   "🌱 Projects": "🌱 திட்டங்கள்",
   "🏛️ Enterprises": "🏛️ கூட்டு முயற்சிகள்",
   "👥 Chat groups": "👥 அரட்டைக் குழுக்கள்",
@@ -2747,16 +2747,11 @@
   "Purpose statement is required (docs/the-commons.md §2.1)": "நோக்க அறிக்கை தேவை (docs/the-commons.md §2.1)",
   "A project needs a goal in Beans": "ஒரு திட்டத்திற்குப் பயறுகளில் இலக்கு தேவை",
   "Failed to propose enterprise": "கூட்டு முயற்சியை முன்மொழிய முடியவில்லை",
-  "The Commons": "பொது நிதி",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "சமூக முடிவுகள், பொது நிதி மற்றும் உங்கள் குழுக்கள்: திட்டங்கள், கூட்டு முயற்சிகள் மற்றும் பல",
   "You can propose a Decision once you have completed a trade.": "நீங்கள் ஒரு வர்த்தகத்தை முடித்தவுடன் ஒரு முடிவை முன்மொழியலாம்.",
   "You already have an open decision (limit 1 open decision per author).": "உங்களிடம் ஏற்கனவே ஒரு திறந்த முடிவு உள்ளது (ஒருவருக்கு 1 திறந்த முடிவு மட்டுமே).",
   "Opens after your first completed trade": "உங்கள் முதல் பரிவர்த்தனை முடிந்த பிறகு திறக்கும்",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} குழு என்பது அனைவருக்கும் அல்லாமல் சிலருக்கான இடம். திட்டங்களும் கூட்டு முயற்சிகளும் பயறுகளை வைத்திருக்கின்றன; அரட்டைக் குழுக்கள் எதையும் வைப்பதில்லை. குழுவில் இருப்பது உங்கள் நம்பிக்கையையோ உங்கள் வாக்கையோ மாற்றாது.",
-  "Groups:": "குழுக்கள்:",
   "Loading groups...": "குழுக்கள் ஏற்றப்படுகின்றன...",
   "No groups found": "குழுக்கள் எதுவும் இல்லை",
-  "You have not joined any groups yet.": "நீங்கள் இன்னும் எந்தக் குழுவிலும் இணையவில்லை.",
   "Start a working group, guild, or team to coordinate discussions.": "விவாதங்களை ஒருங்கிணைக்க ஒரு பணிக்குழு, சங்கம் அல்லது குழுவைத் தொடங்குங்கள்.",
   "+ Create a Group": "+ குழுவை உருவாக்குங்கள்",
   "View details for group {name}": "{name} குழுவிற்கான விவரங்களைக் காண்க",
@@ -3627,5 +3622,11 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} உறுப்பினர் · ஒலியடக்கம்",
     "other": "{n} உறுப்பினர்கள் · ஒலியடக்கம்"
-  }
+  },
+  "View photo full screen": "புகைப்படத்தை முழுத் திரையில் காண்க",
+  "Photo message": "புகைப்படச் செய்தி",
+  "Full-size photo": "முழு அளவிலான புகைப்படம்",
+  "Dismiss full-size photo": "முழு அளவிலான புகைப்படத்தை மறை",
+  "Close photo": "புகைப்படத்தை மூடு",
+  "It will read \"This message was deleted\" for both of you.": "உங்கள் இருவருக்கும் இது \"இந்தச் செய்தி நீக்கப்பட்டது\" என்று தோன்றும்."
 }

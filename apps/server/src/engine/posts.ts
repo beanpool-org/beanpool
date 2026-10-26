@@ -726,8 +726,9 @@ export function createPost(
     const createdAt = new Date(now).toISOString();
     const searchKeywords = generateSearchKeywords(title, description, category);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
-    // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos.
-    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), authorPublicKey);
+    // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos. A keeper's listing for
+    // their enterprise charges the keeper who sent the photos, as its edit and its logo do, never the enterprise.
+    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey);
 
     db.transaction(() => {
         if (type === 'poll') {
@@ -1079,7 +1080,15 @@ function rollIfDue(broadcast: BroadcastFn | undefined, id: string): void {
     if (r?.event_repeat && r.event_end_at && Date.parse(r.event_end_at) <= Date.now()) rollDueSeries(broadcast);
 }
 
-export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
+/** What a keeper's edit of a closed enterprise's listing answers, as its lifecycle routes do (routes/treasury.ts). */
+export const ENTERPRISE_CLOSED_TO_EDITS = word('This enterprise has been closed, so it can no longer be modified.');
+export const ENTERPRISE_CLOSED_CODE = 'enterprise_closed';
+
+/**
+ * `keeps`: whether the signed caller (`actorPubkey`) keeps this enterprise, as state-engine canOperateTreasury says. Passed
+ * in, not imported: state-engine imports this module. Only a route's signed caller has one.
+ */
+export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string, out?: EventTimeOut, keeps?: (enterprisePubkey: string) => boolean): MarketplacePost | null {
     // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
     // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
     // ENTERPRISE as `authorPublicKey`, and `authorPublicKey` is rewritten below anyway so the UPDATE's WHERE
@@ -1107,13 +1116,30 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     }
     const existingPost = getPosts(db, { id, includeAllScopes: true })[0] ?? null;
     if (!existingPost) return null;
+    // A keeper who edits their enterprise's listing pays for the photos they bring in (photo-upload-budget.ts), as for its
+    // logo; any other edit charges the author, as before.
+    let keeperPays: string | null = null;
     if (existingPost.type === 'event') {
         authorPublicKey = existingPost.authorPublicKey;
-    } else if (existingPost.authorPublicKey !== authorPublicKey) {
-        return null;
-    } else {
+    } else if (existingPost.authorPublicKey === authorPublicKey) {
         // Their own post, from its author only while a member here: an edit publishes under their name (4109713263).
         assertNodeMember(authorPublicKey);
+    } else if (actorPubkey && keeps && existingPost.audienceScope === 'public' && !existingPost.originNode
+        && keeps(existingPost.authorPublicKey)) {
+        // A keeper editing their enterprise's Offer or Need, signed with their own key as the phone and the web send it
+        // (the signature middleware refuses the enterprise's key in a body). Entitled as the enterprise's create and
+        // remove routes entitle them; the post stays the enterprise's. A group's or a direct post stays its author's
+        // alone, and anyone else is answered as before.
+        assertNodeMember(actorPubkey);
+        // Closed, it takes no edit, as it takes no new listing (routes/treasury.ts requireOperator, assertMemberActive).
+        const status = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(existingPost.authorPublicKey) as { status: string | null } | undefined)?.status;
+        if (status === 'disabled' || status === 'suspended' || status === 'pruned' || status === 'completed') {
+            throw Object.assign(new Error(ENTERPRISE_CLOSED_TO_EDITS), { status: 403, statusCode: 403, code: ENTERPRISE_CLOSED_CODE });
+        }
+        authorPublicKey = existingPost.authorPublicKey;
+        keeperPays = actorPubkey;
+    } else {
+        return null;
     }
     // G3: an edit goes out under the author's name, so a muted author's post takes none, whoever makes it: a keeper
     // or convenor editing a muted enterprise's or member's event is refused as the author would be. The route checks
@@ -1430,7 +1456,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     // Outside the transaction, like the create path: see storedPhotoColumns.
     const nextPhotoColumns = (updates.photos !== undefined && Array.isArray(updates.photos))
-        ? storedPhotoColumns(id, updates.photos.slice(0, 5), authorPublicKey, uploadPhotoBytes)
+        ? storedPhotoColumns(id, updates.photos.slice(0, 5), keeperPays ?? authorPublicKey, uploadPhotoBytes)
         : null;
 
     let openedLine: EventThreadMessage | null = null;

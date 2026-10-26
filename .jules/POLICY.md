@@ -1069,3 +1069,50 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** BUNDLE (see #1729)
 - **What landed:** only the new `apps/server/src/test-event-post.ts` and its registration line (director PR).
 - **Why the rest must not be re-filed:** `keepalive-test-fetch.ts` got a blind ECONNRESET retry that replays POSTs which may already have been applied, and hides the reset its header's measured fix prevents; `test-pulse-resolver.ts`'s "ssrfSafeFetch succeeds on a public domain" was made to pass on a 503. Scout: never weaken an assertion or add a retry to dodge a flake; one suite per PR.
+
+### 2026-10-26 — Bolt: Map lookup of myMembership in GroupDetailModal (#2485) — CLOSED, NO BENEFIT (see #745, #2455)
+- **Category:** NO BENEFIT (see #745, #2455)
+- **Claim:** a Map makes the viewer's membership lookup O(1).
+- **Why not to re-file:** single lookup per render, Map built per members change, last-wins vs first-wins.
+
+### 2026-10-26 — Flow: loading indicator in RestorePointsPanel (#2486) — CLOSED, RE-FILE (see #1957, #2116, #2376)
+- **Category:** RE-FILE (see #1957, #2116, #2376)
+- **Claim:** RestorePointsPanel needs a loading spinner while fetching the signed-in node.
+- **Why not to re-file:** the panel makes one GET of the signed-in node; card heading and explanation are already on screen while it runs, and it draws nothing for a non-owner. The spinner would show for one local round trip, then vanish into a list or the "No restore points" line; no stall shown. The spinner is an emoji with English-only text (against #2376).
+
+### 2026-10-26 — Scout: test-open-copies (#2487) — LANDED
+- **Category:** LANDED (director PR)
+- **What landed:** `apps/server/src/test-open-copies.ts` and its registration line in `scripts/server-suites.mjs` beside `test-sync-copy-pages`. Tests engine/open-copies.ts copy tracking, close callbacks with reason string, count, and error isolation.
+
+### 2026-10-26 — Expo: first of repeated params in toolParams, eighth filing (#2488) — CLOSED, DECIDED (#2384, #2425, …)
+- **Category:** DELIBERATE DECISION (see #2384, #2425, #1753, #2073, #2118, #2174, #2343, #2454)
+- **Claim:** take `v[0]` of an array param in `tool/[id].tsx`.
+- **Why not to re-file:** a repeated parameter is refused on purpose. Re-file only with a real link that produces the array and Marty's decision.
+
+### 2026-10-26 — Pixel: accessibilityLabel on ChatPhoto loading indicator (#2489) — LANDED WITH CHANGES
+- **Category:** LANDED WITH CHANGES (director PR)
+- **What landed:** accessibilityLabel on ChatPhoto's loading indicator through `t('Loading photo')` with the key added across all 24 native catalogs (`apps/native/words/*.json`) copied from PWA words.
+
+### 2026-10-26 — Forge: 404 when freezing non-existent member credit (#2490) — LANDED WITH CHANGES
+- **Category:** LANDED WITH CHANGES (director PR)
+- **What landed:** `adminSetCreditFrozen` uses UPDATE's `.changes === 0` (boolean return) and route answers 404 without matching error text; no broadcast and no row created on 404; integration test in server test suite.
+
+### 2026-10-26 — Sentinel: length check before timingSafeEqual in verifyAutomationToken (#2491) — CLOSED, PHANTOM (see #2338)
+- **Category:** PHANTOM (see #2338)
+- **Claim:** verifyAutomationToken needs a length check before timingSafeEqual.
+- **Why not to re-file:** both digests are 32 bytes by construction (sha256 hex of the presented secret; stored hash regex-checked to 64 hex or NO_TOKEN_HASH). timingSafeEqual can never see unequal lengths and cannot throw.
+
+### 2026-10-26 — Atlas: community-shape helper tests (#2492) — CLOSED, ALREADY ON MAIN (#2476)
+- **Category:** ALREADY ON MAIN (see #2476)
+- **Claim:** unit tests for community-shape helpers in manager.
+- **Why not to re-file:** duplicate of `apps/manager/src/lib/community-shape.test.ts` landed in #2476 (743f6ce3).
+
+### 2026-10-26 — Palette: AvatarPresetPicker region focus ring (#2493) — CLOSED, CLAIM FALSE (#1369)
+- **Category:** CLAIM FALSE (see #1369)
+- **Claim:** scroll region in AvatarPresetPicker needs focus-visible ring.
+- **Why not to re-file:** the region already has `tabIndex=0`, `focus:outline-none focus:ring-1 focus:ring-emerald-500`; changing to focus-visible and ring-2 gains no visible keyboard focus.
+
+### 2026-10-26 — Watchman: Retry-After bound in test-door-signal (#2494) — CLOSED, NOT REPRODUCED
+- **Category:** NOT REPRODUCED (see Scout #2449)
+- **Claim:** test-door-signal fails with Retry-After below 590 s.
+- **Why not to re-file:** not reproduced on main (44/44 pass); assertion widened from 590 to 570 to dodge a wall-clock load flake, violating Scout #2449. If a fix is wanted, compute expected value from `Date.now() - tick` in the test, keeping the bound tight.

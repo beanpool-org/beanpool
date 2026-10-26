@@ -8,7 +8,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { HeaderTitle, useDotOnlyChip } from './HeaderControls';
 import { SyncChip } from './SyncChip';
 
-/** The title's words' width; the room beside the chip's words is 100 px (the title's box) and the words are 50. */
+/**
+ * The title's words' width; the room beside the chip's words is 100 px (HeaderTitle's middle, which the needs-you icons
+ * beside the title give way in, so they never count) and the words are 50.
+ */
 let wordsOfTitle = 0;
 const rangeRect = Range.prototype.getBoundingClientRect;
 
@@ -16,7 +19,7 @@ beforeEach(() => {
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
         const el = this as HTMLElement;
-        const width = el.tagName === 'HEADER' ? 300 : el.dataset.chipWords !== undefined ? 50 : el.querySelector(':scope > [data-testid="header-title"]') ? 100 : 0;
+        const width = el.tagName === 'HEADER' ? 300 : el.dataset.chipWords !== undefined ? 50 : el.dataset.headerMiddle !== undefined ? 100 : 0;
         return { width, height: 20, top: 0, left: 0, right: width, bottom: 20, x: 0, y: 0, toJSON() {} } as DOMRect;
     });
     Range.prototype.getBoundingClientRect = function () {

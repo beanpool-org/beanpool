@@ -656,7 +656,11 @@ describe('RekeyMemberWizard: one try per number, and a code ended elsewhere (#17
         await screen.findByLabelText('The number on their phone');
         read.mockResolvedValue({ isInvalidated: true, invalidatedInfo: null, pendingRequest: null, proposals: [], wrongNumbers: 0, history: [] } as any);
         await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS * 2 + 50); });
-        expect(screen.queryByTestId('rekey-code-qr')).toBeNull();
+        // Flake cause: fetchRekeyStatusApi is an async network call. While advancing fake timers triggers
+        // the polling tick, the state update and DOM unmount settle across microtasks. Synchronously querying
+        // queryByTestId right after timers advance fails under CI load with "expected <img> to be null".
+        // waitFor waits for the re-render to complete (matching line 597).
+        await waitFor(() => expect(screen.queryByTestId('rekey-code-qr')).toBeNull());
         expect(screen.queryByText(/Waiting for their phone to ask/)).toBeNull();
         expect(screen.getByTestId('rekey-code-expired').textContent).toContain('no longer active');
         expect(screen.getByRole('button', { name: 'Make a new code' })).toBeTruthy();

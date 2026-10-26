@@ -68,12 +68,14 @@ if [ $FORCE_ALL -eq 0 ] && [ $FAST -eq 0 ]; then
     CHANGED_FILES=$(git diff --name-only "$BASE_REF"... 2>/dev/null; git status --porcelain 2>/dev/null | awk '{print $2}')
     
     if [ -n "$CHANGED_FILES" ]; then
-      echo "$CHANGED_FILES" | grep -q "^packages/beanpool-core/" || HAS_CORE_CHANGES=0
-      echo "$CHANGED_FILES" | grep -q "^packages/beanpool-engine/" || HAS_ENGINE_CHANGES=0
+      # Here-strings, not echo | grep -q: under pipefail a match can end grep before echo has written everything, and the
+      # SIGPIPE would read as "no change here" and skip that package's suites.
+      grep -q "^packages/beanpool-core/" <<<"$CHANGED_FILES" || HAS_CORE_CHANGES=0
+      grep -q "^packages/beanpool-engine/" <<<"$CHANGED_FILES" || HAS_ENGINE_CHANGES=0
       # The sign-in checks in packages/beanpool-signin are the server's: its sso and keeper suites cover them. So is a
       # change to the list of server suites or the runner that runs them.
-      echo "$CHANGED_FILES" | grep -q -E "^(apps/server|packages/beanpool-signin)/|^scripts/(run-)?server-suites\.mjs$" || HAS_SERVER_CHANGES=0
-      echo "$CHANGED_FILES" | grep -q "^apps/native/" || HAS_NATIVE_CHANGES=0
+      grep -q -E "^(apps/server|packages/beanpool-signin)/|^scripts/(run-)?server-suites\.mjs$" <<<"$CHANGED_FILES" || HAS_SERVER_CHANGES=0
+      grep -q "^apps/native/" <<<"$CHANGED_FILES" || HAS_NATIVE_CHANGES=0
     fi
   fi
 fi
@@ -249,7 +251,7 @@ if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ] || [ $HAS_ENGINE
 else
   skip_check "server_suites"
 fi
-run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
+run_check "test"          pnpm turbo run test --continue $TURBO_TEST_ARGS
 
 # e2e/fresh-proof.mjs (owner-delete S4a): an owner's fresh-proof box is on screen at the press, survives a second Manage
 # press, and never offers a spent code.
@@ -446,13 +448,17 @@ FAIL=0
 FAILED_NAMES=()
 
 for i in "${!PIDS[@]}"; do
-  wait "${PIDS[$i]}"
-  EXIT_CODE=$?
-  if [ $EXIT_CODE -eq 0 ]; then
+  wait "${PIDS[$i]}" 2>/dev/null || true
+  NAME="${NAMES[$i]}"
+  RC=1
+  if [ -f "$LOGDIR/$NAME.rc" ]; then
+    read -r RC < "$LOGDIR/$NAME.rc"
+  fi
+  if [ "$RC" = "0" ]; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
-    FAILED_NAMES+=("${NAMES[$i]}")
+    FAILED_NAMES+=("$NAME")
   fi
 done
 
@@ -465,12 +471,13 @@ echo "╠═══════════════════════�
 for i in "${!NAMES[@]}"; do
   NAME="${NAMES[$i]}"
   STATUS="✅ PASS"
-  for fn in "${FAILED_NAMES[@]}"; do
-    if [ "$fn" = "$NAME" ]; then
-      STATUS="❌ FAIL"
-      break
-    fi
-  done
+  RC=1
+  if [ -f "$LOGDIR/$NAME.rc" ]; then
+    read -r RC < "$LOGDIR/$NAME.rc"
+  fi
+  if [ "$RC" != "0" ]; then
+    STATUS="❌ FAIL"
+  fi
   # Wall clock, and the offset from the start of the run at which this check began. The pair is
   # what makes the load legible: which checks were actually running at the same time, and which
   # one is the long pole everything else is hiding behind. A check killed before it could write
@@ -512,7 +519,7 @@ FAILED_TASK_LINES=150
 
 turbo_failed_tasks() {
   # "Failed:    @beanpool/pwa#test, @beanpool/core#test"  ->  one pkg#task per line
-  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" "$1" | sed -n 's/^Failed:[[:space:]]*//p' | tr ', ' '\n\n' | grep '#'
+  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" "$1" | sed -n 's/^[[:space:]]*Failed:[[:space:]]*//p' | tr ', ' '\n\n' | grep '#'
 }
 
 turbo_task_output() {

@@ -1233,6 +1233,7 @@
   "Failed to delete": "মুছে ফেলা যায়নি",
   "Post remains active after completion for repeat business.": "পুনরায় ব্যবসার জন্য কাজ শেষ হওয়ার পরও পোস্টটি সক্রিয় থাকে।",
   "Photos ({n}/{max})": "ছবি ({n}/{max})",
+  "Add photo": "ছবি যোগ করুন",
   "Failed to save": "সংরক্ষণ করা যায়নি",
   "Failed to delete post as convenor": "আহ্বায়ক হিসেবে পোস্ট মুছতে ব্যর্থ হয়েছে",
   "Loading Location Services...": "অবস্থান পরিষেবা লোড হচ্ছে...",
@@ -2730,7 +2731,6 @@
   "Save Profile Changes": "প্রোফাইলের পরিবর্তন সংরক্ষণ করুন",
   "That photo could not be read. Please choose another one.": "সেই ছবিটি পড়া যায়নি। অনুগ্রহ করে অন্য একটি বেছে নিন।",
   "Decide": "সিদ্ধান্ত গ্রহণ",
-  "My groups": "আমার দলসমূহ",
   "🌱 Projects": "🌱 প্রকল্পসমূহ",
   "🏛️ Enterprises": "🏛️ উদ্যোগসমূহ",
   "👥 Chat groups": "👥 চ্যাট গ্রুপ",
@@ -2739,16 +2739,11 @@
   "Purpose statement is required (docs/the-commons.md §2.1)": "উদ্দেশ্যের বিবৃতি প্রয়োজন (docs/the-commons.md §2.1)",
   "A project needs a goal in Beans": "একটি প্রকল্পের জন্য শিমের লক্ষ্যমাত্রা প্রয়োজন",
   "Failed to propose enterprise": "উদ্যোগের প্রস্তাব দিতে ব্যর্থ হয়েছে",
-  "The Commons": "যৌথ তহবিল",
-  "Community decisions, the Commons, and your groups: projects, enterprises and more": "কমিউনিটি সিদ্ধান্ত, যৌথ তহবিল এবং আপনার দলসমূহ: প্রকল্প, উদ্যোগ এবং আরও অনেক কিছু",
   "You can propose a Decision once you have completed a trade.": "একটি লেনদেন সম্পন্ন করার পর আপনি সিদ্ধান্তের প্রস্তাব দিতে পারবেন।",
   "You already have an open decision (limit 1 open decision per author).": "আপনার ইতোমধ্যে একটি সক্রিয় সিদ্ধান্ত রয়েছে (লেখক প্রতি সর্বোচ্চ ১টি উন্মুক্ত সিদ্ধান্ত)।",
   "Opens after your first completed trade": "আপনার প্রথম সম্পূর্ণ লেনদেনের পর খোলে",
-  "👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.": "👥 {label} গ্রুপ হলো সবার বদলে নির্দিষ্ট কিছু মানুষের জন্য একটি জায়গা। প্রকল্প ও উদ্যোগসমূহ শিম ধারণ করে; চ্যাট গ্রুপ কোনো শিম রাখে না। কোনো গ্রুপে থাকার ফলে আপনার আস্থা বা ভোট পরিবর্তন হয় না।",
-  "Groups:": "গ্রুপ:",
   "Loading groups...": "দলগুলো লোড হচ্ছে...",
   "No groups found": "কোনো দল পাওয়া যায়নি",
-  "You have not joined any groups yet.": "আপনি এখনও কোনো দলে যোগ দেননি।",
   "Start a working group, guild, or team to coordinate discussions.": "আলোচনার সমন্বয় করতে একটি ওয়ার্কিং গ্রুপ, গিল্ড বা টিম শুরু করুন।",
   "+ Create a Group": "+ একটি গ্রুপ তৈরি করুন",
   "View details for group {name}": "{name} দলের বিস্তারিত দেখুন",
@@ -3627,5 +3622,11 @@
   "{n} member · muted|{n} members · muted": {
     "one": "{n} জন সদস্য · মিউট করা",
     "other": "{n} জন সদস্য · মিউট করা"
-  }
+  },
+  "View photo full screen": "পুরো স্ক্রিনে ছবি দেখুন",
+  "Photo message": "ছবির বার্তা",
+  "Full-size photo": "বড় ছবি",
+  "Dismiss full-size photo": "বড় ছবি বন্ধ করুন",
+  "Close photo": "ছবি বন্ধ করুন",
+  "It will read \"This message was deleted\" for both of you.": "এটি আপনাদের দুজনের জন্যই \"এই বার্তাটি মুছে ফেলা হয়েছে\" দেখাবে।"
 }

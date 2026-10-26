@@ -20,7 +20,6 @@ import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
 import { useOwnAvatar } from './lib/useOwnAvatar';
-import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
@@ -43,7 +42,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
-import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './components/HeaderControls';
+import { MobileHeader, SidebarStatus } from './components/AppHeader';
 import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
@@ -63,6 +62,9 @@ import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
+import { YourShopPage } from './pages/YourShopPage';
+import { ShopDetailPage } from './pages/ShopDetailPage';
+import { takeShopParam } from './lib/shop';
 
 type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
@@ -237,6 +239,10 @@ export function App() {
     const clearEditEventPost = useCallback(() => setEditEventPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
+    const [openYourShop, setOpenYourShop] = useState(false);
+    const [openShopId, setOpenShopId] = useState<string | null>(null);
+    const [shopFromYourShop, setShopFromYourShop] = useState(false);
+    const [openTreasuryTab, setOpenTreasuryTab] = useState<'page' | 'manage'>('page');
     // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
     // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
@@ -255,15 +261,19 @@ export function App() {
         setOpenDraft(draft);
         setActiveTab('map');
     }, []);
-    // A member's profile, an enterprise's page or a tool: each drawn over the tabs, and over Settings (z-[110] to its 100).
+    // A member's profile, an enterprise's page, their shop or a tool: each drawn over the tabs, and over Settings (z-[110] to its 100).
     // On md+ the sidebar stays beside it, so its tabs and its cog can be tapped with one open.
-    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool;
+    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool || (openYourShop && !!identity) || !!openShopId;
     const isBottomNavVisible = !pageOver;
     // A tab, from the sidebar or the bottom nav, is shown with nothing over it.
     const closePagesOver = () => {
         setOpenProfilePubkey(null);
         setOpenTreasuryPubkey(null);
+        setOpenTreasuryTab('page');
         setOpenTool(null);
+        setOpenYourShop(false);
+        setOpenShopId(null);
+        setShopFromYourShop(false);
     };
     // The cog's, the sidebar's and the pill's: Settings as the member sees it. Opened, it closes a page over the tabs as a
     // tab does, or it opened under that page and nothing seemed to happen (tester, 23 Oct: from My profile the cog didn't
@@ -326,7 +336,7 @@ export function App() {
     // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
     // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
     const tourStillOffered = !!identity && isGuest === false && (tourOffered?.publicKey !== identity.publicKey || tourOffered.up);
-    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey || !!openTool;
+    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey || !!openTool || openYourShop || !!openShopId;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
     // The recent searches and "near you" answers (lib/members-on-demand) are kept by path alone: another account in this
@@ -416,6 +426,15 @@ export function App() {
             if (contextId) setOpenTreasuryPubkey(contextId);
             return;
         }
+        if (tab === 'shop-mine') {
+            setOpenYourShop(true);
+            return;
+        }
+        if (tab === 'shop') {
+            if (contextId) setOpenShopId(contextId);
+            else setOpenYourShop(true);
+            return;
+        }
         // A group's vote: the group's info, where its Decisions block is. Read first, so the sheet opens whole; a group
         // that can't be read now opens just its votes when they still hold the reader (#1784 review B1), else Commons.
         if (tab === 'group') {
@@ -476,6 +495,20 @@ export function App() {
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
+
+    // `/?shop=<id>` — a shared shop link.
+    const [linkedShop, setLinkedShop] = useState<string | null>(null);
+    useEffect(() => { setLinkedShop(takeShopParam()); }, []);
+    useEffect(() => {
+        if (!linkedShop) return;
+        if (linkedShop === 'mine') {
+            if (!identity) return;
+            setOpenYourShop(true);
+        } else {
+            setOpenShopId(linkedShop);
+        }
+        setLinkedShop(null);
+    }, [linkedShop, identity]);
     // On the global lobby a visitor reads the shared listing first; the lobby keeps it in this tab (a join by sign-in
     // leaves the page), and it opens here once, when they have joined. Before the address's own, so that one wins.
     useEffect(() => {
@@ -728,10 +761,9 @@ export function App() {
     ];
     const activeTabEntry = TABS.find(tb => tb.id === activeTab);
 
-    // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
-    // where the title wouldn't fit beside the chip's words (a hook, so above the returns before the app).
+    // The mobile header's title (none on the map, which shows the community's name); MobileHeader sends the sync chip to its
+    // dot alone where the title wouldn't fit beside the chip's words.
     const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
-    const [headerRef, chipDotOnly] = useDotOnlyChip(headerTitle);
 
     if (loading || (!identity && visitorView.kind === 'checking')) {
         return (
@@ -878,10 +910,14 @@ export function App() {
 
                 {/* Sidebar Footer Controls */}
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
-                    <div className="flex items-center justify-between px-2 py-1">
-                        <SyncStatus isMember={!isGuest} />
-                        <SidebarControls showSettings={settingsSeen} setShowSettings={setSettingsFromCog} />
-                    </div>
+                    <SidebarStatus
+                        isGuest={isGuest}
+                        identityPubkey={identity?.publicKey}
+                        activeTab={activeTab}
+                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                        settingsSeen={settingsSeen}
+                        setShowSettings={setSettingsFromCog}
+                    />
 
                     {identity && (
                         <button
@@ -938,57 +974,20 @@ export function App() {
                 <FormerAddressBanner signedIn />
 
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
-                <header ref={headerRef} className="relative shadow-md md:hidden" style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.3rem 0.75rem',
-                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid #111',
-                    position: (activeTab === 'map' && !showSettings) ? 'absolute' : 'sticky',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 100,
-                    backgroundImage: "url('/assets/neon-vines-banner.png')",
-                    backgroundSize: '150% auto',
-                    backgroundPosition: 'center',
-                }}>
-                    <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
-
-                    <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
-                        <SyncStatus isMember={!isGuest} stacked dotOnly={chipDotOnly} />
-                    </div>
-
-                    {headerTitle !== null ? (
-                        // The tab's own name, as the lobby's, in the room between the chip and the pill (never under either).
-                        <HeaderTitle title={headerTitle} onClick={toggleCommunityStatus}>
-                            {communityStatus}
-                        </HeaderTitle>
-                    ) : (
-                        <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
-                            <div 
-                                className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
-                                style={{ transform: 'translateX(-12px) translateY(-2px)' }}
-                                onClick={toggleCommunityStatus}
-                            >
-                                <img src="/bean.png" alt={t('BeanPool Icon')} style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
-                                <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{t('BeanPool')}</span>
-                                <span
-                                    className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider whitespace-nowrap"
-                                    aria-label={t('Version {version}', { version: displayVersion })}
-                                >{t('v{version}', { version: displayVersion })}</span>
-                            </div>
-                            {communityStatus}
-                        </div>
-                    )}
-
-                    <HeaderControls
-                        showSettings={settingsSeen}
-                        setShowSettings={setSettingsFromCog}
-                        identityPubkey={identity?.publicKey}
-                        onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                    />
-                </header>
+                <MobileHeader
+                    activeTab={activeTab}
+                    showSettings={showSettings}
+                    title={headerTitle}
+                    isGuest={isGuest}
+                    identityPubkey={identity?.publicKey}
+                    displayVersion={displayVersion}
+                    communityStatus={communityStatus}
+                    onTitleClick={toggleCommunityStatus}
+                    settingsSeen={settingsSeen}
+                    setShowSettings={setSettingsFromCog}
+                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                />
 
                 {/* Main Scrollable Canvas */}
                 <main style={{
@@ -1133,7 +1132,10 @@ export function App() {
                             {activeTab === 'projects' && (
                                 <ProjectsPage
                                     identity={identity}
-                                    onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                    onOpenTreasury={(pubkey, tab) => {
+                                        setOpenTreasuryTab(tab ?? 'page');
+                                        setOpenTreasuryPubkey(pubkey);
+                                    }}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     isMember={isGuest === null ? null : !isGuest}
                                 />
@@ -1164,6 +1166,7 @@ export function App() {
                                 onComposer={openComposerFromTool}
                                 onGuide={(slug) => { setOpenTool(null); navigateToTab('guide', slug); }}
                                 onAddHomeCard={(type) => { setOpenTool(null); setAddHomeCard(type); setShowSettings(false); setActiveTab('home'); }}
+                                onShop={() => { setOpenTool(null); setOpenYourShop(true); }}
                             />
                         </Suspense>
                     )}
@@ -1174,10 +1177,14 @@ export function App() {
                             identity={identity}
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
+                            initialTab={openTreasuryTab}
                             enterprisesPreview={enterprisesMode === 'preview'}
                             onNearYou={() => { closePagesOver(); setActiveTab('home'); }}
                             onGuide={(slug) => { closePagesOver(); navigateToTab('guide', slug); }}
-                            onBack={() => setOpenTreasuryPubkey(null)}
+                            onBack={() => {
+                                setOpenTreasuryPubkey(null);
+                                setOpenTreasuryTab('page');
+                            }}
                             onNavigatePost={(postId) => {
                                 closePagesOver();
                                 navigateToTab('marketplace', postId);
@@ -1224,6 +1231,70 @@ export function App() {
                                 }
                                 setActiveTab(tab as any);
                                 setShowSettings(false);
+                            }}
+                        />
+                    )}
+
+                    {/* Your shop Overlay */}
+                    {openYourShop && identity && (
+                        <YourShopPage
+                            identity={identity}
+                            onBack={() => setOpenYourShop(false)}
+                            onOpenShop={(shopId: string) => {
+                                setOpenYourShop(false);
+                                setShopFromYourShop(true);
+                                setOpenShopId(shopId);
+                            }}
+                            onOpenPost={(postId) => {
+                                closePagesOver();
+                                navigateToTab('marketplace', postId);
+                            }}
+                            onOpenTools={() => {
+                                setOpenYourShop(false);
+                                setOpenTool({ id: null, screen: 'main', key: null });
+                            }}
+                            onOpenDeals={() => {
+                                closePagesOver();
+                                navigateToTab('marketplace', 'deals_active');
+                            }}
+                        />
+                    )}
+
+                    {/* Shop Detail Overlay */}
+                    {openShopId && (
+                        <ShopDetailPage
+                            id={openShopId}
+                            identity={identity}
+                            showsBeans={beansMode === 'live'}
+                            onBack={() => {
+                                setOpenShopId(null);
+                                if (shopFromYourShop) {
+                                    setShopFromYourShop(false);
+                                    setOpenYourShop(true);
+                                }
+                            }}
+                            onOpenYourShop={() => {
+                                setOpenShopId(null);
+                                setShopFromYourShop(false);
+                                setOpenYourShop(true);
+                            }}
+                            onOpenEnterprise={(pubkey) => {
+                                setOpenShopId(null);
+                                setShopFromYourShop(false);
+                                setOpenTreasuryPubkey(pubkey);
+                            }}
+                            onOpenProfile={(pubkey) => {
+                                setOpenShopId(null);
+                                setShopFromYourShop(false);
+                                setOpenProfilePubkey(pubkey);
+                            }}
+                            onOpenPost={(postId) => {
+                                closePagesOver();
+                                navigateToTab('marketplace', postId);
+                            }}
+                            onMessage={(pubkey) => {
+                                closePagesOver();
+                                navigateToTab('messages', pubkey);
                             }}
                         />
                     )}

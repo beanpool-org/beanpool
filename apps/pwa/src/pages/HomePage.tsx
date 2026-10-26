@@ -53,6 +53,7 @@ import {
     resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
+import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
 import { settleInterests, shareInterests } from '../lib/home-interests';
 import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from '../lib/account-epoch';
 import { onSocketOpen, onSyncActivity, onSystemAnnouncement } from '../lib/sync';
@@ -63,6 +64,8 @@ import { sentCentre } from '../lib/listings-near';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide } from '../lib/guide';
+import { ShopHomeBody } from '../components/shop/ShopHomeBody';
+import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
@@ -1134,14 +1137,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             const held = answerRef.current;
             const sent = drawnRef.current || (held?.me && !held.welcome)
                 ? cardsToAsk(drawnRef.current, askPinned(held, Date.now()), held ? frameOf(held) : null) : undefined;
-            const read = await getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
+            const readPromise = getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
+            markHomeInflight(readPromise);
+            const read = await readPromise;
             // The page has gone, or a sign-out or a clear came while the read was out: what it brought is not this
             // page's to draw or keep any more.
             if (!mounted.current || !holds(epoch)) return;
             // 304: the copy drawn is still the answer, layout and all (its tag covers the cards asked). Anything not sent
             // since is sent again.
             if (read?.notModified && answerRef.current) {
+                recordHomeAnswer(answerRef.current, publicKey);
                 builtForRef.current = sent ?? builtFor(answerRef.current);
                 if (unsavedRef.current && layoutRef.current && savingLayout.current === 0 && !refusedLanding.current) void saveLayout(layoutRef.current);
                 // The account's interests are the ones in the copy drawn: a change made here that never reached them is
@@ -1159,6 +1165,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             const a = read && !read.notModified ? read.answer : null;
             // Only an answer shaped as Home is drawn (a proxy's page or an odd reply is a failed read, never a crash).
             if (!a || typeof a !== 'object' || !a.cards || typeof a.cards !== 'object' || Array.isArray(a.cards)) throw new Error('not a Home answer');
+            recordHomeAnswer(a, publicKey);
             etagRef.current = read && !read.notModified ? read.etag : null;
             // Which list stands (lib/home-layout.ts pickLayout): the account's or this browser's, by date, with the standby tie
             // and the empty version-1 "unknown" rule. A visitor keeps no layout.
@@ -1287,6 +1294,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             // A sign-out or a clear came while the copy was read: what it read is from before, and the page lands again.
             if (landedEpoch() === null) return;
             if (cached && !answerRef.current) {
+                recordHomeAnswer(cached.answer, publicKey);
                 answerRef.current = cached.answer;
                 builtForRef.current = cached.asked ?? null;
                 etagRef.current = cached.etag;
@@ -1815,6 +1823,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // group shows as invited.
                 case 'invite': return onNavigate('group', target.id);
                 case 'invites': return onNavigate('projects');
+                case 'shop': return onNavigate('shop', (target as any).id);
+                case 'shop-mine': return onNavigate('shop-mine');
                 default: return undefined;
             }
         };
@@ -2054,6 +2064,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         <EnterpriseBody e={c.enterprise} onNavigate={onNavigate} />
                     </HomeCard>
                 );
+            case 'shop': {
+                const s = c.shop as ShopHomeCard | undefined;
+                return s ? (
+                    <HomeCard key={id} {...common}>
+                        <ShopHomeBody card={s} onNavigate={onNavigate} />
+                    </HomeCard>
+                ) : null;
+            }
             case 'events': {
                 const ev = c.events!;
                 return (

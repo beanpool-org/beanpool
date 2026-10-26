@@ -12,8 +12,10 @@ import { MessagesPage } from './MessagesPage';
 import { ProjectsPage } from './ProjectsPage';
 import { ToolsPage } from './ToolsPage';
 import { ChannelsPage } from './ChannelsPage';
+import { YourShopPage } from './YourShopPage';
+import { ShopDetailPage } from './ShopDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getPulseFeed, getConversationMessages, getConversations, getTreasuries, type PulseFeedItem, type Treasury } from '../lib/api';
+import { getPulseFeed, getConversationMessages, getConversations, getTreasuries, getYourGroups, type PulseFeedItem, type Treasury } from '../lib/api';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 
@@ -82,6 +84,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
     getGroups: vi.fn().mockResolvedValue({ groups: [] }),
     markConversationReadApi: vi.fn().mockResolvedValue({ success: true }),
     getGroupChat: vi.fn().mockResolvedValue({ chat: null }),
+    getYourGroups: vi.fn().mockResolvedValue({ items: [] }),
 }));
 
 const testIdentity: BeanPoolIdentity = {
@@ -251,6 +254,37 @@ describe('Wide screen layout: Commons, Tools, and Channels container pins', () =
         expect(grid.className).toContain('xl:max-w-7xl');
     });
 
+    it('Commons Yours grid uses container-driven auto-fill minmax rule instead of lg:grid-cols-3', async () => {
+        const kept = {
+            ...mockEnterprise,
+            keepers: [{ publicKey: testIdentity.publicKey, callsign: testIdentity.callsign, role: 'lead' }],
+        };
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [kept] });
+        vi.mocked(getYourGroups).mockResolvedValueOnce({
+            items: [{
+                kind: 'enterprise',
+                id: kept.publicKey,
+                conversationId: kept.publicKey,
+                name: kept.name,
+                role: 'lead',
+                lifecycle: 'ongoing',
+                badge: '🏛️',
+                avatarUrl: null,
+                readOnly: false,
+                unreadCount: 0,
+                lastActivityAt: '2026-01-01T00:00:00Z',
+            }],
+        });
+        render(<ProjectsPage identity={testIdentity} onOpenTreasury={vi.fn()} />);
+
+        const yoursBlock = await screen.findByTestId('commons-yours');
+        const grid = yoursBlock.querySelector('.grid') as HTMLElement;
+        expect(grid).not.toBeNull();
+        expect(grid.className).toContain('grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))]');
+        expect(grid.className).not.toContain('lg:grid-cols-3');
+        expect(grid.className).not.toContain('xl:grid-cols-3');
+    });
+
     it('Tools page containers preserve max-w-xl reading width (not widened to 6xl)', async () => {
         // 1. ToolsList container
         const { unmount } = render(
@@ -310,6 +344,32 @@ describe('Wide screen layout: Commons, Tools, and Channels container pins', () =
         expect(formContainer.className).not.toContain('xl:max-w-6xl');
         expect(formContainer.className).not.toContain('md:max-w-4xl');
         expect(formContainer.className).not.toContain('lg:max-w-5xl');
+    });
+
+    it('Shop pages preserve max-w-xl reading width (not widened to 6xl)', async () => {
+        const { container: shopContainer, unmount } = render(
+            <YourShopPage
+                identity={testIdentity}
+                onBack={vi.fn()}
+            />
+        );
+        const inner = shopContainer.querySelector('.max-w-xl') as HTMLElement;
+        expect(inner).not.toBeNull();
+        expect(inner.className).toContain('max-w-xl');
+        expect(inner.className).not.toContain('xl:max-w-6xl');
+        unmount();
+
+        const { container: detailContainer } = render(
+            <ShopDetailPage
+                id="shop-1"
+                identity={testIdentity}
+                onBack={vi.fn()}
+            />
+        );
+        const detailInner = detailContainer.querySelector('.max-w-xl') as HTMLElement;
+        expect(detailInner).not.toBeNull();
+        expect(detailInner.className).toContain('max-w-xl');
+        expect(detailInner.className).not.toContain('xl:max-w-6xl');
     });
 });
 

@@ -38,7 +38,7 @@ export function ChatPhoto({ photoKey, load, onOpen }: { photoKey: string; load: 
     if (!uri) {
         return (
             <View style={{ width: PHOTO_SIDE, maxWidth: '100%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <ActivityIndicator color={colors.text.muted} />
+                <ActivityIndicator color={colors.text.muted} accessibilityLabel={t('Loading photo')} />
             </View>
         );
     }

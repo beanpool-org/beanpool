@@ -33,7 +33,7 @@ import { compareVersions, resolveChain, sha256Hex, type ReleaseManifest } from '
  * and nothing else at or below the newest release it has switched to is ever taken.
  *
  * Messages over the child's IPC channel: `{type: 'ready'}` and `{type: 'switch', id, request}` from a child;
- * `{type: 'switch-result', id, ok, reason?}` and `{type: 'drain'}` to it.
+ * `{type: 'ready-ack'}`, `{type: 'switch-result', id, ok, reason?}` and `{type: 'drain'}` to it.
  */
 
 export interface LauncherOptions {
@@ -163,7 +163,10 @@ export class Launcher {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => done(new Error('it did not say it was listening in time')), this.opts.readyTimeoutMs ?? 60_000);
             const onMessage = (m: ChildMessage) => {
-                if (m?.type === 'ready') done();
+                if (m?.type === 'ready') {
+                    if (child.connected) child.send({ type: 'ready-ack' });
+                    done();
+                }
             };
             const onExit = (code: number | null) => done(new Error(`it exited (${code}) before it was listening`));
             const done = (e?: Error) => {

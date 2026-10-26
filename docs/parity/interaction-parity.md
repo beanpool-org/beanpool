@@ -190,7 +190,7 @@ This section documents critical interaction discrepancies that directly degrade 
 
 ---
 
-### 4. Chat Message Images Are Unclickable Dead Ends on PWA
+### 4. Chat Message Images Are Unclickable Dead Ends on PWA — FIXED (#2495: a chat photo opens full screen on the web, group and DM)
 - **What the member attempts to do**: In a chat thread, a counterparty sends a photo of an item, receipt, or condition. The member clicks the image thumbnail to inspect the full-resolution image.
 - **What happens instead**: On PWA (`apps/pwa/src/pages/MessagesPage.tsx:141`), the image is rendered as a standard `<img>` without an `onClick` handler, light box, or modal zoom. Clicking it does nothing. In contrast, Native (`apps/native/app/chat/[id].tsx:92, 1700-1705`) opens a full-screen pinch-and-zoom modal image viewer.
 - **Files & Lines**:

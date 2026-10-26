@@ -72,6 +72,8 @@ import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
 import { REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
+import { ShopToggle, type ShopToggleState } from '../components/shop/ShopToggle';
+import { readListingShopId, readMyShop, shopIdForEdit, shopToggleState } from '../lib/shop';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -487,6 +489,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
+    const selectedPostRef = useRef<MarketplacePost | null>(null);
+    selectedPostRef.current = selectedPost;
     const [inactiveEnterprises, setInactiveEnterprises] = useState<Map<string, { paused: boolean; status: string; name: string }>>(new Map());
     const [selectedPostEnterprise, setSelectedPostEnterprise] = useState<{ paused: boolean; status: string; name: string } | null>(null);
     const [lightboxState, setLightboxState] = useState<{
@@ -639,12 +643,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editPriceType, setEditPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+    const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
+    const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
 
     // Accept & Complete Inline Forms
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
+    const [keeperOf, setKeeperOf] = useState<string[]>([]);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [acceptHours, setAcceptHours] = useState('1');
@@ -854,14 +861,22 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const canLoadBalance = !!identity && isMember !== false && isMember !== null;
     // Gate 1 is a Beans rule (the server holds it only where they are on): in preview the balance is never asked.
     const readsBalance = useReadsOwn('beans', canLoadBalance);
+    // The enterprises this member keeps (the balance's keeperOf), for Edit on their listings, as on the phone: an enterprises
+    // rule, so read where those are the reader's own as well (app/post/[id].tsx).
+    const readsKeepers = useReadsOwn('enterprises', canLoadBalance);
     useEffect(() => {
-        if (!identity || !canLoadBalance || !readsBalance) return;
+        // Signed out, or no longer reading them: the enterprises a member kept go with them.
+        if (!identity || !canLoadBalance || !(readsBalance || readsKeepers)) { setKeeperOf([]); return; }
         let cancelled = false;
         getBalance(identity.publicKey)
-            .then(b => { if (!cancelled) setBlockedFromTrading(!!b.isBlockedFromTrading); })
+            .then(b => {
+                if (cancelled) return;
+                if (readsBalance) setBlockedFromTrading(!!b.isBlockedFromTrading);
+                setKeeperOf(readsKeepers && Array.isArray(b.keeperOf) ? b.keeperOf : []);
+            })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity, canLoadBalance, readsBalance]);
+    }, [identity, canLoadBalance, readsBalance, readsKeepers]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -1270,6 +1285,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
         const isPulsePost = (selectedPost.authorCallsign || (selectedPost as any).author_callsign) === 'Daily Pulse';
+        // A keeper of the enterprise that listed it may edit it, as on the phone (app/post/[id].tsx isOperatorOfAuthor): the
+        // node takes the edit signed with the keeper's own key (apps/server engine/posts.ts updatePost), for a listing here
+        // for everyone. Edit only: pausing and deleting it stay as they were on this page.
+        const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
+            && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 
         // #143 step 5 — the link this member keeps for the community this listing actually came from, or
         // undefined. Keyed on `originNode` ONLY, never on `_remoteNode`: a client-side peer browse is not a
@@ -1534,6 +1554,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                         </div>
                     </button>
+                    {selectedPost.shopId && (
+                        <div className="mt-2 pt-2 border-t border-nature-100 dark:border-nature-800">
+                            <button
+                                type="button"
+                                onClick={() => onNavigate?.('shop', selectedPost.shopId!)}
+                                data-testid="post-shop-link"
+                                className="flex items-center gap-2 text-sm font-semibold text-bp-ink-brand hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                            >
+                                <span aria-hidden="true">🏪</span>
+                                <span>{t('View shop')}</span>
+                            </button>
+                        </div>
+                    )}
                     {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md
                         §4): said here, so a pin on the map is never taken for the door. */}
                     {placeShownRoughly(selectedPost, identity?.publicKey, openMembership) && (
@@ -2399,13 +2432,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
-                {isOwnPost && selectedPost.status !== 'pending' && (
+                {(isOwnPost || keepsAuthor) && selectedPost.status !== 'pending' && (
                     <div className="flex flex-col gap-2 mt-4">
                         {!editMode ? (
                             <>
                                 {/* Active/Paused toggle (Offers only). A live Offer counts toward your
                                     credit line (offer covenant, v3); pausing it drops it from the feed. */}
-                                {selectedPost.type === 'offer' && (
+                                {isOwnPost && selectedPost.type === 'offer' && (
                                     <button
                                         onClick={async () => {
                                             if (!identity || !selectedPost) return;
@@ -2445,13 +2478,41 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
+                                        setEditShop({ kind: 'hidden' });
+                                        setEditInShop(false);
+                                        const post = selectedPost;
+                                        const scope = (post as any).audience_scope ?? post.audienceScope ?? 'public';
+                                        const authorPk = (post as any).author_pubkey ?? post.authorPublicKey;
+                                        const originNode = (post as any).origin_node ?? (post as any).originNode;
+                                        const targetGroupId = (post as any).target_group_id ?? post.targetGroupId;
+                                        const targetPubkey = (post as any).target_pubkey ?? (post as any).targetPubkey;
+                                        if (post.type === 'offer' && authorPk === identity?.publicKey && scope === 'public' && !originNode && !targetGroupId && !targetPubkey) {
+                                            const targetPostId = post.id;
+                                            void (async () => {
+                                                try {
+                                                    const [mine, inShopId] = await Promise.all([
+                                                        readMyShop({ timeoutMs: 5000 }),
+                                                        readListingShopId(targetPostId),
+                                                    ]);
+                                                    if (selectedPostRef.current?.id !== targetPostId) return;
+                                                    if (inShopId === undefined) return;
+                                                    const inShop = mine.state === 'open' && inShopId === mine.shop.id;
+                                                    setEditShop(shopToggleState(mine, { inShop }));
+                                                    setEditInShop(inShop);
+                                                } catch {
+                                                    if (selectedPostRef.current?.id === targetPostId) {
+                                                        setEditShop({ kind: 'hidden' });
+                                                    }
+                                                }
+                                            })();
+                                        }
                                         setEditMode(true);
                                     }}
                                     className="w-full py-3.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-[15px] transition-all shadow-md"
                                 >
                                     {t('✏️ Edit Post')}
                                 </button>
-                                <button
+                                {isOwnPost && <button
                                     onClick={async () => {
                                         if (!identity || !selectedPost) return;
                                         if (!confirm(t('Delete this post?'))) return;
@@ -2473,7 +2534,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }`}
                                 >
                                     {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Post')}
-                                </button>
+                                </button>}
                             </>
                         ) : (
                             <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
@@ -2625,6 +2686,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                 </div>
 
+                                {editType === 'offer' && editShop.kind !== 'hidden' && (
+                                    <div className="mb-4">
+                                        <ShopToggle
+                                            state={editShop}
+                                            on={editInShop}
+                                            onChange={setEditInShop}
+                                            testId="edit-post-shop"
+                                        />
+                                    </div>
+                                )}
+
                                 {/* Save/Cancel */}
                                 <div className="flex gap-2">
                                     <button
@@ -2642,6 +2714,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             if (!price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
                                             setSaving(true);
                                             try {
+                                                const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
+                                                const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,
@@ -2651,6 +2725,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,
+                                                    ...(shopId !== undefined ? { shopId } : {}),
                                                 });
                                                 setSelectedPost(result.post);
                                                 setEditMode(false);

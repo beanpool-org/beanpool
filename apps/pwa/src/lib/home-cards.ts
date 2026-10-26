@@ -25,6 +25,7 @@ import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } f
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
 import { formatRelativeTime } from './pulse';
 import { tierWords } from './trust-tier';
+import type { ShopHomeCard } from './shop';
 export { tierWords };
 export type { HomeLayoutV2 };
 
@@ -67,7 +68,9 @@ export type NeedsTarget =
      * sent only to an app that asks with `lands=invite` (lib/api.ts getHome).
      */
     | { to: 'invite'; id: string }
-    | { to: 'invites' };
+    | { to: 'invites' }
+    | { to: 'shop'; id: string }
+    | { to: 'shop-mine' };
 export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**
@@ -191,6 +194,8 @@ export interface HomeCards {
         month?: MonthFigures;
         latest?: EnterpriseLine | null;
     };
+    /** "Your shop and tools": the member's own shop, or none yet. */
+    shop?: ShopHomeCard;
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
     decide?: {

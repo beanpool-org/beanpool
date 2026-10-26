@@ -145,7 +145,7 @@ async function unusedPort(): Promise<number> {
         if (!handedOut.has(p)) return p;
     }
 }
-/** index.ts listens on PORT_HTTP, PORT_HTTPS, PORT_P2P and PORT_P2P + 1: four free ports, none fixed (test-clean-stop's). */
+/** Probe ephemeral ports for index.ts's four listeners (PORT_HTTP, PORT_HTTPS, PORT_P2P, and PORT_P2P + 1): four free ports, none fixed. */
 let picking: Promise<unknown> = Promise.resolve();
 function freePorts(): Promise<{ http: number; https: number; p2p: number }> {
     // One node's four at a time, so two nodes starting together never pick the same one.

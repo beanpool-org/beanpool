@@ -34,7 +34,7 @@ In the web app, use **Message** on their profile, 💬 on their row under **Peop
 ## Sending
 
 - Type in **Message...** and tap the send button.
-- To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button.
+- To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button.
 
 The ticks under your message:
 
@@ -56,7 +56,7 @@ On the phone, tap a message. Small round buttons appear beside it:
 
 The same buttons are in a group's chat. See "Groups".
 
-In the web app, **Reply**, **React** and **Edit** are small words on each message, and in a one-to-one chat there is no **Delete** (a group's chat has it): delete that message from the phone app.
+Both apps have **Reply**, **React**, **Edit** and **Delete** (in the web app they are small words on each message).
 
 Deleting takes the words off your community's server too, so a new phone signing in later never sees them.
 

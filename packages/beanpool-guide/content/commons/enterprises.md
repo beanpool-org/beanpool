@@ -18,7 +18,7 @@ An enterprise has its own daily limits, ten times a member's: 1,000 payments, 30
 
 ## Finding them
 
-Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each shows its status, purpose and balance. On the phone, the ones you keep are first under **Yours** (lead first, each with its role and a **Manage** button to run it). Tap one to open it.
+Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each shows its status, purpose and balance. The ones you keep are first under **Yours** (lead first, each with its role and a **Manage** button to run it). Tap one to open it.
 
 ## What an enterprise page shows
 
@@ -54,7 +54,8 @@ If you keep an enterprise, or help run a project, everything only its keepers do
 - requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See "Keepers".
 - **Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its category and **How we deal**. Its category is one of the Market's categories, the same ones every listing has. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the category and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, category or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. With a photo, for the logo or the banner, move it and zoom it until the part you want is in the frame (a circle for the logo, a strip three times as wide as it is tall for the banner, as its page shows them), then tap **Done**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.
 - **Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.
-- **Operator controls:** **Post Offer** and **Post Need** post in its name (a new Offer starts in its shop's category, which you can change before you post), and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.
+- **Operator controls:** **Post Offer** and **Post Need** post in its name (a new Offer starts in its shop's category, which you can change before you post). You can add up to five photos as you post it, as for your own: tap the photo button, then **Camera** or **Gallery** (on the phone), or pick a photo (in the web app). **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.
+- **Changing its Offers and Needs:** any keeper can open one of its Offers or Needs and tap **Edit Post**, as for their own: change the words, category, price and photos, then tap **Save**. It is still the enterprise's. See "Posting an Offer or a Need".
 - **Decisions:** its keepers' votes.
 - Removing a keeper, and stepping down.
 - **Season & lifecycle controls:** pausing and closing it (below).
@@ -73,10 +74,10 @@ Before a project reaches its goal, its leader can also cancel it (on the phone, 
 - On the web or phone, tap **Commons**, then **Start something** (on the phone, the round **+** button) and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)
 - Give it a **Name** and a **Purpose statement**.
 - For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.
-- Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Its banner photo, across the top of its page, is chosen later under **Manage**.
+- Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. For an enterprise, you can add a banner photo next; a project's is chosen later in **Manage**.
 - Tap **Start the project 🌱** or **Start the enterprise 🏛️**.
 
-It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one.
+It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one. When you start an enterprise, it opens on its own page with **Add a banner photo**: tap it to choose the photo and the part that shows, or **Not now** to leave it for later.
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 

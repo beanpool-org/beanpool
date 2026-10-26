@@ -203,3 +203,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-09 - Add dynamic accessibilityLabel, hint, and busy state to old words unlock submit button
 **Learning:** Unlock buttons in message history recovery flows whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without accessible text feedback when busy unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
 **Action:** Supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` on message recovery submit buttons rendering `ActivityIndicator` when busy.
+
+## 2027-01-16 - Add dynamic accessibilityLabel and busy state to settings profile save button
+**Learning:** Save buttons in settings profile editor whose child text is conditionally replaced by an ActivityIndicator during saving leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`loading ? t('Saving profile...') : t('Save Profile')`) and `accessibilityState={{ disabled: loading, busy: loading }}`.
+**Action:** Always supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` on settings save buttons rendering ActivityIndicator when loading.

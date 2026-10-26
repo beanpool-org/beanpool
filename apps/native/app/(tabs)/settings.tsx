@@ -2489,7 +2489,14 @@ export default function SettingsScreen() {
                         </View>
                     )}
 
-                    <Pressable style={styles.primaryBtn} onPress={handleUpdateCallsign} disabled={loading} accessibilityRole="button">
+                    <Pressable
+                        style={styles.primaryBtn}
+                        onPress={handleUpdateCallsign}
+                        disabled={loading}
+                        accessibilityRole="button"
+                        accessibilityLabel={loading ? t("Saving profile...") : t("Save Profile")}
+                        accessibilityState={{ disabled: loading, busy: loading }}
+                    >
                         {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Save Profile")}</Text>}
                     </Pressable>
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">

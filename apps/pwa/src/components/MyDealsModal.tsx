@@ -210,8 +210,6 @@ export function MyDealsModal({
         return map;
     }, [preview, effectiveTransactions, transactions]);
 
-    if (!visible || !effectiveIdentity) return null;
-
     const currentPubkey = (preview ? effectiveIdentity : identity)?.publicKey || '';
     const rawTxs = preview ? effectiveTransactions : transactions;
     const postsList = preview ? effectivePosts : posts;
@@ -250,6 +248,8 @@ export function MyDealsModal({
             return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
         });
     }, [effectiveTxs, currentPubkey]);
+
+    if (!visible || !effectiveIdentity) return null;
 
     const myPosts = (preview ? effectivePosts : posts)
         .filter(p => (p.status === 'active' || p.status === 'paused' || p.status === 'pending') && (p.authorPublicKey === currentPubkey || (p as any).author_pubkey === currentPubkey))

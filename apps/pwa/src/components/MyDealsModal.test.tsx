@@ -70,6 +70,30 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('handles transition from visible=false to visible=true without hook order violation', () => {
+        const { rerender } = render(
+            <MyDealsModal
+                visible={false}
+                identity={mockIdentity}
+                onClose={vi.fn()}
+                posts={mockPosts}
+                transactions={mockTransactions}
+            />
+        );
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        rerender(
+            <MyDealsModal
+                visible={true}
+                identity={mockIdentity}
+                onClose={vi.fn()}
+                posts={mockPosts}
+                transactions={mockTransactions}
+            />
+        );
+        expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+    });
+
     it('renders with role="dialog", aria-modal="true", and accessible title', () => {
         render(
             <MyDealsModal

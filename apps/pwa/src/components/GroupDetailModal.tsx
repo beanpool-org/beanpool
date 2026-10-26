@@ -16,6 +16,7 @@ import {
 } from '../lib/api';
 import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { usePictureCrop } from './PictureCropDialog';
 import { buildRosterView } from '../lib/group-roster';
@@ -501,19 +502,12 @@ export function GroupDetailModal({
                                     </div>
                                     <div className="space-y-1.5">
                                         {pendingMembers.map((p) => {
-                                            const resolvedAvatar = resolveAvatarUrl(p.avatarUrl);
                                             return (
                                                 // The name keeps close to half the row (at 320 px it was cut even in English); Approve and
                                                 // Decline in a longer language drop below it rather than squeezing it away.
                                                 <div key={p.memberPubkey} className="flex flex-wrap items-center justify-between gap-2 p-2 bg-white dark:bg-nature-900 rounded-xl border border-nature-200 dark:border-nature-800">
                                                     <div className="flex items-center gap-2 min-w-0 flex-1 basis-[45%]">
-                                                        {resolvedAvatar ? (
-                                                            <img src={resolvedAvatar} alt="" className="w-6 h-6 shrink-0 rounded-full object-cover" />
-                                                        ) : (
-                                                            <div className="w-6 h-6 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-[10px] font-bold">
-                                                                {(p.callsign || '?').charAt(0).toUpperCase()}
-                                                            </div>
-                                                        )}
+                                                        <MemberAvatar avatarUrl={p.avatarUrl} pubkey={p.memberPubkey} callsign={p.callsign} size={24} alt="" />
                                                         <span className="text-xs font-bold text-nature-900 dark:text-white truncate">
                                                             {p.callsign || p.memberPubkey.slice(0, 10)}
                                                         </span>
@@ -586,20 +580,13 @@ export function GroupDetailModal({
                             <div className="divide-y divide-nature-200 dark:divide-nature-800/80 border border-nature-200 dark:border-nature-800 rounded-xl overflow-hidden">
                                 {roster.rows.map((row) => {
                                     const m = row.member;
-                                    const resolvedAvatar = resolveAvatarUrl(m.avatarUrl);
                                     const highlight = row.isLead || m.role === 'convenor';
                                     return (
                                         // flex-wrap and gap-y so the row stacks rather than overflowing at 320px
                                         // with 1.3× text.
                                         <div key={m.memberPubkey} className="flex flex-wrap items-center justify-between gap-y-2 p-3 bg-white dark:bg-nature-950">
                                             <div className="flex items-center gap-3 min-w-0">
-                                                {resolvedAvatar ? (
-                                                    <img src={resolvedAvatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
-                                                ) : (
-                                                    <div className="w-8 h-8 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-xs font-bold">
-                                                        {(m.callsign || '?').charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
+                                                <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign} size={32} alt="" />
                                                 <div className="min-w-0">
                                                     <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
                                                         {m.callsign || m.memberPubkey.slice(0, 10)} {row.isYou && <span className="text-xs text-nature-400">{t('(You)', undefined, 'roster: the viewer')}</span>}

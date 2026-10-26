@@ -22,13 +22,13 @@ import {
     successionDeadlineText, myChoice, successionHeading, successionExplainer,
 } from '../lib/keeper-governance';
 import { type BeanPoolIdentity } from '../lib/identity';
-import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import {
     formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
-    isAmbiguousAmount, parseAmount, upperCase, type WordKey, BANNER_PICTURE,
+    isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE,
 } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { ReportModal } from '../components/ReportModal';
@@ -2731,17 +2731,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 const textContent = decodeThreadText(m.ciphertext, m.type, m.metadata, project);
                                                 return (
                                                     <div key={m.id} className="py-3 flex items-start gap-3 text-xs">
-                                                        {m.authorAvatar ? (
-                                                            <img
-                                                                src={resolveAvatarUrl(m.authorAvatar) || undefined}
-                                                                alt={authorName}
-                                                                className="w-8 h-8 rounded-full object-cover shrink-0 bg-nature-100 dark:bg-nature-800"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-nature-700 dark:text-nature-200 shrink-0">
-                                                                {upperCase(authorName.charAt(0))}
-                                                            </div>
-                                                        )}
+                                                        <MemberAvatar avatarUrl={m.authorAvatar} pubkey={m.authorPubkey} callsign={authorName} size={32} className="bg-nature-100 dark:bg-nature-800" />
                                                         <div className="min-w-0 flex-1">
                                                             <div className="flex items-center justify-between gap-2">
                                                                 <div className="flex items-center gap-1.5">

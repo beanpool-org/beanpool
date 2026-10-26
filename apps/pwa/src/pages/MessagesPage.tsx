@@ -53,7 +53,7 @@ import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { formatDate, listPhotoUrl, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, formatDate, listPhotoUrl, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn } from '../lib/features';
 
@@ -1493,6 +1493,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     /** Render an avatar circle — shows resolved image or deterministic preset (no bare initial disc, Pictures S4) */
+    /** A group chat's face, as the phone's rows and header draw it: the group's picture, else its category's emblem. */
+    function groupChatPicture(conv: Conversation): string {
+        return conv.avatarUrl || bundledGroupEmblem(conv.category);
+    }
+
     function renderAvatar(avatarUrl: string | null | undefined, fallbackChar: string, size = 40, style?: React.CSSProperties, pubkey?: string | null) {
         const resolved = resolveAvatarUrl(avatarUrl, pubkey || fallbackChar) || '/avatars/avatar_bean_green.jpg';
         return (
@@ -1803,7 +1808,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             const title = getConversationTitle(activeConv);
                             const body = (
                                 <>
-                                    {renderAvatar(activeConv.avatarUrl || activeConv.peerAvatar, title, 32, undefined, peerPubkey || activeConv.id)}
+                                    {activeConv.type === 'group_thread'
+                                        ? renderAvatar(groupChatPicture(activeConv), title, 32)
+                                        : renderAvatar(activeConv.peerAvatar, title, 32, undefined, peerPubkey || activeConv.id)}
                                     <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
                                         <span style={{ fontWeight: 600, fontSize: '1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             {title}
@@ -3204,6 +3211,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         setActiveConv({
                             id: group.id, type: 'group_thread', name: group.name, participants: [identity.publicKey],
                             createdBy: identity.publicKey, createdAt: new Date().toISOString(),
+                            avatarUrl: group.avatarUrl ?? null, category: group.category ?? null,
                         });
                         loadMembers();
                         loadConversations();
@@ -3334,18 +3342,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </div>
                                 ) : (
                                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                                        {conv.type === 'group_thread' ? (
-                                            <div style={{
-                                                width: '44px', height: '44px', borderRadius: '50%',
-                                                background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontSize: '1.1rem',
-                                            }}>
-                                                👥
-                                            </div>
-                                        ) : (
-                                            renderAvatar(conv.peerAvatar, getConversationTitle(conv), 44)
-                                        )}
+                                        {conv.type === 'group_thread'
+                                            ? renderAvatar(groupChatPicture(conv), getConversationTitle(conv), 44, { border: '1px solid var(--border-primary)' })
+                                            : renderAvatar(conv.peerAvatar, getConversationTitle(conv), 44)}
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
                                                 position: 'absolute', top: '-4px', right: '-4px',

@@ -26,7 +26,7 @@ import { globalCommunityLink, isAppsGlobal, phoneLaterLines } from '../lib/globa
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
-import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from '../components/MemberAvatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../lib/event-extras';
@@ -754,13 +754,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                     </div>
                     <div className="flex justify-center mb-4">
                         <div className="w-20 h-20 rounded-full border-4 border-terra-300 dark:border-terra-600 flex items-center justify-center text-3xl bg-oat-50 dark:bg-nature-800 shadow-inner overflow-hidden transition-colors">
-                            {profile?.avatar ? (
-                                <img src={resolveAvatarUrl(profile.avatar)!} className="w-full h-full object-cover" alt={identity.callsign} />
-                            ) : (
-                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-400 select-none">
-                                    {identity.callsign.charAt(0).toUpperCase()}
-                                </span>
-                            )}
+                            <MemberAvatar avatarUrl={profile?.avatar} pubkey={identity.publicKey} callsign={identity.callsign} size={72} />
                         </div>
                     </div>
                     <div className="text-center mb-4">

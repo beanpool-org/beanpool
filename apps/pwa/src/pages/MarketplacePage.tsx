@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
-import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { useCoversScreen } from '../lib/screen-cover';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
@@ -1506,16 +1506,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {/* Avatar */}
                         {loadingProfile ? (
                             <div className="w-14 h-14 rounded-full bg-nature-100 dark:bg-nature-800 animate-pulse shrink-0" />
-                        ) : resolveAvatarUrl(authorProfile?.avatar) ? (
-                            <img
-                                src={resolveAvatarUrl(authorProfile?.avatar)!}
-                                alt={selectedPost.authorCallsign}
-                                className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm shrink-0"
-                            />
                         ) : (
-                            <div className="w-14 h-14 rounded-full bg-terra-100 border-2 border-white shadow-sm flex items-center justify-center text-terra-600 font-bold text-xl shrink-0">
-                                {selectedPost.authorCallsign.charAt(0).toUpperCase()}
-                            </div>
+                            <MemberAvatar avatarUrl={authorProfile?.avatar} pubkey={selectedPost.authorPublicKey} callsign={selectedPost.authorCallsign} size={56} className="border-2 border-white shadow-sm" />
                         )}
                         <div className="flex-1 min-w-0">
                             <p className="font-bold text-lg text-nature-950 dark:text-white mb-0.5 truncate flex items-center gap-1.5">

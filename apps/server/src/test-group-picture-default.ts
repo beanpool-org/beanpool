@@ -242,6 +242,29 @@ async function main() {
         assert(r.status === 403, `(the same member renaming it → 403, the answer the picture now shares; got ${r.status})`);
     }
 
+    // 6. The chat list gives a group's chat the group's own picture and category (the web's header and rows draw it),
+    //    never only one member's face; a direct chat carries neither.
+    {
+        const path = `/api/messages/conversations/${neighbour.pub}`;
+        const ts = String(Date.now());
+        const nonce = crypto.randomUUID();
+        const res = await fetch(`${BASE}${path}`, {
+            headers: {
+                'X-Public-Key': neighbour.pub,
+                'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), neighbour.priv).toString('base64'),
+                'X-Timestamp': ts,
+                'X-Nonce': nonce,
+            },
+        });
+        const body: any = await res.json().catch(() => null);
+        const chat = body?.conversations?.find((c: any) => c.id === library.id);
+        assert(res.status === 200 && chat?.type === 'group_thread', `the group's chat is in Cal's list (got ${res.status}, ${chat?.type})`);
+        assert(chat?.avatarUrl === getGroup(library.id, neighbour.pub)?.avatarUrl && chat?.avatarUrl === 'bundled://sunflower',
+            `and carries the group's picture URL (got ${chat?.avatarUrl})`);
+        assert(chat?.category === 'general', `and its category, for the emblem of a group with none (got ${chat?.category})`);
+        assert(!body?.conversations?.some((c: any) => c.type === 'dm' && ('avatarUrl' in c || 'category' in c)), 'a direct chat carries neither');
+    }
+
     console.log(`\n${passed}/${run} tests passed.`);
     if (passed !== run) {
         process.exit(1);

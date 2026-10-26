@@ -547,6 +547,27 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         expect(screen.getByText('Bob')).toBeInTheDocument();
     });
 
+    it("a group chat is drawn with the group's own picture, in the list and its chat's header, never a member's face (Pictures S4)", async () => {
+        const face = '/api/avatar/peer-pubkey?v=1';
+        mockConversations = [
+            { ...group('grp-1', 'Garden crew'), avatarUrl: 'bundled://leaf', category: 'social', peerAvatar: face },
+            // A group from before pictures were required: its category's emblem, as the phone draws it.
+            { ...group('grp-2', 'Street choir'), avatarUrl: null, category: 'guild', peerAvatar: face },
+        ];
+        mockConversationDetails = { 'grp-1': mockConversations[0] };
+        mockMessagesByConv = { 'grp-1': [] };
+        const srcs = (root: ParentNode) => Array.from(root.querySelectorAll('img')).map((i) => i.getAttribute('src'));
+        const { container } = render(<MessagesPage identity={mockIdentity} onNavigate={vi.fn()} />);
+        await screen.findByText('Garden crew');
+        expect(srcs(container)).toEqual(expect.arrayContaining(['bundled://leaf', 'bundled://crystal']));
+        expect(srcs(container)).not.toContain(face);
+        expect(screen.queryByText('👥')).toBeNull();
+
+        fireEvent.click(screen.getByText('Garden crew'));
+        const header = await screen.findByTestId('chat-owner-header');
+        expect(srcs(header)).toEqual(['bundled://leaf']);
+    });
+
     it("the Groups chip carries the groups' unread total and says it to a screen reader", async () => {
         render(<MessagesPage identity={mockIdentity} />);
         await screen.findByText('Garden crew');

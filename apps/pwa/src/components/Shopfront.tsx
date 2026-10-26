@@ -10,8 +10,9 @@
  * a quiet block in its category's emoji, as its listings show it, when it has none.
  */
 import { useState, type ReactNode } from 'react';
-import { formatCount, listPhotoUrl, t, upperCase, type ShopCategory } from '@beanpool/core';
+import { formatCount, listPhotoUrl, t, type ShopCategory } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 import { Sentence } from './Sentence';
 import {
     categoryEmoji, categoryLabel, keeperBadgeLine, keeperRoleWord, listingPriceLine, listingStateLine,
@@ -93,15 +94,9 @@ function suspendedKeeperLabel(name: string, project: boolean, isLead: boolean): 
     return isLead ? t('{name}, lead keeper, suspended', { name }) : t('{name}, keeper, suspended', { name });
 }
 
-/** A member's small picture: their photo, or their first letter. */
+/** A member's small picture: their photo, or the ready-made one their key picks (never an initial). */
 function KeeperAvatar({ k }: { k: ShopfrontKeeper }) {
-    const url = resolveAvatarUrl(k.avatarUrl);
-    if (url) return <img src={url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 bg-nature-100 dark:bg-nature-800" />;
-    return (
-        <span aria-hidden="true" className="w-8 h-8 rounded-full shrink-0 bg-nature-200 dark:bg-nature-700 text-nature-800 dark:text-nature-100 flex items-center justify-center text-sm font-bold">
-            {upperCase(k.callsign.charAt(0) || '?')}
-        </span>
-    );
+    return <MemberAvatar avatarUrl={k.avatarUrl} pubkey={k.publicKey} callsign={k.callsign} size={32} alt="" className="bg-nature-100 dark:bg-nature-800" />;
 }
 
 /**

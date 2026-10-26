@@ -44,6 +44,7 @@ import { privatePreviewOn } from '../lib/visitor-lobby';
 import { nodeNameFor, withNodeName } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
@@ -1664,20 +1665,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         }}
                                     />
                                 ) : (
-                                    <div style={{
-                                        width: '96px',
-                                        height: '96px',
-                                        borderRadius: '48px',
-                                        backgroundColor: 'var(--bg-secondary, #1e293b)',
-                                        border: '2px dashed var(--border-primary, #334155)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                    }}>
-                                        <span style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--text-muted)' }}>
-                                            {pendingIdentity.callsign.charAt(0).toUpperCase()}
-                                        </span>
-                                    </div>
+                                    <MemberAvatar avatarUrl={null} pubkey={pendingIdentity.publicKey} callsign={pendingIdentity.callsign} size={96} alt="" />
                                 )}
                                 <span style={{ fontSize: '1rem', fontWeight: 700, marginTop: '0.5rem' }}>
                                     {pendingIdentity.callsign}

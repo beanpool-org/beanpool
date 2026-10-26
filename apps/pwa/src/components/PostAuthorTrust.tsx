@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { t, tierForCredit, type TierLevel, type TierName } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 
-import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 
 const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string }> = {
     Newcomer: { color: 'text-nature-600 dark:text-nature-300', bg: 'bg-nature-500/10', border: 'border-nature-500/20' },
@@ -39,7 +39,7 @@ interface PostAuthorTrustProps {
     /** 'compact' = grid cards, 'full' = list cards */
     mode?: 'compact' | 'full';
     className?: string;
-    /** Avatar URL (image) — shows initials fallback if missing */
+    /** Avatar URL (image) — the ready-made picture the author's key picks if missing */
     avatarUrl?: string | null;
     /** Public key for profile navigation */
     publicKey?: string;
@@ -51,27 +51,10 @@ interface PostAuthorTrustProps {
     showTier?: boolean;
 }
 
-/** Small avatar circle with initials fallback */
-function MiniAvatar({ callsign, avatarUrl, size }: { callsign: string; avatarUrl?: string | null; size: number }) {
-    const initial = callsign.charAt(0).toUpperCase();
-    const sizeClass = size === 18 ? 'w-[18px] h-[18px] text-[8px]' : 'w-[24px] h-[24px] text-[10px]';
-
-    const resolved = resolveAvatarUrl(avatarUrl);
-
-    if (resolved) {
-        return (
-            <img 
-                src={resolved} 
-                alt={callsign} 
-                className={`${sizeClass} rounded-full object-cover flex-shrink-0 border border-nature-200 dark:border-nature-700`}
-            />
-        );
-    }
-
+/** Small avatar circle: the author's picture, or the ready-made one their key picks (never an initial). */
+function MiniAvatar({ callsign, avatarUrl, publicKey, size }: { callsign: string; avatarUrl?: string | null; publicKey?: string; size: number }) {
     return (
-        <span className={`${sizeClass} rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-500 flex items-center justify-center font-bold flex-shrink-0 border border-amber-200 dark:border-amber-800`}>
-            {initial}
-        </span>
+        <MemberAvatar avatarUrl={avatarUrl} pubkey={publicKey} callsign={callsign} size={size} className="flex-shrink-0 border border-nature-200 dark:border-nature-700" />
     );
 }
 
@@ -114,7 +97,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                     {...interactiveProps}
                 >
                     {/* Avatar */}
-                    <MiniAvatar callsign={callsign} avatarUrl={avatarUrl} size={18} />
+                    <MiniAvatar callsign={callsign} avatarUrl={avatarUrl} publicKey={publicKey} size={18} />
                     {/* Tier badge */}
                     {showTier && (
                         <span data-testid="author-tier" className={`w-[18px] h-[18px] rounded-full border flex items-center justify-center text-[10px] ${tier.bg} ${tier.border}`}>
@@ -145,7 +128,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                 {...interactiveProps}
             >
                 {/* Avatar */}
-                <MiniAvatar callsign={callsign} avatarUrl={avatarUrl} size={24} />
+                <MiniAvatar callsign={callsign} avatarUrl={avatarUrl} publicKey={publicKey} size={24} />
                 {/* Tier badge with label */}
                 {showTier && (
                     <span data-testid="author-tier" className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold ${tier.bg} ${tier.border} ${tier.color}`}>

@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { GroupDetailModal } from './GroupDetailModal';
 import { getGroup, getGroupMembers, getGroupSuccession, type Group, type GroupMember } from '../lib/api';
 import * as pictureCrop from '../lib/picture-crop';
+import { resolveAvatarUrl } from '../lib/avatar';
 
 vi.mock('../lib/api', () => ({
     getGroupDecisions: vi.fn(async () => null),
@@ -218,7 +219,7 @@ describe("GroupDetailModal roster's faces", () => {
         vi.mocked(getGroupMembers).mockResolvedValue(roster);
     });
 
-    it("shows each member's and each request's photo from its URL, a shipped picture from the app, and initials for none", async () => {
+    it("shows each member's and each request's photo from its URL, a shipped picture from the app, and for none the key's ready-made picture, never an initial (Pictures S4)", async () => {
         const { container } = render(<GroupDetailModal group={group} isOpen={true} onClose={() => {}} myPubkey={LEAD} />);
         await waitFor(() => expect(screen.getByText('Nell')).toBeInTheDocument());
         await waitFor(() => expect(screen.getByText('Asha')).toBeInTheDocument());
@@ -227,8 +228,10 @@ describe("GroupDetailModal roster's faces", () => {
         expect(srcs).toContain(url(ASKING));
         expect(srcs).toContain('/avatars/avatar_leaf.jpg');
         expect(srcs.filter(src => src?.startsWith('data:'))).toEqual([]);
-        // No photo: the initial, as before.
-        expect(screen.getByText('N')).toBeInTheDocument();
+        // No photo: the ready-made picture Nell's key picks, as the phone's roster draws it; the bare initial it drew
+        // before is what Marty's rule forbids ("never a bare initial").
+        expect(screen.queryByText('N')).toBeNull();
+        expect(srcs).toContain(resolveAvatarUrl(null, NONE));
     });
 
     it('a photo picked empties the file input, so the same photo picked again after a cancelled crop opens the crop again', async () => {

@@ -12,6 +12,7 @@ import { ProfileSetup } from './ProfileSetup';
 import * as api from '../lib/api';
 import { generateIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { resolveAvatarUrl } from '../lib/avatar';
 
 vi.mock('./OnboardingGuide', () => ({ OnboardingGuide: () => null }));
 vi.mock('../lib/api', () => ({
@@ -74,5 +75,14 @@ describe("ProfileSetup's name is the one the node keeps", () => {
         const nextBtn = screen.getByRole('button', { name: 'Next →' });
         // Standing rule: sign-up photo is non-blocking, Next must not be disabled
         expect(nextBtn).not.toBeDisabled();
+    });
+
+    it('with no picture picked, the preview is the ready-made picture the key picks, never the first letter (Pictures S4)', async () => {
+        vi.mocked(api.getMemberProfile).mockResolvedValue({ avatar: null, bio: '', contact: null } as any);
+        const { container } = render(<ProfileSetup identity={saved} onDone={vi.fn()} onIdentityUpdated={vi.fn()} />);
+        expect(await screen.findByText('📸 Choose your look')).toBeInTheDocument();
+        expect(screen.queryByText('R')).toBeNull();
+        const preview = container.querySelector('.w-24.h-24') as HTMLElement;
+        expect(preview.style.background).toContain(resolveAvatarUrl(null, saved.publicKey)!);
     });
 });

@@ -64,4 +64,15 @@ describe("ProfileSetup's name is the one the node keeps", () => {
         expect(onIdentityUpdated.mock.calls[0][0]).toEqual({ ...saved, callsign: 'Sam' });
         expect(await loadIdentity()).toEqual({ ...saved, callsign: 'Sam' });
     });
+
+    it('Next is NOT disabled on the avatar step when no picture is picked (§4.5 non-blocking)', async () => {
+        vi.mocked(api.getMemberProfile).mockResolvedValue({ avatar: null, bio: '', contact: null } as any);
+        render(<ProfileSetup identity={saved} onDone={vi.fn()} onIdentityUpdated={vi.fn()} />);
+
+        // Directly opens at avatar step because callsign is already set in saved identity
+        expect(await screen.findByText('📸 Choose your look')).toBeInTheDocument();
+        const nextBtn = screen.getByRole('button', { name: 'Next →' });
+        // Standing rule: sign-up photo is non-blocking, Next must not be disabled
+        expect(nextBtn).not.toBeDisabled();
+    });
 });

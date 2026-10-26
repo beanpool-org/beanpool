@@ -27,6 +27,9 @@ vi.mock('react-native', () => {
     };
 });
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
+vi.mock('expo-image', () => ({
+    Image: (props: any) => createElement('img', { src: props.source?.uri || 'bundled', 'data-testid': 'group-avatar-img' }),
+}));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     const ctx = { theme: 'light', colors: lightColors };
@@ -85,5 +88,26 @@ describe('Your groups names a project a project (§3.1)', () => {
         draw(createElement(ChatOwnerHeader, { kind: 'enterprise', name: 'Bakery', onBack: () => { }, onOpenOwner: () => { } }));
         expect(container.textContent).toContain('🥖 Bakery');
         expect(container.textContent).toMatch(/enterprise\s+·\s+tap for info/);
+    });
+
+    it('Pictures S4: YourGroupRow draws picture in place of emoji box when avatarUrl is present', () => {
+        draw(createElement(YourGroupRow, {
+            item: row({ kind: 'group', name: 'Garden Crew', avatarUrl: 'bundled://sunflower' }),
+            onPress: () => { },
+        }));
+        const img = container.querySelector('[data-testid="group-avatar-img"]') || container.querySelector('img');
+        expect(img).not.toBeNull();
+    });
+
+    it('Pictures S4: ChatOwnerHeader draws picture before title when avatarUrl is present', () => {
+        draw(createElement(ChatOwnerHeader, {
+            kind: 'group',
+            name: 'Garden Crew',
+            avatarUrl: 'bundled://sunflower',
+            onBack: () => { },
+            onOpenOwner: () => { },
+        }));
+        const img = container.querySelector('[data-testid="group-avatar-img"]') || container.querySelector('img');
+        expect(img).not.toBeNull();
     });
 });

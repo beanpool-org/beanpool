@@ -230,6 +230,26 @@ describe('CreateGroupModal is chat-group form with bridge', () => {
         expect(onClose).toHaveBeenCalled();
         expect(nav.push).toHaveBeenCalledWith('/propose-project');
     });
+
+    it('Pictures S4: first row is Picture with preselected category emblem and sends avatarUrl', async () => {
+        await mount(createElement(CreateGroupModal, { isOpen: true, onClose: vi.fn(), onCreated: vi.fn() }));
+
+        // Picture section/label is present as first row
+        expect(host!.textContent).toContain('Picture');
+
+        await type(host!.querySelector('input[placeholder*="Bindarrabi"]'), 'Garden Crew');
+
+        const submitBtn = Array.from(host!.querySelectorAll('button')).find(b =>
+            /Create Group/i.test(b.getAttribute('aria-label') || b.textContent || '')
+        );
+        expect(submitBtn).toBeDefined();
+
+        await act(async () => { submitBtn!.click(); });
+        expect(dbMock.createGroupApi).toHaveBeenCalledWith(expect.objectContaining({
+            name: 'Garden Crew',
+            avatarUrl: 'bundled://sunflower',
+        }));
+    });
 });
 
 describe('propose-project modal kind handling', () => {

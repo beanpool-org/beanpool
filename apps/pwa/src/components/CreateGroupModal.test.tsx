@@ -1,6 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { CreateGroupModal } from './CreateGroupModal';
+import { createGroup } from '../lib/api';
+
+vi.mock('../lib/api', () => ({
+    createGroup: vi.fn(async (params) => ({ id: 'g1', ...params })),
+}));
 
 describe('CreateGroupModal Accessibility', () => {
     it('renders with dialog title linking and aria attributes when open', () => {
@@ -57,5 +62,61 @@ describe('CreateGroupModal Accessibility', () => {
 
         const submitBtn = screen.getByRole('button', { name: /Create Group/i });
         expect(submitBtn.className).toContain('focus-visible:ring-2');
+    });
+});
+
+describe('CreateGroupModal Picture (Pictures S4, §4.3)', () => {
+    it('has first row Picture with category emblem following category until custom choice, and sends avatarUrl', async () => {
+        const onCreated = vi.fn();
+        render(<CreateGroupModal isOpen={true} onClose={vi.fn()} onCreated={onCreated} />);
+
+        // Label Picture is present
+        expect(screen.getByText(/^Picture$/i)).toBeInTheDocument();
+
+        // Default category is social -> emblem is bundled://sunflower
+        const previewImg = screen.getByAltText(/Group picture/i) as HTMLImageElement;
+        expect(previewImg).toBeInTheDocument();
+        expect(previewImg.src).toContain('avatar_sunflower');
+
+        // Changing category to General updates emblem to bundled://bean-green
+        const generalBtn = screen.getByRole('button', { name: /General/i });
+        fireEvent.click(generalBtn);
+        expect(previewImg.src).toContain('avatar_bean_green');
+
+        // Changing category to Working Group updates emblem to bundled://solartree
+        const workingBtn = screen.getByRole('button', { name: /Working Group/i });
+        fireEvent.click(workingBtn);
+        expect(previewImg.src).toContain('avatar_solartree');
+
+        // Changing category to Guild updates emblem to bundled://crystal
+        const guildBtn = screen.getByRole('button', { name: /Guild/i });
+        fireEvent.click(guildBtn);
+        expect(previewImg.src).toContain('avatar_crystal');
+
+        // Convenor chooses a custom preset ("Choose another")
+        const chooseAnotherBtn = screen.getByRole('button', { name: /Choose another/i });
+        fireEvent.click(chooseAnotherBtn);
+
+        const leafPreset = screen.getByRole('button', { name: /Select Leaf avatar/i });
+        fireEvent.click(leafPreset);
+
+        expect(previewImg.src).toContain('avatar_leaf');
+
+        // Changing category now does NOT change the picture because convenor chose one
+        fireEvent.click(generalBtn);
+        expect(previewImg.src).toContain('avatar_leaf');
+
+        // Fill name and submit
+        const nameInput = screen.getByPlaceholderText(/e\.g\. Bindarrabi/i);
+        fireEvent.change(nameInput, { target: { value: 'Herbalists' } });
+        fireEvent.click(screen.getByRole('button', { name: /Create Group/i }));
+
+        await waitFor(() => {
+            expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
+                name: 'Herbalists',
+                category: 'general',
+                avatarUrl: 'bundled://leaf',
+            }));
+        });
     });
 });

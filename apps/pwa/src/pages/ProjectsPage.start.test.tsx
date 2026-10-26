@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getTreasuries, getDecisions, getCommonsBalance, getGroups } from '../lib/api';
+import { getTreasuries, getDecisions, getCommonsBalance, getGroups, createEnterprise } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -387,5 +387,50 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
         // Section switched to Decide preview
         expect(screen.getByTestId('decide-preview')).toBeInTheDocument();
+    });
+
+    it('Pictures S4: Start modal requires logo (label LOGO, Start button says "Choose a logo" until picked, sends avatar)', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^🌱 Project/i }));
+
+        const modal = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(modal).toBeInTheDocument();
+
+        // Label must be LOGO (no '(optional)')
+        expect(within(modal).getByText(/^LOGO$/i)).toBeInTheDocument();
+        expect(within(modal).queryByText(/LOGO \(optional\)/i)).toBeNull();
+
+        // Start button reads "Choose a logo" and is disabled until logo is chosen
+        const submitBtn = within(modal).getByRole('button', { name: /Choose a logo/i });
+        expect(submitBtn).toBeDisabled();
+
+        // Fill in required fields
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. Community Solar Array/i), { target: { value: 'Local Garden' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/What is this project's purpose\?/i), { target: { value: 'Grow food together' } });
+        fireEvent.change(within(modal).getByPlaceholderText('0'), { target: { value: '100' } });
+
+        // Still disabled because no logo
+        expect(submitBtn).toBeDisabled();
+
+        // Select a preset avatar (e.g. Green Bean)
+        const presetBtn = within(modal).getByRole('button', { name: /Select Green Bean avatar/i });
+        fireEvent.click(presetBtn);
+
+        // Now button becomes enabled and reads "Start the project 🌱"
+        const startBtn = within(modal).getByRole('button', { name: /Start the project 🌱/i });
+        expect(startBtn).not.toBeDisabled();
+
+        fireEvent.click(startBtn);
+        await waitFor(() => {
+            expect(createEnterprise).toHaveBeenCalledWith(expect.objectContaining({
+                name: 'Local Garden',
+                avatar: 'bundled://bean-green',
+                photos: ['bundled://bean-green'],
+            }));
+        });
     });
 });

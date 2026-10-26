@@ -202,6 +202,17 @@ describe('enterprise logo presets (phone)', () => {
             root.render(createElement(ProposeProjectModal) as any);
         });
 
+        // Pictures S4: Label is LOGO (not LOGO (OPTIONAL))
+        expect(host.textContent).toContain('LOGO');
+        expect(host.textContent).not.toContain('LOGO (OPTIONAL)');
+
+        // Pictures S4: Start button reads "Choose a logo" and is disabled while no logo is chosen
+        const submitBtns = Array.from(host.querySelectorAll('[role="button"]')).filter((b) =>
+            b.getAttribute('aria-label') === 'Choose a logo'
+        );
+        // There should be the logo picker slot and the footer submit button
+        expect(submitBtns.length).toBeGreaterThanOrEqual(1);
+
         // Tapping the logo button opens the picker
         const chooseLogoBtn = host.querySelector('[aria-label="Choose a logo"]');
         expect(chooseLogoBtn).toBeTruthy();

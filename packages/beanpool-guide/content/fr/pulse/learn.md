@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Sur le téléphone, ouvrez le **Pouls** et touchez **Découvrir**. Dans l'application web, ouvrez le Pouls et touchez **Comment ça marche** en haut. Cet espace propose :
 
 - des vidéos de BeanPool expliquant son fonctionnement ;
-- la **Réflexion quotidienne**, une courte pensée renouvelée chaque matin. Il s'agit simplement d'un titre ; il n'y a rien à ouvrir.
+- la **Réflexion quotidienne**, une courte pensée renouvelée chaque matin. Touchez-le pour ouvrir la réflexion du jour.
 
 Les membres peuvent également ajouter leurs propres canaux de tutoriels à Découvrir, en choisissant le thème **Comment ça marche** lors de l'ajout d'un canal. Ces vidéos appartiennent aux membres et non à BeanPool : vérifiez qui a publié une vidéo avant d'en suivre les conseils.
 

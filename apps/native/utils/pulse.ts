@@ -340,6 +340,39 @@ export function canReportPulseItem(item: PulseFeedItem, currentPubkey?: string |
     return Boolean(currentPubkey && item.ownerPubkey && item.ownerPubkey !== currentPubkey && !item.id.startsWith('item_fix_'));
 }
 
+export interface DailyPulseReflection {
+    date: string;
+    headline: string;
+    body: string;
+}
+
+/**
+ * Fetches the day's reflection from GET /api/pulse/daily.
+ */
+export async function fetchDailyPulse(date?: string): Promise<DailyPulseReflection> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const path = `/api/pulse/daily${query}`;
+    try {
+        const { signedGet } = await import('./db');
+        const res = await signedGet(path);
+        if (!res.ok) {
+            throw new Error(`Failed to load Daily Pulse (${res.status})`);
+        }
+        return await res.json();
+    } catch (e: any) {
+        // Fallback for environments without AsyncStorage / db (like standalone tests)
+        const url = await anchorUrl().catch(() => null);
+        if (!url) throw e;
+        const res = await fetch(`${url.replace(/\/+$/, '')}${path}`, {
+            headers: { 'Accept': 'application/json' },
+        });
+        if (!res.ok) {
+            throw new Error(`Failed to load Daily Pulse (${res.status})`);
+        }
+        return await res.json();
+    }
+}
+
 /**
  * Report someone else's Pulse item to the node's operators.
  *

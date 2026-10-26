@@ -10,6 +10,7 @@
 import Router from '@koa/router';
 import { getPulseFeed, setPulseItemMute, PulseError } from '../engine/pulse-resolver.js';
 import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
+import { getTodaysPulseEntry, getPulseEntry, type DailyPulseEntry } from '../daily-pulse-entries.js';
 import type { RouteDeps } from './types.js';
 import { word } from '@beanpool/core';
 
@@ -59,6 +60,56 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
         });
 
         ctx.body = result;
+    });
+
+    /**
+     * Daily Pulse — answers today's (or, by ?date=YYYY-MM-DD, a recent day's) entry:
+     * { date, headline, body }. Read-only, gated like the Pulse feed beside it.
+     */
+    router.get('/api/pulse/daily', async (ctx) => {
+        const { date } = ctx.query;
+        let entry: DailyPulseEntry;
+        let dateStr: string;
+
+        if (date !== undefined && date !== '') {
+            if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                ctx.status = 400;
+                ctx.body = { error: 'invalid_date', message: word('Invalid date') };
+                return;
+            }
+            const [y, m, d] = date.split('-').map(Number);
+            const utcMs = Date.UTC(y, m - 1, d);
+            const parsed = new Date(utcMs);
+            if (parsed.getUTCFullYear() !== y || parsed.getUTCMonth() !== m - 1 || parsed.getUTCDate() !== d) {
+                ctx.status = 400;
+                ctx.body = { error: 'invalid_date', message: word('Invalid date') };
+                return;
+            }
+
+            const now = new Date();
+            const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
+            const todayStr = new Date(localEpochMs).toISOString().split('T')[0];
+            if (date > todayStr) {
+                ctx.status = 404;
+                ctx.body = { error: 'not_found', message: word('Daily Pulse entry not found') };
+                return;
+            }
+
+            const dayIndex = Math.floor(utcMs / 86400000);
+            entry = getPulseEntry(dayIndex);
+            dateStr = date;
+        } else {
+            const now = new Date();
+            const localEpochMs = now.getTime() - (now.getTimezoneOffset() * 60 * 1000);
+            dateStr = new Date(localEpochMs).toISOString().split('T')[0];
+            entry = getTodaysPulseEntry(now);
+        }
+
+        ctx.body = {
+            date: dateStr,
+            headline: entry.headline,
+            body: entry.body,
+        };
     });
 
     /**

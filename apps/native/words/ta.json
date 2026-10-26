@@ -6110,5 +6110,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} முயற்சிகள், ஒரு முயற்சிக்கு {ms} ms (சராசரியாக {expected} எதிர்பார்க்கப்படுகிறது)",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” பதிவிடப்பட்டுள்ளது, ஆனால் உங்கள் கடையில் இல்லை. அதை உள்ளே வைக்க, அதைத் திறந்து, பதிவைத் திருத்து என்பதைத் தட்டி, இதை உங்கள் கடையில் வையுங்கள் என்பதைத் தேர்ந்தெடுக்கவும்.",
   "✓ Friend": "✓ நண்பர்",
-  "✓ nonce issued": "✓ nonce வழங்கப்பட்டது"
+  "✓ nonce issued": "✓ nonce வழங்கப்பட்டது",
+  "Failed to load": "ஏற்றுவதில் தோல்வி"
 }

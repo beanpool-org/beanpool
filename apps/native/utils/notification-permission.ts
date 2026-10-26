@@ -20,10 +20,9 @@ import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
 import { registerForPushNotifications } from '../services/push-notifications';
 import { loadIdentity } from './identity';
 
-function getNotificationsModule(): typeof ExpoNotifications | null {
+async function getNotificationsModule(): Promise<typeof ExpoNotifications | null> {
     try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const mod = require('expo-notifications');
+        const mod = await import('expo-notifications');
         return mod?.default ?? mod;
     } catch {
         return null;
@@ -89,7 +88,7 @@ export function shouldShowNotificationCard(record: NotificationPermissionRecord 
 /** Checks whether notifications are granted at the OS level. */
 export async function checkOsNotificationPermission(): Promise<boolean> {
     try {
-        const notif = getNotificationsModule();
+        const notif = await getNotificationsModule();
         if (!notif?.getPermissionsAsync) return false;
         const { status } = await notif.getPermissionsAsync();
         return status === 'granted';
@@ -104,7 +103,7 @@ export async function checkOsNotificationPermission(): Promise<boolean> {
 export async function turnOnNotifications(publicKey?: string | null, storage: StorageLike = AsyncStorage): Promise<'granted' | 'declined'> {
     let status = 'denied';
     try {
-        const notif = getNotificationsModule();
+        const notif = await getNotificationsModule();
         if (notif?.requestPermissionsAsync) {
             const res = await notif.requestPermissionsAsync();
             status = res.status;

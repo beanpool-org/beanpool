@@ -37,12 +37,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-vi.mock('expo-secure-store', () => ({
-    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
-    getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
-    setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
-    deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
+const identityMock = vi.hoisted(() => ({
+    loadIdentity: vi.fn(async () => null as { publicKey: string; privateKey: string } | null),
 }));
+vi.mock('../identity', () => identityMock);
 
 const notificationsMock = vi.hoisted(() => ({
     getPermissionsAsync: vi.fn(async () => ({ status: 'undetermined' })),
@@ -120,7 +118,7 @@ describe('S3: notification permission at the tap, never at account creation', ()
         });
 
         it('tapping Turn on without publicKey falls back to stored identity', async () => {
-            mem.secure.set('beanpool_identity', JSON.stringify({ publicKey: 'stored-pubkey', privateKey: 'pk' }));
+            identityMock.loadIdentity.mockResolvedValueOnce({ publicKey: 'stored-pubkey', privateKey: 'pk' });
             notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted' } as any);
 
             const result = await turnOnNotifications();

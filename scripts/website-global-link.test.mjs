@@ -160,12 +160,20 @@ test('with no script: both stores and the browser line, all plain links; the app
     assert.doesNotMatch(MARKUP.slice(MARKUP.lastIndexOf('<p', at), at), /hidden/);
 });
 
-test('during the private preview the page names no button the app shows only once global is open', () => {
-    // The welcome screen's "Explore BeanPool worldwide" is there only when global.beanpool.org answers that its door is
-    // open (apps/native/welcome.tsx, utils/global-door-offer.ts). The open-day flip (grep OPEN-GLOBAL) brings the line back.
+test('now global is open, the page tells newcomers how to find it on the first screen', () => {
+    // The welcome screen's "Explore BeanPool worldwide" is there now that global.beanpool.org's door is open.
+    // The open-day flip (grep OPEN-GLOBAL) brought the line back and removed the marker comment.
     const words = decode(MARKUP.replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' '));
-    assert.doesNotMatch(words, /Explore BeanPool worldwide/i);
-    assert.match(HTML, /<!-- OPEN-GLOBAL: add <p class="global-note">[^]*?Explore BeanPool worldwide[^]*?-->/);
+    assert.match(words, /Explore BeanPool worldwide/i);
+    assert.doesNotMatch(HTML, /<!-- OPEN-GLOBAL/);
+});
+
+test('carries the apple-itunes-app smart banner meta for Safari with the global link app-argument', () => {
+    const meta = MARKUP.match(/<meta\s+name="apple-itunes-app"\s+content="([^"]*)"/i);
+    assert.ok(meta, 'apple-itunes-app meta tag');
+    const content = meta[1];
+    assert.match(content, /\bapp-id=6761870086\b/);
+    assert.match(content, /\bapp-argument=https:\/\/beanpool\.org\/global\b/);
 });
 
 test('Android: the app by its link, beanpool.org/global, else Google Play with the referrer; once, on arrival at beanpool.org', () => {

@@ -10,7 +10,7 @@
  *     Body: "So you hear when someone answers you, messages you, or asks to join. Nothing else."
  *     Buttons: "Turn on" · "Not now"
  * - Nothing asked after a restore (the restored member lands on Home; the notifications card asks only when tapped).
- * - Ask again at the first knock or message if declined; never on subsequent knocks or messages.
+ * - Ask at the first knock or message if unanswered or declined; never on subsequent knocks or messages.
  */
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -159,7 +159,7 @@ function defaultAlertPrompt(): Promise<'turn_on' | 'not_now'> {
 
 /**
  * At the first knock or message:
- * If the member previously declined notifications, ask again with the one-line reason first;
+ * If notifications are unanswered or previously declined, ask with the one-line reason first;
  * never ask on subsequent knocks or messages.
  */
 export async function askNotificationPermissionOnAction(
@@ -171,11 +171,9 @@ export async function askNotificationPermissionOnAction(
     const record = await readNotificationPermissionRecord(storage);
 
     if (record.state === 'granted') return 'granted';
-    if (record.state === 'unanswered') return 'unanswered';
 
-    // State is declined
     const alreadyRetried = action === 'knock' ? record.knockRetried : record.messageRetried;
-    if (alreadyRetried) return 'declined';
+    if (alreadyRetried) return record.state;
 
     const prompter = options?.promptUser ?? defaultAlertPrompt;
     const choice = await prompter();

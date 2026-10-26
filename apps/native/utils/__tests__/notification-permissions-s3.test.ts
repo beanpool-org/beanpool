@@ -37,6 +37,13 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
+}));
+
 const notificationsMock = vi.hoisted(() => ({
     getPermissionsAsync: vi.fn(async () => ({ status: 'undetermined' })),
     requestPermissionsAsync: vi.fn(async () => ({ status: 'granted' })),
@@ -112,6 +119,15 @@ describe('S3: notification permission at the tap, never at account creation', ()
             expect(shouldShowNotificationCard(updated, false)).toBe(false);
         });
 
+        it('tapping Turn on without publicKey falls back to stored identity', async () => {
+            mem.secure.set('beanpool_identity', JSON.stringify({ publicKey: 'stored-pubkey', privateKey: 'pk' }));
+            notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'granted' } as any);
+
+            const result = await turnOnNotifications();
+            expect(result).toBe('granted');
+            expect(pushServiceMock.registerForPushNotifications).toHaveBeenCalledWith('stored-pubkey');
+        });
+
         it('tapping Turn on when permission is denied records declined state and does not register token', async () => {
             notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({ status: 'denied' } as any);
 
@@ -179,6 +195,50 @@ describe('S3: notification permission at the tap, never at account creation', ()
             await declineNotifications();
 
             // First message: should prompt with reason
+            const promptMock1 = vi.fn(async () => 'not_now' as const);
+            const res1 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
+                promptUser: promptMock1,
+            });
+            expect(promptMock1).toHaveBeenCalledTimes(1);
+            expect(res1).toBe('declined');
+
+            // Record should have messageRetried: true
+            const rec1 = await readNotificationPermissionRecord();
+            expect(rec1.messageRetried).toBe(true);
+
+            // Second message: should not prompt again
+            const promptMock2 = vi.fn();
+            const res2 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
+                promptUser: promptMock2,
+            });
+            expect(promptMock2).not.toHaveBeenCalled();
+            expect(res2).toBe('declined');
+        });
+
+        it('if unanswered, asks at the first knock with one-line reason, but not on second knock', async () => {
+            // Fresh state is unanswered
+            const askPromise = askNotificationPermissionOnAction('knock', 'test-pubkey', {
+                promptUser: vi.fn(async () => 'turn_on' as const),
+            });
+            const res1 = await askPromise;
+            expect(res1).toBe('granted');
+            expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+
+            // Record should now have knockRetried: true
+            const rec1 = await readNotificationPermissionRecord();
+            expect(rec1.knockRetried).toBe(true);
+
+            // Second knock: should not prompt again
+            const promptMock2 = vi.fn();
+            const res2 = await askNotificationPermissionOnAction('knock', 'test-pubkey', {
+                promptUser: promptMock2,
+            });
+            expect(promptMock2).not.toHaveBeenCalled();
+            expect(res2).toBe('granted');
+        });
+
+        it('if unanswered, asks at the first message with one-line reason, but not on second message', async () => {
+            // Fresh state is unanswered
             const promptMock1 = vi.fn(async () => 'not_now' as const);
             const res1 = await askNotificationPermissionOnAction('message', 'test-pubkey', {
                 promptUser: promptMock1,

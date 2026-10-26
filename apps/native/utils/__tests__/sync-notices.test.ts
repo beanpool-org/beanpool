@@ -223,9 +223,31 @@ describe('local notices from the background sync', () => {
         expect(postedKnocks[0].body).toBe('A community answered your request.');
     });
 
-    it('background sync posts a notice when admin queue knocks count rises', async () => {
-        const { postAdminKnockNoticesFromSync } = await import('../sync-notices');
+    it('background sync seeds knock count on initial sync without posting a notice', async () => {
+        const { postAdminKnockNoticesFromSync, ADMIN_KNOCKS_COUNT_STORE_KEY } = await import('../sync-notices');
         const adminAccount = account();
+
+        vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
+            total: 2,
+            items: [{ kind: 'knocks', count: 2, label: 'People asking to join', section: 'home', settingsPath: '/settings#section=home' }],
+        }), { status: 200 }));
+
+        const postedAdmin: LocalNotice[] = [];
+        const count = await postAdminKnockNoticesFromSync({
+            storage: AsyncStorage,
+            account: adminAccount,
+            post: async (n) => { postedAdmin.push(n); },
+        });
+
+        expect(count).toBe(0);
+        expect(postedAdmin).toHaveLength(0);
+        expect(await AsyncStorage.getItem(ADMIN_KNOCKS_COUNT_STORE_KEY)).toBe('2');
+    });
+
+    it('background sync posts a notice when admin queue knocks count rises', async () => {
+        const { postAdminKnockNoticesFromSync, ADMIN_KNOCKS_COUNT_STORE_KEY } = await import('../sync-notices');
+        const adminAccount = account();
+        await AsyncStorage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, '1');
 
         vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
             total: 2,

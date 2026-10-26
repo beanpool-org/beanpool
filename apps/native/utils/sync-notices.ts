@@ -272,7 +272,11 @@ export async function postAdminKnockNoticesFromSync(deps: {
         const count = knockItem && typeof knockItem.count === 'number' ? knockItem.count : 0;
 
         const lastRaw = await deps.storage.getItem(ADMIN_KNOCKS_COUNT_STORE_KEY);
-        const lastCount = lastRaw !== null && !Number.isNaN(Number(lastRaw)) ? Number(lastRaw) : 0;
+        if (lastRaw === null) {
+            await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, String(count));
+            return 0;
+        }
+        const lastCount = !Number.isNaN(Number(lastRaw)) ? Number(lastRaw) : 0;
         await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, String(count));
 
         if (count > lastCount) {

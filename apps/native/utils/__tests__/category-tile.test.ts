@@ -24,6 +24,16 @@ vi.mock('react-native', () => {
     };
 });
 
+vi.mock('expo-system-ui', () => ({ setBackgroundColorAsync: vi.fn(async () => undefined) }));
+vi.mock('expo-navigation-bar', () => ({ setStyle: vi.fn() }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: async () => null,
+        setItem: async () => {},
+        removeItem: async () => {},
+    },
+}));
+
 import { CategoryTile } from '../../components/CategoryTile';
 
 describe('CategoryTile (Native)', () => {

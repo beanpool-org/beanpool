@@ -298,6 +298,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         }
         logger.info('ADMIN', 'AI assistant preview', { tool: tool.name, role: grant.role, by: String(actorOf(ctx) ?? 'owner:password').slice(0, 16) });
         if (!out.ok) {
+            ctx.status = 400;
             ctx.body = { tool: tool.name, ok: false, error: out.error };
             return;
         }

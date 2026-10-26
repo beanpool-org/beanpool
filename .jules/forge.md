@@ -168,3 +168,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
 **Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.
+
+## 2026-10-26 - [Missing 400 status on failed agent preview tool run]
+**Issue:** `POST /api/local/admin/agent/preview` in `apps/server/src/agent/grants-route.ts` returned HTTP `200 OK` with `{ tool: name, ok: false, error }` when `out.ok` was false.
+**Learning:** Returning HTTP 200 OK when tool execution fails misleads clients into treating failed preview execution requests as HTTP success responses.
+**Pattern:** Ensure route handlers that invoke domain/tool operations inspect `out.ok` and explicitly set `ctx.status = 400` on failure.

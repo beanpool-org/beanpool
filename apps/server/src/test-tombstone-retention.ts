@@ -313,6 +313,7 @@ async function main(): Promise<void> {
         }
         const offer = async (who: Id, title: string) => built(`${who.name} offers ${title}`, await api(m, '/api/marketplace/posts', who, {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits: 3, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         await offer(ann, 'Honey');
         const conv = built('Ann opens a DM with Bo', await api(m, '/api/messages/conversation', ann, { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));

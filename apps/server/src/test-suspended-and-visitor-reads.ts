@@ -165,6 +165,7 @@ async function main() {
     console.log(`Suspended members and visitors see what a non-member sees ${MODE}...\n`);
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
+    const { TEST_PHOTOS } = await import('./post-test-helper.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { issueRekeyCode } = await import('./engine/member-wizards.js');
@@ -300,8 +301,8 @@ async function main() {
 
     // ── Suspensions and a re-key ───────────────────────────────────────────────────────────────────────────────────
     // Sue's and Dan's own listings, which the board other members read leaves out while they are suspended.
-    const sueOffer = se.createPost('offer', 'food', 'Sue sourdough', 'A loaf a week', 5, 'fixed', sue.pubKeyHex)!.id;
-    const danOffer = se.createPost('offer', 'tools', 'Dan ladder', 'Borrow it for a day', 5, 'fixed', dis.pubKeyHex)!.id;
+    const sueOffer = se.createPost('offer', 'food', 'Sue sourdough', 'A loaf a week', 5, 'fixed', sue.pubKeyHex, undefined, undefined, TEST_PHOTOS)!.id;
+    const danOffer = se.createPost('offer', 'tools', 'Dan ladder', 'Borrow it for a day', 5, 'fixed', dis.pubKeyHex, undefined, undefined, TEST_PHOTOS)!.id;
     const boardIds = async (reader: Id) => {
         const r = await get('/api/marketplace/posts?limit=500&types=offer,need,poll,event', reader);
         return new Set(((Array.isArray(r.body) ? r.body : r.body?.posts) ?? []).map((p: any) => p.id as string));

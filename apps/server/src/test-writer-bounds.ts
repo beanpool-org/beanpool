@@ -49,6 +49,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, setNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import { resetGatewayRateLimit, gatewayAdmitDayBudget, pruneGatewayBuckets, dayBudgetKeyCount, DAY_BUDGET_MAX_KEYS } from './gateway-rate-limit.js';
 import { requestNonces } from './engine/member-signature.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
@@ -137,7 +138,7 @@ function keySession(id: Id): string {
 
 // ── what members do ─────────────────────────────────────────────────────────────────────────────────────────────
 let n = 0;
-const post = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk });
+const post = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
 const openDm = (from: Id, toPk: string) => call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, toPk], createdBy: from.pk });
 const line = (from: Id, conversationId: string, payload: Record<string, unknown> = lockedDm()) =>
     call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ...payload });

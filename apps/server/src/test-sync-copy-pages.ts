@@ -437,6 +437,7 @@ async function main(): Promise<void> {
         for (const who of [ann, bo, cy, dee]) await join(who);
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
         await offer(gwen, 'Sourdough', 4);
@@ -458,7 +459,7 @@ async function main(): Promise<void> {
             const r = built(`Ann writes to Bo (${i + 1})`, await As(ann, '/api/messages/send', { conversationId, authorPubkey: ann.pk, ...lockedDm() }));
             lines.push(r.message?.id ?? r.id);
         }
-        await main.send('sql', { sql: `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 0, ?)`, args: [honey.id, TINY_PNG, new Date().toISOString()] });
+        await main.send('sql', { sql: `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 0, ?)`, args: [honey.id, TINY_PNG, new Date().toISOString()] });
         await main.send('flood', { kind: 'messages', n: 1200, prefix: 'pre', conversationId, author: ann.pk });
         await main.send('flood', { kind: 'members', n: 300, prefix: 'pre' });
         await main.send('flood', { kind: 'posts', n: 200, prefix: 'pre', author: cy.pk });

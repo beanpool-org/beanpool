@@ -97,8 +97,10 @@ async function child(): Promise<void> {
         /** The owner lists offers, one by one, as the marketplace route does. */
         list: async (a: { titles: string[]; category: string }) => {
             const se = await import('./state-engine.js');
+            const { wrapCreatePost } = await import('./post-test-helper.js');
+            const createPost = wrapCreatePost(se.createPost);
             const pk = await ownerOf();
-            return a.titles.map((t) => se.createPost('offer', a.category, t, '', 5, 'fixed', pk)!.id);
+            return a.titles.map((t) => createPost('offer', a.category, t, '', 5, 'fixed', pk)!.id);
         },
         edit: async (a: { id: string; title: string }) => {
             const se = await import('./state-engine.js');

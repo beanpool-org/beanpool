@@ -377,7 +377,7 @@ async function main(): Promise<void> {
         const offer = async (who: Id, title: string, credits: number, extra: Record<string, unknown> = {}) =>
             built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed',
-                authorPublicKey: who.pk, ...extra,
+                authorPublicKey: who.pk, photos: [TINY_PNG], ...extra,
             })).post;
         const deal = async (buyer: Id, seller: Id, postId: string, finish: boolean) => {
             const tx = built(`${buyer.name} asks for ${seller.name}'s listing`, await S_(buyer, '/api/marketplace/posts/request', { postId, buyerPublicKey: buyer.pk })).transaction;
@@ -414,6 +414,7 @@ async function main(): Promise<void> {
         const event = built('Cy hosts an event', await S_(cy, '/api/marketplace/posts', {
             type: 'event', title: 'Street picnic', description: 'Bring a plate', authorPublicKey: cy.pk, lat: -28.55, lng: 153.5,
             eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 3600_000).toISOString(), eventPlaceName: 'The park',
+            photos: [TINY_PNG],
         })).post;
         built('Dee is going', await S_(dee, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' }));
         built('Rex blocks Kip', await S_(rex, '/api/blocks', { targetPubkey: kip.pk }));

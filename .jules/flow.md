@@ -35,6 +35,7 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 9. **Record outcomes below.**
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-26 #2486: Resolved — do NOT re-file: RestorePointsPanel loading indicator (#2486).
 - 2026-10-25 #2451: any→unknown in CommunityShapeSection dropped the || fallback (REGRESSION, #2006 shape). See POLICY.md.
 - 2026-10-18 #2116: DoorSettingPanel needs no loading state (third filing; #1670, #1820).
 

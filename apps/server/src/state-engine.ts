@@ -8211,11 +8211,13 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
     broadcast({ type: 'profile_updated', publicKey });
 }
 
-export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
-    db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
+export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolean {
+    const res = db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
+    if (res.changes === 0) return false;
     clearEnterpriseFloorCache(publicKey);
     clearEnterpriseFloorCache();
     broadcast({ type: 'profile_updated', publicKey });
+    return true;
 }
 
 /**

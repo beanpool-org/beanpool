@@ -19,6 +19,7 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
+- 2026-10-26 #2493: Resolved — do NOT re-file: AvatarPresetPicker focus ring (#2493).
 - 2026-10-25 #2452: StartCommunityScreen focus rings are CLAIM FALSE (global :focus-visible); only the Back button size is open. See POLICY.md.
 - 2026-10-19 #2170: ProposeDecisionModal focus ring: the global :focus-visible outline applies (#1676).
 

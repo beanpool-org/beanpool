@@ -277,6 +277,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         const applicant = signer(ctx, 'Sign this request with the key you asked to join with.');
         if (!applicant) return;
         if (refusedOnStandby(ctx, STANDBY_KNOCK)) return;
+        if (!rateLimit(ctx, 'knock')) return;
         const outcome = cancelKnock(applicant);
         if (!outcome.ok) return answer(ctx, 404, word('There’s no open request to join to cancel.'), 'not_found');
         ctx.status = 200;

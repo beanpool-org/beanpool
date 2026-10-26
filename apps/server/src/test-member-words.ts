@@ -423,6 +423,8 @@ interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
  */
 async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> {
     console.log("\n--- 6. Each family's refusals in the member's language ---");
+    const { wrapCreatePost } = await import('./post-test-helper.js');
+    const createPost = wrapCreatePost(se.createPost);
     useCatalogsForTests('fr', { server: await everyMarkInFrench(), core: FR_CORE });
     const family = async (name: string, english: string, method: 'GET' | 'POST', who: Id | null, route: string, body?: unknown,
         field: 'error' | 'message' = 'error'): Promise<void> => {

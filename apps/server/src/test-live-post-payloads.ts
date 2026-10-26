@@ -45,7 +45,9 @@ const last = (s: Sock, type: string) => [...s.events].reverse().find(e => e.type
 async function main() {
     console.log('A listing change on the live feed: public says so, and carries nothing that is the author\'s alone...\n');
     const { db } = await import('./db/db.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    (se as any).createPost = wrapCreatePost(se.createPost);
     se.initStateEngine();
 
     const member = (callsign: string): string => {

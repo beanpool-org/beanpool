@@ -40,6 +40,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
+import { wrapCreatePost } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import Koa from 'koa';
@@ -52,13 +53,14 @@ import {
     getCommonsBalanceExact,
     getMember,
     assertMemberActive,
-    createPost,
+    createPost: rawCreatePost,
     acceptPost,
     completePostTransaction,
     isSoleOwner,
     persistCommonsBalance,
     reconcileLedgerFromDb,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { setCommonsBalance } from '@beanpool/core';
 import {
     issueRekeyCode,

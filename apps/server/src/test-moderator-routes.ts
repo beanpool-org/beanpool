@@ -24,10 +24,12 @@
 import crypto from 'node:crypto';
 import Koa from 'koa';
 import type Router from '@koa/router';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, nodeRoleOf,
-    createPost, submitReport, getMember,
+    createPost: rawCreatePost, submitReport, getMember,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';
 import { checkAdminAuth, resetAdminAuthTarpit, MODERATOR_ROUTES } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';

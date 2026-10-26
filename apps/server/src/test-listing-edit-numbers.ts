@@ -23,10 +23,12 @@ import Database from 'better-sqlite3';
 import { runConservationCheck, setMemberPhoto } from '@beanpool/engine';
 import { db } from './db/db.js';
 import { LedgerManager, setCommonsBalance } from '@beanpool/core';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, createPost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
+    initStateEngine, createPost: rawCreatePost, requestPost, approvePostRequest, completePostTransaction, acceptPost, transfer, getBalance,
     moveToCommons, payFromCommons, getCommonsBalanceExact, cancelPostTransaction, rejectPostRequest, removePost, adminDeletePost,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 
 let run = 0, passed = 0;

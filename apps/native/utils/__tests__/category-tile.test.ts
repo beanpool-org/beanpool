@@ -34,7 +34,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
+const theme = vi.hoisted(() => ({ dark: false }));
+vi.mock('../../app/ThemeContext', async () => {
+    const { lightColors, darkColors } = await import('../../constants/colors');
+    return { useTheme: () => ({ theme: theme.dark ? 'dark' : 'light', colors: theme.dark ? darkColors : lightColors }) };
+});
+
 import { CategoryTile } from '../../components/CategoryTile';
+import { lightColors, darkColors } from '../../constants/colors';
 
 describe('CategoryTile (Native)', () => {
     function renderComponent(ui: React.ReactElement) {
@@ -53,12 +60,20 @@ describe('CategoryTile (Native)', () => {
         };
     }
 
-    it('renders cleanly outside ThemeProvider without crashing (rules of hooks check)', () => {
+    it.each([
+        ['light', false, lightColors],
+        ['dark', true, darkColors],
+    ] as const)('draws its ground and word from the theme in %s', (_name, dark, palette) => {
+        theme.dark = dark;
         const { container, unmount } = renderComponent(
             createElement(CategoryTile, { category: 'food' })
         );
         expect(container.textContent).toContain('🥕');
         expect(container.textContent).toContain('FOOD');
+        const style = JSON.stringify(JSON.parse(container.querySelector('[data-testid="category-tile"]')!.getAttribute('data-style')!));
+        expect(style).toContain(palette.tile.food.tint);
+        expect(container.innerHTML).toContain(palette.tile.food.ink);
+        theme.dark = false;
         unmount();
     });
 

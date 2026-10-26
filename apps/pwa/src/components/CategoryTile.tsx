@@ -128,7 +128,7 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
                     height: `${discSize}px`,
                 }}
             >
-                {/* 1px outline in category ink at 25% alpha (no color-mix() for old WebView compat) */}
+                {/* 1px outline in category ink at 25% alpha (a plain opacity layer: old WebViews can't mix colours) */}
                 <div
                     className="absolute inset-0 rounded-full border pointer-events-none"
                     style={{

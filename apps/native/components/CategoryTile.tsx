@@ -14,7 +14,7 @@ import React from 'react';
 import { View, Text, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { normalizeCategory, rgbaOf, t, upperCase } from '@beanpool/core';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
-import { colors } from '../constants/colors';
+import type { AppColors } from '../constants/colors';
 import { useTheme } from '../app/ThemeContext';
 
 export type CategoryTileKind = 'listing' | 'event' | 'pulse' | 'group';
@@ -35,7 +35,9 @@ const KNOWN_TILES = new Set([
     'general', 'event', 'pulse',
 ]);
 
-const GROUP_CATEGORY_MAP: Record<string, { tile: keyof typeof colors.tile; emoji: string; label: string }> = {
+type TileKey = keyof AppColors['tile'];
+
+const GROUP_CATEGORY_MAP: Record<string, { tile: TileKey; emoji: string; label: string }> = {
     social: { tile: 'arts', emoji: '🌻', label: 'SOCIAL' },
     general: { tile: 'general', emoji: '💬', label: 'GENERAL' },
     working_group: { tile: 'services', emoji: '🤝', label: 'WORKING GROUP' },
@@ -50,7 +52,7 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
     style,
     testID = 'category-tile',
 }) => {
-    let tileKey: keyof typeof colors.tile = 'general';
+    let tileKey: TileKey = 'general';
     let emoji = '📦';
     let word = 'GENERAL';
 
@@ -76,14 +78,13 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
     } else {
         // Listing
         const normalized = normalizeCategory(category);
-        tileKey = (KNOWN_TILES.has(normalized) ? normalized : 'general') as keyof typeof colors.tile;
+        tileKey = (KNOWN_TILES.has(normalized) ? normalized : 'general') as TileKey;
         const isKnown = !!category && (normalized !== 'general' || category.trim().toLowerCase() === 'general');
         emoji = isKnown ? categoryEmoji(category) : '📦';
         word = isKnown ? upperCase(categoryLabel(category)) : upperCase(categoryLabel('general'));
     }
 
-    const themeContext = useTheme();
-    const activeColors = themeContext?.colors ?? colors;
+    const { colors: activeColors } = useTheme();
 
     const tileColors = activeColors.tile[tileKey] || activeColors.tile.general;
     const showWord = label !== undefined ? label : (size === 'grid' || size === 'banner');

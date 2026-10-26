@@ -308,9 +308,10 @@ export function ShopfrontPaused({ listings, onOpen }: { listings: ShopfrontListi
                             data-testid={`shopfront-row-${l.id}`}
                             onClick={onOpen ? () => onOpen(l.id) : undefined}
                             disabled={!onOpen}
-                            className="w-full min-h-[56px] py-1.5 flex items-center gap-2.5 text-left bg-transparent border-none cursor-pointer rounded-lg hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors opacity-75"
+                            className="w-full min-h-[56px] py-1.5 flex items-center gap-2.5 text-left bg-transparent border-none cursor-pointer rounded-lg hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors"
                         >
-                            <ListingPicture l={l} className="w-12 h-12 shrink-0 rounded-lg" emojiClass="text-2xl" />
+                            {/* Only the picture fades: the ⏸ Paused chip says it, and faded words read under AA in dark. */}
+                            <ListingPicture l={l} className="w-12 h-12 shrink-0 rounded-lg opacity-75" emojiClass="text-2xl" />
                             <span className="flex-1 min-w-0">
                                 <span className="block text-sm font-semibold text-nature-900 dark:text-white line-clamp-2 break-words">{l.title}</span>
                                 <span className="flex items-center gap-1.5 mt-0.5">

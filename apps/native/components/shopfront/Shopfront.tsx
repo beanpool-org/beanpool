@@ -70,7 +70,9 @@ const makeStyles = ({ colors }: { colors: AppColors }) => StyleSheet.create({
     section: { marginBottom: 12 },
     sectionTitle: { fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 4 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-    pausedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border.default, opacity: 0.75 },
+    pausedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+    // Only the picture fades: the ⏸ PAUSED badge says it, and faded words read under AA in dark.
+    pausedThumb: { opacity: 0.75 },
     badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
     typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
     badgeOffer: { backgroundColor: colors.market.offer.bg },
@@ -377,7 +379,7 @@ export function ShopfrontPaused({ listings, onOpen = openListing }: { listings: 
                         accessibilityLabel={l.title}
                         testID={`shopfront-row-${l.id}`}
                     >
-                        <ListingPicture l={l} style={s.thumb} emojiStyle={s.thumbEmoji} />
+                        <ListingPicture l={l} style={[s.thumb, s.pausedThumb]} emojiStyle={s.thumbEmoji} />
                         <View style={s.rowText}>
                             <Text style={s.rowTitle} numberOfLines={2}>{l.title}</Text>
                             <View style={s.badgesRow}>

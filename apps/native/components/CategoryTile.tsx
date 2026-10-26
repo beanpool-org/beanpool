@@ -15,6 +15,7 @@ import { View, Text, StyleSheet, type ViewStyle, type StyleProp } from 'react-na
 import { normalizeCategory, rgbaOf } from '@beanpool/core';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { colors } from '../constants/colors';
+import { useTheme } from '../app/ThemeContext';
 
 export type CategoryTileKind = 'listing' | 'event' | 'pulse' | 'group';
 export type CategoryTileSize = 'grid' | 'thumb' | 'banner';
@@ -80,7 +81,15 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
         word = categoryLabel(category).toUpperCase();
     }
 
-    const tileColors = colors.tile[tileKey] || colors.tile.general;
+    let activeColors = colors;
+    try {
+        const themeContext = useTheme();
+        if (themeContext?.colors) activeColors = themeContext.colors;
+    } catch {
+        // Outside ThemeProvider (e.g. test environment)
+    }
+
+    const tileColors = activeColors.tile[tileKey] || activeColors.tile.general;
     const showWord = label !== undefined ? label : (size === 'grid' || size === 'banner');
 
     let discSize = 44;
@@ -113,7 +122,7 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
                         width: discSize,
                         height: discSize,
                         borderRadius: discSize / 2,
-                        backgroundColor: colors.surface.card,
+                        backgroundColor: activeColors.surface.card,
                         borderColor: discOutline,
                     },
                 ]}

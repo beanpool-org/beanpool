@@ -26,7 +26,7 @@ import { ReportReasonBox } from '../components/ReportReasonBox';
 import { Sentence } from '../components/Sentence';
 import { reportedAlertBody } from '../utils/reportReasons';
 import { blockUser, isUserBlocked } from '../utils/blocklist';
-import { pledgeClosedLine } from '../utils/enterprise-pledge';
+import { pledgeClosedLine, pledgeReturnLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/showcase/sample-screens';
@@ -176,6 +176,7 @@ export default function TreasuryDetailScreen() {
         escrowNotice: { fontSize: 12, color: colors.text.secondary, lineHeight: 17, marginBottom: 14 },
         pledgeBox: { backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default },
         pledgeClosedText: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20 },
+        pledgeReturnText: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20, marginBottom: 14 },
         pledgeInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
         pledgeAmountInput: { flex: 1, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
@@ -726,6 +727,9 @@ export default function TreasuryDetailScreen() {
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
                             // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
                             const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle, detail?.deadlineAt);
+                            // What happens to the backers' Beans if the goal isn't reached, and once they have gone back, that they did.
+                            const returnLine = pledgeReturnLine({ ...detail, currentAmount: current });
+                            const wentBack = !!returnLine && !!detail?.pledgesReturnedAt;
                             return (
                                 <View style={styles.progressCard}>
                                     <View style={styles.progressHeader}>
@@ -747,6 +751,8 @@ export default function TreasuryDetailScreen() {
                                     <View style={styles.progressBarBg}>
                                         <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }]} />
                                     </View>
+                                    {/* Once the Beans went back nothing is held: the line below says so instead. */}
+                                    {!wentBack && (
                                     <Text style={styles.escrowNotice}>
                                         {isFunded
                                             ? (project
@@ -756,6 +762,8 @@ export default function TreasuryDetailScreen() {
                                                 ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
                                                 : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
                                     </Text>
+                                    )}
+                                    {!!returnLine && <Text style={styles.pledgeReturnText} testID="pledge-return-line">{returnLine}</Text>}
 
                                     {/* Inline Pledge Beans Input */}
                                     {/* In preview (Example Valley's): the marker, never the box. */}

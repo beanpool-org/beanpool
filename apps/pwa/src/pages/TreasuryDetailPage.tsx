@@ -25,7 +25,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
-import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
     deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, upperCase, type WordKey, BANNER_PICTURE,
@@ -2161,6 +2161,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     const daysRemaining = getDaysRemaining(detail.deadlineAt);
                                     // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
                                     const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle, detail.deadlineAt);
+                                    // What happens to the backers' Beans if the goal isn't reached, and once they have gone back, that they did.
+                                    const returnLine = pledgeReturnLine({ ...detail, currentAmount: current });
+                                    const wentBack = !!returnLine && !!detail.pledgesReturnedAt;
 
                                     return (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -2197,6 +2200,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 />
                                             </div>
 
+                                            {/* Once the Beans went back nothing is held: the line below says so instead. */}
+                                            {!wentBack && (
                                             <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 {isFunded
                                                     ? (project
@@ -2206,6 +2211,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
                                                         : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
                                             </p>
+                                            )}
+                                            {returnLine && (
+                                                <p data-testid="pledge-return-line" className="text-sm font-semibold text-bp-ink-accent leading-relaxed">
+                                                    {returnLine}
+                                                </p>
+                                            )}
 
                                             {/* Inline Pledge Form — pledging moves the member's own beans */}
                                             {isEffectivePreview ? (

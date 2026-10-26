@@ -2247,6 +2247,8 @@ export interface Treasury {
     goalAmount?: number | null;
     currentAmount?: number | null;
     deadlineAt?: string | null;
+    /** When the node gave a project's backers their Beans back, its goal not reached a week after its end date; else null. */
+    pledgesReturnedAt?: string | null;
     lifecycle?: string;
     status?: 'active' | 'winding_up' | 'completed' | string;
     paused?: boolean;

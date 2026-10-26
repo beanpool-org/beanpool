@@ -9,7 +9,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { TreasurySummary } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
-import { CategoryTile } from './CategoryTile';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
@@ -108,15 +107,9 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
             }}
         >
             <View style={styles.cardHeader}>
-                {item.avatar ? (
-                    // The node's URL for the photo, relative to it, or a shipped picture: MemberAvatar resolves both,
-                    // which React Native's Image cannot.
-                    <MemberAvatar avatarUrl={item.avatar} pubkey={item.publicKey} callsign={item.name || item.callsign || ''} size={44} />
-                ) : (
-                    <View style={[styles.avatar, { overflow: 'hidden' }]}>
-                        <CategoryTile category="general" size="thumb" />
-                    </View>
-                )}
+                {/* The node's URL for the photo, relative to it, or a shipped picture: MemberAvatar resolves both, which React
+                    Native's Image cannot. With no logo, the ready-made picture its key picks, as on the web (Pictures S4). */}
+                <MemberAvatar avatarUrl={item.avatar} pubkey={item.publicKey} callsign={item.name || item.callsign || ''} size={44} />
                 <View style={styles.cardTitleCol}>
                     <Text style={styles.cardTitle} numberOfLines={2}>{item.name || item.callsign}</Text>
                     <View style={styles.badgeRow}>

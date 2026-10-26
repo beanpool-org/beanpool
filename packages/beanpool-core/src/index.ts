@@ -80,6 +80,7 @@ export * from './amount-input.js';
 export * from './report-kind.js';
 export * from './group-options.js';
 export * from './start-something.js';
+export * from './deal-step.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './refresh-gate.js';

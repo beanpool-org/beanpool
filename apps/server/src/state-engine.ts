@@ -238,7 +238,7 @@ import {
     previewAdmitsInvite,
 } from './engine/invites.js';
 import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
-import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
+import { avatarUrlOf, isSelfGroupPictureUrl, word, wordsFor } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,

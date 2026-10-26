@@ -14,7 +14,7 @@
  * jsdom does no layout, so the 320 px check is the phone's width model (apps/native/utils/__tests__/home-layout-320.test.ts:
  * 0.62 of the font size a letter, 1.25 an emoji) on the classes the page draws with.
  */
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { useRef, useState, type ComponentType } from 'react';
@@ -38,20 +38,22 @@ interface Case { manifest: ToolManifest; fixtures: ScaffoldTool['fixtures']; loa
 const OWNER = 'tools-test-owner-key';
 const identity = { publicKey: OWNER, privateKey: 'k', callsign: 'Robin', createdAt: '2026-10-01T00:00:00.000Z' };
 
-let scaffold: ScaffoldTool;
-let cases: Case[] = [];
-
-beforeAll(async () => {
-    scaffold = await scaffoldTool('scaffold');
-    const registered: Case[] = [];
-    for (const m of TOOLS) {
-        const loader = TOOL_APPS[m.id] as Loader | undefined;
-        if (!loader) continue;
-        const { FIXTURES } = await import(/* @vite-ignore */ `../../../../../packages/beanpool-core/src/tools/${m.id}/fixtures.ts`);
-        registered.push({ manifest: m, fixtures: FIXTURES, loader });
-    }
-    cases = [...registered, { manifest: scaffold.manifest, fixtures: scaffold.fixtures, loader: scaffold.loader }];
-});
+// Loaded when the file loads, not in beforeAll, so that each fixture on each screen is a test of its own (below). One test
+// for the whole shed put every tool's fixtures, screens and axe runs in one 30 s budget: it grew with each tool and fixture,
+// timed out under load (local test-all and main's CI, 27 Oct; 30–33 s under taskpolicy -b beside 10 hogs, 3 s at rest),
+// and the timed-out loop kept drawing into the next test ("multiple tools-page").
+const scaffold: ScaffoldTool = await scaffoldTool('scaffold');
+const cases: Case[] = [];
+for (const m of TOOLS) {
+    const loader = TOOL_APPS[m.id] as Loader | undefined;
+    if (!loader) continue;
+    const { FIXTURES } = await import(/* @vite-ignore */ `../../../../../packages/beanpool-core/src/tools/${m.id}/fixtures.ts`);
+    cases.push({ manifest: m, fixtures: FIXTURES, loader });
+}
+cases.push({ manifest: scaffold.manifest, fixtures: scaffold.fixtures, loader: scaffold.loader });
+const SCREEN_CASES = cases.flatMap((c) =>
+    Object.entries(c.fixtures.docs).flatMap(([name, doc]) =>
+        c.manifest.screens.map((screenName) => [`${c.manifest.id} ${screenName} with ${name}`, { c, name, doc, screenName }] as const)));
 
 beforeEach(() => {
     localStorage.clear();
@@ -172,35 +174,31 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         for (const m of TOOLS) if (TOOL_APPS[m.id]) expect(cases.map((c) => c.manifest.id)).toContain(m.id);
     });
 
-    it('every screen with every fixture: every word through t(), each fits, nothing scrolls sideways, axe clean', async () => {
+    it.each(SCREEN_CASES)('%s: every word through t(), it fits, nothing scrolls sideways, axe clean', async (where, { c, doc, screenName }) => {
         await showIn('xx');
-        for (const c of cases) {
-            for (const [name, doc] of Object.entries(c.fixtures.docs)) {
-                for (const screenName of c.manifest.screens) {
-                    resetToolStoreForTest();
-                    vi.stubGlobal('indexedDB', memoryIndexedDB());
-                    await keep(c.manifest.id, doc);
-                    const view = draw(c, { id: c.manifest.id, screen: screenName, key: null });
-                    const page = await view.findByTestId('tools-page');
-                    const where = `${c.manifest.id} ${screenName} with ${name}`;
-                    // Empty: the two doors first; "I already do this" goes in.
-                    if (screenName === 'main' && JSON.stringify(doc) === JSON.stringify(c.manifest.doc.empty())) {
-                        await view.findByTestId('tool-doors');
-                        expect(layoutProblems(page), `${where}, the doors`).toEqual([]);
-                        expect(bypassing(page, { others: memberText(doc) }), `${where}, the doors`).toEqual([]);
-                        expect(await axeProblems(page), `${where}, the doors`).toEqual([]);
-                        await act(async () => { fireEvent.click(within(page).getByRole('button', { name: xx('I already do this') })); });
-                    }
-                    await waitFor(() => expect(view.queryByRole('status')).toBeNull());
-                    expect(bracketed(page), where).toBeGreaterThan(1);
-                    expect(bypassing(page, { others: memberText(doc) }), where).toEqual([]);
-                    expect(layoutProblems(page), where).toEqual([]);
-                    expect(await axeProblems(page), where).toEqual([]);
-                    view.unmount();
-                }
-            }
+        resetToolStoreForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        await keep(c.manifest.id, doc);
+        const view = draw(c, { id: c.manifest.id, screen: screenName, key: null });
+        const page = await view.findByTestId('tools-page');
+        // Empty: the two doors first; "I already do this" goes in.
+        if (screenName === 'main' && JSON.stringify(doc) === JSON.stringify(c.manifest.doc.empty())) {
+            await view.findByTestId('tool-doors');
+            expect(layoutProblems(page), `${where}, the doors`).toEqual([]);
+            expect(bypassing(page, { others: memberText(doc) }), `${where}, the doors`).toEqual([]);
+            expect(await axeProblems(page), `${where}, the doors`).toEqual([]);
+            await act(async () => { fireEvent.click(within(page).getByRole('button', { name: xx('I already do this') })); });
         }
-    });
+        await waitFor(() => expect(view.queryByRole('status')).toBeNull());
+        expect(bracketed(page), where).toBeGreaterThan(1);
+        expect(bypassing(page, { others: memberText(doc) }), where).toEqual([]);
+        expect(layoutProblems(page), where).toEqual([]);
+        expect(await axeProblems(page), where).toEqual([]);
+        view.unmount();
+        // One case is heavy on its own: "things main with full" draws the whole shed (316 rows) and runs axe over it,
+        // ~1 s at rest and 15–22 s under taskpolicy -b beside 10 hogs (measured 27 Oct; every other case under 5 s).
+        // 60 s gives that case room on a loaded machine; a hang still fails.
+    }, 60_000);
 
     it('the Tools screen, the menu, Settings, About and the unknown tool: the same, in xx', async () => {
         await showIn('xx');

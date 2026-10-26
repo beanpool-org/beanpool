@@ -5,7 +5,7 @@
  * a deadline an hour ago is the project's last day: its badge says "Ends today", and it takes pledges.
  */
 import { describe, expect, it } from 'vitest';
-import { deadlineDaysRemaining, isPastDeadline, takesPledges } from '../enterprise-pledge.js';
+import { deadlineDaysRemaining, isPastDeadline, isPledgeReturnDue, PLEDGE_RETURN_DAYS, pledgeReturnAt, takesPledges } from '../enterprise-pledge.js';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -84,6 +84,58 @@ describe('The badge and the gate: one rule', () => {
             expect(days, deadline).toBe(badgeDays(deadline, NOW));
             expect(isPastDeadline(deadline, NOW), deadline).toBe(days < 0);
             expect(isPastDeadline(deadline, NOW), deadline).toBe(offset >= DAY);
+        }
+    });
+});
+
+/**
+ * When an unfunded project's held pledges go back to their backers (Marty, board, 27 Oct 2026: "Return them a week after
+ * the end date", unless the leader moves the date in that week). By #2500's day rule a deadline is a day starting at its
+ * instant, and pledges stop once that day is over; the return falls at the start of the end date + 7, the day both apps'
+ * project page names: the deadline's instant + 7 days. The node returns them at its first tick from then on.
+ */
+describe('pledgeReturnAt and isPledgeReturnDue: a week after the end date', () => {
+    it('is a week', () => {
+        expect(PLEDGE_RETURN_DAYS).toBe(7);
+    });
+
+    it("falls 7 days after the deadline's instant: the start of the end date + 7", () => {
+        const webEndDate = new Date('2026-11-30').toISOString();
+        expect(pledgeReturnAt(webEndDate)).toBe(Date.parse('2026-12-07T00:00:00.000Z'));
+        const phoneEndDate = '2026-11-30T09:14:00.000Z';
+        expect(pledgeReturnAt(phoneEndDate)).toBe(Date.parse('2026-12-07T09:14:00.000Z'));
+    });
+
+    it('is NaN, and never due, for no deadline or one that names no time', () => {
+        for (const deadline of [null, undefined, '', 'not a date']) {
+            expect(pledgeReturnAt(deadline)).toBeNaN();
+            expect(isPledgeReturnDue(deadline, NOW)).toBe(false);
+            expect(isPledgeReturnDue(deadline, NOW + 365 * DAY)).toBe(false);
+        }
+    });
+
+    it('is not due through the end date and the six days after it, and due from the start of the seventh', () => {
+        expect(isPledgeReturnDue(ago(0), NOW)).toBe(false);
+        expect(isPledgeReturnDue(ago(DAY), NOW)).toBe(false);
+        expect(isPledgeReturnDue(ago(7 * DAY - 1), NOW)).toBe(false);
+        expect(isPledgeReturnDue(ago(7 * DAY), NOW)).toBe(true);
+        expect(isPledgeReturnDue(ago(7 * DAY + 1), NOW)).toBe(true);
+        // A node that was off on the day returns them at its next tick, however late.
+        expect(isPledgeReturnDue(ago(90 * DAY), NOW)).toBe(true);
+        // A deadline ahead is never due.
+        expect(isPledgeReturnDue(ago(-DAY), NOW)).toBe(false);
+    });
+
+    it("is due exactly when the deadline badge's number reaches -7, and only ever after pledges stopped", () => {
+        const offsets: number[] = [];
+        for (let h = -24; h <= 10 * 24; h++) offsets.push(h * HOUR);
+        for (let d = 0; d <= 9; d++) offsets.push(d * DAY - 1, d * DAY, d * DAY + 1);
+        for (const offset of offsets) {
+            const deadline = ago(offset);
+            const due = isPledgeReturnDue(deadline, NOW);
+            expect(due, deadline).toBe(offset >= 7 * DAY);
+            expect(due, deadline).toBe(deadlineDaysRemaining(deadline, NOW) <= -PLEDGE_RETURN_DAYS);
+            if (due) expect(isPastDeadline(deadline, NOW), deadline).toBe(true);
         }
     });
 });

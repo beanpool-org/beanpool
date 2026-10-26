@@ -330,6 +330,56 @@ for (const dark of [false, true]) {
             expect(byId('shopfront-message')?.textContent).toBe('Message Damo (leader)');
         });
 
+        // A project that ends short of its goal gives its backers their Beans back a week after its end date, unless the end
+        // date moves before then (Marty, board, 27 Oct 2026). The goal card says so plainly, and once the node has returned
+        // them (the page's pledgesReturnedAt), that they went back. 10:00 UTC is the same calendar day on every clock from
+        // UTC-10 to UTC+13, so the dates read the same wherever this runs.
+        describe("a project's goal card says when the Beans go back if the goal isn't reached", () => {
+            const NOW = Date.parse('2026-11-20T10:00:00.000Z');
+            beforeEach(() => {
+                vi.useFakeTimers({ toFake: ['Date'] });
+                vi.setSystemTime(NOW);
+                params.now = { publicKey: ENT, name: 'Village Hall Roof' };
+            });
+            afterEach(() => { vi.useRealTimers(); });
+            const roof = (over: Record<string, unknown>) =>
+                community({ getTreasuryDetail: membersView({ name: 'Village Hall Roof', lifecycle: 'bounded', goalAmount: 500, currentAmount: 40, ...over }) });
+
+            it('before its end date: if the goal isn’t reached by then, everyone’s Beans go back a week after it, in the goal card', async () => {
+                net.answer = roof({ deadlineAt: '2026-11-30T10:00:00.000Z' });
+                await renderIn();
+                const line = byId('pledge-return-line');
+                expect(line?.textContent).toBe('If the goal isn’t reached by 30 Nov 2026, everyone’s Beans go back on 7 Dec 2026.');
+                expect(styleOf(line).color).toBe(colors().text.body);
+                expect(at('Goal: 500 🫘')).toBeLessThan(at('If the goal isn’t reached'));
+                expect(at('If the goal isn’t reached')).toBeLessThan(at(ABOUT));
+                expect(host.textContent).toContain('PLEDGE BEANS 🌱');
+            });
+
+            it('in the week after its end date: they go back on the day, unless the end date moves before then', async () => {
+                net.answer = roof({ deadlineAt: '2026-11-17T10:00:00.000Z' });
+                await renderIn();
+                expect(byId('pledge-return-line')?.textContent)
+                    .toBe('The goal wasn’t reached by 17 Nov 2026. Everyone’s Beans go back on 24 Nov 2026, unless the end date moves before then.');
+                expect(byId('pledges-closed')?.textContent).toBe("This project's deadline has passed: it takes no more pledges.");
+            });
+
+            it('once the node has returned them: they went back, and nothing reads as still held', async () => {
+                net.answer = roof({ deadlineAt: '2026-11-10T10:00:00.000Z', currentAmount: 0, balance: 0, pledgesReturnedAt: '2026-11-17T10:00:30.000Z' });
+                await renderIn();
+                const line = byId('pledge-return-line');
+                expect(line?.textContent).toBe('The goal wasn’t reached by 10 Nov 2026, so everyone’s Beans went back on 17 Nov 2026.');
+                expect(styleOf(line).color).toBe(colors().text.body);
+                expect(host.textContent).not.toContain('Pledges are held securely');
+            });
+
+            it('a project that reached its goal says nothing of it', async () => {
+                net.answer = roof({ deadlineAt: '2026-11-30T10:00:00.000Z', status: 'funded', currentAmount: 500 });
+                await renderIn();
+                expect(byId('pledge-return-line')).toBeNull();
+            });
+        });
+
         it("the listings couldn't be read: the node's own text listings, in their sections", async () => {
             net.answer = community({}, 'down');
             await renderIn();

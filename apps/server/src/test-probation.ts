@@ -237,6 +237,20 @@ function main(): void {
         "...and their own summary counts the enterprise listing's photos as theirs");
     assert(refusedLimit(() => assertMayEditPhotos(photoKeeper, enterprisePostId, PROBATION.photos, 1, now)) === null,
         "...while swapping a photo on that listing counts its set once, not twice");
+    // A second keeper of the same enterprise (on probation, 2 photos of their own today) swaps 1 photo on a listing the
+    // first keeper posted today with 4: they bring in 1 (2 + 1 within the day's allowance) and must not be charged the 4.
+    const otherKeeper = makeKey();
+    insertMember(otherKeeper, 'OtherKeeper', nowIso);
+    const otherOwnPost = insertPost(otherKeeper, nowIso);
+    insertPostPhoto(otherOwnPost, 1);
+    insertPostPhoto(otherOwnPost, 2);
+    const firstKeepersListing = insertPost(photoEnterprise, nowIso);
+    db.prepare('UPDATE posts SET created_by = ? WHERE id = ?').run(photoKeeper, firstKeepersListing);
+    for (let i = 1; i <= 4; i++) insertPostPhoto(firstKeepersListing, i);
+    assert(refusedLimit(() => assertMayEditPhotos(otherKeeper, firstKeepersListing, 4, 1, now)) === null,
+        "a second keeper swapping 1 photo on today's listing another keeper posted pays for the 1 they bring in, not the set");
+    assert(refusedLimit(() => assertMayEditPhotos(otherKeeper, firstKeepersListing, 4, 4, now)) === 'photos',
+        '...and bringing in 4 more than their allowance has left is still refused');
 
     // ── 6. assertMayMessage ──
     console.log('\n6. assertMayMessage...');

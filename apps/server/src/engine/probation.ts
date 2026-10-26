@@ -368,9 +368,13 @@ export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize
     if (newPhotoCount <= 0) return;
     const rules = probationRules(pubkey, now);
     if (!rules) return;
-    const row = db.prepare('SELECT created_at FROM posts WHERE id = ?').get(postId) as { created_at?: string } | undefined;
+    const row = db.prepare('SELECT created_at, author_pubkey, created_by FROM posts WHERE id = ?').get(postId) as
+        { created_at?: string; author_pubkey?: string; created_by?: string | null } | undefined;
     const createdMs = row?.created_at ? Date.parse(row.created_at) : NaN;
-    const inside = Number.isFinite(createdMs) && createdMs > now - rules.windowMs;
+    // The whole set is charged only when the post sits in this member's own tally (photoTimes: theirs, or a listing they
+    // made for an enterprise). Another keeper editing it, or a listing with no maker, pays only for what they bring in.
+    const theirs = row?.author_pubkey === pubkey || row?.created_by === pubkey;
+    const inside = theirs && Number.isFinite(createdMs) && createdMs > now - rules.windowMs;
     assertPhotosFit(rules, pubkey, inside ? photoSetSize : newPhotoCount, now, inside ? postId : undefined);
 }
 

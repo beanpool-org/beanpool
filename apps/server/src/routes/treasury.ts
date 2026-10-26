@@ -626,8 +626,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 return;
             }
         }
-        let photoUrl = avatar;
-        if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
+        let photoUrl = typeof avatar === 'string' && avatar.trim() ? avatar.trim() : null;
+        if (!photoUrl && Array.isArray(photos) && photos.length > 0 && typeof photos[0] === 'string' && photos[0].trim()) {
+            photoUrl = photos[0].trim();
+        }
         // S4 (§4.2, §6): a create with no avatar and no photos is given bundled://bean-green and accepted (never on sync/ingest)
         if (!photoUrl) {
             photoUrl = 'bundled://bean-green';

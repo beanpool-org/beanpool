@@ -184,6 +184,7 @@ export default function WelcomeScreen() {
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
     const [notifVisible, setNotifVisible] = useState(false);
+    const [notifBusy, setNotifBusy] = useState(false);
     useEffect(() => {
         if (mode !== 'onboardingGuide') return;
         let live = true;
@@ -2527,29 +2528,45 @@ export default function WelcomeScreen() {
 
                         {notifVisible && (
                             <View style={guideStyles.card} testID="guide-notification-card">
-                                <Text style={guideStyles.cardTitle}>{t('Turn on notifications?')}</Text>
+                                <Text style={guideStyles.cardTitle} accessibilityRole="header">{t('Turn on notifications?')}</Text>
                                 <Text style={guideStyles.cardText}>
                                     {t('So you hear when someone answers you, messages you, or asks to join. Nothing else.')}
                                 </Text>
                                 <Pressable
-                                    style={[styles.primaryBtn, { minHeight: 44, marginTop: 12, marginBottom: 8 }]}
+                                    style={[styles.primaryBtn, { minHeight: 48, marginTop: 12, marginBottom: 8 }, notifBusy && { opacity: 0.6 }]}
+                                    disabled={notifBusy}
                                     onPress={async () => {
-                                        const result = await turnOnNotifications(pendingIdentity?.publicKey);
-                                        // 'settings': the phone's settings opened; nothing is answered yet, so the card stays.
-                                        if (result !== 'settings') setNotifVisible(false);
+                                        if (notifBusy) return;
+                                        setNotifBusy(true);
+                                        try {
+                                            const result = await turnOnNotifications(pendingIdentity?.publicKey);
+                                            // 'settings': the phone's settings opened; nothing is answered yet, so the card stays.
+                                            if (result !== 'settings') setNotifVisible(false);
+                                        } finally {
+                                            setNotifBusy(false);
+                                        }
                                     }}
                                     accessibilityRole="button"
+                                    accessibilityState={{ busy: notifBusy, disabled: notifBusy }}
                                     testID="guide-notification-turn-on"
                                 >
                                     <Text style={styles.primaryBtnText}>{t('Turn on')}</Text>
                                 </Pressable>
                                 <Pressable
-                                    style={[styles.secondaryBtn, { minHeight: 40 }]}
+                                    style={[styles.secondaryBtn, { minHeight: 48 }, notifBusy && { opacity: 0.6 }]}
+                                    disabled={notifBusy}
                                     onPress={async () => {
-                                        await declineNotifications();
-                                        setNotifVisible(false);
+                                        if (notifBusy) return;
+                                        setNotifBusy(true);
+                                        try {
+                                            await declineNotifications();
+                                            setNotifVisible(false);
+                                        } finally {
+                                            setNotifBusy(false);
+                                        }
                                     }}
                                     accessibilityRole="button"
+                                    accessibilityState={{ busy: notifBusy, disabled: notifBusy }}
                                     testID="guide-notification-not-now"
                                 >
                                     <Text style={[styles.secondaryBtnText, { color: colors.text.secondary }]}>{t('Not now')}</Text>

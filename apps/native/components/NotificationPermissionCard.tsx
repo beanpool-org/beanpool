@@ -95,8 +95,9 @@ export function NotificationPermissionCard({ colors, onAnswered }: { colors: App
             <Pressable
                 onPress={() => { handleNotNow().catch(() => {}); }}
                 disabled={busy}
-                style={styles.secondaryBtn}
+                style={[styles.secondaryBtn, busy && { opacity: 0.6 }]}
                 accessibilityRole="button"
+                accessibilityState={{ busy, disabled: busy }}
                 testID="notification-card-not-now"
             >
                 <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Not now')}</Text>

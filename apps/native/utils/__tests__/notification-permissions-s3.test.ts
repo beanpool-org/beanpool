@@ -433,6 +433,35 @@ describe('S3: notification permission at the tap, never at account creation', ()
         });
     });
 
+    // #2524 deciding review, non-blocking polish.
+    describe('the cards read right and take one tap at a time', () => {
+        const root = path.resolve(__dirname, '../..');
+        const welcome = fs.readFileSync(path.join(root, 'app/welcome.tsx'), 'utf8');
+        const card = welcome.slice(welcome.indexOf('testID="guide-notification-card"'), welcome.indexOf('testID="guide-notification-not-now"') + 40);
+        const home = fs.readFileSync(path.join(root, 'components/NotificationPermissionCard.tsx'), 'utf8');
+
+        it("How it Works' card: the title is a header; both buttons are 48 dp, busy-guarded and say so", () => {
+            expect(card).toMatch(/accessibilityRole="header">\{t\('Turn on notifications\?'\)\}/);
+            expect(card).not.toMatch(/minHeight: 4[0-4]\b/);
+            expect(card.match(/minHeight: 48/g)).toHaveLength(2);
+            expect(card.match(/disabled=\{notifBusy\}/g)).toHaveLength(2);
+            expect(card.match(/if \(notifBusy\) return;/g)).toHaveLength(2);
+            expect(card.match(/accessibilityState=\{\{ busy: notifBusy, disabled: notifBusy \}\}/g)).toHaveLength(2);
+        });
+
+        it("Home's card: Not now says it is busy, as Turn on does", () => {
+            const notNow = home.slice(home.lastIndexOf('<Pressable', home.indexOf('testID="notification-card-not-now"')), home.indexOf('testID="notification-card-not-now"'));
+            expect(notNow).toContain('accessibilityState={{ busy, disabled: busy }}');
+        });
+
+        it("New message asks before its row's spinner shows", () => {
+            const nm = fs.readFileSync(path.join(root, 'app/new-message.tsx'), 'utf8');
+            const handler = nm.slice(nm.indexOf('const handleSelectMember'), nm.indexOf('setCreating(null);', nm.indexOf('const handleSelectMember')));
+            expect(handler.indexOf("askNotificationPermissionOnAction('message'")).toBeGreaterThan(-1);
+            expect(handler.indexOf("askNotificationPermissionOnAction('message'")).toBeLessThan(handler.indexOf('setCreating(pubkey)'));
+        });
+    });
+
     describe('words and copy', () => {
         it('matches the exact copy decided in design §3.9', () => {
             expect(NOTIFICATION_CARD_WORDS.title).toBe('Turn on notifications?');

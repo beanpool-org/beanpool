@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PulseFeedCard } from './PulseFeedCard';
-import { type PulseFeedItem, reportAbuse } from '../lib/api';
+import { type PulseFeedItem, reportAbuse, getDailyPulse } from '../lib/api';
 
 vi.mock('../lib/api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/api')>()),
     reportAbuse: vi.fn().mockResolvedValue({ success: true }),
+    getDailyPulse: vi.fn(),
 }));
 
 const mockItem: PulseFeedItem = {
@@ -206,6 +207,114 @@ describe('PulseFeedCard Instagram link card (web)', () => {
         // YouTube retains aspect-video and Open on YouTube link
         expect(container.querySelector('.aspect-video')).toBeInTheDocument();
         expect(screen.getByText(/Open on YouTube/)).toBeInTheDocument();
+    });
+
+    describe('Daily Pulse card (web)', () => {
+        const dailyPulseItem: PulseFeedItem = {
+            id: 'item_pulse_2026-10-26',
+            ownerPubkey: 'pubkey-pulse-treasury',
+            url: null,
+            platform: 'website',
+            category: 'learn',
+            title: 'Plant seeds of kindness',
+            thumbnailUrl: null,
+            callsign: 'Daily Pulse',
+            avatarUrl: null,
+            source: 'curated',
+            isVerified: true,
+            publishedAt: '2026-10-26T05:00:00.000Z',
+        };
+
+        it('renders as button/link with accessible name, and click opens reflection dialog labelled by headline', async () => {
+            vi.mocked(getDailyPulse).mockResolvedValueOnce({
+                date: '2026-10-26',
+                headline: 'Plant seeds of kindness',
+                body: 'Kindness is the soil in which trust grows.',
+            });
+
+            render(<PulseFeedCard item={dailyPulseItem} />);
+
+            const trigger = screen.getByRole('button', { name: /Daily Reflection/i });
+            expect(trigger).toBeInTheDocument();
+
+            fireEvent.click(trigger);
+
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toBeInTheDocument();
+
+            const labelledById = dialog.getAttribute('aria-labelledby');
+            expect(labelledById).toBeTruthy();
+            const headlineEl = document.getElementById(labelledById!);
+            expect(headlineEl).toHaveTextContent('Plant seeds of kindness');
+
+            expect(screen.getByText('Kindness is the soil in which trust grows.')).toBeInTheDocument();
+            expect(screen.getByText('2026-10-26')).toBeInTheDocument();
+
+            // Close button works and focus returns to the card
+            const closeBtn = screen.getByRole('button', { name: 'Close' });
+            fireEvent.click(closeBtn);
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            expect(document.activeElement).toBe(trigger);
+        });
+
+        it('Escape closes the reflection dialog and returns focus to the card', async () => {
+            vi.mocked(getDailyPulse).mockResolvedValueOnce({
+                date: '2026-10-26',
+                headline: 'Plant seeds of kindness',
+                body: 'Kindness is the soil in which trust grows.',
+            });
+
+            render(<PulseFeedCard item={dailyPulseItem} />);
+
+            const trigger = screen.getByRole('button', { name: /Daily Reflection/i });
+            fireEvent.click(trigger);
+
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toBeInTheDocument();
+
+            fireEvent.keyDown(window, { key: 'Escape' });
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            expect(document.activeElement).toBe(trigger);
+        });
+
+        it('shows a line in the app words with Retry on failed read, and Retry re-fetches', async () => {
+            vi.mocked(getDailyPulse).mockRejectedValueOnce(new Error('Network error'));
+
+            render(<PulseFeedCard item={dailyPulseItem} />);
+
+            const trigger = screen.getByRole('button', { name: /Daily Reflection/i });
+            fireEvent.click(trigger);
+
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toBeInTheDocument();
+
+            // Shows error message and Retry button
+            expect(screen.getByText('Failed to load')).toBeInTheDocument();
+            const retryBtn = screen.getByRole('button', { name: 'Retry' });
+            expect(retryBtn).toBeInTheDocument();
+
+            // Clicking Retry re-fetches
+            vi.mocked(getDailyPulse).mockResolvedValueOnce({
+                date: '2026-10-26',
+                headline: 'Plant seeds of kindness',
+                body: 'Kindness is the soil in which trust grows.',
+            });
+
+            fireEvent.click(retryBtn);
+            await waitFor(() => expect(screen.getByText('Kindness is the soil in which trust grows.')).toBeInTheDocument());
+        });
+
+        it('normal Pulse item still opens its URL in a new window', () => {
+            const windowOpenSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+            render(<PulseFeedCard item={mockItem} />);
+
+            const cardLink = screen.getByRole('link', { name: /Open post on YouTube/i });
+            fireEvent.click(cardLink);
+
+            expect(windowOpenSpy).toHaveBeenCalledWith(mockItem.url, '_blank', 'noopener,noreferrer');
+            windowOpenSpy.mockRestore();
+        });
     });
 });
 

@@ -695,8 +695,9 @@ export function GroupDetailModal({
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
                             <MemberAvatar
                                 avatarUrl={groupData.avatarUrl || bundledGroupEmblem(groupData.category)}
-                                pubkey=""
+                                pubkey={groupData.id}
                                 callsign={groupData.name}
+                                updatedAt={groupData.updatedAt}
                                 size={36}
                             />
                             <Text style={styles.title} numberOfLines={1}>{groupData.name}</Text>

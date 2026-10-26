@@ -10,12 +10,12 @@
  * Props follow DESIGN-pictures-fable.md §3.2.
  */
 
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { View, Text, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
-import { normalizeCategory, rgbaOf } from '@beanpool/core';
+import { normalizeCategory, rgbaOf, t, upperCase } from '@beanpool/core';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { colors } from '../constants/colors';
-import { useTheme } from '../app/ThemeContext';
+import { ThemeContext, type ThemeContextType } from '../app/ThemeContext';
 
 export type CategoryTileKind = 'listing' | 'event' | 'pulse' | 'group';
 export type CategoryTileSize = 'grid' | 'thumb' | 'banner';
@@ -42,6 +42,8 @@ const GROUP_CATEGORY_MAP: Record<string, { tile: keyof typeof colors.tile; emoji
     guild: { tile: 'education', emoji: '🛡️', label: 'GUILD' },
 };
 
+const FALLBACK_THEME_CONTEXT = createContext<ThemeContextType | undefined>(undefined);
+
 export const CategoryTile: React.FC<CategoryTileProps> = ({
     category,
     kind = 'listing',
@@ -57,11 +59,11 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
     if (kind === 'event' || category === 'event') {
         tileKey = 'event';
         emoji = '📅';
-        word = 'EVENT';
+        word = upperCase(t('EVENT', undefined, 'event category tile label'));
     } else if (kind === 'pulse' || category === 'pulse') {
         tileKey = 'pulse';
         emoji = '🗞️';
-        word = 'PULSE';
+        word = upperCase(t('PULSE', undefined, 'pulse category tile label'));
     } else if (kind === 'group') {
         const groupMeta = category ? GROUP_CATEGORY_MAP[category] : undefined;
         if (groupMeta) {
@@ -71,23 +73,19 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
         } else {
             tileKey = 'general';
             emoji = '👥';
-            word = (category ? String(category).trim() : 'GENERAL').toUpperCase();
+            word = upperCase(category ? String(category).trim() : 'GENERAL');
         }
     } else {
         // Listing
         const normalized = normalizeCategory(category);
         tileKey = (KNOWN_TILES.has(normalized) ? normalized : 'general') as keyof typeof colors.tile;
-        emoji = categoryEmoji(category);
-        word = categoryLabel(category).toUpperCase();
+        const isKnown = !!category && (normalized !== 'general' || category.trim().toLowerCase() === 'general');
+        emoji = isKnown ? categoryEmoji(category) : '📦';
+        word = isKnown ? upperCase(categoryLabel(category)) : upperCase(categoryLabel('general'));
     }
 
-    let activeColors = colors;
-    try {
-        const themeContext = useTheme();
-        if (themeContext?.colors) activeColors = themeContext.colors;
-    } catch {
-        // Outside ThemeProvider (e.g. test environment)
-    }
+    const themeContext = useContext(ThemeContext || FALLBACK_THEME_CONTEXT);
+    const activeColors = themeContext?.colors ?? colors;
 
     const tileColors = activeColors.tile[tileKey] || activeColors.tile.general;
     const showWord = label !== undefined ? label : (size === 'grid' || size === 'banner');

@@ -35,7 +35,7 @@ const RETIRED_LIGHT_PALETTE_KEY = 'beanpool_light_palette';
 /** The flat colour the doodle tiles are drawn on — sampled from the art itself. */
 const PATTERN_GROUND = { light: '#f1f1e4', dark: '#141a1a' } as const;
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+export const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Live: re-renders when the phone switches light/dark while the app is open.

@@ -57,6 +57,7 @@ export const SUITES = [
     'test-sso',
     'test-sso-unavailable',
     'test-daily-pulse',
+    'test-daily-pulse-route',
     'test-pairing-relay',
     'test-pairing-routes',
     'test-auth-limit-buckets',

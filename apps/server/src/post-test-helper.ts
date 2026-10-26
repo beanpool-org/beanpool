@@ -14,7 +14,7 @@ export function wrapCreatePost<T extends (...args: any[]) => any>(rawCreatePost:
              priceType: string, authorPublicKey: string, lat?: number, lng?: number,
              photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
              options?: any) => {
-        const p = type === 'poll' ? photos : (!photos || photos.length === 0 ? TEST_PHOTOS : photos);
+        const p = (type === 'poll' || options?.allowNoPhoto) ? photos : (!photos || photos.length === 0 ? TEST_PHOTOS : photos);
         return rawCreatePost(type, category, title, description, credits, priceType, authorPublicKey, lat, lng, p, repeatable, id, cashAlsoNeeded, options);
     }) as unknown as T;
 }

@@ -120,7 +120,7 @@ async function main(): Promise<void> {
     // ── 1. Validation ────────────────────────────────────────────────────────────────────────
     console.log('\n--- 1. Create validation ---');
     const base = (o: Record<string, unknown>, pin: [number, number] | null = [-28.5, 153.5]) =>
-        () => createPostEngine(capture, 'event', 'community', 'T', 'D', 0, 'fixed', host, pin?.[0], pin?.[1], [], false, undefined, false, o as any);
+        () => createPostEngine(capture, 'event', 'community', 'T', 'D', 0, 'fixed', host, pin?.[0], pin?.[1], [PHOTO], false, undefined, false, o as any);
     assertThrows(base({}), /Start time must be a valid date/, 'an event without a start time is refused');
     assertThrows(base({ eventStartAt: 'next tuesday' }), /Start time must be a valid date/, 'an unparseable start is refused');
     assertThrows(base({ eventStartAt: inHours(-1) }), /must start in the future/, 'an event starting in the past is refused');
@@ -169,11 +169,11 @@ async function main(): Promise<void> {
     adminAssignTreasuryOperator(treasury, host, 'admin');
     let enterpriseCreated = 0;
     for (let i = 0; i < 5; i++) {
-        if (createPost('event', 'community', `Enterprise event ${i}`, '', 0, 'fixed', treasury, -28.5, 153.5, [], false, undefined, false,
+        if (createPost('event', 'community', `Enterprise event ${i}`, '', 0, 'fixed', treasury, -28.5, 153.5, [PHOTO], false, undefined, false,
             { eventStartAt: inHours(48), createdBy: host })) enterpriseCreated++;
     }
     assert(enterpriseCreated === 5, 'an enterprise hosts 5 events while its keeper is already at the member cap (separate pool)');
-    assertThrows(() => createPost('event', 'community', 'Enterprise event 6', '', 0, 'fixed', treasury, -28.5, 153.5, [], false, undefined, false,
+    assertThrows(() => createPost('event', 'community', 'Enterprise event 6', '', 0, 'fixed', treasury, -28.5, 153.5, [PHOTO], false, undefined, false,
         { eventStartAt: inHours(48), createdBy: host }), /5 upcoming events/, "the enterprise's own pool caps at 5");
 
     const groupId = crypto.randomUUID();

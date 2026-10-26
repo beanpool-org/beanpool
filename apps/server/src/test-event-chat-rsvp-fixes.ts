@@ -73,7 +73,7 @@ async function main(): Promise<void> {
         const host = member('FfHost'), eve = member('FfEve'), gus = member('FfGus');
         const g = se.createGroup({ name: 'Ff club', createdBy: host.pk, joinPolicy: 'invite_only' } as any);
         for (const m of [eve, gus]) db.prepare("INSERT INTO group_members (group_id, member_pubkey, role, status) VALUES (?, ?, 'member', 'active')").run(g.id, m.pk);
-        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff bee', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), audienceScope: 'group', targetGroupId: g.id });
+        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff bee', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), audienceScope: 'group', targetGroupId: g.id, photos: [TINY_PNG] });
         const id = ev.body?.post?.id;
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, eve, { status: 'going' });
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, gus, { status: 'going' });
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     // ── E3: Not going, on a cancelled or ended event ──
     {
         const host = member('FfWdHost'), grace = member('FfGrace'), hal = member('FfHal');
-        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff far', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 300 * DAY).toISOString() });
+        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff far', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 300 * DAY).toISOString(), photos: [TINY_PNG] });
         const id = ev.body?.post?.id;
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, grace, { status: 'going' });
         await req('POST', '/api/marketplace/posts/remove', host, { id, authorPublicKey: host.pk });

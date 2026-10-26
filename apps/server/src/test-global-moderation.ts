@@ -58,10 +58,12 @@ delete process.env.ENFORCE_WS_AUTH;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, grantNodeRole, createPost: rawCreatePost, exportSyncState, importRemoteState, setNodeRole,
     payFromCommons, createGroup, dispatchPushNotification,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db, createCrowdfundProject } from './db/db.js';
@@ -162,7 +164,7 @@ const photo = (seed: string) => {
 };
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** A post written straight into the engine, as it would be by a member long before the test, out of any window. */
 function oldPost(id: Id, title: string, extra: { lat?: number; lng?: number; photos?: string[] } = {}): string {
     const p = createPost('offer', 'other', title, `${title} description`, 0, 'fixed', id.pk, extra.lat, extra.lng, extra.photos)!;

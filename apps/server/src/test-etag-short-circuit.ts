@@ -21,10 +21,13 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, createPost, updatePost, pausePost, resumePost, removePost,
+    initStateEngine, createPost as rawCreatePost, updatePost, pausePost, resumePost, removePost,
     generateInvite, redeemInvite, updateProfile, getPostsVersion, getMembersVersion,
     bumpPostsVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createActivityRouter } from './routes/activity.js';

@@ -31,6 +31,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import { localFetch } from './keepalive-test-fetch.js';
 import { toldPush, type ToldPush } from './push-notice-test-harness.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -133,6 +134,7 @@ async function main() {
             type: 'event', category: 'community', title, description: 'Bring gloves',
             authorPublicKey: hana.pubKeyHex, lat: -28.65, lng: 153.56,
             eventStartAt: inHours(48), eventEndAt: inHours(50), eventPlaceName: 'Bangalow Hall', eventPrivateNote: NOTE,
+            photos: TEST_PHOTOS,
             ...extra,
         });
     const byId = async (postId: string, who: Id) => (await call('GET', `/api/marketplace/posts?id=${postId}`, who)).body?.posts?.[0]

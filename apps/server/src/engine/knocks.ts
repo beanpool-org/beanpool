@@ -648,8 +648,9 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
         const past = db.prepare(`SELECT id FROM join_requests
                                  WHERE (status = 'pending' AND created_at < ?)
                                     OR (status = 'declined' AND decided_at < ?)
-                                    OR (status = 'approved' AND decided_at < ?)`)
-            .all(daysAgo(KNOCK_RULES.openDays + KNOCK_RULES.lapsedKeptDays), daysAgo(KNOCK_RULES.declineBlockDays), iso(now - INVITE_LIFETIME_MS)) as { id: string }[];
+                                    OR (status = 'approved' AND decided_at < ?)
+                                    OR (status = 'cancelled' AND decided_at < ?)`)
+            .all(daysAgo(KNOCK_RULES.openDays + KNOCK_RULES.lapsedKeptDays), daysAgo(KNOCK_RULES.declineBlockDays), iso(now - INVITE_LIFETIME_MS), daysAgo(KNOCK_RULES.declineBlockDays)) as { id: string }[];
         const remove = db.prepare('DELETE FROM join_requests WHERE id = ?');
         for (const { id } of past) {
             remove.run(id);
@@ -687,7 +688,7 @@ export interface KnockMerge { written: number; kept: number; removed: number; in
 
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 const isNullableText = (v: unknown, max: number) => v === null || v === undefined || isText(v, max);
-const STATUSES = new Set<string>(['pending', 'approved', 'declined']);
+const STATUSES = new Set<string>(['pending', 'approved', 'declined', 'cancelled']);
 
 /**
  * The main server's knocks as a copy carries them (SyncPayload.joinRequests), merged into this standby's database in

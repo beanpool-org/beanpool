@@ -248,7 +248,7 @@ async function main(): Promise<void> {
     adminAssignTreasuryOperator(treasury2, goer, 'admin');
     const createCtx = (actor: string, author: string) => ({
         params: {}, state: { actor }, get: () => '', set: () => { },
-        requestBody: { type: 'event', title: 'Hall working bee', authorPublicKey: author, lat: -28.5, lng: 153.5, eventStartAt: inHours(30) },
+        requestBody: { type: 'event', title: 'Hall working bee', authorPublicKey: author, lat: -28.5, lng: 153.5, eventStartAt: inHours(30), photos: [PHOTO] },
     });
     let hostCtx: any = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(goer, treasury2));
     assert(hostCtx.status === 403 && /treasury/.test(hostCtx.body?.error ?? ''),

@@ -222,7 +222,7 @@ describe('treasury-detail paused section on phone', () => {
 
     it('a non-keeper member sees NO Paused section and no paused listings', async () => {
         const notKeeper = enterpriseDetail({ keepers: [{ publicKey: DAMO, callsign: 'Damo', role: 'lead' }] });
-        net.answer = (name, args) => {
+        net.answer = (name, _args) => {
             if (name === 'getTreasuryDetail') return Promise.resolve(notKeeper);
             if (name === 'getBalance') return Promise.resolve({ balance: 10, keeperOf: [] });
             if (name === 'signedGet') {

@@ -374,7 +374,7 @@ export function ShopfrontPaused({ listings, onOpen = openListing }: { listings: 
                         style={s.pausedRow}
                         onPress={() => onOpen(l.id)}
                         accessibilityRole="button"
-                        accessibilityLabel={[l.title, l.type === 'offer' ? t('OFFER') : t('NEED'), t('⏸ PAUSED')].join(', ')}
+                        accessibilityLabel={l.title}
                         testID={`shopfront-row-${l.id}`}
                     >
                         <ListingPicture l={l} style={s.thumb} emojiStyle={s.thumbEmoji} />

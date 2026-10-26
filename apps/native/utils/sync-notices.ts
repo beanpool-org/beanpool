@@ -19,11 +19,12 @@
  * (engine/kept-notices.ts). A push's own details (engine/push-notices.ts) have no list a phone can read, so a push
  * missed while the phone was off is not repeated here.
  */
+import { PUSH_NOTICE_TITLE, pushNoticeWords, t } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { LOCAL_NOTICE_DATA } from './push-notice-check';
 import { communityAddress } from './push-pins';
-import { KNOCKS_STORE_KEY } from './storage-keys';
+import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY } from './storage-keys';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const UNSEEN_NOTICES_PATH = '/api/notices?unseen=1';
@@ -36,7 +37,10 @@ export const SYNC_NOTICE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const LEDGER_KEEP_MS = 2 * SYNC_NOTICE_MAX_AGE_MS;
 /** The most ids kept; the oldest go first. A member's node keeps 50. */
 const LEDGER_MAX = 300;
-/** How long the node has to answer, inside the background task's 30 seconds. */
+/**
+ * How long the node has to answer, inside the background task's 30 seconds (services/background-task.ts: iOS's, after the
+ * sync's own 20-second fail-fast). Every read the sync's notices make shares it ({@link postAllNoticesFromSync}).
+ */
 export const SYNC_NOTICES_TIMEOUT_MS = 8000;
 /** The longest title and text the node keeps (server engine/kept-notices.ts NOTICE_LIMITS). */
 const TITLE_MAX = 80;
@@ -50,6 +54,16 @@ interface Storage {
 }
 
 type Account = Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>;
+
+/** What each of the sync's notice checks is handed. `signal`: the shared deadline ({@link postAllNoticesFromSync}). */
+export interface SyncNoticeDeps {
+    storage: Storage;
+    account: Account | null;
+    post: (notice: LocalNotice) => Promise<unknown>;
+    now?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+}
 
 /** A notice the app posts on the phone. */
 export interface LocalNotice {
@@ -79,22 +93,39 @@ function parseRows(body: unknown): Row[] | null {
     return rows;
 }
 
-/** The unseen notices `community` keeps for `account`, or null when it didn't answer with them. Never throws. */
-async function unseenNotices(community: string, account: Account, timeoutMs: number): Promise<Row[] | null> {
-    const url = `${community}${UNSEEN_NOTICES_PATH}`;
+/** Aborted after `timeoutMs`, or as soon as `outer` is (the sync's shared deadline). `done` stops the timer. */
+function bounded(timeoutMs: number, outer?: AbortSignal): { signal: AbortSignal; done: () => void } {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const stop = () => controller.abort();
+    const timer = setTimeout(stop, timeoutMs);
+    if (outer?.aborted) stop();
+    else outer?.addEventListener('abort', stop);
+    return { signal: controller.signal, done: () => { clearTimeout(timer); outer?.removeEventListener('abort', stop); } };
+}
+
+/**
+ * `url` read with a GET signed by `account`: its JSON body, or null for any refusal, no answer in `timeoutMs` (or by
+ * `outer`), or an unreadable body. Never throws.
+ */
+async function signedRead(url: string, account: Account, timeoutMs: number, outer?: AbortSignal): Promise<unknown> {
+    const { signal, done } = bounded(timeoutMs, outer);
     try {
         const headers = await buildSignedHeaders('GET', url, '', account.privateKey, account.publicKey);
-        const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+        const res = await fetch(url, { method: 'GET', headers, signal });
         if (!res.ok) return null;
-        return parseRows(await res.json().catch(() => null));
+        return await res.json().catch(() => null);
     } catch (e) {
-        console.log(`[Notices] ${community} did not answer for unseen notices: ${e instanceof Error ? e.message : e}`);
+        console.log(`[Notices] ${url} did not answer: ${e instanceof Error ? e.message : e}`);
         return null;
     } finally {
-        clearTimeout(timer);
+        done();
     }
+}
+
+/** The unseen notices `community` keeps for `account`, or null when it didn't answer with them. Never throws. */
+async function unseenNotices(community: string, account: Account, timeoutMs: number, outer?: AbortSignal): Promise<Row[] | null> {
+    const body = await signedRead(`${community}${UNSEEN_NOTICES_PATH}`, account, timeoutMs, outer);
+    return body === null ? null : parseRows(body);
 }
 
 /** The ledger as written: `[[id, ms], …]`. Anything else is an empty one. */
@@ -147,18 +178,12 @@ export async function markNoticeShown(id: unknown, storage: Storage, now = Date.
  * posted (`post`) for each recent one this phone hasn't shown, oldest first. Returns how many were posted. Nothing
  * without a community or an account on the phone. Never throws.
  */
-export async function postNoticesFromSync(deps: {
-    storage: Storage;
-    account: Account | null;
-    post: (notice: LocalNotice) => Promise<unknown>;
-    now?: number;
-    timeoutMs?: number;
-}): Promise<number> {
+export async function postNoticesFromSync(deps: SyncNoticeDeps): Promise<number> {
     const now = deps.now ?? Date.now();
     try {
         const community = communityAddress(await deps.storage.getItem(ANCHOR_STORE_KEY));
         if (!community || !deps.account?.publicKey || !deps.account.privateKey) return 0;
-        const rows = await unseenNotices(community, deps.account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
+        const rows = await unseenNotices(community, deps.account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, deps.signal);
         if (!rows) return 0;
         const recent = rows
             .filter((r) => now - r.createdAt <= SYNC_NOTICE_MAX_AGE_MS && r.createdAt - now <= CLOCK_SKEW_MS)
@@ -181,52 +206,59 @@ export async function postNoticesFromSync(deps: {
     }
 }
 
-export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
+// ── Requests to join (front doors S1, design §5.2 and §5.5) ────────────────────────────────────────────────────
 
 /**
- * Polls status for remembered open knocks and posts a local notice if any was approved.
+ * What this phone last saw of its community's open requests to join, for the account on it (`{ community, publicKey,
+ * count }`). A notice is posted only when the count rose since; the first look only writes it down.
  */
-export async function postKnockStatusNoticesFromSync(deps: {
-    storage: Storage;
-    account: Account | null;
-    post: (notice: LocalNotice) => Promise<unknown>;
-    now?: number;
-    timeoutMs?: number;
-}): Promise<number> {
-    const now = deps.now ?? Date.now();
-    if (!deps.account?.publicKey || !deps.account.privateKey) return 0;
+export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
+/** The account's role on that community as `GET /api/node-admin/me` last said it, and when (`{ community, publicKey, role, at }`). */
+export const KNOCK_ROLE_STORE_KEY = 'beanpool_knock_role_checked';
+/** How long that answer stands before it is asked again: a member made an admin is told from the next day at the latest. */
+export const KNOCK_ROLE_RECHECK_MS = 24 * 60 * 60 * 1000;
+
+const KNOCK_STATUS_PATH = '/api/join/knock/status';
+
+function parseJson(raw: string | null): Record<string, unknown> | null {
     try {
-        const raw = await deps.storage.getItem(KNOCKS_STORE_KEY);
-        if (!raw) return 0;
-        const parsed = JSON.parse(raw);
-        if (!parsed || parsed.pubkey !== deps.account.publicKey || !Array.isArray(parsed.knocks)) return 0;
+        const v = JSON.parse(raw ?? 'null');
+        return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The answers to this phone's requests to join (utils/knock.ts remembers them): each community asked at once, under the
+ * one deadline, and a notice posted for each that said yes, once each ("A community answered your request."). The
+ * phone's own poll, since no community has the asker's push token (design §5.5). Never throws.
+ */
+export async function postKnockStatusNoticesFromSync(deps: SyncNoticeDeps): Promise<number> {
+    const now = deps.now ?? Date.now();
+    const account = deps.account;
+    if (!account?.publicKey || !account.privateKey) return 0;
+    try {
+        const stored = parseJson(await deps.storage.getItem(KNOCKS_STORE_KEY));
+        if (!stored || stored.pubkey !== account.publicKey || !Array.isArray(stored.knocks)) return 0;
+        // A request this key cancelled is no longer waiting for an answer.
+        const waiting = (stored.knocks as Array<{ url?: unknown; cancelledAt?: unknown }>)
+            .filter((k): k is { url: string } => !!k && typeof k.url === 'string' && !!communityAddress(k.url) && !k.cancelledAt);
+        const said = await Promise.all(waiting.map(async (k) => ({
+            url: k.url,
+            body: await signedRead(`${k.url}${KNOCK_STATUS_PATH}`, account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, deps.signal),
+        })));
         let posted = 0;
-        for (const k of parsed.knocks) {
-            if (!k || typeof k.url !== 'string') continue;
-            const url = `${k.url}/api/join/knock/status`;
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
+        for (const { url, body } of said) {
+            const answer = body as { status?: unknown; invite?: unknown } | null;
+            if (answer?.status !== 'approved') continue;
+            const id = `knock-answer:${url}:${typeof answer.invite === 'string' ? answer.invite : 'approved'}`;
+            if ((await claim([id], deps.storage, now)).length === 0) continue;
             try {
-                const headers = await buildSignedHeaders('GET', url, '', deps.account.privateKey, deps.account.publicKey);
-                const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
-                if (!res.ok) continue;
-                const body = await res.json().catch(() => null) as Record<string, unknown> | null;
-                if (body?.status === 'approved') {
-                    const noticeId = `knock-answer:${k.url}:${body.invite ?? 'approved'}`;
-                    const claimed = await claim([noticeId], deps.storage, now);
-                    if (claimed.length > 0) {
-                        await deps.post({
-                            title: 'BeanPool',
-                            body: 'A community answered your request.',
-                            data: { ...LOCAL_NOTICE_DATA, type: 'knock-answer', url: k.url },
-                        });
-                        posted++;
-                    }
-                }
+                await deps.post({ title: PUSH_NOTICE_TITLE, body: t('A community answered your request.'), data: { ...LOCAL_NOTICE_DATA, type: 'knock-answer', url } });
+                posted++;
             } catch (e) {
-                console.log(`[Notices] Knock status check failed for ${k.url}: ${e instanceof Error ? e.message : e}`);
-            } finally {
-                clearTimeout(timer);
+                console.warn('[Notices] Could not post a knock answer', e);
             }
         }
         return posted;
@@ -236,65 +268,84 @@ export async function postKnockStatusNoticesFromSync(deps: {
     }
 }
 
+/** Whether this phone sent its push token to `community` for the account on it (utils/push-registrations.ts). */
+async function pushRegisteredWith(storage: Storage, community: string): Promise<boolean> {
+    try {
+        const list = JSON.parse((await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY)) ?? '[]');
+        return Array.isArray(list) && list.some((c) => communityAddress(c) === community);
+    } catch {
+        return false;
+    }
+}
+
+/** The account's node role on `community`, from the day's remembered answer or a fresh `GET /api/node-admin/me`; null when unknown. */
+async function knockRole(deps: SyncNoticeDeps, community: string, account: Account, now: number): Promise<string | null> {
+    const kept = parseJson(await deps.storage.getItem(KNOCK_ROLE_STORE_KEY));
+    if (kept && kept.community === community && kept.publicKey === account.publicKey && typeof kept.at === 'number'
+        && kept.at <= now && now - kept.at < KNOCK_ROLE_RECHECK_MS) {
+        return typeof kept.role === 'string' ? kept.role : null;
+    }
+    const me = await signedRead(`${community}/api/node-admin/me`, account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, deps.signal) as { role?: unknown } | null;
+    if (!me || typeof me !== 'object') return null;
+    const role = typeof me.role === 'string' ? me.role : null;
+    await deps.storage.setItem(KNOCK_ROLE_STORE_KEY, JSON.stringify({ community, publicKey: account.publicKey, role, at: now }));
+    return role;
+}
+
 /**
- * Polls the admin queue for knocks and posts a local notice if the count increased.
+ * The floor under the `community.knock` push for an owner or admin (design §5.2 floor 1): when the community's count of
+ * open requests to join rose since the last look, one notice ("Someone asked to join your community.", the push's own
+ * words, in the phone's language). Only where this phone has no push from that community (GrapheneOS, no Play services;
+ * or a registration that never landed): a phone with push is told by the push, never twice. The admin-only queue is read
+ * only for an account the community says is an owner or admin, asked once a day (`GET /api/node-admin/me`, any member's),
+ * so a member's sync never reads it. Never throws.
  */
-export async function postAdminKnockNoticesFromSync(deps: {
-    storage: Storage;
-    account: Account | null;
-    post: (notice: LocalNotice) => Promise<unknown>;
-    now?: number;
-    timeoutMs?: number;
-}): Promise<number> {
-    if (!deps.account?.publicKey || !deps.account.privateKey) return 0;
+export async function postAdminKnockNoticesFromSync(deps: SyncNoticeDeps): Promise<number> {
+    const now = deps.now ?? Date.now();
+    const account = deps.account;
+    if (!account?.publicKey || !account.privateKey) return 0;
     try {
         const community = communityAddress(await deps.storage.getItem(ANCHOR_STORE_KEY));
         if (!community) return 0;
-        const url = `${community}/api/node-admin/queue`;
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
-        let items: Array<{ kind: string; count: number }> | null = null;
-        try {
-            const headers = await buildSignedHeaders('GET', url, '', deps.account.privateKey, deps.account.publicKey);
-            const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
-            if (!res.ok) return 0;
-            const body = await res.json().catch(() => null) as { items?: unknown } | null;
-            if (Array.isArray(body?.items)) items = body.items as Array<{ kind: string; count: number }>;
-        } catch (e) {
-            console.log(`[Notices] Admin queue check failed for ${community}: ${e instanceof Error ? e.message : e}`);
-            return 0;
-        } finally {
-            clearTimeout(timer);
-        }
-
-        if (!items) return 0;
-        const knockItem = items.find(i => i && i.kind === 'knocks');
-        const count = knockItem && typeof knockItem.count === 'number' ? knockItem.count : 0;
-
-        const lastRaw = await deps.storage.getItem(ADMIN_KNOCKS_COUNT_STORE_KEY);
-        if (lastRaw === null) {
-            await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, String(count));
+        if (await pushRegisteredWith(deps.storage, community)) {
+            // The push tells this phone. What was last seen is dropped, so a phone that loses its push starts afresh.
+            await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, '');
             return 0;
         }
-        const lastCount = !Number.isNaN(Number(lastRaw)) ? Number(lastRaw) : 0;
-        await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, String(count));
+        const role = await knockRole(deps, community, account, now);
+        if (role !== 'owner' && role !== 'admin') return 0;
+        const queue = await signedRead(`${community}/api/node-admin/queue`, account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, deps.signal) as { items?: unknown } | null;
+        if (!queue || !Array.isArray(queue.items)) return 0;
+        const item = (queue.items as Array<{ kind?: unknown; count?: unknown }>).find((i) => i?.kind === 'knocks');
+        const count = typeof item?.count === 'number' && item.count > 0 ? item.count : 0;
 
-        if (count > lastCount) {
-            try {
-                await deps.post({
-                    title: 'BeanPool',
-                    body: 'Someone asked to join your community.',
-                    data: { ...LOCAL_NOTICE_DATA, type: 'admin-knocks' },
-                });
-                return 1;
-            } catch (e) {
-                console.warn('[Notices] Could not post admin knock notice', e);
-                return 0;
-            }
-        }
-        return 0;
+        const last = parseJson(await deps.storage.getItem(ADMIN_KNOCKS_COUNT_STORE_KEY));
+        await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, JSON.stringify({ community, publicKey: account.publicKey, count }));
+        // The first look on this phone, for this account and community, only writes the count down: no notice for old news.
+        if (!last || last.community !== community || last.publicKey !== account.publicKey || typeof last.count !== 'number') return 0;
+        if (count <= last.count) return 0;
+        const words = pushNoticeWords('community.knock');
+        await deps.post({ title: words.title, body: words.body, data: { ...LOCAL_NOTICE_DATA, type: 'admin-knocks' } });
+        return 1;
     } catch (e) {
         console.warn('[Notices] Failed to check admin knocks in sync', e);
         return 0;
+    }
+}
+
+/**
+ * Every notice the background sync posts (services/push-notifications.ts postNoticesAfterSync): the community's unseen
+ * notices, the answers to this phone's requests to join, and new requests for an owner or admin without push, all asked
+ * at once under one deadline (`timeoutMs`), so a slow or unreachable community can't take the task past iOS's ~30
+ * seconds. Returns how many were posted. Never throws.
+ */
+export async function postAllNoticesFromSync(deps: Omit<SyncNoticeDeps, 'signal'>): Promise<number> {
+    const { signal, done } = bounded(deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS);
+    try {
+        const shared = { ...deps, signal };
+        const counts = await Promise.all([postNoticesFromSync(shared), postKnockStatusNoticesFromSync(shared), postAdminKnockNoticesFromSync(shared)]);
+        return counts.reduce((a, b) => a + b, 0);
+    } finally {
+        done();
     }
 }

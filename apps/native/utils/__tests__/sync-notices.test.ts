@@ -27,7 +27,9 @@ vi.mock('expo-crypto', async () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { markNoticeShown, postNoticesFromSync, SYNC_NOTICE_MAX_AGE_MS, type LocalNotice } from '../sync-notices';
+import { markNoticeShown, postNoticesFromSync, KNOCK_ROLE_RECHECK_MS, SYNC_NOTICE_MAX_AGE_MS, type LocalNotice } from '../sync-notices';
+import { PUSH_REGISTERED_AT_STORE_KEY } from '../storage-keys';
+import { pushNoticeWords } from '@beanpool/core';
 import { checkTap, checkWhileOpen, LOCAL_NOTICE_DATA } from '../push-notice-check';
 import { boundSignatureValid } from './server-signature-check';
 
@@ -222,47 +224,137 @@ describe('local notices from the background sync', () => {
         expect(postedKnocks[0].title).toBe('BeanPool');
         expect(postedKnocks[0].body).toBe('A community answered your request.');
     });
+});
 
-    it('background sync seeds knock count on initial sync without posting a notice', async () => {
-        const { postAdminKnockNoticesFromSync, ADMIN_KNOCKS_COUNT_STORE_KEY } = await import('../sync-notices');
-        const adminAccount = account();
+// ── Requests to join (front doors S1): the floor under the community.knock push, and the answers to the asker ──────
 
-        vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
-            total: 2,
-            items: [{ kind: 'knocks', count: 2, label: 'People asking to join', section: 'home', settingsPath: '/settings#section=home' }],
-        }), { status: 200 }));
+describe('requests to join, from the background sync', () => {
+    type Route = (url: URL, signedBy: boolean) => Response | Promise<Response>;
+    /** The community: each path's answer; every request recorded, as the fake above does. */
+    function community(routes: Record<string, Route>) {
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = new URL(String(input));
+            const headers = (init?.headers ?? {}) as Record<string, string>;
+            const signer = headers['X-Public-Key'];
+            const signedBy = !!signer && boundSignatureValid({ url: String(input), method: init?.method ?? 'GET', headers, body: String(init?.body ?? '') }, signer);
+            requests.push({ url: String(input), signedBy });
+            const route = routes[`${url.origin}${url.pathname}`];
+            if (!route) return new Response('{}', { status: 404 });
+            if (!signedBy) return new Response('{}', { status: 401 });
+            return route(url, signedBy);
+        }));
+    }
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+    let role: string | null;
+    let open: number;
+    const adminRoutes = () => community({
+        [`${MULLUM}/api/node-admin/me`]: () => json({ role, communityName: 'Mullumbimby' }),
+        [`${MULLUM}/api/node-admin/queue`]: () => (role ? json({ total: open, items: open ? [{ kind: 'knocks', count: open, label: 'Requests to join', section: 'home' }] : [] })
+            : json({ error: 'Only the node owner, an admin or a moderator can see the admin queue' }, 403)),
+    });
+    const admin = async (now = Date.now()) => {
+        const { postAdminKnockNoticesFromSync } = await import('../sync-notices');
+        return postAdminKnockNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (n) => { posted.push(n); }, now });
+    };
+    const asked = (path: string) => requests.filter((r) => new URL(r.url).pathname === path).length;
 
-        const postedAdmin: LocalNotice[] = [];
-        const count = await postAdminKnockNoticesFromSync({
-            storage: AsyncStorage,
-            account: adminAccount,
-            post: async (n) => { postedAdmin.push(n); },
-        });
+    beforeEach(() => { role = 'owner'; open = 0; });
 
-        expect(count).toBe(0);
-        expect(postedAdmin).toHaveLength(0);
-        expect(await AsyncStorage.getItem(ADMIN_KNOCKS_COUNT_STORE_KEY)).toBe('2');
+    it('an owner with no push here (GrapheneOS): the first look only writes the count down; a new request is one notice, in the push\'s words', async () => {
+        adminRoutes();
+        open = 2;
+        expect(await admin()).toBe(0);
+        expect(posted).toEqual([]);
+        open = 3;
+        expect(await admin()).toBe(1);
+        expect(posted).toHaveLength(1);
+        expect({ title: posted[0].title, body: posted[0].body }).toEqual(pushNoticeWords('community.knock'));
+        expect(posted[0].body).toBe('Someone asked to join your community.');
+        expect(posted[0].data).toMatchObject(LOCAL_NOTICE_DATA);
+        // No name, key or id: counts and kinds only.
+        expect(JSON.stringify(posted[0])).not.toMatch(/[0-9a-f]{64}/);
+        // The same count, or fewer (one answered), says nothing.
+        expect(await admin()).toBe(0);
+        open = 1;
+        expect(await admin()).toBe(0);
+        expect(requests.every((r) => r.signedBy)).toBe(true);
     });
 
-    it('background sync posts a notice when admin queue knocks count rises', async () => {
-        const { postAdminKnockNoticesFromSync, ADMIN_KNOCKS_COUNT_STORE_KEY } = await import('../sync-notices');
-        const adminAccount = account();
-        await AsyncStorage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, '1');
+    it('an owner whose phone has push from this community is told by the push alone: no read, no second notice', async () => {
+        adminRoutes();
+        mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([MULLUM]));
+        open = 1;
+        expect(await admin()).toBe(0);
+        open = 4;
+        expect(await admin()).toBe(0);
+        expect(posted).toEqual([]);
+        expect(requests).toEqual([]);
+        // Push from another community only: this one still gets the floor.
+        mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify(['https://castlemaine.beanpool.org']));
+        expect(await admin()).toBe(0);
+        open = 5;
+        expect(await admin()).toBe(1);
+    });
 
-        vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({
-            total: 2,
-            items: [{ kind: 'knocks', count: 2, label: 'People asking to join', section: 'home', settingsPath: '/settings#section=home' }],
-        }), { status: 200 }));
+    it("a member's sync never reads the admin-only queue: it asks its role once a day, any member's read", async () => {
+        adminRoutes();
+        role = null;
+        open = 3;
+        const t0 = Date.now();
+        expect(await admin(t0)).toBe(0);
+        expect(await admin(t0 + 60_000)).toBe(0);
+        expect(await admin(t0 + 23 * 60 * 60 * 1000)).toBe(0);
+        expect(asked('/api/node-admin/queue')).toBe(0);
+        expect(asked('/api/node-admin/me')).toBe(1);
+        // A day on, asked again: made an admin since, the queue is read from then.
+        role = 'admin';
+        expect(await admin(t0 + KNOCK_ROLE_RECHECK_MS)).toBe(0);
+        expect(asked('/api/node-admin/me')).toBe(2);
+        expect(asked('/api/node-admin/queue')).toBe(1);
+        open = 4;
+        expect(await admin(t0 + KNOCK_ROLE_RECHECK_MS + 60_000)).toBe(1);
+    });
 
-        const postedAdmin: LocalNotice[] = [];
-        const count = await postAdminKnockNoticesFromSync({
-            storage: AsyncStorage,
-            account: adminAccount,
-            post: async (n) => { postedAdmin.push(n); },
+    it('a community that said yes is asked once per sync, and a request the member cancelled is not asked at all', async () => {
+        const CASTLE = 'https://castlemaine.beanpool.org';
+        community({
+            [`${MULLUM}/api/join/knock/status`]: () => json({ status: 'approved', invite: 'INV-1', expiresAt: null }),
+            [`${CASTLE}/api/join/knock/status`]: () => json({ status: 'pending' }),
         });
+        mem.async.set('beanpool_knocks', JSON.stringify({
+            pubkey: kim.publicKey,
+            knocks: [
+                { url: MULLUM, name: 'Mullumbimby', key: 'mullum', sentAt: new Date().toISOString() },
+                { url: CASTLE, name: 'Castlemaine', key: 'castle', sentAt: new Date().toISOString(), cancelledAt: new Date().toISOString() },
+            ],
+        }));
+        const { postKnockStatusNoticesFromSync } = await import('../sync-notices');
+        const once = () => postKnockStatusNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (n) => { posted.push(n); } });
+        expect(await once()).toBe(1);
+        expect(await once()).toBe(0);
+        expect(posted.map((n) => n.body)).toEqual(['A community answered your request.']);
+        expect(requests.map((r) => r.url)).toEqual([`${MULLUM}/api/join/knock/status`, `${MULLUM}/api/join/knock/status`]);
+    });
 
-        expect(count).toBe(1);
-        expect(postedAdmin[0].title).toBe('BeanPool');
-        expect(postedAdmin[0].body).toBe('Someone asked to join your community.');
+    it("all of it under one deadline: a community that never answers can't hold the task past it (iOS gives ~30 s)", async () => {
+        // Every read hangs until it is aborted.
+        vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+            requests.push({ url: String(input), signedBy: true });
+            return new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            });
+        }));
+        mem.async.set('beanpool_knocks', JSON.stringify({
+            pubkey: kim.publicKey,
+            knocks: ['https://a.example.org', 'https://b.example.org', 'https://c.example.org'].map((url) => ({ url, name: null, key: null, sentAt: new Date().toISOString() })),
+        }));
+        const { postAllNoticesFromSync } = await import('../sync-notices');
+        const started = Date.now();
+        const n = await postAllNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (x) => { posted.push(x); }, timeoutMs: 300 });
+        const took = Date.now() - started;
+        expect(n).toBe(0);
+        // The unseen notices, three answers and the role: asked side by side, so the whole waits one deadline, not five.
+        expect(requests).toHaveLength(5);
+        expect(took).toBeLessThan(900);
     });
 });

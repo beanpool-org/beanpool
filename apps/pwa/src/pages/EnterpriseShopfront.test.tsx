@@ -845,7 +845,8 @@ describe("the keepers' Manage tab", () => {
             await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: `/api/treasury/${ENT}/shop/offers`, body: { postIds: ['p5'] } }]));
         });
 
-        const listingsReads = () => reads().filter((r) => r.startsWith('/api/marketplace/posts?')).length;
+        // The members' read only: the keepers' Paused section reads again too, with keeper=1.
+        const listingsReads = () => reads().filter((r) => r.startsWith('/api/marketplace/posts?') && !r.includes('keeper=1')).length;
         const saveAbout = (panel: HTMLElement) => {
             fireEvent.change(within(panel).getByTestId('manage-face-about'), { target: { value: 'We bake on Sundays now.' } });
             fireEvent.click(within(panel).getByTestId('manage-face-save'));

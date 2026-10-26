@@ -316,8 +316,8 @@ export function ShopfrontPaused({ listings, onOpen }: { listings: ShopfrontListi
                                 <span className="flex items-center gap-1.5 mt-0.5">
                                     <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
                                         l.type === 'offer'
-                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                            ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                            : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                     }`}>
                                         {l.type === 'offer' ? t('OFFER') : t('NEED')}
                                     </span>

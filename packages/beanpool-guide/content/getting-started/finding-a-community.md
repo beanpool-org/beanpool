@@ -34,7 +34,7 @@ A community that hasn't published its address is listed, but it can't be asked f
 
 Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
-While you wait, the community's card says **You asked to join. No answer yet**, with how promptly the community answers (such as **Usually answers within a week** or **Hasn't answered requests lately**). You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
+While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 
 If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours.
 

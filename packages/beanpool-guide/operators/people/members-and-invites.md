@@ -50,11 +50,6 @@ If a request waits **3 days** without an answer in an Invite community (any memb
 
 If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
 
-Your server measures how promptly requests are answered over its last 90 days and publishes this line to the directory:
-- **"Usually answers within a week"** when at least 80% of requests were answered within 7 days and none is older than 14 days.
-- **"Hasn't answered requests lately"** when an open request is older than 14 days or fewer than half were answered. Communities with this status for 60 days sort after those that answer within their distance band.
-- Nothing is shown until at least 3 requests have been received.
-
 **While no new members are being taken** (the community is paused), the card says so first. No choice is marked as the one in use; the one from before the pause is marked "before the pause". Saving either choice takes new members again, and every member is told. Until the manager has checked whether the community is paused, it won't save: if it can't check, reload to try again.
 
 **While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The card says so first, in the server's words, with what would end it, and offers nothing to save until the preview is off.

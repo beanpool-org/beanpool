@@ -5877,5 +5877,6 @@
   "Failed to load": "読み込みに失敗しました",
   "Turn on": "オンにする",
   "Turn on notifications?": "通知をオンにしますか？",
-  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。"
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "スマートフォンの設定で BeanPool の通知がオフになっています。オンにするには設定を開いてください。"
 }

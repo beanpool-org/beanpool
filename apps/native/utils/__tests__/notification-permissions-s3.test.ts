@@ -20,6 +20,9 @@ vi.mock('react-native', () => ({
     Alert: {
         alert: vi.fn(),
     },
+    Linking: {
+        openSettings: vi.fn(async () => {}),
+    },
 }));
 
 const mem = vi.hoisted(() => ({
@@ -68,6 +71,7 @@ import {
     turnOnNotifications,
     declineNotifications,
     askNotificationPermissionOnAction,
+    NOTIFICATIONS_OFF_IN_SETTINGS,
     type NotificationPermissionRecord,
 } from '../notification-permission';
 
@@ -303,6 +307,89 @@ describe('S3: notification permission at the tap, never at account creation', ()
             notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true } as any);
             await declineNotifications();
             expect((await readNotificationPermissionRecord()).state).toBe('declined');
+        });
+    });
+
+    // #2524 deciding review, finding 3: once the phone won't show its dialog again (iOS after Don't Allow, Android 13+
+    // after a second denial, notifications off in the phone's settings), requestPermissionsAsync returns "denied" with
+    // nothing shown. Turn on then says why in one line and opens BeanPool's page in the phone's settings.
+    describe("the phone won't ask again (canAskAgain: false)", () => {
+        beforeEach(() => {
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false } as any);
+            notificationsMock.requestPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false } as any);
+        });
+
+        it("Turn on gives the one-line reason, then opens the phone's settings; the card stays", async () => {
+            const confirmSettings = vi.fn(async () => 'turn_on' as const);
+            const openSettings = vi.fn(async () => {});
+
+            const res = await turnOnNotifications('test-pubkey', undefined, { confirmSettings, openSettings });
+
+            expect(res).toBe('settings');
+            expect(confirmSettings).toHaveBeenCalledTimes(1);
+            expect(openSettings).toHaveBeenCalledTimes(1);
+            expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+            const rec = await readNotificationPermissionRecord();
+            expect(rec.state).toBe('unanswered');
+            expect(shouldShowNotificationCard(rec, false)).toBe(true);
+        });
+
+        it('the default Turn on shows the reason in an Alert, and its Open Settings opens Linking.openSettings', async () => {
+            const rn = await import('react-native');
+            const alert = vi.mocked(rn.Alert.alert);
+            alert.mockImplementationOnce((_title, _body, buttons) => { buttons?.[1]?.onPress?.(); });
+
+            const res = await turnOnNotifications('test-pubkey');
+
+            expect(res).toBe('settings');
+            expect(alert).toHaveBeenCalledTimes(1);
+            const [title, body, buttons] = alert.mock.calls[0];
+            expect(title).toBe('Turn on notifications?');
+            expect(body).toBe(NOTIFICATIONS_OFF_IN_SETTINGS);
+            expect(buttons?.map((b) => b.text)).toEqual(['Not now', 'Open Settings']);
+            expect(rn.Linking.openSettings).toHaveBeenCalledTimes(1);
+            expect((await readNotificationPermissionRecord()).state).toBe('unanswered');
+        });
+
+        it('Not now at that line stores declined and opens nothing', async () => {
+            const openSettings = vi.fn(async () => {});
+            const res = await turnOnNotifications('test-pubkey', undefined, {
+                confirmSettings: vi.fn(async () => 'not_now' as const), openSettings,
+            });
+            expect(res).toBe('declined');
+            expect(openSettings).not.toHaveBeenCalled();
+            expect((await readNotificationPermissionRecord()).state).toBe('declined');
+        });
+
+        it('once the phone allows them, the card goes (back from settings)', async () => {
+            await turnOnNotifications('test-pubkey', undefined, { confirmSettings: async () => 'turn_on', openSettings: async () => {} });
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true } as any);
+            const rec = await readNotificationPermissionRecord();
+            expect(shouldShowNotificationCard(rec, true)).toBe(false);
+        });
+
+        it("first message: one prompt that says they're off in settings; its button opens the settings, with no second dialog", async () => {
+            await declineNotifications();
+            const promptUser = vi.fn(async (_kind: 'ask' | 'settings') => 'turn_on' as const);
+            const openSettings = vi.fn(async () => {});
+            const rn = await import('react-native');
+
+            const res = await askNotificationPermissionOnAction('message', 'test-pubkey', { promptUser, openSettings });
+
+            expect(promptUser).toHaveBeenCalledTimes(1);
+            expect(promptUser).toHaveBeenCalledWith('settings');
+            expect(openSettings).toHaveBeenCalledTimes(1);
+            expect(rn.Alert.alert).not.toHaveBeenCalled();
+            expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+            expect(res).toBe('declined');
+            expect((await readNotificationPermissionRecord()).messageRetried).toBe(true);
+        });
+
+        it('while the phone can still ask, the first-message prompt is the plain ask', async () => {
+            notificationsMock.getPermissionsAsync.mockResolvedValue({ status: 'undetermined', canAskAgain: true } as any);
+            const promptUser = vi.fn(async (_kind: 'ask' | 'settings') => 'not_now' as const);
+            await askNotificationPermissionOnAction('message', 'test-pubkey', { promptUser });
+            expect(promptUser).toHaveBeenCalledWith('ask');
         });
     });
 

@@ -8,7 +8,7 @@
  * - Buttons: "Turn on" · "Not now"
  */
 import React, { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { t } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
@@ -29,7 +29,7 @@ export function NotificationPermissionCard({ colors, onAnswered }: { colors: App
     useFocusEffect(
         useCallback(() => {
             let live = true;
-            (async () => {
+            const check = async () => {
                 const [record, osGranted] = await Promise.all([
                     readNotificationPermissionRecord(),
                     checkOsNotificationPermission(),
@@ -37,8 +37,11 @@ export function NotificationPermissionCard({ colors, onAnswered }: { colors: App
                 if (live) {
                     setVisible(shouldShowNotificationCard(record, osGranted));
                 }
-            })();
-            return () => { live = false; };
+            };
+            void check();
+            // Back from the phone's settings (Turn on when the phone won't ask again): the card goes once they allow it.
+            const sub = AppState?.addEventListener?.('change', (next) => { if (next === 'active') void check(); });
+            return () => { live = false; sub?.remove(); };
         }, []),
     );
 
@@ -48,9 +51,12 @@ export function NotificationPermissionCard({ colors, onAnswered }: { colors: App
         if (busy) return;
         setBusy(true);
         try {
-            await turnOnNotifications(identity?.publicKey);
-            setVisible(false);
-            onAnswered?.();
+            const result = await turnOnNotifications(identity?.publicKey);
+            // 'settings': the phone's settings opened; nothing is answered yet, so the card stays.
+            if (result !== 'settings') {
+                setVisible(false);
+                onAnswered?.();
+            }
         } finally {
             setBusy(false);
         }

@@ -12,7 +12,7 @@
  * - Nothing asked after a restore (the restored member lands on Home; the notifications card asks only when tapped).
  * - Ask at the first knock or message if unanswered or declined; never on subsequent knocks or messages.
  */
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import { t, word } from '@beanpool/core';
@@ -134,19 +134,57 @@ async function registerPushToken(publicKey?: string | null): Promise<void> {
     }
 }
 
+export type TurnOnResult = 'granted' | 'declined' | 'settings';
+
+export interface TurnOnOptions {
+    /** The one-line reason before the phone's settings open (tests inject it; the app shows an Alert). */
+    confirmSettings?: () => Promise<'turn_on' | 'not_now'>;
+    /** Opens BeanPool's page in the phone's settings (tests inject it; the app uses Linking.openSettings). */
+    openSettings?: () => Promise<void>;
+    /** The member already answered a prompt that said notifications are off in the phone's settings. */
+    skipSettingsConfirm?: boolean;
+}
+
+async function defaultOpenSettings(): Promise<void> {
+    await Linking.openSettings().catch((e: unknown) => console.warn('[Push] Could not open the phone settings:', e));
+}
+
 /**
  * Tapping "Turn on" on the card: requests system permission, saves the state, and if granted registers the push token.
+ * When the phone won't show its dialog again (`canAskAgain: false`: iOS after Don't Allow, Android 13+ after a second
+ * denial, or notifications switched off in the phone's settings), requesting would return "denied" with nothing shown,
+ * so "Turn on" says why in one line and opens BeanPool's page in the phone's settings instead. Nothing is stored then
+ * ('settings'): the card stays until the phone allows notifications or the member says Not now.
  */
-export async function turnOnNotifications(publicKey?: string | null, storage: StorageLike = AsyncStorage): Promise<'granted' | 'declined'> {
+export async function turnOnNotifications(
+    publicKey?: string | null,
+    storage: StorageLike = AsyncStorage,
+    options: TurnOnOptions = {},
+): Promise<TurnOnResult> {
+    const os = await readOsNotificationPermission();
     let status = 'denied';
-    try {
-        const notif = await getNotificationsModule();
-        if (notif?.requestPermissionsAsync) {
-            const res = await notif.requestPermissionsAsync();
-            status = res.status;
+    if (os.granted) {
+        status = 'granted';
+    } else if (os.available && !os.canAskAgain) {
+        const choice = options.skipSettingsConfirm
+            ? 'turn_on'
+            : await (options.confirmSettings ?? (() => defaultAlertPrompt('settings-after-card')))();
+        if (choice === 'turn_on') {
+            await (options.openSettings ?? defaultOpenSettings)();
+            return 'settings';
         }
-    } catch {
-        status = 'denied';
+        await declineNotifications(storage);
+        return 'declined';
+    } else {
+        try {
+            const notif = await getNotificationsModule();
+            if (notif?.requestPermissionsAsync) {
+                const res = await notif.requestPermissionsAsync();
+                status = res.status;
+            }
+        } catch {
+            status = 'denied';
+        }
     }
 
     const existing = await readNotificationPermissionRecord(storage);
@@ -172,21 +210,32 @@ export async function declineNotifications(storage: StorageLike = AsyncStorage):
 }
 
 export interface ActionPromptOptions {
-    promptUser?: () => Promise<'turn_on' | 'not_now'>;
+    /** 'ask' when the phone can still show its dialog; 'settings' when only its settings can turn notifications on. */
+    promptUser?: (kind: 'ask' | 'settings') => Promise<'turn_on' | 'not_now'>;
+    openSettings?: () => Promise<void>;
     storage?: StorageLike;
 }
 
+/** The one line said before the phone's settings open, when the phone won't show its own dialog again. */
+export const NOTIFICATIONS_OFF_IN_SETTINGS = word("Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.");
+
 /**
  * Prompt helper using React Native Alert when promptUser is not injected.
+ * 'ask': the reason, then Turn on (the system dialog follows). 'settings': the reason and that notifications are off in
+ * the phone's settings, then Open Settings. 'settings-after-card': only the settings line, as the card above has just
+ * given the reason.
  */
-function defaultAlertPrompt(): Promise<'turn_on' | 'not_now'> {
+function defaultAlertPrompt(kind: 'ask' | 'settings' | 'settings-after-card' = 'ask'): Promise<'turn_on' | 'not_now'> {
+    const reason = t('So you hear when someone answers you, messages you, or asks to join. Nothing else.');
+    const off = t("Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.");
+    const body = kind === 'ask' ? reason : kind === 'settings' ? `${reason}\n\n${off}` : off;
     return new Promise((resolve) => {
         Alert.alert(
             t('Turn on notifications?'),
-            t('So you hear when someone answers you, messages you, or asks to join. Nothing else.'),
+            body,
             [
                 { text: t('Not now'), style: 'cancel', onPress: () => resolve('not_now') },
-                { text: t('Turn on'), onPress: () => resolve('turn_on') },
+                { text: kind === 'ask' ? t('Turn on') : t('Open Settings'), onPress: () => resolve('turn_on') },
             ],
             { cancelable: false },
         );
@@ -199,7 +248,8 @@ function defaultAlertPrompt(): Promise<'turn_on' | 'not_now'> {
  * never ask on subsequent knocks or messages.
  * The phone is read first: where it already allows notifications (every Android 8–12 phone, and members who allowed the
  * old boot prompt), the token is registered silently and nothing is shown. Where expo-notifications can't load (no
- * native module in this build), there is nothing to turn on, so nothing is asked either.
+ * native module in this build), there is nothing to turn on, so nothing is asked either. Where the phone won't show its
+ * dialog again, the one prompt says so and its button opens the phone's settings.
  */
 export async function askNotificationPermissionOnAction(
     action: 'knock' | 'message',
@@ -221,18 +271,19 @@ export async function askNotificationPermissionOnAction(
     }
     if (!os.available) return record.state;
 
+    const kind = os.canAskAgain ? 'ask' : 'settings';
     const prompter = options?.promptUser ?? defaultAlertPrompt;
-    const choice = await prompter();
+    const choice = await prompter(kind);
 
     const updated = await readNotificationPermissionRecord(storage);
     if (choice === 'turn_on') {
-        const res = await turnOnNotifications(publicKey, storage);
+        const res = await turnOnNotifications(publicKey, storage, { skipSettingsConfirm: true, openSettings: options?.openSettings });
         const latest = await readNotificationPermissionRecord(storage);
         await writeNotificationPermissionRecord({
             ...latest,
             [action === 'knock' ? 'knockRetried' : 'messageRetried']: true,
         }, storage);
-        return res;
+        return res === 'settings' ? latest.state : res;
     } else {
         await writeNotificationPermissionRecord({
             ...updated,

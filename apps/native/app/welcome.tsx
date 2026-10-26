@@ -187,14 +187,17 @@ export default function WelcomeScreen() {
     useEffect(() => {
         if (mode !== 'onboardingGuide') return;
         let live = true;
-        (async () => {
+        const check = async () => {
             const [record, osGranted] = await Promise.all([
                 readNotificationPermissionRecord(),
                 checkOsNotificationPermission(),
             ]);
             if (live) setNotifVisible(shouldShowNotificationCard(record, osGranted));
-        })();
-        return () => { live = false; };
+        };
+        void check();
+        // Back from the phone's settings (Turn on when the phone won't ask again): the card goes once they allow it.
+        const sub = AppState?.addEventListener?.('change', (next) => { if (next === 'active') void check(); });
+        return () => { live = false; sub?.remove(); };
     }, [mode]);
     // Communities this device has joined before. They survive an identity wipe on purpose, so
     // a member recovering on the same phone can tap theirs rather than retype its address.
@@ -2531,8 +2534,9 @@ export default function WelcomeScreen() {
                                 <Pressable
                                     style={[styles.primaryBtn, { minHeight: 44, marginTop: 12, marginBottom: 8 }]}
                                     onPress={async () => {
-                                        await turnOnNotifications(pendingIdentity?.publicKey);
-                                        setNotifVisible(false);
+                                        const result = await turnOnNotifications(pendingIdentity?.publicKey);
+                                        // 'settings': the phone's settings opened; nothing is answered yet, so the card stays.
+                                        if (result !== 'settings') setNotifVisible(false);
                                     }}
                                     accessibilityRole="button"
                                     testID="guide-notification-turn-on"

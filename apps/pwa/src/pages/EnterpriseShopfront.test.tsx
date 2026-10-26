@@ -21,6 +21,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import * as identityLib from '../lib/identity';
 import * as pictureCrop from '../lib/picture-crop';
+import * as photoResize from '../lib/photo-resize';
 
 /**
  * A picture picked in Manage goes through the crop step (components/PictureCropDialog.tsx): the file read (jsdom decodes
@@ -881,7 +882,11 @@ describe("the keepers' Manage tab", () => {
             fireEvent.click(found(ACTIONS.find((a) => a.what === 'post its Offer')!, panel) as HTMLElement);
             fireEvent.change(screen.getByPlaceholderText('e.g. Dozen fresh eggs'), { target: { value: 'Honey cake' } });
             fireEvent.change(screen.getByPlaceholderText('20'), { target: { value: '7' } });
-            fireEvent.click(screen.getByRole('button', { name: 'Publish Listing' }));
+            // Every new Offer has a photo: until one is added, the button reads 📷 Add a photo (TreasuryDetailPage.post-photos.test.tsx).
+            vi.spyOn(photoResize, 'resizePhotoFile').mockResolvedValue('data:image/jpeg;base64,SE9ORVk=');
+            const photo = within(screen.getByRole('dialog')).getByLabelText('Add photo');
+            await act(async () => { fireEvent.change(photo, { target: { files: [new File(['raw'], 'cake.jpg', { type: 'image/jpeg' })] } }); });
+            fireEvent.click(await screen.findByRole('button', { name: 'Publish Listing' }));
             await waitFor(() => expect(byId('manage-shop-outside')?.textContent).toBe("2 of its live Offers aren't in its shop yet, so they can't be featured."));
             expect(byId('manage-feature-p3')).toBeInTheDocument();
 

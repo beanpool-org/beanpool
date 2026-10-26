@@ -442,6 +442,8 @@ afterEach(() => {
 });
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+/** Ticks until `done()` holds or `ms` pass: for a step whose end comes after real awaits (SQLite, storage, a dynamic import), which a fixed tick count can outrun on a slow runner. */
+const settleUntil = async (done: () => boolean, ms = 20000) => { const end = Date.now() + ms; while (!done() && Date.now() < end) await settle(1); };
 async function drawTool(id: string, extra: Record<string, string> = {}, lang: 'xx' | 'en' = 'xx') {
     setLanguage(lang);
     nav.params = { id, ...extra };
@@ -751,7 +753,8 @@ describe('the route around a tool', () => {
         await click(byTestId('tool-menu'), 'the "…"');
         await click(byTestId('tool-menu-remove'), 'Remove my data');
         await act(async () => { alerts.buttons.find((b) => b.text === 'Remove')!.onPress!(); });
-        await settle();
+        // The way back to the first screen comes at the end of the remove chain (app/tool/[id].tsx remove: copy, data, settings, then setParams).
+        await settleUntil(() => byTestId('tool-doors') !== null);
         expect((await readToolDoc(ME.publicKey, KIT)).stored).toBe(false);
         expect(host.textContent).not.toContain('One thing');
         expect(byTestId('tool-doors')).not.toBeNull();

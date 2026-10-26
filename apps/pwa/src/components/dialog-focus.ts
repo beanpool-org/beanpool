@@ -54,7 +54,9 @@ export function useDialogFocus(dialog: RefObject<HTMLDivElement | null>, onClose
             const first = items[0];
             const last = items[items.length - 1];
             const active = document.activeElement;
-            if (!box.contains(active)) {
+            // Outside, or on something inside that isn't a Tab stop (the heading or the box focused on open, tabIndex -1):
+            // the browser's own Shift+Tab would leave the dialog from there. A select or textarea is a Tab stop: left alone.
+            if (!box.contains(active) || (active as HTMLElement).tabIndex < 0) {
                 e.preventDefault();
                 (e.shiftKey ? last : first).focus();
             } else if (e.shiftKey && active === first) {

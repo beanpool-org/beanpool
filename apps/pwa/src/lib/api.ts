@@ -725,6 +725,20 @@ export async function getPulseFeed(options?: {
     return request('GET', `/api/pulse/feed${qs ? `?${qs}` : ''}`);
 }
 
+export interface DailyPulseEntry {
+    date: string;
+    headline: string;
+    body: string;
+}
+
+/**
+ * Fetches today's (or, by date=YYYY-MM-DD, a recent day's) Daily Pulse reflection.
+ */
+export async function getDailyPulse(date?: string): Promise<DailyPulseEntry> {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return request('GET', `/api/pulse/daily${qs}`);
+}
+
 /**
  * The caller's own channels, including ones switched off for the feed.
  * Signed POST /api/channels/mine

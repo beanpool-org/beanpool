@@ -353,6 +353,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/member/re-enroll/status',  // a replacement phone's poll of its re-key ask: signed by a key that is no member yet, the route asks for the signature (routes/community.ts)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
     '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
+    '/api/pulse/daily',              // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
     '/api/federation/links',         // members only (MEMBERS_ONLY_READS_EXACT): link cards carry each link's Beans balance (FED-10)
@@ -413,6 +414,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
 export const MEMBERS_ONLY_READS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
     '/api/pulse/feed',
+    '/api/pulse/daily',
     // The link cards (#143): each link enterprise's Beans balance with a peer community. Public by design until the
     // 2026-09-28 decision that balances are members' business (FED-10); no app reads it, and a member still does.
     '/api/federation/links',

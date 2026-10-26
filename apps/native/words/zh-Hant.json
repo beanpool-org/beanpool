@@ -5872,5 +5872,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries} 次嘗試，每次 {ms} 毫秒（平均預期 {expected} 次）",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "「{title}」已經上架，但不在你的小店裡。若要放進去，請開啟它，點「編輯貼文」，然後勾選「放進你的小店」。",
   "✓ Friend": "✓ 好友",
-  "✓ nonce issued": "✓ 已取得 nonce"
+  "✓ nonce issued": "✓ 已取得 nonce",
+  "Failed to load": "載入失敗"
 }

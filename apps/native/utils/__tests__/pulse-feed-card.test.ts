@@ -165,6 +165,7 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     mockLinking.openURL.mockClear();
+    mockFetchDailyPulse.mockClear();
     lastImageProps = null;
 });
 

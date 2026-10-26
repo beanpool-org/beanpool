@@ -6,6 +6,8 @@
  * gets 403 `key_invalidated` from both):
  *   POST /api/join/knock          { message, callsign, avatar?, fromNode? }  → 201 { knock: { status: 'pending' } }
  *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
+ *   POST /api/join/knock/cancel   → 200 { knock: { status: 'cancelled' } } | 404 `not_found` ("Cancel my request"; the key
+ *                                   may ask again after KNOCK_RULES.cancelBlockHours, 409 `knock_cancelled` before)
  * Any member (tiers gate nothing), signed; where only admins invite (the door, config/door.ts), only an owner or admin,
  * and anyone else is answered 403 `admins_only`:
  *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt }], total, limit, offset }
@@ -179,6 +181,8 @@ function refuseKnock(ctx: any, reason: KnockRefusal): void {
             return answer(ctx, 409, word('You’ve already asked to join. There’s no answer yet.'), reason);
         case 'knock_approved':
             return answer(ctx, 409, word('A member has already invited you. Your app can join with that invite now.'), reason);
+        case 'knock_cancelled':
+            return answer(ctx, 409, tr('You cancelled your request to join less than a day ago. You can ask again {n} hours after you cancelled.', { n: KNOCK_RULES.cancelBlockHours }), reason);
         case 'rate_limited':
             return answer(ctx, 429, tr('Too many requests to join have come from this network today ({n}). Please try again tomorrow.', { n: KNOCK_RULES.perAddressPerDay }), reason);
         case 'busy':
@@ -280,8 +284,9 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         if (!rateLimit(ctx, 'knock')) return;
         const outcome = cancelKnock(applicant);
         if (!outcome.ok) return answer(ctx, 404, word('There’s no open request to join to cancel.'), 'not_found');
+        // The same answer whether it was open or declined (engine/knocks.ts cancelKnock): a decline is never a message.
         ctx.status = 200;
-        ctx.body = { knock: { id: outcome.knock.id, status: outcome.knock.status } };
+        ctx.body = { knock: { status: 'cancelled' } };
     });
 
     router.get('/api/join/knock/status', async (ctx) => {

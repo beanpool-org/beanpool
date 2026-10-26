@@ -15,8 +15,8 @@ import {
     type DirectoryCommunity, type PlaceWatch, type Point,
 } from '../utils/community-directory';
 import {
-    sendKnock, readKnockStatus, rememberedKnocks, rememberKnock, forgetKnock, knockCardState, knockFormProblem,
-    KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
+    sendKnock, readKnockStatus, rememberedKnocks, rememberKnock, forgetKnock, knockCardState, knockFormProblem, cancelKnock, cancelledKnocks,
+    KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
@@ -198,6 +198,8 @@ export default function FindCommunityScreen() {
     const [asked, setAsked] = useState<RememberedKnock[]>([]);
     const [statuses, setStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     const [members, setMembers] = useState<Record<string, string>>({});
+    // Requests this key cancelled within the day (utils/knock.ts cancelledKnocks): said so, and not asked again yet.
+    const [cancelled, setCancelled] = useState<Record<string, number>>({});
 
     const readStatus = useCallback(async (url: string) => {
         if (!identity) return;
@@ -215,6 +217,7 @@ export default function FindCommunityScreen() {
             // Only the communities this key asked: a signed read shows a community who is asking.
             list.forEach(k => { readStatus(k.url); });
         });
+        cancelledKnocks(pubkey).then(c => { if (alive) setCancelled(c); });
         return () => { alive = false; };
     }, [pubkey, readStatus]);
 
@@ -316,16 +319,63 @@ export default function FindCommunityScreen() {
         }
     };
 
+    // "Cancel my request" (front doors S1): asked first, since the key can't ask that community again for a day.
+    const [cancelling, setCancelling] = useState<string | null>(null);
+    const [cancelNotes, setCancelNotes] = useState<Record<string, string>>({});
+    const cancel = (url: string, name: string | null) => {
+        if (!identity) return;
+        Alert.alert(t('Cancel your request to join {name}?', { name: name ?? url.replace(/^https:\/\//, '') }), t('You can ask again after 24 hours.'), [
+            { text: t('Keep it'), style: 'cancel' },
+            {
+                text: t('Cancel my request'), style: 'destructive', onPress: async () => {
+                    setCancelling(url);
+                    const r = await cancelKnock(url, identity);
+                    setCancelling(null);
+                    if (!r.ok) {
+                        // The community's own words (nothing open any more: it lapsed, or a member said yes), and what it says now.
+                        setCancelNotes(n => ({ ...n, [url]: r.message }));
+                        readStatus(url);
+                        return;
+                    }
+                    setAsked(await rememberedKnocks(identity.publicKey));
+                    setCancelled(await cancelledKnocks(identity.publicKey));
+                },
+            },
+        ]);
+    };
+
     const askedUrls = useMemo(() => new Set(asked.map(a => a.url)), [asked]);
-    const stateFor = (url: string | null): KnockCardState =>
-        knockCardState(!!url, !!url && askedUrls.has(url), url && askedUrls.has(url) ? statuses[url] : undefined, url ? members[url] : null);
+    const stateFor = (url: string | null): KnockCardState => url && cancelled[url] && !askedUrls.has(url)
+        ? { kind: 'cancelled', note: KNOCK_MESSAGES.cancelled }
+        : knockCardState(!!url, !!url && askedUrls.has(url), url && askedUrls.has(url) ? statuses[url] : undefined, url ? members[url] : null);
 
     // ── Drawing ─────────────────────────────────────────────────────────────────────────────────────────
     // A plain function, not a component: a component made inside render is a new type on every render, and its
     // text fields would lose focus at each keystroke.
     const renderKnock = (url: string | null, name: string | null, community?: DirectoryCommunity) => {
         const state = stateFor(url);
-        if (state.kind === 'no_address' || state.kind === 'waiting' || state.kind === 'member') {
+        if (state.kind === 'waiting' && url) {
+            const label = name ?? url.replace(/^https:\/\//, '');
+            return (
+                <View>
+                    <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    {!!cancelNotes[url] && <Text style={styles.refusal}>{findLineWords(cancelNotes[url])}</Text>}
+                    <View style={styles.actions}>
+                        <Pressable
+                            style={[styles.secondary, cancelling === url && { opacity: 0.6 }]}
+                            onPress={() => cancel(url, name)}
+                            disabled={!!cancelling}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Cancel your request to join {name}', { name: label })}
+                            testID="find-cancel-request"
+                        >
+                            <Text style={styles.secondaryText}>{cancelling === url ? t('Cancelling…') : t('Cancel my request')}</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            );
+        }
+        if (state.kind === 'no_address' || state.kind === 'waiting' || state.kind === 'cancelled' || state.kind === 'member') {
             return <Text style={styles.note}>{findLineWords(state.note)}</Text>;
         }
         if (state.kind === 'checking') {

@@ -223,6 +223,45 @@ async function main() {
     assert(statusRes.body?.status === 'none', 'status after cancel is none');
     assert(getAdminQueue({ forOwner: true }).items.find(i => i.kind === 'knocks') === undefined, 'queue has 0 knocks after cancel');
 
+    // The guide's 24 hours: no new request from the same key until then, so cancel-and-ask never rings every admin again.
+    db.prepare('UPDATE join_requests SET ip_hash = NULL').run(); // this suite's knocks all come from one address
+    const KNOCK_BODY = { callsign: 'StrangerTwo', message: 'Asking to join again', fromNode: 'https://global.beanpool.org/' };
+    pushedBatches.length = 0;
+    const tooSoon = await call(stranger2, 'POST', '/api/join/knock', KNOCK_BODY);
+    await new Promise(r => setTimeout(r, 50));
+    assert(tooSoon.status === 409 && tooSoon.body?.code === 'knock_cancelled'
+        && tooSoon.body?.error === 'You cancelled your request to join less than a day ago. You can ask again 24 hours after you cancelled.',
+        `asking again within the day is refused in plain words (${tooSoon.status} ${JSON.stringify(tooSoon.body)})`);
+    assert(pushedBatches.length === 0 && getAdminQueue({ forOwner: true }).items.find(i => i.kind === 'knocks') === undefined,
+        `...and nobody is told, and nothing is listed (${pushedBatches.length} pushes)`);
+    const againCancel = await call(stranger2, 'POST', '/api/join/knock/cancel');
+    assert(againCancel.status === 404 && againCancel.body?.code === 'not_found', `nothing open to cancel twice (${againCancel.status})`);
+    // A day and a bit later (the cancel moved back 25 hours): asked again, told once.
+    const dayAgo = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    db.prepare(`UPDATE join_requests SET decided_at = ?, updated_at = ? WHERE pubkey = ? AND status = 'cancelled'`).run(dayAgo, dayAgo, stranger2.pk);
+    pushedBatches.length = 0;
+    const nextDay = await call(stranger2, 'POST', '/api/join/knock', KNOCK_BODY);
+    await new Promise(r => setTimeout(r, 50));
+    assert(nextDay.status === 201 && pushedBatches.filter(p => p.to === 'ExponentPushToken[owner]').length === 1,
+        `after 24 hours the key may ask again, and the owner is told once (${nextDay.status}, ${pushedBatches.length} pushes)`);
+    const cancelAgain = await call(stranger2, 'POST', '/api/join/knock/cancel');
+    assert(cancelAgain.status === 200, `...and may cancel that one too (${cancelAgain.status})`);
+
+    // A declined request (the applicant reads it as waiting): Cancel answers the same, and the decline keeps its 30 days.
+    const stranger4 = newId('StrangerFour');
+    await call(stranger4, 'POST', '/api/join/knock', { ...KNOCK_BODY, callsign: 'StrangerFour' });
+    const declinedId = (db.prepare(`SELECT id FROM join_requests WHERE pubkey = ? AND status = 'pending'`).get(stranger4.pk) as { id: string }).id;
+    assert((await call(admin, 'POST', `/api/join/knocks/${declinedId}/decline`)).status === 200, 'an admin says Not now');
+    const declinedCancel = await call(stranger4, 'POST', '/api/join/knock/cancel');
+    assert(declinedCancel.status === 200 && JSON.stringify(declinedCancel.body) === JSON.stringify(cancelAgain.body),
+        `cancelling a declined request is answered exactly as cancelling an open one: no word of the decline (${JSON.stringify(declinedCancel.body)})`);
+    const declinedRow = db.prepare('SELECT status FROM join_requests WHERE id = ?').get(declinedId) as { status: string };
+    pushedBatches.length = 0;
+    const declinedAgain = await call(stranger4, 'POST', '/api/join/knock', { ...KNOCK_BODY, callsign: 'StrangerFour' });
+    assert(declinedRow.status === 'declined' && declinedAgain.status === 409 && declinedAgain.body?.code === 'knock_open' && pushedBatches.length === 0,
+        `...and the decline still holds its block: asking again is "already asked", and nobody is told (${declinedRow.status} ${declinedAgain.status} ${declinedAgain.body?.code})`);
+    db.prepare(`DELETE FROM join_requests WHERE pubkey IN (?, ?)`).run(stranger2.pk, stranger4.pk);
+
     // ── 4. 7-day owner alert ──
     pushedBatches.length = 0;
     const oldKnockId = crypto.randomUUID();

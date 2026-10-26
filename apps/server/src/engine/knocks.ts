@@ -131,12 +131,18 @@ import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } 
 import { broadcast, dispatchPushNotification } from '../state-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 export const KNOCK_RULES = {
     /** An unanswered knock is open this long, then lapses (the applicant may ask again). */
     openDays: 30,
     /** A declined knock blocks the key this long from the decline, and reads as still open to the applicant. */
     declineBlockDays: 30,
+    /**
+     * A knock its applicant cancelled blocks the same key from asking again this long from the cancel (the guide's 24
+     * hours), so asking, cancelling and asking again can't ring every admin's phone over and over.
+     */
+    cancelBlockHours: 24,
     /** Knocks from one address in any 24 hours. */
     perAddressPerDay: 3,
     /** Knocks made on this node in any 24 hours, from every address together. A reopened knock counts. */
@@ -222,17 +228,21 @@ function listedCount(now: number): number {
  *   - `waiting`: open, or declined within its block (the applicant can't tell which), so no new knock;
  *   - `invited`: approved with an invite that still works, or that this key has already used;
  *   - `lapsed`: an open knock past `openDays` (the same row reopens on the next knock);
- *   - `free`: none, an expired decline block, or an invite that expired unused (a new row on the next knock).
+ *   - `cancelled`: taken back by its applicant within `cancelBlockHours` (no new knock yet; nothing open to read);
+ *   - `free`: none, an expired decline or cancel block, or an invite that expired unused (a new row on the next knock).
  */
 type Standing =
     | { kind: 'waiting'; row: KnockRow }
+    | { kind: 'cancelled'; row: KnockRow }
     | { kind: 'invited'; row: KnockRow; expiresAt: number | null }
     | { kind: 'lapsed'; row: KnockRow }
     | { kind: 'free' };
 
 function standingOf(row: KnockRow | undefined, now: number): Standing {
     if (!row) return { kind: 'free' };
-    if (row.status === 'cancelled') return { kind: 'free' };
+    if (row.status === 'cancelled') {
+        return ageMs(row.decided_at, now) < KNOCK_RULES.cancelBlockHours * HOUR_MS ? { kind: 'cancelled', row } : { kind: 'free' };
+    }
     if (row.status === 'pending') return isOpen(row, now) ? { kind: 'waiting', row } : { kind: 'lapsed', row };
     if (row.status === 'declined') {
         return ageMs(row.decided_at, now) < KNOCK_RULES.declineBlockDays * DAY_MS ? { kind: 'waiting', row } : { kind: 'free' };
@@ -250,7 +260,7 @@ function standingOf(row: KnockRow | undefined, now: number): Standing {
 
 /** `rate_limited`: this address's knocks today. `busy`: a node-wide ceiling, whichever (the applicant did nothing). */
 export type KnockRefusal =
-    'already_member' | 'account_closed' | 'key_invalidated' | 'knock_open' | 'knock_approved' | 'rate_limited' | 'busy';
+    'already_member' | 'account_closed' | 'key_invalidated' | 'knock_open' | 'knock_approved' | 'knock_cancelled' | 'rate_limited' | 'busy';
 
 export interface KnockInput {
     /** The key that signed the knock, lower-case hex. Never a body field. */
@@ -296,6 +306,7 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             const standing = standingOf(latestKnock(pubkey), now);
             if (standing.kind === 'waiting') return { ok: false, reason: 'knock_open' };
             if (standing.kind === 'invited') return { ok: false, reason: 'knock_approved' };
+            if (standing.kind === 'cancelled') return { ok: false, reason: 'knock_cancelled' };
             const fromAddress = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE ip_hash = ? AND created_at >= ?')
                 .get(ipHash, iso(now - DAY_MS)) as { n: number }).n;
             if (fromAddress >= KNOCK_RULES.perAddressPerDay) return { ok: false, reason: 'rate_limited' };
@@ -351,17 +362,21 @@ export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAns
     }
 }
 
-/** Cancel an open request to join from `pubkey`. */
-export function cancelKnock(pubkey: string, now = Date.now()): { ok: true; knock: KnockRow } | { ok: false; reason: string } {
-    const key = pubkey.toLowerCase();
-    const row = latestKnock(key);
-    if (!row || row.status !== 'pending' || !isOpen(row, now)) {
-        return { ok: false, reason: 'not_found' };
+/**
+ * The applicant takes back their request ("Cancel my request", POST /api/join/knock/cancel). An open one is closed:
+ * members no longer see it, and the key may ask again `cancelBlockHours` after (standingOf). A declined one still in its
+ * block is answered the same and left as it is: the applicant can't tell it from an open one (a decline is never a
+ * message), Cancel doesn't tell them either, and the decline keeps its block. Anything else: nothing open to cancel.
+ */
+export function cancelKnock(pubkey: string, now = Date.now()): { ok: true } | { ok: false; reason: 'not_found' } {
+    const standing = standingOf(latestKnock(pubkey.toLowerCase()), now);
+    if (standing.kind !== 'waiting') return { ok: false, reason: 'not_found' };
+    if (standing.row.status === 'pending') {
+        const at = iso(now);
+        db.prepare(`UPDATE join_requests SET status = 'cancelled', decided_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
+            .run(at, at, standing.row.id);
     }
-    const at = iso(now);
-    db.prepare(`UPDATE join_requests SET status = 'cancelled', decided_at = ?, updated_at = ? WHERE id = ?`).run(at, at, row.id);
-    const updated = db.prepare('SELECT * FROM join_requests WHERE id = ?').get(row.id) as KnockRow;
-    return { ok: true, knock: updated };
+    return { ok: true };
 }
 
 // ── The members ──────────────────────────────────────────────────────────────────────────────────────────────────

@@ -111,10 +111,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     );
 }
 
-export function useTheme() {
+export function useTheme(): ThemeContextType {
     const context = useContext(ThemeContext);
     if (!context) {
-        throw new Error('useTheme must be used within a ThemeProvider');
+        return {
+            theme: 'light',
+            themePreference: 'light',
+            patternEnabled: true,
+            colors: lightColors,
+            setThemePreference: async () => {},
+            setPatternEnabled: async () => {},
+        };
     }
     return context;
 }

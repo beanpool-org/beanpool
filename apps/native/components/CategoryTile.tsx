@@ -10,12 +10,12 @@
  * Props follow DESIGN-pictures-fable.md §3.2.
  */
 
-import React, { createContext, useContext } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, type ViewStyle, type StyleProp } from 'react-native';
 import { normalizeCategory, rgbaOf, t, upperCase } from '@beanpool/core';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { colors } from '../constants/colors';
-import { ThemeContext, type ThemeContextType } from '../app/ThemeContext';
+import { useTheme } from '../app/ThemeContext';
 
 export type CategoryTileKind = 'listing' | 'event' | 'pulse' | 'group';
 export type CategoryTileSize = 'grid' | 'thumb' | 'banner';
@@ -41,8 +41,6 @@ const GROUP_CATEGORY_MAP: Record<string, { tile: keyof typeof colors.tile; emoji
     working_group: { tile: 'services', emoji: '🤝', label: 'WORKING GROUP' },
     guild: { tile: 'education', emoji: '🛡️', label: 'GUILD' },
 };
-
-const FALLBACK_THEME_CONTEXT = createContext<ThemeContextType | undefined>(undefined);
 
 export const CategoryTile: React.FC<CategoryTileProps> = ({
     category,
@@ -84,7 +82,7 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
         word = isKnown ? upperCase(categoryLabel(category)) : upperCase(categoryLabel('general'));
     }
 
-    const themeContext = useContext(ThemeContext || FALLBACK_THEME_CONTEXT);
+    const themeContext = useTheme();
     const activeColors = themeContext?.colors ?? colors;
 
     const tileColors = activeColors.tile[tileKey] || activeColors.tile.general;

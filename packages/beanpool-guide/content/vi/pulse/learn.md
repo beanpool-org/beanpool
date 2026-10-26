@@ -3,7 +3,7 @@ slug: learn
 title: Mục Tìm hiểu
 summary: Các video ngắn về BeanPool và các trang hướng dẫn đi kèm.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Những nội dung trong mục này
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Trên điện thoại, mở **Nhịp đập** và nhấn **Tìm hiểu**. Trong ứng dụng web, mở Nhịp đập và nhấn **Cách thức hoạt động** ở dọc trên cùng. Mục này bao gồm:
 
 - các video từ BeanPool về cách thức hoạt động;
-- **Chiêm nghiệm mỗi ngày**, một suy nghĩ ngắn thay đổi vào mỗi buổi sáng. Đây chỉ là một tiêu đề; không có gì để mở.
+- **Chiêm nghiệm mỗi ngày**, một suy nghĩ ngắn thay đổi vào mỗi buổi sáng. Nhấn vào đó để mở chiêm nghiệm trong ngày.
 
 Các thành viên cũng có thể thêm các kênh hướng dẫn của riêng mình vào Tìm hiểu, bằng cách chọn chủ đề **Cách thức hoạt động** khi họ thêm một kênh. Những video đó là của riêng thành viên, không phải của BeanPool: hãy kiểm tra xem ai đã đăng video trước khi làm theo lời khuyên trong đó.
 

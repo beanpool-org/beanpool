@@ -3,7 +3,7 @@ slug: learn
 title: A seção Aprender
 summary: Vídeos curtos sobre o BeanPool e as páginas do guia que os acompanham.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## O que há nela
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 No celular, abra o **Pulso** e toque em **Aprender**. No aplicativo web, abra o Pulso e toque em **Como funciona** na parte superior. Ela contém:
 
 - vídeos do BeanPool sobre como ele funciona;
-- a **Reflexão diária**, um pensamento curto que muda a cada manhã. É apenas um título; não há nada para abrir.
+- a **Reflexão diária**, um pensamento curto que muda a cada manhã. Toque nele para abrir a reflexão do dia.
 
 Os membros também podem adicionar seus próprios canais de tutoriais ao Aprender, escolhendo o assunto **Como funciona** ao adicionar um canal. Esses vídeos são dos próprios membros, não do BeanPool: confira quem publicou um vídeo antes de seguir seus conselhos.
 

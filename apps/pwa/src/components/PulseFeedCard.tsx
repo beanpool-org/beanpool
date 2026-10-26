@@ -10,7 +10,7 @@
  * - Responsive at 320dp and 1.3x font scale without horizontal overflow.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import {
     isWebUrl,
     platformMeta,
@@ -19,11 +19,13 @@ import {
     VIDEO_PLATFORMS,
     t,
 } from '@beanpool/core';
-import { type PulseFeedItem } from '../lib/api';
+import { type PulseFeedItem, type DailyPulseEntry, getDailyPulse } from '../lib/api';
 import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '../lib/pulse';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ReportModal } from './ReportModal';
 import { Sentence } from './Sentence';
+import { CategoryTile } from './CategoryTile';
+import { useDialogFocus } from './dialog-focus';
 
 interface Props {
     item: PulseFeedItem;
@@ -38,6 +40,18 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const [showMuteConfirm, setShowMuteConfirm] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showReport, setShowReport] = useState(false);
+    const [showReflection, setShowReflection] = useState(false);
+    const [reflection, setReflection] = useState<DailyPulseEntry | null>(null);
+    const [reflectionLoading, setReflectionLoading] = useState(false);
+    const [reflectionError, setReflectionError] = useState(false);
+    const triggerRef = useRef<HTMLDivElement>(null);
+
+    const isDailyPulse = Boolean(
+        item.id?.startsWith('item_pulse_') ||
+        (item as any).external_id?.startsWith('daily_pulse_') ||
+        (item as any).channelId === 'chan_daily_pulse' ||
+        (item as any).channel_id === 'chan_daily_pulse'
+    );
 
     useEffect(() => {
         setImageFailed(false);
@@ -59,6 +73,32 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const titleFirstLine =
         item.title?.split('\n').map((l) => l.trim()).find(Boolean) || postTitle;
     const avatarResolved = resolveAvatarUrl(item.avatarUrl);
+
+    const fetchReflection = async () => {
+        setReflectionLoading(true);
+        setReflectionError(false);
+        try {
+            const itemDate = item.id?.startsWith('item_pulse_')
+                ? item.id.replace('item_pulse_', '')
+                : (item as any).external_id?.startsWith('daily_pulse_')
+                ? (item as any).external_id.replace('daily_pulse_', '')
+                : undefined;
+            const data = await getDailyPulse(itemDate);
+            setReflection(data);
+        } catch {
+            setReflectionError(true);
+        } finally {
+            setReflectionLoading(false);
+        }
+    };
+
+    const handleOpenDailyPulse = () => {
+        setShowReflection(true);
+        void fetchReflection();
+    };
+
+    // Focus goes back to the card on close (useDialogFocus in ReflectionDialog).
+    const closeReflection = () => setShowReflection(false);
 
     const handleOpenPost = () => {
         if (!item.url) return;
@@ -244,17 +284,22 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 </div>
             ) : (
                 <div
-                    onClick={handleOpenPost}
-                    role="link"
+                    ref={triggerRef}
+                    onClick={isDailyPulse ? handleOpenDailyPulse : handleOpenPost}
+                    role={isDailyPulse ? 'button' : 'link'}
                     tabIndex={0}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            handleOpenPost();
+                            if (isDailyPulse) {
+                                handleOpenDailyPulse();
+                            } else {
+                                handleOpenPost();
+                            }
                         }
                     }}
                     className="cursor-pointer group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                    aria-label={t('Open post on {platform}', { platform: platName })}
+                    aria-label={isDailyPulse ? t('🌱 Daily Reflection') : t('Open post on {platform}', { platform: platName })}
                 >
                     <div className="w-full aspect-video relative bg-nature-100 dark:bg-nature-800 overflow-hidden flex items-center justify-center">
                         {proxiedThumbnailUrl && !imageFailed ? (
@@ -266,9 +311,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 loading="lazy"
                             />
                         ) : (
-                            <div className="text-4xl select-none opacity-60">
-                                {platMeta.icon}
-                            </div>
+                            <CategoryTile kind="pulse" size="banner" />
                         )}
 
                         {isVideo && (
@@ -280,7 +323,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         )}
 
                         <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow">
-                            {platName} ↗
+                            {isDailyPulse ? t('🌱 Daily Reflection') : `${platName} ↗`}
                         </div>
                     </div>
 
@@ -289,7 +332,11 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         <h3 dir="auto" className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors m-0">
                             {isInstagram ? titleFirstLine : postTitle}
                         </h3>
-                        {!isInstagram && (
+                        {isDailyPulse ? (
+                            <div className="flex items-center gap-1 text-xs font-semibold text-nature-600 dark:text-nature-400 mt-2">
+                                <span>{t('🌱 Daily Reflection')}</span>
+                            </div>
+                        ) : !isInstagram && (
                             <div className="flex items-center gap-1 text-xs font-semibold text-terra-600 dark:text-terra-400 mt-2">
                                 <span>
                                     <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <span aria-hidden="true">↗</span> }} />
@@ -297,6 +344,67 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Daily Pulse reflection dialog */}
+            {showReflection && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+                    onClick={closeReflection}
+                >
+                    <ReflectionDialog
+                        headlineId={reflection ? `daily-pulse-headline-${item.id}` : undefined}
+                        onClose={closeReflection}
+                        fallback={() => triggerRef.current}
+                    >
+                        {reflectionLoading ? (
+                            <div className="py-8 text-center text-sm font-medium text-nature-500 dark:text-nature-400">
+                                {t('Loading')}
+                            </div>
+                        ) : reflectionError ? (
+                            <div className="py-6 flex flex-col items-center gap-3">
+                                <p className="text-sm font-medium text-nature-600 dark:text-nature-400 m-0">
+                                    {t('Failed to load')}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={fetchReflection}
+                                    className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 text-nature-900 dark:text-white border border-nature-200 dark:border-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                                >
+                                    {t('Retry')}
+                                </button>
+                            </div>
+                        ) : reflection ? (
+                            <>
+                                <div className="flex items-center justify-between text-xs font-semibold text-nature-500 dark:text-nature-400">
+                                    <span>{reflection.date}</span>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
+                                        {t('🌱 Daily Reflection')}
+                                    </span>
+                                </div>
+                                <h3
+                                    id={`daily-pulse-headline-${item.id}`}
+                                    className="text-lg sm:text-xl font-bold text-nature-950 dark:text-white leading-snug m-0"
+                                >
+                                    {reflection.headline}
+                                </h3>
+                                <div className="text-sm sm:text-base text-nature-800 dark:text-nature-200 whitespace-pre-wrap leading-relaxed">
+                                    {reflection.body}
+                                </div>
+                            </>
+                        ) : null}
+
+                        <div className="flex justify-end pt-2 border-t border-nature-100 dark:border-nature-800">
+                            <button
+                                type="button"
+                                onClick={closeReflection}
+                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                            >
+                                {t('Close')}
+                            </button>
+                        </div>
+                    </ReflectionDialog>
                 </div>
             )}
 
@@ -388,5 +496,33 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 />
             )}
         </article>
+    );
+}
+
+/**
+ * The reflection's dialog box: focus moves in on open (the box itself, so its name is read), Tab stays inside, Escape
+ * closes, focus goes back to the card. Named by the headline once it has loaded, by "Daily Reflection" while it loads
+ * or fails.
+ */
+function ReflectionDialog({ headlineId, onClose, fallback, children }: {
+    headlineId?: string;
+    onClose: () => void;
+    fallback: () => HTMLElement | null;
+    children: ReactNode;
+}) {
+    const box = useRef<HTMLDivElement>(null);
+    useDialogFocus(box, onClose, { fallback, initialFocus: () => box.current });
+    return (
+        <div
+            ref={box}
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
+            {...(headlineId ? { 'aria-labelledby': headlineId } : { 'aria-label': t('🌱 Daily Reflection') })}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto focus:outline-none"
+        >
+            {children}
+        </div>
     );
 }

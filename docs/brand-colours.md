@@ -96,6 +96,44 @@ matches the file.
 | `deal.cancelled.tint` | `#fee2e2` | `#450a0a` |
 | `deal.cancelled.ink` | `#991b1b` | `#fca5a5` |
 | `deal.cancelled.border` | `#ef4444` | `#f87171` |
+| `tile.food.tint` | `#ffedd5` | `#431407` |
+| `tile.food.ink` | `#9a3412` | `#fdba74` |
+| `tile.services.tint` | `#dbeafe` | `#172554` |
+| `tile.services.ink` | `#1e40af` | `#93c5fd` |
+| `tile.labour.tint` | `#fef3c7` | `#451a03` |
+| `tile.labour.ink` | `#92400e` | `#fcd34d` |
+| `tile.tools.tint` | `#e7e5e4` | `#292524` |
+| `tile.tools.ink` | `#292524` | `#d6d3d1` |
+| `tile.goods.tint` | `#ebe6df` | `#5b5046` |
+| `tile.goods.ink` | `#5b5046` | `#ebe6df` |
+| `tile.garden.tint` | `#ecfccb` | `#1a2e05` |
+| `tile.garden.ink` | `#3f6212` | `#bef264` |
+| `tile.housing.tint` | `#fcedea` | `#3c180e` |
+| `tile.housing.ink` | `#863b28` | `#f0bcab` |
+| `tile.transport.tint` | `#cffafe` | `#083344` |
+| `tile.transport.ink` | `#155e75` | `#67e8f9` |
+| `tile.education.tint` | `#e0e7ff` | `#1e1b4b` |
+| `tile.education.ink` | `#3730a3` | `#a5b4fc` |
+| `tile.arts.tint` | `#fce7f3` | `#500724` |
+| `tile.arts.ink` | `#9d174d` | `#f9a8d4` |
+| `tile.health.tint` | `#ccfbf1` | `#042f2e` |
+| `tile.health.ink` | `#115e59` | `#5eead4` |
+| `tile.care.tint` | `#ffe4e6` | `#4c0519` |
+| `tile.care.ink` | `#9f1239` | `#fda4af` |
+| `tile.animals.tint` | `#d1fae5` | `#022c22` |
+| `tile.animals.ink` | `#065f46` | `#6ee7b7` |
+| `tile.tech.tint` | `#e0f2fe` | `#082f49` |
+| `tile.tech.ink` | `#075985` | `#7dd3fc` |
+| `tile.energy.tint` | `#fef9c3` | `#422006` |
+| `tile.energy.ink` | `#854d0e` | `#fde047` |
+| `tile.mindset.tint` | `#fae8ff` | `#4a044e` |
+| `tile.mindset.ink` | `#86198f` | `#f0abfc` |
+| `tile.general.tint` | `#eef1ee` | `#384038` |
+| `tile.general.ink` | `#434e43` | `#c0ccc0` |
+| `tile.event.tint` | `#ede9fe` | `#2e1065` |
+| `tile.event.ink` | `#5b21b6` | `#c4b5fd` |
+| `tile.pulse.tint` | `#fef3c7` | `#451a03` |
+| `tile.pulse.ink` | `#92400e` | `#fcd34d` |
 | `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
@@ -120,6 +158,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
 | `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
+| `tile.<cat>` | category tiles: listings, events, Pulse; sticker outline and word in ink on tint | 6.31 – 12.08 | 6.31 – 11.19 |
 | `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
 | `ink.success` | success messages, ticks | 4.77 | 5.58 |
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |

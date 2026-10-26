@@ -48,7 +48,7 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
         back: ctx.back,
         now: ctx.now,
         photos: {
-            pick: async () => keepPicked(community, owner, tool, await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 })),
+            pick: async () => keepPicked(community, owner, tool, await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, defaultTab: 'albums' })),
             remove: (ref) => removeToolPhoto(community, owner, tool, ref),
             uri: (ref) => toolPhotoUri(community, owner, tool, ref),
         },

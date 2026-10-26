@@ -941,6 +941,7 @@
   "Camera Unavailable": "Appareil photo indisponible",
   "Could not launch camera.": "Impossible d'ouvrir l'appareil photo.",
   "Gallery": "Galerie",
+  "Browse files": "Parcourir les fichiers",
   "Offer": "Offre",
   "Need": "Demande",
   "● DAILY PULSE": "● POULS DU JOUR",
@@ -6112,6 +6113,7 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "« {title} » est publiée, mais pas dans votre boutique. Pour l'y mettre, ouvrez-la, touchez Modifier l'annonce et cochez Mettre ceci dans votre boutique.",
   "✓ Friend": "✓ Ami",
   "✓ nonce issued": "✓ nonce émis",
+  "Failed to load": "Échec du chargement",
   "Turn on": "Activer",
   "Turn on notifications?": "Activer les notifications ?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Pour savoir quand quelqu'un vous répond, vous envoie un message ou demande à rejoindre. Rien d'autre."

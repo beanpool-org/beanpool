@@ -941,6 +941,7 @@
   "Camera Unavailable": "Η κάμερα δεν είναι διαθέσιμη",
   "Could not launch camera.": "Δεν ήταν δυνατή η εκκίνηση της κάμερας.",
   "Gallery": "Συλλογή",
+  "Browse files": "Αναζήτηση αρχείων",
   "Offer": "Προσφορά",
   "Need": "Ζήτηση",
   "● DAILY PULSE": "● ΚΑΘΗΜΕΡΙΝΟΣ ΠΑΛΜΟΣ",
@@ -6112,6 +6113,7 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "Η ανάρτηση «{title}» είναι ανεβασμένη, αλλά δεν είναι στο κατάστημά σας. Για να μπει, ανοίξτε την, πατήστε Επεξεργασία ανάρτησης και επιλέξτε Βάλτε αυτό στο κατάστημά σας.",
   "✓ Friend": "✓ Φίλος",
   "✓ nonce issued": "✓ εκδόθηκε nonce",
+  "Failed to load": "Αποτυχία φόρτωσης",
   "Turn on": "Ενεργοποίηση",
   "Turn on notifications?": "Ενεργοποίηση ειδοποιήσεων;",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο."

@@ -1137,6 +1137,7 @@
   "Camera Unavailable": "الكاميرا غير متاحة",
   "Could not launch camera.": "تعذر تشغيل الكاميرا.",
   "Gallery": "معرض الصور",
+  "Browse files": "استعراض الملفات",
   "Offer": "عرض",
   "Need": "طلب",
   "● DAILY PULSE": "● النبض اليومي",
@@ -7068,6 +7069,7 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” منشور، لكنه ليس في متجرك. لوضعه فيه، افتحه، واضغط على تعديل المنشور، ثم علّم على ضع هذا في متجرك.",
   "✓ Friend": "✓ صديق",
   "✓ nonce issued": "✓ صدر الرمز العشوائي",
+  "Failed to load": "فشل التحميل",
   "Turn on": "تشغيل",
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر."

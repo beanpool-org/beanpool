@@ -892,6 +892,7 @@
   "Camera Unavailable": "無法使用相機",
   "Could not launch camera.": "無法啟動相機。",
   "Gallery": "相簿",
+  "Browse files": "瀏覽檔案",
   "Offer": "提供",
   "Need": "需求",
   "● DAILY PULSE": "● 每日動態",
@@ -5873,6 +5874,7 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "「{title}」已經上架，但不在你的小店裡。若要放進去，請開啟它，點「編輯貼文」，然後勾選「放進你的小店」。",
   "✓ Friend": "✓ 好友",
   "✓ nonce issued": "✓ 已取得 nonce",
+  "Failed to load": "載入失敗",
   "Turn on": "開啟",
   "Turn on notifications?": "開啟通知？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回覆、發訊息或申請加入時收到提醒。不會用於其他任何用途。"

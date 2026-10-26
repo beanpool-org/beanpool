@@ -352,6 +352,7 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
         // Row text never runs on: every line has a line limit.
         const rows = Array.from(document.querySelectorAll('[data-testid^="home-market-p"] span[data-lines]'));
         expect(rows.length).toBeGreaterThan(0);
+        expect(document.querySelector('[data-testid^="home-market-p"] [data-testid="category-tile"]')).not.toBeNull();
         // The Beans card says Beans, never Ʀ; nothing is worded as an unlock.
         expect(document.body.textContent).not.toMatch(/Ʀ|unlock/i);
     });

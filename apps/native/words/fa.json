@@ -942,6 +942,7 @@
   "Camera Unavailable": "دوربین در دسترس نیست",
   "Could not launch camera.": "دوربین باز نشد.",
   "Gallery": "گالری",
+  "Browse files": "مرور فایل‌ها",
   "Offer": "پیشنهاد",
   "Need": "نیاز",
   "● DAILY PULSE": "● نبض روزانه",
@@ -6112,6 +6113,7 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "«{title}» ثبت شد، اما در فروشگاه شما نیست. برای گذاشتنش در فروشگاه، آن را باز کنید، «✏️ ویرایش پست» را بزنید و «این را در فروشگاه خود بگذارید» را علامت بزنید.",
   "✓ Friend": "✓ دوست",
   "✓ nonce issued": "✓ nonce صادر شد",
+  "Failed to load": "بارگذاری ناموفق بود",
   "Turn on": "روشن کردن",
   "Turn on notifications?": "روشن کردن اعلان‌ها؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر."

@@ -23,6 +23,7 @@ import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
     pledgeToProject, deleteCrowdfundProject, db,
+    PROJECT_DEADLINE_PASSED_ERROR,
     isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, isMemberActive, INACTIVE_MEMBER_CREATE_ERROR,
     isAcceptableGoal, GOAL_AMOUNT_ERROR,
 } from '../db/db.js';
@@ -34,10 +35,10 @@ import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } f
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
-import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
-import { word } from '@beanpool/core';
+import { isPastDeadline, word } from '@beanpool/core';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -538,6 +539,15 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 
+    const projRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(projectId) as any;
+    const memberRow = db.prepare('SELECT deadline_at FROM members WHERE public_key = ?').get(projectId) as any;
+    const deadline = projRow?.deadline_at ?? memberRow?.deadline_at;
+    if (isPastDeadline(deadline)) {
+        ctx.status = 409;
+        ctx.body = { error: PROJECT_DEADLINE_PASSED_ERROR, code: 'project_closed' };
+        return;
+    }
+
     try {
         const txId = crypto.randomUUID();
         pledgeToProject(txId, projectId, actor, parsedAmount, memo || 'Project Pledge', (ctx.state as any).authSig);
@@ -545,8 +555,9 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         deps.broadcast?.({ type: 'project_updated', project: updatedProject });
         ctx.body = { success: true, txId };
     } catch (err: any) {
-        ctx.status = 400;
-        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
+        ctx.status = err.status || 400;
+        // A refusal's code (project_closed, standby), never a server fault's own (SQLITE_CONSTRAINT_TRIGGER: member-error-text.ts).
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT), ...(!isServerFault(err) && typeof err.code === 'string' ? { code: err.code } : {}) };
     }
 });
 

@@ -219,7 +219,8 @@ for (const dark of [false, true]) {
 
         it('a member reads its shopfront in order, and Message writes to its owner', async () => {
             await renderIn();
-            expect(byId('shopfront-banner')?.textContent).toBe('🛠️');
+            // No banner photo: the category's tile, emoji and word (pictures S2).
+            expect(byId('shopfront-banner')?.querySelector('[data-testid="category-tile"]')?.textContent).toBe('🛠️TOOLS');
             expect(styleOf(byId('shopfront-banner')).backgroundColor).toBe(colors().brand.tint);
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
             expect(byId('shopfront-name')?.textContent).toBe("Dave's Tool Shed");

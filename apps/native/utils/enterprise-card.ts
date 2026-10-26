@@ -32,7 +32,7 @@ export interface EnterpriseCardStatus {
     meta: string;
 }
 
-type CardInput = Pick<TreasurySummary, 'balance' | 'liveOffers' | 'goalAmount' | 'currentAmount' | 'lifecycle' | 'status' | 'paused' | 'keepers'>;
+type CardInput = Pick<TreasurySummary, 'balance' | 'liveOffers' | 'goalAmount' | 'currentAmount' | 'lifecycle' | 'status' | 'paused' | 'keepers' | 'deadlineAt'>;
 
 export function enterpriseCardStatus(item: CardInput): EnterpriseCardStatus {
     const hasGoal = item.goalAmount != null && item.goalAmount > 0;
@@ -63,7 +63,7 @@ export function enterpriseCardStatus(item: CardInput): EnterpriseCardStatus {
 
     const showKindBadge = stateBadge === null || kindBadge === 'funded';
 
-    const takesPledges = hasGoal && !isFunded && pledgeClosedLine(item.status) === null;
+    const takesPledges = hasGoal && !isFunded && pledgeClosedLine(item.status, item.lifecycle, item.deadlineAt) === null;
 
     return { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta: [stateText, keeperText].filter(Boolean).join(' · ') };
 }

@@ -442,7 +442,8 @@ describe('the event form in the pseudo-locale', () => {
         expect(said()).toEqual([xx('Location is off'), xx('Allow location in settings, or tap the map to place the pin.'), xx('Cancel'), xx('Open Settings')]);
         alerts.said.length = 0;
         await click(byLabel(xx('Add a photo')), 'Add a photo');
-        expect(said()).toEqual([xx('Photo not added'), xx('Could not open your photos.')]);
+        // The shared photo sheet (utils/post-photo.ts askPhotoSource); Android: Cancel is Back or a tap outside.
+        expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
         alerts.said.length = 0;
         // Post as the group: who can see it, said for the group.
         await click(byLabel('Seed Savers'), 'Post as Seed Savers');

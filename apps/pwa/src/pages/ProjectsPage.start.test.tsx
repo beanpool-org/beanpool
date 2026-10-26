@@ -441,4 +441,30 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
             }));
         });
     });
+
+    it('Pictures S4: keyboard form submit without logo fails with "Choose a logo"', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Project/i }));
+
+        const modal = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(modal).toBeInTheDocument();
+
+        // Fill in required fields without picking logo
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. Community Tool Shed/i), { target: { value: 'Local Garden' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Grow food together' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. 500/i), { target: { value: '100' } });
+
+        // Submit form via submit event (keyboard Enter)
+        const form = modal.querySelector('form')!;
+        fireEvent.submit(form);
+
+        await waitFor(() => {
+            expect(within(modal).getByText('Choose a logo')).toBeInTheDocument();
+        });
+        expect(createEnterprise).not.toHaveBeenCalled();
+    });
 });

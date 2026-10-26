@@ -367,6 +367,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setCreateError(t('A project needs a goal in Beans'));
             return;
         }
+        if (newPhotos.length < 1) {
+            setCreateError(t('Choose a logo'));
+            return;
+        }
 
         let deadlineAt = null;
         if (newLifecycle === 'bounded' && newDeadline) {

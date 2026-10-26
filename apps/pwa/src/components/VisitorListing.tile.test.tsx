@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { VisitorCard, VisitorPostDetail } from './VisitorListing';
-import type { MarketplacePost } from '../lib/marketplace';
+import type { MarketplacePost } from '../lib/api';
 
 const postWithoutPhoto: MarketplacePost = {
     id: 'p-1',

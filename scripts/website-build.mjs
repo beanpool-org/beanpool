@@ -696,6 +696,16 @@ export function checkWebsite() {
                 errors.push(`apps/website/${lang}/${page} has global.beanpool.org link without ?lang=${lang}`);
             }
 
+            // S0 amendment (d): global.html carries NO apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false
+            if (page === 'global.html') {
+                if (/<meta\s+name="apple-itunes-app"/i.test(actualHtml)) {
+                    errors.push(`apps/website/${lang}/${page} must not carry apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false`);
+                }
+                if (!/\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*false\b/.test(actualHtml)) {
+                    errors.push(`apps/website/${lang}/${page} missing IOS_OPEN_DOOR_LIVE = false in script`);
+                }
+            }
+
             // Verify translated pages link to the guide page in their language when guide/<lang>/<slug> exists
             const guideLinks = actualHtml.matchAll(/href=["'](?:\.\.\/)+guide\/([^"'\s#?]+)[^"']*["']/gi);
             for (const gMatch of guideLinks) {

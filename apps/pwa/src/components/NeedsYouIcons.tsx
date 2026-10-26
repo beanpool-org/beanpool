@@ -534,9 +534,10 @@ function NeedsSheet({
                         {t('Needs you')}
                     </h2>
                     <button
+                        type="button"
                         onClick={onClose}
                         aria-label={t('Close')}
-                        className="text-text-muted hover:text-text-primary p-1 rounded-full cursor-pointer"
+                        className="text-text-muted hover:text-text-primary min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -547,12 +548,13 @@ function NeedsSheet({
                     {entries.map((e) => (
                         <button
                             key={e.kind}
+                            type="button"
                             onClick={() => {
                                 onClose();
                                 onPick(e.target);
                             }}
                             aria-label={e.label}
-                            className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px]"
+                            className="w-full flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-surface-subtle text-left transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                         >
                             <span className={e.accent ? 'text-bp-ink-warning' : 'text-text-secondary'}>
                                 <NeedSvg kind={e.kind} />

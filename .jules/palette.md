@@ -264,3 +264,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-21 - FormerAddressBanner ARIA Live Region & Internationalization
 **Learning:** `FormerAddressBanner.tsx` displayed community migration alerts using `role="status"` without explicit `aria-live="polite"` or `aria-label`, preventing screen readers from describing the alert context, and hardcoded text strings without `t(...)` translation wrappers.
 **Action:** Added `aria-live="polite"` and `aria-label={t('Community address change alert')}` to the status container, wrapped text strings with `t(...)`, and verified test suite passing.
+
+## 2026-10-27 - NeedsSheet Close Button Touch Target & Focus Rings
+**Learning:** `NeedsSheet` in `NeedsYouIcons.tsx` rendered its modal close button without minimum 44px touch target dimensions (`p-1` around 20px SVG) or explicit `type="button"`, and lacked visible focus-visible ring indicators (`focus-visible:ring-2 focus-visible:ring-bp-gold-fill`) for keyboard users.
+**Action:** Added `type="button"`, `min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill` styling to the close button and sheet option buttons, and created `NeedsYouIcons.test.tsx`.

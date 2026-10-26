@@ -5872,5 +5872,8 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries}번 시도, 시도당 {ms} ms (평균 예상 {expected})",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}”이(가) 올라갔지만 내 가게에는 없어요. 가게에 넣으려면 열어서 게시물 수정을 탭하고 내 가게에 넣기를 체크하세요.",
   "✓ Friend": "✓ 친구",
-  "✓ nonce issued": "✓ 논스 발급됨"
+  "✓ nonce issued": "✓ 논스 발급됨",
+  "PHOTO *": "사진 *",
+  "Missing Photo": "사진 누락",
+  "Add a photo first": "먼저 사진을 추가하세요"
 }

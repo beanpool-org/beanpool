@@ -6589,5 +6589,8 @@
   "{shop}: {state}. Opens your shop.": "{shop}: {state}. Открывает вашу витрину.",
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "Попыток: {tries}, {ms} мс на попытку (в среднем ожидается {expected})",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "«{title}» опубликовано, но его нет в вашей витрине. Чтобы добавить, откройте его, нажмите «Редактировать объявление» и отметьте «Добавить в вашу витрину».",
-  "✓ nonce issued": "✓ nonce выдан"
+  "✓ nonce issued": "✓ nonce выдан",
+  "PHOTO *": "ФОТО *",
+  "Missing Photo": "Нет фото",
+  "Add a photo first": "Сначала добавьте фото"
 }

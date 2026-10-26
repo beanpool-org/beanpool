@@ -3,7 +3,7 @@ slug: learn
 title: Öğren bölümü
 summary: BeanPool hakkında kısa videolar ve bunlara eşlik eden kılavuz sayfaları.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## İçinde neler var
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Telefonda **Nabız**'ı açın ve **Öğren**'e dokunun. Web uygulamasında Nabız'ı açın ve üst kısımda **Nasıl çalışır** seçeneğine dokunun. Şunları içerir:
 
 - BeanPool'dan nasıl çalıştığına dair videolar;
-- her sabah değişen kısa bir düşünce olan **Günlük Düşünce**. Bu yalnızca bir başlıktır; açılacak bir şey yoktur.
+- her sabah değişen kısa bir düşünce olan **Günlük Düşünce**. Günün düşüncesini açmak için üzerine dokunun.
 
 Üyeler bir kanal eklerken konu olarak **Nasıl çalışır**'ı seçerek Öğren bölümüne kendi nasıl yapılır kanallarını da ekleyebilirler. Bu videolar üyelerin kendilerine aittir, BeanPool'un değildir: tavsiyelerine uymadan önce videoyu kimin paylaştığını kontrol edin.
 

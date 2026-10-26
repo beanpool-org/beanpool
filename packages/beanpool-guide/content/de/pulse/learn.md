@@ -3,7 +3,7 @@ slug: learn
 title: Die Lernspur
 summary: Kurze Videos über BeanPool und die passenden Seiten aus dem Guide.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Was darin enthalten ist
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Öffne auf dem Smartphone den **Puls** und tippe auf **Lernen**. Öffne in der Web-App den Pulse und tippe oben auf **So funktioniert's**. Die Spur enthält:
 
 - Videos von BeanPool darüber, wie es funktioniert;
-- die **Tägliche Reflexion**, ein kurzer Gedanke, der jeden Morgen wechselt. Es ist nur eine Überschrift; es gibt nichts zum Öffnen.
+- die **Tägliche Reflexion**, ein kurzer Gedanke, der jeden Morgen wechselt. Tippe darauf, um die Tagesreflexion zu öffnen.
 
 Mitglieder können zu „Lernen“ auch eigene Anleitungs-Kanäle hinzufügen, indem sie beim Hinzufügen eines Kanals das Thema **So funktioniert's** wählen. Diese Videos stammen von den Mitgliedern selbst, nicht von BeanPool: Prüfe, wer ein Video eingestellt hat, bevor du seinen Ratschlägen folgst.
 

@@ -28,6 +28,7 @@ import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } fro
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
+import { CategoryTile } from '../components/CategoryTile';
 import { ExampleListings } from '../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../lib/example-listings';
 import { pollsInformal } from '../lib/informal-polls';
@@ -1406,6 +1407,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <Sentence text={t('This listing belongs to {name}, which has closed permanently.')} parts={{ name: <strong>{authorEnterpriseInactive.name}</strong> }} />
                                     </p>
                                 </div>
+                            </div>
+                        )}
+
+                        {(!selectedPost.photos || selectedPost.photos.length === 0) && (
+                            <div className="w-full aspect-[3/1] rounded-xl overflow-hidden mb-3">
+                                <CategoryTile
+                                    category={selectedPost.category}
+                                    kind={isPulsePost ? 'pulse' : ((selectedPost.type as string) === 'event' ? 'event' : 'listing')}
+                                    size="banner"
+                                />
                             </div>
                         )}
 

@@ -7707,11 +7707,38 @@ export async function getRatingsGiven(raterPubkey: string): Promise<any[]> {
     }
 }
 
-export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0) {
+export interface MarketplaceTransaction {
+    id: string;
+    postId: string;
+    postTitle?: string | null;
+    buyerPublicKey: string;
+    buyerCallsign?: string | null;
+    sellerPublicKey: string;
+    sellerCallsign?: string | null;
+    credits: number;
+    hours?: number | null;
+    status: string;
+    createdAt: string;
+    completedAt?: string | null;
+    coverImage?: string | null;
+    buyerAvatar?: string | null;
+    sellerAvatar?: string | null;
+    ratedByBuyer?: boolean;
+    ratedBySeller?: boolean;
+    postType?: string;
+    postAuthorPublicKey?: string;
+    postRepeatable?: boolean;
+    postLendable?: boolean;
+}
+
+export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): Promise<MarketplaceTransaction[]> {
     const database = await getDb();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     let query = `
         SELECT mt.*, COALESCE(p.title, mt.post_title) as postTitle, p.photos as postPhotos, m1.callsign as buyerCallsign, m1.avatar_url as buyerAvatar, m2.callsign as sellerCallsign, m2.avatar_url as sellerAvatar,
+               p.type as postType, p.author_pubkey as postAuthorPublicKey,
+               p.repeatable as postRepeatable,
+               p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
         FROM marketplace_transactions mt
@@ -7757,7 +7784,11 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             buyerAvatar: r.buyerAvatar || null,
             sellerAvatar: r.sellerAvatar || null,
             ratedByBuyer: !!r.ratedByBuyer,
-            ratedBySeller: !!r.ratedBySeller
+            ratedBySeller: !!r.ratedBySeller,
+            postType: r.postType || undefined,
+            postAuthorPublicKey: r.postAuthorPublicKey || undefined,
+            postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
+            postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
         };
     });
 }

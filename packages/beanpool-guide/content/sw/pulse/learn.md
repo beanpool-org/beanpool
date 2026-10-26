@@ -3,7 +3,7 @@ slug: learn
 title: Sehemu ya Jifunze
 summary: Video fupi kuhusu BeanPool, na kurasa za mwongozo zinazoambatana nazo.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Kilichomo ndani yake
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Kwenye simu, fungua **Mwenendo** na uguse **Jifunze**. Kwenye programu ya wavuti, fungua Mwenendo na uguse **Jinsi inavyofanya kazi** juu kabisa. Inajumuisha:
 
 - video kutoka BeanPool kuhusu jinsi inavyofanya kazi;
-- **Tafakari ya Kila Siku**, wazo fupi linalobadilika kila asubuhi. Ni kichwa cha habari tu; hakuna cha kufungua.
+- **Tafakari ya Kila Siku**, wazo fupi linalobadilika kila asubuhi. Iguse ili kufungua tafakari ya siku.
 
 Wanachama wanaweza kuongeza chaneli zao wenyewe za mafunzo kwenye Jifunze pia, kwa kuchagua mada **Jinsi inavyofanya kazi** wanapoongeza chaneli. Video hizo ni za wanachama wenyewe, si za BeanPool: kagua nani aliyechapisha video kabla ya kufuata ushauri wake.
 

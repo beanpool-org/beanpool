@@ -25,6 +25,10 @@ export interface MarketplaceTransaction {
     coverImage?: string | null;
     disputeResolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | string;
     disputeResolvedAt?: string;
+    postType?: string;
+    postAuthorPublicKey?: string;
+    postRepeatable?: boolean;
+    postLendable?: boolean;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.
 }
@@ -44,6 +48,8 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
 export function getMarketplaceTransaction(db: Db, transactionId: string): MarketplaceTransaction | null {
     const r = db.prepare(`
         SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, p.author_pubkey as postAuthor,
+               p.type as postType, p.author_pubkey as postAuthorPublicKey,
+               p.repeatable as postRepeatable, p.lendable as postLendable,
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
@@ -82,7 +88,11 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         ratedBySeller: !!r.ratedBySeller,
         coverImage,
         disputeResolution: r.dispute_resolution || undefined,
-        disputeResolvedAt: r.dispute_resolved_at || undefined
+        disputeResolvedAt: r.dispute_resolved_at || undefined,
+        postType: r.postType ?? undefined,
+        postAuthorPublicKey: r.postAuthorPublicKey ?? undefined,
+        postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
+        postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
     };
 }
 
@@ -94,6 +104,8 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
 export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: { status?: string }, limit = 50, offset = 0, offPhotoShown: OffListingPhotoShown = authorsOnly(publicKey)): MarketplaceTransaction[] {
     let query = `
         SELECT mt.*, p.title as postTitle, p.audience_scope as postAudienceScope, p.author_pubkey as postAuthor,
+               p.type as postType, p.author_pubkey as postAuthorPublicKey,
+               p.repeatable as postRepeatable, p.lendable as postLendable,
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
@@ -144,7 +156,11 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             ratedBySeller: !!r.ratedBySeller,
             coverImage,
             disputeResolution: r.dispute_resolution || undefined,
-            disputeResolvedAt: r.dispute_resolved_at || undefined
+            disputeResolvedAt: r.dispute_resolved_at || undefined,
+            postType: r.postType ?? undefined,
+            postAuthorPublicKey: r.postAuthorPublicKey ?? undefined,
+            postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
+            postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
         };
     });
 }

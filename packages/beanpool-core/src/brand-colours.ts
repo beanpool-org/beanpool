@@ -108,6 +108,12 @@ export interface ChipRole {
     readonly border?: Themed;
 }
 
+/** A category tile: `ink` words and icon outline on a pale (light) or deep (dark) `tint`. */
+export interface TileRole {
+    readonly tint: Themed;
+    readonly ink: Themed;
+}
+
 /**
  * The roles. Keys are lowercase single words so the CSS names below are the path joined by dashes
  * (`chip.ok.ink` → `--bp-chip-ok-ink`).
@@ -158,6 +164,31 @@ export const BRAND_COLOURS = {
         held: { tint: themed(EMERALD_100, EMERALD_950), ink: themed(EMERALD_800, EMERALD_300), border: themed(EMERALD_500, EMERALD_400) },
         released: { tint: themed(EMERALD_200, EMERALD_900), ink: themed(EMERALD_800, EMERALD_300), border: themed(EMERALD_600, EMERALD_500) },
         cancelled: { tint: themed(RED_100, RED_950), ink: themed(RED_800, RED_300), border: themed(RED_500, RED_400) },
+    },
+    /**
+     * Category tiles for listings, events, and Pulse. `tint` is the ground; `ink` is the category word and sticker
+     * outline.
+     */
+    tile: {
+        food: { tint: themed('#ffedd5', '#431407'), ink: themed('#9a3412', '#fdba74') },
+        services: { tint: themed('#dbeafe', '#172554'), ink: themed('#1e40af', '#93c5fd') },
+        labour: { tint: themed('#fef3c7', '#451a03'), ink: themed('#92400e', '#fcd34d') },
+        tools: { tint: themed('#e7e5e4', '#292524'), ink: themed('#292524', '#d6d3d1') },
+        goods: { tint: themed('#ebe6df', '#5b5046'), ink: themed('#5b5046', '#ebe6df') },
+        garden: { tint: themed('#ecfccb', '#1a2e05'), ink: themed('#3f6212', '#bef264') },
+        housing: { tint: themed('#fcedea', '#3c180e'), ink: themed('#863b28', '#f0bcab') },
+        transport: { tint: themed('#cffafe', '#083344'), ink: themed('#155e75', '#67e8f9') },
+        education: { tint: themed('#e0e7ff', '#1e1b4b'), ink: themed('#3730a3', '#a5b4fc') },
+        arts: { tint: themed('#fce7f3', '#500724'), ink: themed('#9d174d', '#f9a8d4') },
+        health: { tint: themed('#ccfbf1', '#042f2e'), ink: themed('#115e59', '#5eead4') },
+        care: { tint: themed('#ffe4e6', '#4c0519'), ink: themed('#9f1239', '#fda4af') },
+        animals: { tint: themed('#d1fae5', '#022c22'), ink: themed('#065f46', '#6ee7b7') },
+        tech: { tint: themed('#e0f2fe', '#082f49'), ink: themed('#075985', '#7dd3fc') },
+        energy: { tint: themed('#fef9c3', '#422006'), ink: themed('#854d0e', '#fde047') },
+        mindset: { tint: themed('#fae8ff', '#4a044e'), ink: themed('#86198f', '#f0abfc') },
+        general: { tint: themed('#eef1ee', '#384038'), ink: themed('#434e43', '#c0ccc0') },
+        event: { tint: themed('#ede9fe', '#2e1065'), ink: themed('#5b21b6', '#c4b5fd') },
+        pulse: { tint: themed('#fef3c7', '#451a03'), ink: themed('#92400e', '#fcd34d') },
     },
     /** Words and icons drawn straight on a page or card (never on one of the fills above). */
     ink: {
@@ -336,6 +367,10 @@ export function brandContrastPairs(): BrandContrastPair[] {
             } else if (role === 'chip') {
                 for (const [name, chip] of Object.entries(node as BrandColours['chip'])) {
                     add(theme, `chip.${name}`, 'ink / tint', chip.ink[theme], chip.tint[theme]);
+                }
+            } else if (role === 'tile') {
+                for (const [name, tile] of Object.entries(node as BrandColours['tile'])) {
+                    add(theme, `tile.${name}`, 'ink / tint', tile.ink[theme], tile.tint[theme]);
                 }
             } else if (role === 'ink') {
                 for (const [name, ink] of Object.entries(node as BrandColours['ink'])) {

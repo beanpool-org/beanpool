@@ -5873,6 +5873,7 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "「{title}」は投稿されましたが、お店には入っていません。入れるには、投稿を開いて「投稿を編集」をタップし、「これをお店に入れる」にチェックを入れてください。",
   "✓ Friend": "✓ フレンド",
   "✓ nonce issued": "✓ ノンス発行済み",
+  "Failed to load": "読み込みに失敗しました",
   "PHOTO *": "写真 *",
   "Missing Photo": "写真がありません",
   "Add a photo first": "先に写真を追加してください"

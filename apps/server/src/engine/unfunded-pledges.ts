@@ -38,7 +38,7 @@
 // Once committed, each goes live to its member's own sockets with that copy's id, and out as a push of kind community.notice
 // on the escrow category ("Held in Trust & System"), whose words are only "Your community has a notice for you". The notices
 // name the project; the leader's counts the backers and the Beans and names nobody. The leader's end date moved in that week
-// (POST /api/crowdfund/projects/update) tells the backers too (noticeEndDateMoved).
+// (POST /api/crowdfund/projects/update) tells the backers too (noticeEndDateMoved), each once a day at most.
 
 import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, getCrowdfundProject } from '../db/db.js';
@@ -253,11 +253,23 @@ export function projectEndDate(projectId: string): string | null {
     return p?.deadline ?? null;
 }
 
+/** How soon a backer told that a project's end date moved (or was taken off) can be told the same again. */
+const END_DATE_TOLD_EVERY_MS = 24 * 60 * 60 * 1000;
+
+/** Whether a member has a kept notice, from `since` on, that this project's end date moved ('moved') or was taken off ('off'). */
+function toldOfEndDateSince(recipient: string, projectId: string, endDate: 'moved' | 'off', since: string): boolean {
+    return !!db.prepare(`SELECT 1 FROM moderation_notices WHERE recipient = ? AND created_at >= ?
+                           AND CASE WHEN json_valid(data) THEN json_extract(data, '$.kind') = 'project_end_date_moved'
+                               AND json_extract(data, '$.enterprise') = ? AND json_extract(data, '$.endDate') = ? ELSE 0 END
+                         LIMIT 1`).get(recipient, since, projectId, endDate);
+}
+
 /**
  * The leader moved a project's end date (POST /api/crowdfund/projects/update), `before` being the one it had. When that end
  * date was over and its pledges still held, in the week before they would go back, each backer is told, and nothing goes back
  * on the old day: the return reads the new one. Not `actor`, who moved it. Before its end date is over a move is an ordinary
- * edit, and nobody is told. Returns how many it told. Never throws.
+ * edit, and nobody is told. A backer is told the same (moved, or taken off) once a day at most. Returns how many it told.
+ * Never throws.
  */
 export function noticeEndDateMoved(
     hooks: Pick<UnfundedPledgeHooks, 'broadcast' | 'dispatchPushNotification'>, projectId: string, before: string | null, actor: string | null,
@@ -274,13 +286,20 @@ export function noticeEndDateMoved(
             return 0;
         }
         const project = named(p.title ?? '');
+        const endDate = p.deadline ? 'moved' : 'off';
         const title = tr('🫘 A project you backed changed its end date');
         const body = p.deadline
             ? tr('"{project}" didn\'t reach its goal by its end date, and its leader has moved the date. Your pledge stays with it: if the goal isn\'t reached by the new date, your Beans go back to you a week after it.', { project })
             : tr('"{project}" didn\'t reach its goal by its end date, and its leader has taken the end date off. Your pledge stays with it until the goal is reached or the project is cancelled.', { project });
-        const data = { kind: 'project_end_date_moved', enterprise: projectId };
-        const backers = [...new Set(owed.returns.map((o) => o.backer))].filter((pk) => pk !== actor);
-        const told = backers.map((to) => ({ to, title, body, id: keepNotice(to, title, body, data) }));
+        const data = { kind: 'project_end_date_moved', enterprise: projectId, endDate };
+        // Once a day: the notice names no date, so another the same day only repeats it, and the page names the new one.
+        // Without this a leader who kept moving an end date that was over, to another over or a moment from over (the route
+        // takes a date back to 36 hours ago), told every backer again at each request, and each copy kept pushed one of
+        // their other notices out (kept-notices.ts KEPT_NOTICES.perMember). Review of #2525.
+        const since = new Date(now - END_DATE_TOLD_EVERY_MS).toISOString();
+        const backers = [...new Set(owed.returns.map((o) => o.backer))]
+            .filter((pk) => pk !== actor && !toldOfEndDateSince(pk, projectId, endDate, since));
+        const told = backers.map((to) => ({ to, title, body, id: keepNotice(to, title, body, data, now) }));
         tell(hooks, told, data);
         return told.length;
     } catch (e: any) {

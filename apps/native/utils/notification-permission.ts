@@ -17,8 +17,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type * as ExpoNotifications from 'expo-notifications';
 import { t, word } from '@beanpool/core';
 import { NOTIFICATION_PERMISSION_STORE_KEY } from './storage-keys';
-import { registerForPushNotifications } from '../services/push-notifications';
-import { loadIdentity } from './identity';
+// services/push-notifications (which require()s expo-notifications as it loads) and ./identity are loaded inside the
+// functions that need them, never here: Home and How it Works import this file, and six screen suites that don't mock
+// either failed to load when they were static (#2524 deciding review).
 
 async function getNotificationsModule(): Promise<typeof ExpoNotifications | null> {
     try {
@@ -98,6 +99,27 @@ export async function checkOsNotificationPermission(): Promise<boolean> {
 }
 
 /**
+ * Registers this phone's push token for the account (the key given, else the one stored), without waiting for it.
+ * Only called once the phone allows notifications, so it never brings up the system dialog itself.
+ */
+async function registerPushToken(publicKey?: string | null): Promise<void> {
+    try {
+        let activeKey = publicKey || null;
+        if (!activeKey) {
+            const { loadIdentity } = await import('./identity');
+            activeKey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
+        }
+        if (!activeKey) return;
+        const { registerForPushNotifications } = await import('../services/push-notifications');
+        registerForPushNotifications(activeKey).catch((e) => {
+            console.warn('[Push] Error registering push notifications after permission granted:', e);
+        });
+    } catch (e) {
+        console.warn('[Push] Could not load push registration:', e);
+    }
+}
+
+/**
  * Tapping "Turn on" on the card: requests system permission, saves the state, and if granted registers the push token.
  */
 export async function turnOnNotifications(publicKey?: string | null, storage: StorageLike = AsyncStorage): Promise<'granted' | 'declined'> {
@@ -115,12 +137,7 @@ export async function turnOnNotifications(publicKey?: string | null, storage: St
     const existing = await readNotificationPermissionRecord(storage);
     if (status === 'granted') {
         await writeNotificationPermissionRecord({ ...existing, state: 'granted', updatedAt: Date.now() }, storage);
-        const activeKey = publicKey || (await loadIdentity().catch(() => null))?.publicKey;
-        if (activeKey) {
-            registerForPushNotifications(activeKey).catch((e) => {
-                console.warn('[Push] Error registering push notifications after permission granted:', e);
-            });
-        }
+        await registerPushToken(publicKey);
         return 'granted';
     } else {
         await writeNotificationPermissionRecord({ ...existing, state: 'declined', updatedAt: Date.now() }, storage);

@@ -96,8 +96,8 @@ describe("a keeper editing their enterprise's listing on the web", () => {
         await openEggs();
 
         await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());
-        // Edit only: pausing and deleting the enterprise's listing stay the author's on this page.
-        expect(screen.queryByText('⏸️ Pause Offer')).toBeNull();
+        // Edit and Pause for a keeper; deleting the enterprise's listing stays the author's on this page.
+        expect(screen.getByText('⏸️ Pause Offer')).toBeInTheDocument();
         expect(screen.queryByText('🗑️ Delete Post')).toBeNull();
 
         fireEvent.click(screen.getByText('✏️ Edit Post'));
@@ -115,15 +115,41 @@ describe("a keeper editing their enterprise's listing on the web", () => {
         expect(screen.queryByText('💾 Save')).toBeNull();
     });
 
-    it('a member who keeps nothing, or keeps another enterprise: no Edit', async () => {
+    it('Pause and Resume Offer for a keeper of the enterprise: calls pauseMarketplacePost and resumeMarketplacePost with member\'s key', async () => {
+        const listings: Array<Record<string, unknown>> = [eggs];
+        stubNode(listings, [ENT]);
+        const pause = vi.spyOn(api, 'pauseMarketplacePost').mockImplementation(async () => {
+            listings[0] = { ...eggs, status: 'paused' };
+            return { success: true };
+        });
+        const resume = vi.spyOn(api, 'resumeMarketplacePost').mockImplementation(async () => {
+            listings[0] = { ...eggs, status: 'active' };
+            return { success: true };
+        });
+        await openEggs();
+
+        await waitFor(() => expect(screen.getByText('⏸️ Pause Offer')).toBeInTheDocument());
+        await act(async () => { fireEvent.click(screen.getByText('⏸️ Pause Offer')); });
+
+        await waitFor(() => expect(pause).toHaveBeenCalledWith('offer-eggs', ME));
+        await waitFor(() => expect(screen.getByText('▶️ Activate Offer')).toBeInTheDocument());
+
+        await act(async () => { fireEvent.click(screen.getByText('▶️ Activate Offer')); });
+        await waitFor(() => expect(resume).toHaveBeenCalledWith('offer-eggs', ME));
+        await waitFor(() => expect(screen.getByText('⏸️ Pause Offer')).toBeInTheDocument());
+    });
+
+    it('a member who keeps nothing, or keeps another enterprise: no Edit and no Pause', async () => {
         stubNode([eggs], []);
         await openEggs();
         expect(screen.queryByText('✏️ Edit Post')).toBeNull();
+        expect(screen.queryByText('⏸️ Pause Offer')).toBeNull();
         cleanup();
 
         stubNode([eggs], ['another-enterprise-pk']);
         await openEggs();
         expect(screen.queryByText('✏️ Edit Post')).toBeNull();
+        expect(screen.queryByText('⏸️ Pause Offer')).toBeNull();
     });
 
     it('a keeper who signs out on the open listing: no Edit, the enterprises they kept go with them', async () => {

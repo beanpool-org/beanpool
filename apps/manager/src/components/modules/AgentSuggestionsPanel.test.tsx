@@ -109,6 +109,12 @@ describe('AgentSuggestionsPanel', () => {
         expect(screen.getByTestId('agent-approve-hint').textContent).toMatch(/Nothing left to approve/);
     });
 
+    it('renders a loading indicator while fetching suggestions', async () => {
+        vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+        render(<AgentSuggestionsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        expect(screen.getByTestId('agent-suggestions-loading')).toHaveTextContent('Loading AI suggestions…');
+    });
+
     it('a moderator sees nothing and asks nothing', async () => {
         const calls = fakeNode({ items: [card()] });
         const { container } = render(<AgentSuggestionsPanel activeNode={node} viewer={MOD_KEY} />);

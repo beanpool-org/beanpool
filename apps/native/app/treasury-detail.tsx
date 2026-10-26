@@ -30,7 +30,7 @@ import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../compo
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
 import {
-    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText,
+    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontPaused, ShopfrontSections, ShopfrontText,
     ShopfrontTogether, ShopfrontVisitorNote, categorySinceLine, openListing,
 } from '../components/shopfront/Shopfront';
 import {
@@ -253,17 +253,19 @@ export default function TreasuryDetailScreen() {
                 if (!active) return;
                 if (d) setDetail(d);
                 setIdentity(id);
-                if (d && treasuryKey && hasShopfront(d) && readsAsMember(d)) {
-                    void readOwnerListings(treasuryKey).then((rows) => { if (active) setOwnListings(rows); });
-                }
+                let keeper = false;
                 if (id?.publicKey && treasuryKey) {
                     const b: any = await getBalance(id.publicKey).catch(() => ({}));
                     if (!active) return;
                     const mine: string[] = Array.isArray(b?.keeperOf) ? b.keeperOf : [];
                     const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
-                    setIsKeeperOfThis(mine.includes(treasuryKey) || inKeepers);
+                    keeper = mine.includes(treasuryKey) || inKeepers;
+                    setIsKeeperOfThis(keeper);
                 } else {
                     setIsKeeperOfThis(false);
+                }
+                if (d && treasuryKey && hasShopfront(d) && readsAsMember(d)) {
+                    void readOwnerListings(treasuryKey, { keeper }).then((rows) => { if (active) setOwnListings(rows); });
                 }
             } catch {
                 // handle error
@@ -408,6 +410,7 @@ export default function TreasuryDetailScreen() {
     const leadKeeper = leadKeeperOf(shopfrontKeepers);
     const memberView = isEffectivePreview || readsAsMember(detail);
     const shopListings: ShopfrontListing[] = ownListings ?? listingsFromDetailPosts(detail?.posts);
+    const pausedListings = isKeeperOfThis ? shopListings.filter((l) => l.status === 'paused') : [];
     const openListingHere = (id: string) => { if (!isEffectivePreview) openListing(id); };
     const handleMessageLead = async () => {
         if (!leadKeeper || !myPubkey || messagingLead) return;
@@ -707,6 +710,9 @@ export default function TreasuryDetailScreen() {
                                 <ShopfrontFeatured listings={featuredOf(shopListings)} showsBeans onOpen={openListingHere} />
                                 <ShopfrontTogether categories={Array.isArray(detail?.offerCategories) ? detail.offerCategories : []} />
                                 <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} onOpen={openListingHere} />
+                                {isKeeperOfThis && pausedListings.length > 0 && (
+                                    <ShopfrontPaused listings={pausedListings} onOpen={openListingHere} />
+                                )}
                             </>
                         )}
 

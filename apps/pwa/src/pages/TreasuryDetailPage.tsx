@@ -37,7 +37,7 @@ import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker
 import { Sentence } from '../components/Sentence';
 import { sampleTreasuryDetail, sampleEnterpriseLedger, SampleHeader } from '../components/ShowcasePreviews';
 import {
-    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText, ShopfrontTogether,
+    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontPaused, ShopfrontSections, ShopfrontText, ShopfrontTogether,
     ShopfrontVisitorNote,
 } from '../components/Shopfront';
 import { EnterpriseFace, EnterpriseFeatured } from '../components/EnterpriseManage';
@@ -131,6 +131,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
+    const isKeeperRef = useRef(false);
     // The page or its keepers' Manage tab (round 3 §3, S8). Each enterprise opens on its page unless initialTab asked.
     const [tab, setTab] = useState<'page' | 'manage'>(initialTab ?? 'page');
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
@@ -153,11 +154,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // An Offer put on or off the shelf while a read is out keeps its new place over what that read says of it.
     const listingsTurn = useRef(0);
     const featuredMeanwhile = useRef(new Set<Map<string, string | null>>());
-    const readListings = useCallback(async () => {
+    const readListings = useCallback(async (opts?: { keeper?: boolean }) => {
         const turn = ++listingsTurn.current;
         const meanwhile = new Map<string, string | null>();
         featuredMeanwhile.current.add(meanwhile);
-        const read = await readOwnerListings(pubkey);
+        const keeper = opts?.keeper ?? isKeeperRef.current;
+        const read = await readOwnerListings(pubkey, { keeper });
         featuredMeanwhile.current.delete(meanwhile);
         if (shownPubkey.current !== pubkey || turn !== listingsTurn.current) return;
         setOwnListings((was) => !read
@@ -529,9 +531,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             const d = await getTreasury(pubkey);
             if (!current()) return;
             setDetail(d);
-            // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
-            if (hasShopfront(d) && readsAsMember(d)) void readListings();
 
+            let keeper = false;
             if (identity?.publicKey && viewerIsMember) {
                 const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
                 // The viewer's balance only refines keeper status. The node answers "Member not
@@ -543,11 +544,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 } catch {
                     // fall back to the keeper list the enterprise itself returned
                 }
-                if (!current()) return;
-                setIsKeeperOfThis(mine.includes(pubkey) || inKeepers);
-            } else {
-                setIsKeeperOfThis(false);
+                keeper = mine.includes(pubkey) || inKeepers;
             }
+            if (!current()) return;
+            setIsKeeperOfThis(keeper);
+            isKeeperRef.current = keeper;
+
+            // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
+            // For a keeper, read with keeper=1 to retrieve paused listings too.
+            if (hasShopfront(d) && readsAsMember(d)) void readListings({ keeper });
         } catch (e: any) {
             // A quiet read again that fails leaves the page as it was.
             if (!quiet && current()) setError(e.message || t('Check your connection and try again.'));
@@ -1054,6 +1059,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const leadKeeper = leadKeeperOf(shopfrontKeepers);
     const memberView = isEffectivePreview || readsAsMember(detail);
     const shopListings: ShopfrontListing[] = ownListings ?? listingsFromDetailPosts(detail?.posts);
+    const pausedListings = isKeeperOfThis ? shopListings.filter((l) => l.status === 'paused') : [];
     // What each of its listings says of it while it is paused, winding up or closed (the old listing rows' badge).
     const listingNote = detail?.status === 'completed'
         ? t('Closed', undefined, 'a listing')
@@ -2184,6 +2190,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <ShopfrontFeatured listings={featuredOf(shopListings)} showsBeans onOpen={openListing} />
                                         <ShopfrontTogether categories={Array.isArray(detail?.offerCategories) ? detail.offerCategories : []} />
                                         <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} note={listingNote} onOpen={openListing} />
+                                        {isKeeperOfThis && pausedListings.length > 0 && (
+                                            <ShopfrontPaused listings={pausedListings} onOpen={openListing} />
+                                        )}
                                     </>
                                 )}
 

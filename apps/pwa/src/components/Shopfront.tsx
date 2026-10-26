@@ -291,6 +291,49 @@ export function ShopfrontSections({ sections, showsBeans, empty, note, onOpen }:
     );
 }
 
+/**
+ * A keeper's view of the enterprise's paused listings: title, type, photo or category emoji fallback, words 'Paused'.
+ * Tapping one opens the listing, where Activate Offer / Activate Need is reachable.
+ */
+export function ShopfrontPaused({ listings, onOpen }: { listings: ShopfrontListing[]; onOpen?: (id: string) => void }) {
+    if (listings.length === 0) return null;
+    return (
+        <section data-testid="shopfront-paused" aria-label={t('Paused')} className={card}>
+            <h3 className="m-0 mb-1 text-sm font-extrabold text-nature-900 dark:text-white">{t('Paused')}</h3>
+            <ul className="m-0 p-0 list-none divide-y divide-nature-100 dark:divide-nature-800">
+                {listings.map((l) => (
+                    <li key={l.id}>
+                        <button
+                            type="button"
+                            data-testid={`shopfront-row-${l.id}`}
+                            onClick={onOpen ? () => onOpen(l.id) : undefined}
+                            disabled={!onOpen}
+                            className="w-full min-h-[56px] py-1.5 flex items-center gap-2.5 text-left bg-transparent border-none cursor-pointer rounded-lg hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors opacity-75"
+                        >
+                            <ListingPicture l={l} className="w-12 h-12 shrink-0 rounded-lg" emojiClass="text-2xl" />
+                            <span className="flex-1 min-w-0">
+                                <span className="block text-sm font-semibold text-nature-900 dark:text-white line-clamp-2 break-words">{l.title}</span>
+                                <span className="flex items-center gap-1.5 mt-0.5">
+                                    <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                        l.type === 'offer'
+                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                    }`}>
+                                        {l.type === 'offer' ? t('OFFER') : t('NEED')}
+                                    </span>
+                                    <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink">
+                                        {t('⏸ Paused')}
+                                    </span>
+                                </span>
+                            </span>
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
+}
+
 /** The Message button: a DM to the lead keeper, named. */
 export function ShopfrontMessage({ label, onClick }: { label: string; onClick: () => void }) {
     return (

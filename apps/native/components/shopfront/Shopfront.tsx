@@ -70,6 +70,16 @@ const makeStyles = ({ colors }: { colors: AppColors }) => StyleSheet.create({
     section: { marginBottom: 12 },
     sectionTitle: { fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 4 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+    pausedRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border.default, opacity: 0.75 },
+    badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+    typeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+    badgeOffer: { backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border },
+    badgeNeed: { backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border },
+    typeBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+    badgeOfferText: { color: colors.feedback.warning.fg },
+    badgeNeedText: { color: colors.feedback.info.fg },
+    pausedBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border },
+    pausedBadgeText: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, letterSpacing: 0.3 },
     thumb: { width: 48, height: 48, borderRadius: 8, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
     thumbEmoji: { fontSize: 22 },
     rowText: { flex: 1, minWidth: 0 },
@@ -346,6 +356,44 @@ export function ShopfrontSections({ sections, showsBeans, empty, onOpen = openLi
                     </View>
                 );
             })}
+        </View>
+    );
+}
+
+/** A keeper's view of the enterprise's paused listings: title, type, photo or category emoji fallback, words 'Paused'. */
+export function ShopfrontPaused({ listings, onOpen = openListing }: { listings: ShopfrontListing[]; onOpen?: (id: string) => void }) {
+    const s = useStyles(makeStyles);
+    if (listings.length === 0) return null;
+    return (
+        <View style={s.block} testID="shopfront-paused">
+            <View style={s.section}>
+                <Text style={s.sectionTitle} accessibilityRole="header">{t('Paused')}</Text>
+                {listings.map((l) => (
+                    <Pressable
+                        key={l.id}
+                        style={s.pausedRow}
+                        onPress={() => onOpen(l.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={[l.title, l.type === 'offer' ? t('OFFER') : t('NEED'), t('⏸ PAUSED')].join(', ')}
+                        testID={`shopfront-row-${l.id}`}
+                    >
+                        <ListingPicture l={l} style={s.thumb} emojiStyle={s.thumbEmoji} />
+                        <View style={s.rowText}>
+                            <Text style={s.rowTitle} numberOfLines={2}>{l.title}</Text>
+                            <View style={s.badgesRow}>
+                                <View style={[s.typeBadge, l.type === 'offer' ? s.badgeOffer : s.badgeNeed]}>
+                                    <Text style={[s.typeBadgeText, l.type === 'offer' ? s.badgeOfferText : s.badgeNeedText]}>
+                                        {l.type === 'offer' ? t('OFFER') : t('NEED')}
+                                    </Text>
+                                </View>
+                                <View style={s.pausedBadge}>
+                                    <Text style={s.pausedBadgeText}>{t('⏸ PAUSED')}</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </Pressable>
+                ))}
+            </View>
         </View>
     );
 }

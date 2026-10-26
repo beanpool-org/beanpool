@@ -42,7 +42,7 @@ describe('CategoryTile (Native)', () => {
         document.body.appendChild(container);
         const root = createRoot(container);
         act(() => {
-            root.render(ui);
+            root.render(ui as any);
         });
         return {
             container,

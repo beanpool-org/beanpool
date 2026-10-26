@@ -324,7 +324,7 @@ export async function startMain(pair: Pair): Promise<{ main: NodeProc; m: string
     built('Gwen sets a profile photo', await As(gwen, '/api/profile/update', { avatar: TINY_PNG }));
     for (const who of [ann, bo, cy, dee]) await join(who);
     const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
-        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG],
     })).post;
     built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
     await offer(gwen, 'Sourdough', 4);
@@ -333,7 +333,7 @@ export async function startMain(pair: Pair): Promise<{ main: NodeProc; m: string
     built('Ann approves: the Beans are held', await As(ann, '/api/marketplace/transactions/approve', { transactionId: tx.id, authorPublicKey: ann.pk }));
     built('Gwen confirms: the Beans are released', await As(gwen, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: gwen.pk }));
     // A listing photo, and a friendship to end before a re-key (step 8).
-    await main.send('sql', { sql: `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 0, ?)`, args: [honey.id, TINY_PNG, new Date().toISOString()] });
+    await main.send('sql', { sql: `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 0, ?)`, args: [honey.id, TINY_PNG, new Date().toISOString()] });
     built('Bo adds Cy as a friend', await As(bo, '/api/friends/add', { ownerPubkey: bo.pk, friendPubkey: cy.pk }));
     const conv = built('Ann opens a DM with Bo', await As(ann, '/api/messages/conversation', { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));
     const conversationId: string = conv.conversation?.id ?? conv.id;

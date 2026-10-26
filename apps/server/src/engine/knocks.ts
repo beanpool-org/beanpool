@@ -410,15 +410,43 @@ export function openKnocksWaitingDays(minDays: number, now = Date.now()): number
 }
 
 /**
- * The node measures, over its last 90 days: the share of knocks answered within 7 days, and the age of the oldest open knock.
- * Returns:
- *   - null when < 3 knocks seen;
- *   - 'week' when >= 80% answered within 7 days and no open knock > 14 days old;
- *   - 'none' when an open knock is > 14 days old or < 50% answered;
- *   - 'slow' otherwise.
+ * How promptly the community answers requests to join, as the directory push carries it (design §5.6). A request is
+ * judged once it has had its chance: answered (either way), or still open past `answerDays`. One only hours or days old
+ * is neither an answer nor a miss yet, so a burst of new requests never marks a community that answers as one that
+ * doesn't. Cancelled ones are never judged; nor is an open one whose key joined another way or was replaced (it can't be
+ * answered).
  */
-export function measureKnockAnswers(now = Date.now()): 'week' | 'slow' | 'none' | null {
-    const since = iso(now - 90 * DAY_MS);
+export const KNOCK_ANSWER_RULES = {
+    /** How far back requests are judged. */
+    windowDays: 90,
+    /** Answered within this many days is answered on time; open past it, a miss. */
+    answerDays: 7,
+    /** An open request older than this says the community isn't answering. */
+    staleOpenDays: 14,
+    /** Nothing is said until this many requests have been judged. */
+    minJudged: 3,
+    /** 'week' when at least this share was answered on time (and none is stale). */
+    weekShare: 0.8,
+    /** 'none' when fewer than this share was answered at all (or one is stale). */
+    noneShare: 0.5,
+    /**
+     * 'none' sorts the community after those that answer (directory-cache.ts listCommunities), so it is published only
+     * once the measure has said it this long without a break; until then the push says 'slow' ("hasn't answered requests
+     * lately" too, without the demotion). The operator page promises the 60 days.
+     */
+    noneHoldDays: 60,
+} as const;
+
+export type KnockAnswers = 'week' | 'slow' | 'none';
+
+/**
+ * This node's own measure, over its last {@link KNOCK_ANSWER_RULES}.windowDays: null until `minJudged` requests were
+ * judged; 'none' when an open one is older than `staleOpenDays` or fewer than `noneShare` of those judged were answered;
+ * 'week' when at least `weekShare` were answered within `answerDays`; else 'slow'. What the directory is told is
+ * {@link knockAnswersForDirectory}, which holds 'none' back for `noneHoldDays`.
+ */
+export function measureKnockAnswers(now = Date.now()): KnockAnswers | null {
+    const R = KNOCK_ANSWER_RULES;
     const rows = db.prepare(`
         SELECT created_at, status, decided_at FROM join_requests
         WHERE created_at >= ? AND status IN ('pending', 'approved', 'declined')
@@ -428,35 +456,53 @@ export function measureKnockAnswers(now = Date.now()): 'week' | 'slow' | 'none' 
                 OR EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)
             )
         )
-    `).all(since) as Pick<KnockRow, 'created_at' | 'status' | 'decided_at'>[];
-    if (rows.length < 3) return null;
+    `).all(iso(now - R.windowDays * DAY_MS)) as Pick<KnockRow, 'created_at' | 'status' | 'decided_at'>[];
 
-    let openOlderThan14 = false;
-    let totalAnswered = 0;
-    let answeredWithin7 = 0;
-
+    let judged = 0;
+    let answered = 0;
+    let onTime = 0;
+    let stale = false;
     for (const r of rows) {
         if (r.status === 'pending') {
-            const ageDays = (now - Date.parse(r.created_at)) / DAY_MS;
-            if (ageDays > 14) openOlderThan14 = true;
-        } else {
-            totalAnswered++;
-            if (r.decided_at) {
-                const answerDays = (Date.parse(r.decided_at) - Date.parse(r.created_at)) / DAY_MS;
-                if (answerDays <= 7) answeredWithin7++;
-            }
+            const waited = ageMs(r.created_at, now);
+            // Still within its chance: not judged.
+            if (waited <= R.answerDays * DAY_MS) continue;
+            judged++;
+            if (waited > R.staleOpenDays * DAY_MS) stale = true;
+            continue;
         }
+        judged++;
+        answered++;
+        if (r.decided_at && Date.parse(r.decided_at) - Date.parse(r.created_at) <= R.answerDays * DAY_MS) onTime++;
     }
-
-    if (openOlderThan14 || (totalAnswered / rows.length) < 0.5) {
-        return 'none';
-    }
-
-    if ((answeredWithin7 / rows.length) >= 0.8) {
-        return 'week';
-    }
-
+    if (judged < R.minJudged) return null;
+    if (stale || answered / judged < R.noneShare) return 'none';
+    if (onTime / judged >= R.weekShare) return 'week';
     return 'slow';
+}
+
+/** node_config: when this server's measure began saying 'none' without a break (ISO), or no row. */
+export const KNOCK_ANSWERS_NONE_SINCE_KEY = 'knockAnswersNoneSince';
+
+/**
+ * What the directory push says ({@link measureKnockAnswers}, with 'none' held back): the first time the measure says
+ * 'none' is written down, and until it has said so for `noneHoldDays` the push says 'slow'. Any other answer clears it,
+ * so the hold starts again. Per server: a standby that takes over starts its own count, which only delays the demotion.
+ */
+export function knockAnswersForDirectory(now = Date.now()): KnockAnswers | null {
+    const measured = measureKnockAnswers(now);
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(KNOCK_ANSWERS_NONE_SINCE_KEY) as { value: string } | undefined;
+    if (measured !== 'none') {
+        if (row) db.prepare('DELETE FROM node_config WHERE key = ?').run(KNOCK_ANSWERS_NONE_SINCE_KEY);
+        return measured;
+    }
+    const since = row ? Date.parse(row.value) : NaN;
+    if (!Number.isFinite(since) || since > now) {
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(KNOCK_ANSWERS_NONE_SINCE_KEY, iso(now));
+        return 'slow';
+    }
+    return now - since >= KNOCK_ANSWER_RULES.noneHoldDays * DAY_MS ? 'none' : 'slow';
 }
 
 /**

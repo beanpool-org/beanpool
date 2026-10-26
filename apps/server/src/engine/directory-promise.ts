@@ -47,7 +47,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { getDoor } from '../config/door.js';
 import { resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { closingDay, listingPromise, MAX_CLOSING_DAYS, MAX_PROMISE_OWNERS, type ListingPromise } from './directory-cache.js';
-import { measureKnockAnswers } from './knocks.js';
+import { knockAnswersForDirectory } from './knocks.js';
 
 export type { ListingPromise };
 
@@ -205,7 +205,7 @@ export interface ListingFields {
     acceptingKnocks: boolean;
     /** Only while it is still to come (a mirror drops a day long past anyway). */
     closingOn: string | null;
-    /** How quickly it answers requests to join (Front doors S1). */
+    /** How promptly it answers requests to join (front doors S1; engine/knocks.ts knockAnswersForDirectory: 'none' held 60 days), or null. */
     answers: 'week' | 'slow' | 'none' | null;
 }
 
@@ -216,7 +216,7 @@ export function listingFields(now: number = Date.now()): { fields: ListingFields
         ? listingPromise({ v: 1, owners: Math.min(status.owners, MAX_PROMISE_OWNERS), backups: true, reports: true, notice: true })
         : null;
     const closingOn = status.closingOn && status.closingOn >= today(now) ? status.closingOn : null;
-    const answers = measureKnockAnswers(now);
+    const answers = knockAnswersForDirectory(now);
     return { fields: { promise, acceptingKnocks: acceptingKnocks(), closingOn, answers }, status };
 }
 

@@ -38,7 +38,8 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { checkServerAlerts } from './services/alerts.js';
-import { measureKnockAnswers } from './engine/knocks.js';
+import { measureKnockAnswers, knockAnswersForDirectory } from './engine/knocks.js';
+import { listingFields } from './engine/directory-promise.js';
 import { listCommunities, insertDirectoryRowForTesting, clearDirectoryForTesting } from './engine/directory-cache.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 
@@ -248,17 +249,13 @@ async function main() {
     // Clean up old knock
     db.prepare(`DELETE FROM join_requests WHERE id = ?`).run(oldKnockId);
 
-    // ── 5. Directory 'answers' line measured from seeded histories ──
-    // Clear join_requests for clean test
+    // ── 5. Directory 'answers' line measured from seeded histories (injected time) ──
     db.prepare(`DELETE FROM join_requests`).run();
-
-    // Case A: < 3 knocks -> null
     assert(measureKnockAnswers(Date.now()) === null, 'measureKnockAnswers returns null with 0 knocks');
 
     const now = Date.now();
+    const HOUR_MS = 60 * 60 * 1000;
     const t = (daysAgo: number) => new Date(now - daysAgo * DAY_MS).toISOString();
-
-    // Helper to insert knock history
     const insertHistory = (id: string, createdDaysAgo: number, decidedDaysAgo: number | null, status: 'approved' | 'declined' | 'pending') => {
         db.prepare(`INSERT INTO join_requests (id, pubkey, callsign, message, status, created_at, decided_at, updated_at, invite_code)
                     VALUES (?, ?, 'K', 'M', ?, ?, ?, ?, ?)`).run(
@@ -266,25 +263,56 @@ async function main() {
             status === 'approved' ? `INV-${id}` : null,
         );
     };
+    const fresh = (n: number) => { for (let i = 0; i < n; i++) insertHistory(`fresh${i}`, 1 / 24, null, 'pending'); };
 
-    // Case B: >= 80% answered within 7 days, nothing > 14 days old -> 'week'
-    // 5 knocks: 4 answered in 2 days, 1 pending 3 days old (answered within 7 days: 4/5 = 80%, oldest open: 3 days)
+    // A fresh request has had no chance yet: neither an answer nor a miss (the deciding review's measured cases).
+    fresh(3);
+    assert(measureKnockAnswers(now) === null, `3 requests an hour old: nothing said, not 'none' (got ${measureKnockAnswers(now)})`);
+    insertHistory('p1', 3 / 24, 1 / 24, 'approved');
+    insertHistory('p2', 4 / 24, 2 / 24, 'declined');
+    insertHistory('p3', 5 / 24, 3 / 24, 'approved');
+    assert(measureKnockAnswers(now) === 'week', `3 answered within hours, 3 more an hour old: 'week', not 'slow' (got ${measureKnockAnswers(now)})`);
+    // The same requests a week and a day later, still open: now each is a miss.
+    assert(measureKnockAnswers(now + 8 * DAY_MS) === 'slow', `...8 days on, the 3 still open count against it: 3 of 6 answered (got ${measureKnockAnswers(now + 8 * DAY_MS)})`);
+    assert(measureKnockAnswers(now + 15 * DAY_MS) === 'none', `...15 days on, an open one is older than 14 days: 'none' (got ${measureKnockAnswers(now + 15 * DAY_MS)})`);
+    db.prepare(`DELETE FROM join_requests`).run();
+
+    // >= 80% of those judged answered within 7 days, nothing > 14 days old -> 'week'. The one open 3 days isn't judged.
     insertHistory('k1', 20, 18, 'approved'); // took 2 days
     insertHistory('k2', 15, 13, 'approved'); // took 2 days
     insertHistory('k3', 10, 8, 'approved');  // took 2 days
     insertHistory('k4', 8, 6, 'declined');   // took 2 days
-    insertHistory('k5', 3, null, 'pending'); // open 3 days
+    insertHistory('k5', 3, null, 'pending'); // open 3 days: not judged yet
     assert(measureKnockAnswers(now) === 'week', `measureKnockAnswers returns 'week' when 80% answered in <= 7d (got ${measureKnockAnswers(now)})`);
 
-    // Case C: >= 50% answered and nothing > 14 days, but < 80% answered within 7 days -> 'slow'
-    // Add 2 more that took 10 days to answer: 4/7 answered in <= 7d (57%), all answered in <= 14d
+    // >= 50% answered and nothing > 14 days, but < 80% within 7 days -> 'slow': 4 of 6 judged on time.
     insertHistory('k6', 25, 15, 'approved'); // took 10 days
     insertHistory('k7', 22, 12, 'approved'); // took 10 days
     assert(measureKnockAnswers(now) === 'slow', `measureKnockAnswers returns 'slow' when >= 50% answered but < 80% within 7d (got ${measureKnockAnswers(now)})`);
 
-    // Case D: open knock older than 14 days -> 'none'
+    // Open past the week but not past 14 days: a miss, not yet 'none'.
+    insertHistory('k9', 9, null, 'pending');
+    assert(measureKnockAnswers(now) === 'slow', `an open one 9 days old is a miss, not 'none' (got ${measureKnockAnswers(now)})`);
+
+    // An open knock older than 14 days -> 'none'.
     insertHistory('k8', 16, null, 'pending'); // open 16 days
     assert(measureKnockAnswers(now) === 'none', `measureKnockAnswers returns 'none' when an open knock is > 14 days old (got ${measureKnockAnswers(now)})`);
+
+    // The directory is told 'none' only after 60 days of it without a break (the operator page's hold); 'slow' meanwhile.
+    const NONE_SINCE = (db.prepare(`SELECT value FROM node_config WHERE key = 'knockAnswersNoneSince'`).get() as { value: string } | undefined);
+    assert(NONE_SINCE === undefined, 'no hold has started before the push first measures');
+    assert(knockAnswersForDirectory(now) === 'slow' && listingFields(now).fields.answers === 'slow',
+        `the first 'none': the push says 'slow' ("hasn't answered requests lately", no demotion) (got ${knockAnswersForDirectory(now)})`);
+    assert(knockAnswersForDirectory(now + 59 * DAY_MS) === 'slow', `59 days of 'none': still 'slow' (got ${knockAnswersForDirectory(now + 59 * DAY_MS)})`);
+    assert(knockAnswersForDirectory(now + 60 * DAY_MS) === 'none', `60 days of 'none': the push says 'none' (got ${knockAnswersForDirectory(now + 60 * DAY_MS)})`);
+    // A break (the stale ones answered or gone) ends the hold; the next 'none' starts it again.
+    db.prepare(`DELETE FROM join_requests WHERE id IN ('k8', 'k9', 'k5')`).run();
+    assert(knockAnswersForDirectory(now + 61 * HOUR_MS) === 'slow'
+        && db.prepare(`SELECT 1 FROM node_config WHERE key = 'knockAnswersNoneSince'`).get() === undefined,
+        `a measure that isn't 'none' clears the hold (got ${knockAnswersForDirectory(now + 61 * HOUR_MS)})`);
+    insertHistory('k10', 20, null, 'pending');
+    assert(knockAnswersForDirectory(now + 62 * HOUR_MS) === 'slow', `...and a new 'none' starts it again (got ${knockAnswersForDirectory(now + 62 * HOUR_MS)})`);
+    db.prepare(`DELETE FROM node_config WHERE key = 'knockAnswersNoneSince'`).run();
 
     // ── 6. Directory cache ordering ──
     clearDirectoryForTesting();

@@ -75,7 +75,7 @@ import {
 import { type YourChatLastMessage } from '../engine/your-groups.js';
 import { featuresFor } from '../config/features-for.js';
 import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
-import { type Door } from '../config/door.js';
+import { getDoor, type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
@@ -557,7 +557,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             const joined = parts.length <= 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
             items.push({ kind: 'admin', count: queue.total, accent: true, label: joined.charAt(0).toUpperCase() + joined.slice(1), target: { to: 'admin', section: work[0].section } });
         }
-    } else if (row?.status === 'active' && !isVisitorKey(me) && c.features.door === 'members') {
+    } else if (row?.status === 'active' && !isVisitorKey(me) && getDoor() === 'members') {
         const waitingKnocks = openKnocksWaitingDays(3);
         if (waitingKnocks > 0) {
             items.push({

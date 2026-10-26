@@ -453,7 +453,7 @@ export function measureKnockAnswers(now = Date.now()): 'week' | 'slow' | 'none' 
 /**
  * Notifies active owners and admins (and opted-in members if door !== 'admins') of an incoming knock.
  */
-export function notifyKnockReceived(now = Date.now()): void {
+export function notifyKnockReceived(_now = Date.now()): void {
     const adminRows = db.prepare(`
         SELECT nr.member_pubkey AS pk
         FROM node_roles nr

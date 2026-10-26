@@ -246,7 +246,6 @@ export async function postAdminKnockNoticesFromSync(deps: {
     now?: number;
     timeoutMs?: number;
 }): Promise<number> {
-    const now = deps.now ?? Date.now();
     if (!deps.account?.publicKey || !deps.account.privateKey) return 0;
     try {
         const community = communityAddress(await deps.storage.getItem(ANCHOR_STORE_KEY));

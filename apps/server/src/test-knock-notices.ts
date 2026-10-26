@@ -36,7 +36,7 @@ import { startP2P } from './p2p.js';
 import { getAdminQueue } from './engine/admin-queue.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { putPushTokenRow, pushTokenId } from './services/push-token-seal.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import { checkServerAlerts } from './services/alerts.js';
 import { measureKnockAnswers } from './engine/knocks.js';
 import { listCommunities, insertDirectoryRowForTesting, clearDirectoryForTesting } from './engine/directory-cache.js';

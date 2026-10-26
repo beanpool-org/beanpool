@@ -1414,7 +1414,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <div className="w-full aspect-[3/1] rounded-xl overflow-hidden mb-3">
                                 <CategoryTile
                                     category={selectedPost.category}
-                                    kind={(selectedPost.type as string) === 'event' ? 'event' : 'listing'}
+                                    kind={isPulsePost ? 'pulse' : ((selectedPost.type as string) === 'event' ? 'event' : 'listing')}
                                     size="banner"
                                 />
                             </div>

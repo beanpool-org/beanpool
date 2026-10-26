@@ -238,7 +238,7 @@ import {
     previewAdmitsInvite,
 } from './engine/invites.js';
 import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
-import { avatarUrlOf, isSelfGroupPictureUrl, word, wordsFor } from '@beanpool/core';
+import { avatarUrlOf, word, wordsFor } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -10735,14 +10735,6 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
 
 export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
     assertGroupActorIsMember(convenorPubkey);
-    if (updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl)) {
-        if (!updates.avatarUrl || !updates.avatarUrl.trim()) {
-            const heldPicture = engine.getGroupPicture(db, groupId);
-            if (heldPicture) {
-                throw new Error(word('A group keeps a picture'));
-            }
-        }
-    }
     const incomingBytes = incomingPhotoBytes(updates.avatarUrl);
     if (incomingBytes > 0) assertMayStorePhotoBytes(convenorPubkey, incomingBytes);
     const res = updateGroupEngine(db, groupId, convenorPubkey, { ...updates, avatarUrl: storableGroupPicture(updates.avatarUrl) });

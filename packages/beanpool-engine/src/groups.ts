@@ -210,7 +210,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     // and no route deletes a group. Same refusal as joining one.
     if (isSuspendedAccount(db, params.createdBy)) throw new Error(unauthorized(GROUP_START_PAUSED));
 
-    const avatarUrl = params.avatarUrl?.trim() ? params.avatarUrl : bundledGroupEmblem(category);
+    // Every group has a picture: a value the node would keep as none (empty, a member's avatar URL, this node's own group
+    // picture URL; groupPictureColumnsOf) gives the category's emblem, as nothing sent does.
+    const avatarUrl = groupPictureColumnsOf(params.avatarUrl) ? params.avatarUrl! : bundledGroupEmblem(category);
     assertGroupPictureFits(avatarUrl);
 
     const rawSlug = params.slug ? slugifyGroupName(params.slug) : slugifyGroupName(trimmedName);
@@ -1027,15 +1029,13 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
 
     // The picture by its one writer (setGroupPicture), below. This node's own picture URL sent back by an editor that read
     // the group means "unchanged", as a member's own avatar URL does on a profile save.
-    if (updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl)) {
-        if (!updates.avatarUrl || !updates.avatarUrl.trim()) {
-            const heldPicture = getGroupPicture(db, groupId);
-            if (heldPicture) {
-                throw new Error(word('A group keeps a picture'));
-            }
-        }
-    }
     const picture = updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl) ? updates.avatarUrl || null : undefined;
+    // A group keeps a picture: judged by what would be kept (groupPictureColumnsOf), so empty, whitespace and a member's
+    // avatar URL are each refused, never stored as none. A group made before pictures were required, holding none, may
+    // still be edited without one.
+    if (picture !== undefined && groupPictureColumnsOf(picture) === null && getGroupPicture(db, groupId) !== null) {
+        throw new Error(word('A group keeps a picture'));
+    }
     assertGroupPictureFits(picture);
 
     if (updates.category !== undefined) {

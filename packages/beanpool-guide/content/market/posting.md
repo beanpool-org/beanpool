@@ -60,7 +60,7 @@ On the phone, the app keeps a draft as you type. If you leave and come back, it 
 
 ## Posting only to a group
 
-Open **Commons**, then **Groups**, then your group, and tap **Post to** and the group's name. Only that group sees it. On the phone this shorter form has no photos and no location. In the web app it opens the usual form on the Map, set to the group.
+Open **Commons**, then **Groups**, then your group, and tap **Post to** and the group's name. Only that group sees it. On the phone this shorter form has no location, and needs at least one photo like any Offer or Need. In the web app it opens the usual form on the Map, set to the group.
 
 ## Changing or removing a post
 

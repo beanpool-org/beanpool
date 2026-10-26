@@ -359,7 +359,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
-        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on'),
+        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on answers'),
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',

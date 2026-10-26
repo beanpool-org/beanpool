@@ -64,7 +64,8 @@ export function pledgeReturnLine(p: PledgeReturnInput, now: number = Date.now())
     if (!isPastDeadline(p.deadlineAt, now)) {
         return t('If the goal isn’t reached by {date}, everyone’s Beans go back on {returnDate}.', { date, returnDate });
     }
-    if (!(raised > 0)) return null;
+    // In cents, as every pledge is: a float residue where all of them went back is nothing held (review of #2525).
+    if (!(Math.round(raised * 100) > 0)) return null;
     if (!isPledgeReturnDue(p.deadlineAt, now)) {
         return t('The goal wasn’t reached by {date}. Everyone’s Beans go back on {returnDate}, unless the end date moves before then.', { date, returnDate });
     }

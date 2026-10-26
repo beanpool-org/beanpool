@@ -170,7 +170,7 @@ describe('"Cancel my request" where the asker sees a request waiting', () => {
         expect(sent.filter(s => s.method === 'POST')).toEqual([{ url: `${COMMUNITY}/api/join/knock/cancel`, method: 'POST' }]);
         expect(byTestId(host, 'find-cancel-request')).toBeNull();
         expect(host.textContent).toContain(KNOCK_MESSAGES.cancelled);
-        expect([...host.querySelectorAll('button')].map(b => b.textContent)).not.toContain('Ask to join');
+        expect(Array.from(host.querySelectorAll('button')).map(b => b.textContent)).not.toContain('Ask to join');
         expect(Object.keys(await cancelledKnocks(who.identity!.publicKey))).toEqual([COMMUNITY]);
     });
 

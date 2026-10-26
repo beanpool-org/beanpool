@@ -73,7 +73,14 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         PanResponder: { create: (config: Record<string, unknown>) => ({ panHandlers: { panConfig: config } }) },
-        Alert: { alert: (title: string, body?: string) => { alerts.said.push(title); if (body) alerts.said.push(body); } },
+        Alert: {
+            alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => void }>) => {
+                alerts.said.push(title);
+                if (body) alerts.said.push(body);
+                const gallery = buttons?.find((b) => b.text === 'Gallery');
+                if (gallery?.onPress) void gallery.onPress();
+            },
+        },
         AccessibilityInfo: { announceForAccessibility: vi.fn() },
         Keyboard: { dismiss: vi.fn() },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },

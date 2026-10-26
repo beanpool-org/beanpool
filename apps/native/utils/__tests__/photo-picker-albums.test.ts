@@ -69,7 +69,7 @@ describe('photo picker: Albums default and Browse files door', () => {
     });
 
     it('no new permission appears in app.json and blockedPermissions contains READ_MEDIA_IMAGES', () => {
-        const appJsonPath = path.resolve(__dirname, '../../../app.json');
+        const appJsonPath = path.resolve(__dirname, '../../app.json');
         const raw = fs.readFileSync(appJsonPath, 'utf8');
         const config = JSON.parse(raw);
         const blocked: string[] = config.expo.android.blockedPermissions ?? [];

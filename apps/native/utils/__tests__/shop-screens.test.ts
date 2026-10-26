@@ -396,8 +396,8 @@ describe('Your shop (app/shop/mine.tsx)', () => {
                 node.log.length = 0;
                 await draw(createElement(YourShopScreen));
                 await click('shop-field-banner');
-                expect(alerts.buttons.map(b => b.text)).toEqual(['Gallery', 'Browse files', 'Cancel']);
-                const gallery = alerts.buttons.find(b => b.text === 'Gallery');
+                expect(alerts.buttons.map(b => b.text)).toEqual([t('Gallery'), t('Browse files'), t('Cancel')]);
+                const gallery = alerts.buttons.find(b => b.text === t('Gallery'));
                 await gallery?.onPress?.();
                 expect(vi.mocked(ImagePicker.launchImageLibraryAsync).mock.calls.at(-1)?.[0]).toMatchObject({ defaultTab: 'albums' });
                 expect(vi.mocked(ImagePicker.launchImageLibraryAsync).mock.calls.at(-1)?.[0]).not.toMatchObject({ allowsEditing: true });
@@ -410,7 +410,7 @@ describe('Your shop (app/shop/mine.tsx)', () => {
                 expect(byTestId('picture-crop')).toBeNull();
                 expect(node.log.filter((r) => r.method === 'PUT')).toEqual([]);
                 await click('shop-field-banner');
-                const gallery2 = alerts.buttons.find(b => b.text === 'Gallery');
+                const gallery2 = alerts.buttons.find(b => b.text === t('Gallery'));
                 await gallery2?.onPress?.();
                 await click('picture-crop-done');
                 expect(vi.mocked(ImageManipulator.manipulateAsync).mock.calls.at(-1)).toEqual([

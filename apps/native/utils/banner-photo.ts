@@ -19,35 +19,22 @@ import { pickPicture, type CropPicture, type WorkingPicture } from './picture-cr
  * screen says so rather than sending nothing without a word. Offers Gallery (on Albums) and Browse files doors.
  */
 export async function pickBannerPhoto(crop: CropPicture, from?: 'library' | 'files'): Promise<string | null> {
-    if (from) {
-        const picture = await pickPicture(from);
-        return picture ? crop(picture, BANNER_PICTURE) : null;
-    }
-    return new Promise((resolve, reject) => {
+    const picture = from ? await pickPicture(from) : await new Promise<WorkingPicture | null>((resolve, reject) => {
         Alert.alert(t('Add Photo'), t('Choose a source'), [
             {
                 text: t('Gallery'),
-                onPress: async () => {
-                    try {
-                        const picture = await pickPicture('library');
-                        resolve(picture ? await crop(picture, BANNER_PICTURE) : null);
-                    } catch (e) {
-                        reject(e);
-                    }
+                onPress: () => {
+                    pickPicture('library').then(resolve, reject);
                 },
             },
             {
                 text: t('Browse files'),
-                onPress: async () => {
-                    try {
-                        const picture = await pickPicture('files');
-                        resolve(picture ? await crop(picture, BANNER_PICTURE) : null);
-                    } catch (e) {
-                        reject(e);
-                    }
+                onPress: () => {
+                    pickPicture('files').then(resolve, reject);
                 },
             },
             { text: t('Cancel'), style: 'cancel', onPress: () => resolve(null) },
         ]);
     });
+    return picture ? crop(picture, BANNER_PICTURE) : null;
 }

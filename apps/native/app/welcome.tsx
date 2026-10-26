@@ -73,6 +73,10 @@ import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
+import {
+    checkOsNotificationPermission, declineNotifications, readNotificationPermissionRecord,
+    shouldShowNotificationCard, turnOnNotifications,
+} from '../utils/notification-permission';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -179,6 +183,19 @@ export default function WelcomeScreen() {
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
+    const [notifVisible, setNotifVisible] = useState(false);
+    useEffect(() => {
+        if (mode !== 'onboardingGuide') return;
+        let live = true;
+        (async () => {
+            const [record, osGranted] = await Promise.all([
+                readNotificationPermissionRecord(),
+                checkOsNotificationPermission(),
+            ]);
+            if (live) setNotifVisible(shouldShowNotificationCard(record, osGranted));
+        })();
+        return () => { live = false; };
+    }, [mode]);
     // Communities this device has joined before. They survive an identity wipe on purpose, so
     // a member recovering on the same phone can tap theirs rather than retype its address.
     const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
@@ -2504,6 +2521,37 @@ export default function WelcomeScreen() {
                                 </Text>
                             )}
                         </View>
+
+                        {notifVisible && (
+                            <View style={guideStyles.card} testID="guide-notification-card">
+                                <Text style={guideStyles.cardTitle}>{t('Turn on notifications?')}</Text>
+                                <Text style={guideStyles.cardText}>
+                                    {t('So you hear when someone answers you, messages you, or asks to join. Nothing else.')}
+                                </Text>
+                                <Pressable
+                                    style={[styles.primaryBtn, { minHeight: 44, marginTop: 12, marginBottom: 8 }]}
+                                    onPress={async () => {
+                                        await turnOnNotifications(pendingIdentity?.publicKey);
+                                        setNotifVisible(false);
+                                    }}
+                                    accessibilityRole="button"
+                                    testID="guide-notification-turn-on"
+                                >
+                                    <Text style={styles.primaryBtnText}>{t('Turn on')}</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.secondaryBtn, { minHeight: 40 }]}
+                                    onPress={async () => {
+                                        await declineNotifications();
+                                        setNotifVisible(false);
+                                    }}
+                                    accessibilityRole="button"
+                                    testID="guide-notification-not-now"
+                                >
+                                    <Text style={[styles.secondaryBtnText, { color: colors.text.secondary }]}>{t('Not now')}</Text>
+                                </Pressable>
+                            </View>
+                        )}
 
                         {error && <Text style={styles.error}>{error}</Text>}
 

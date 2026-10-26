@@ -10,7 +10,7 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerForPushNotifications, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
@@ -763,13 +763,6 @@ function RootLayoutNav() {
         const notice = landing === DEFAULT_MEMBER_LANDING ? takeOpenAfterLanding(identity.publicKey, nodeUrl) : null;
         if (notice) router.push(notice);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
-
-    // Register for push notifications when identity is available. One that doesn't land is tried again as the app comes
-    // back and with the 5-minute sync (RootLayout, retryPushRegistrations), not only at the next cold start.
-    useEffect(() => {
-        if (!identity?.publicKey) return;
-        registerForPushNotifications(identity.publicKey).catch(console.warn);
-    }, [identity?.publicKey]);
 
     // Kick a sync whenever the active identity changes. The boot sync
     // (initDB().then(requestSync) above) is a one-shot mount effect, so a recovery /

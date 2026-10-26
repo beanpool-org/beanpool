@@ -18,6 +18,7 @@ import { joinedWords, pickerEmpty, pickerHeading } from '../utils/community-list
 import { t, tn } from '@beanpool/core';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { signedRequestWords } from '../components/signed-request-lines';
+import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 import { useTheme, useStyles } from './ThemeContext';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────
@@ -255,6 +256,7 @@ export default function NewMessageScreen() {
         if (!identity?.publicKey || creating) return;
         setCreating(pubkey);
         try {
+            await askNotificationPermissionOnAction('message', identity.publicKey);
             const fromNode = nodeResults.find(m => m.public_key === pubkey);
             if (fromNode) await keepCards([fromNode]);
             const apiConv = await createConversationApi('dm', [identity.publicKey, pubkey], identity.publicKey);

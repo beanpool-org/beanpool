@@ -32,6 +32,9 @@
  * 11. After the return, the date moved and a new pledge: the leader's cancel pays nobody twice.
  * 12. The leader moves an end date that is over again and again, to dates over or a moment from over, renaming it too:
  *     each backer is told once a day, and once more when it is taken off; a day on, a move tells them again.
+ * 13. Pledges not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7): once they went back, the projects row, the page and the
+ *     project's read all say 0 raised, not a float residue; its leader can move its date and lower its goal; and when the
+ *     new date ends with nothing pledged, nothing goes back and the page says nothing is held.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-unfunded-pledges-return
  */
@@ -51,7 +54,7 @@ import {
     reconcileLedgerFromDb,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db, createCrowdfundProject, pledgeToProject } from './db/db.js';
+import { db, createCrowdfundProject, getCrowdfundProject, pledgeToProject } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -576,6 +579,52 @@ async function main(): Promise<void> {
         && pushDayOn[0].kind === 'community.notice' && pushDayOn[0].category === 'escrow',
         `with one push to the two of them (${pushDayOn.length}, ${pushDayOn[0]?.targets.length}, ${pushDayOn[0]?.kind}, ${pushDayOn[0]?.category})`);
     assert(near(escrowOf(racks), 10) && rowsOutOf(racks).length === 0, `and nothing went back meanwhile (escrow ${escrowOf(racks)})`);
+
+    // ── 13. Pledges not exact in binary: once they went back the raised figure is 0, not what the floats leave ───────────
+    // Review of #2525: SQLite adds a project's pledges up in the order they came, the return adds them up backer by backer,
+    // and with amounts not exact in binary the two sums differ in their last bits. Lowering the raised figure by one sum left
+    // a residue of the other where everything went back, and the project's read (db.ts rowToProjectRow, its pledge rows less
+    // the return's) left one of its own. The leader's update read either as pledges received and refused a new goal, and the
+    // page read the first as Beans still held, so both apps said they were due back. Every amount the parts above use is
+    // exact in binary, so none of them could see it.
+    console.log('── 13. Pledges not exact in binary ──');
+    // A leader of its own: Lea has started three enterprises today, as many as the node lets anyone start in 24 hours.
+    const ola = makeMember('Ola');
+    const seeds = await makeProject(ola, 'Seed Swap', 50, new Date(Date.now() + 10 * DAY).toISOString());
+    // Interleaved, so the raised figure adds them up in another order than the return does.
+    await pledge(ann, seeds, 0.1, 'treasury');
+    await pledge(ben, seeds, 0.3, 'crowdfund');
+    await pledge(ann, seeds, 0.2, 'crowdfund');
+    await pledge(ben, seeds, 0.6, 'treasury');
+    await pledge(ann, seeds, 0.7, 'treasury');
+    const seedsBefore = { ann: balanceOf(ann.pubKeyHex), ben: balanceOf(ben.pubKeyHex) };
+    // Its end date 8 days gone: due. Set and returned with nothing awaited between, so this process's own tick can't take it.
+    setDeadline(seeds, new Date(Date.now() - 8 * DAY).toISOString());
+    const seedsReturn = tick(watched.hooks);
+    assert(seedsReturn.returned === 1 && escrowOf(seeds) <= DUST
+        && near(balanceOf(ann.pubKeyHex), seedsBefore.ann + 1) && near(balanceOf(ben.pubKeyHex), seedsBefore.ben + 0.9),
+        `the pledges go back, Ann her 0.1 + 0.2 + 0.7 and Ben his 0.3 + 0.6 (${JSON.stringify(seedsReturn)}, Ann +${balanceOf(ann.pubKeyHex) - seedsBefore.ann}, Ben +${balanceOf(ben.pubKeyHex) - seedsBefore.ben}, escrow ${escrowOf(seeds)})`);
+    assert(raisedOf(seeds) === 0, `the projects row says 0 raised, not a residue (${raisedOf(seeds)})`);
+    const seedsPage = await readPage(ann, seeds);
+    assert(seedsPage?.currentAmount === 0, `the page says 0 raised (${seedsPage?.currentAmount})`);
+    assert(getCrowdfundProject(seeds)?.current_amount === 0, `and so does the project's read (${getCrowdfundProject(seeds)?.current_amount})`);
+    // Its leader takes it up again: a later end date, then a lower goal. Nothing of anyone's is held, so the goal can change.
+    const seedsNewDeadline = new Date(Date.now() + 10 * DAY).toISOString();
+    const updateSeeds = (goalAmount: number) => signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: seeds, creatorPubkey: ola.pubKeyHex, title: 'Seed Swap', description: 'Seed Swap, for the valley', goalAmount, deadlineAt: seedsNewDeadline }, ola);
+    const seedsMoved = await updateSeeds(50);
+    assert(seedsMoved.status === 200, `its leader moves its end date after the return (${seedsMoved.status} ${seedsMoved.body?.error ?? ''})`);
+    const seedsLowered = await updateSeeds(20);
+    assert(seedsLowered.status === 200 && seedsLowered.body?.project?.goal_amount === 20 && seedsLowered.body?.project?.current_amount === 0,
+        `and lowers its goal to 20 (${seedsLowered.status} ${seedsLowered.body?.error ?? ''}: goal ${seedsLowered.body?.project?.goal_amount}, raised ${seedsLowered.body?.project?.current_amount})`);
+    // Nobody pledges to it again, and its new end date ends too: nothing goes back, and the page has nothing held to say is due.
+    // Read only: a tick that far on would return the other parts' projects as well.
+    const seedsLater = unfunded?.findUnfundedProjectsDue(Date.parse(seedsNewDeadline) + 12 * DAY).filter((p) => p.projectId === seeds);
+    const seedsPageLater = await readPage(ann, seeds);
+    assert(seedsLater?.length === 0 && escrowOf(seeds) <= DUST && rowsOutOf(seeds).length === 2,
+        `12 days after the new end date the return finds nothing of it to give back (${JSON.stringify(seedsLater)}, escrow ${escrowOf(seeds)}, ${rowsOutOf(seeds).length} rows out)`);
+    assert(seedsPageLater?.currentAmount === 0 && seedsPageLater?.pledgesReturnedAt === null,
+        `and the page says 0 raised and nothing went back for that date, so neither app says Beans are due back (${seedsPageLater?.currentAmount}, ${seedsPageLater?.pledgesReturnedAt})`);
 
     // ── 10. A node killed in the middle of a return ───────────────────────────────────────────────────────────────────
     console.log('── 10. Killed in the middle of a return, then booted again ──');

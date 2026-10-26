@@ -24,6 +24,7 @@ import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ReportModal } from './ReportModal';
 import { Sentence } from './Sentence';
+import { CategoryTile } from './CategoryTile';
 import { useDialogFocus } from './dialog-focus';
 
 interface Props {
@@ -310,9 +311,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 loading="lazy"
                             />
                         ) : (
-                            <div className="text-4xl select-none opacity-60">
-                                {isDailyPulse ? '🌱' : platMeta.icon}
-                            </div>
+                            <CategoryTile kind="pulse" size="banner" />
                         )}
 
                         {isVideo && (

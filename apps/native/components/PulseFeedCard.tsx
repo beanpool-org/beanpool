@@ -55,6 +55,7 @@ import {
 import { YOUTUBE_MIN_VIEWPORT_PX } from '../utils/youtube-embed';
 import { MemberAvatar } from './MemberAvatar';
 import { PulseYouTubePlayer } from './PulseYouTubePlayer';
+import { CategoryTile } from './CategoryTile';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 interface PulseFeedCardProps {
@@ -461,8 +462,8 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             ) : null}
                         </View>
                     ) : (
-                        <View style={[styles.thumbnailWrap, styles.placeholderThumbnail]}>
-                            <Text style={styles.placeholderIcon}>{isDailyPulse ? '🌱' : platMeta.icon}</Text>
+                        <View style={[styles.thumbnailWrap, { overflow: 'hidden' }]}>
+                            <CategoryTile kind="pulse" size="banner" />
                             {item.url ? (
                                 <View style={styles.externalBadge}>
                                     <Text style={styles.externalBadgeText}>{platName} ↗</Text>

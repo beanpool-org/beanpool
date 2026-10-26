@@ -539,6 +539,15 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(screen.queryByTestId('home-hint')).toBeNull();
     });
 
+    it('market cards with no photo render CategoryTile instead of bare emoji on grey', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },
+        })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const marketCard = await screen.findByTestId('home-card-market');
+        expect(within(marketCard).getByTestId('category-tile')).toBeInTheDocument();
+    });
+
     it('a Market price of a thousand Beans or more in the language\'s number style: "1,500" in English, never in pt or es, where it reads as 1.5', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },

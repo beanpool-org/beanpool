@@ -28,6 +28,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
+import { CategoryTile } from '../../components/CategoryTile';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -1539,11 +1540,12 @@ export default function MarketScreen() {
                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                             <Image source={{ uri: listPhotoUrl(coverImage) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
                         ) : (
-                            <View style={[styles.gridImage, styles.gridFallback]}>
-                                <Text style={styles.gridFallbackEmoji}>
-                                    {isPulse ? '🗞️' : catEmoji}
-                                </Text>
-                            </View>
+                            <CategoryTile
+                                category={item.category}
+                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                                size="grid"
+                                style={styles.gridImage}
+                            />
                         )}
                         {/* One row along the photo's foot, the badges at its start and the price at its end. It wraps,
                             growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
@@ -1613,10 +1615,18 @@ export default function MarketScreen() {
                     onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
                 >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
-                        <Text style={styles.compactEmoji}>
-                            {catEmoji}
-                        </Text>
-                        <View style={{ flex: 1, marginLeft: 10, marginRight: 8, justifyContent: 'center' }}>
+                        <View style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', marginRight: 10 }}>
+                            {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
+                                <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                            ) : (
+                                <CategoryTile
+                                    category={item.category}
+                                    kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                                    size="thumb"
+                                />
+                            )}
+                        </View>
+                        <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
                             <Text style={styles.compactTitle} numberOfLines={1}>
                                 {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
@@ -1674,10 +1684,12 @@ export default function MarketScreen() {
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
                     ) : (
-                        <View style={{ width: 96, height: '100%', minHeight: 96, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}>
-                            <Text style={{ fontSize: 32, opacity: 0.5 }}>
-                                {catEmoji}
-                            </Text>
+                        <View style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
+                            <CategoryTile
+                                category={item.category}
+                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                                size="thumb"
+                            />
                         </View>
                     )}
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>

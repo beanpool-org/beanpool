@@ -30,3 +30,23 @@ describe('MarketplaceCard photo', () => {
         expect(onPhotoClick.mock.calls[0][0]).toEqual(PHOTOS);
     });
 });
+
+describe('MarketplaceCard with no photo', () => {
+    const postWithoutPhoto = { ...post, photos: [] } as unknown as MarketplacePost;
+
+    it.each(['grid', 'list'] as const)('the %s card renders CategoryTile with category word and full strength emoji', (viewMode) => {
+        const { getByTestId } = render(<MarketplaceCard post={postWithoutPhoto} viewMode={viewMode} />);
+        const tile = getByTestId('category-tile');
+        expect(tile).toBeInTheDocument();
+        expect(tile.querySelector('[class*="opacity-20"], [class*="opacity-30"], [class*="opacity-40"], [class*="opacity-50"]')).toBeNull();
+        if (viewMode === 'grid') {
+            expect(tile.textContent).toMatch(/FOOD/i);
+        }
+    });
+
+    it('the compact card renders CategoryTile at thumb size with full strength emoji', () => {
+        const { getByTestId } = render(<MarketplaceCard post={postWithoutPhoto} viewMode="compact" />);
+        const tile = getByTestId('category-tile');
+        expect(tile).toBeInTheDocument();
+    });
+});

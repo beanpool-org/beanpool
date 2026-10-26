@@ -53,7 +53,7 @@ The button next to **My Deals** changes how the list looks: a list, a grid, or c
 
 ## What a post shows
 
-- a photo, or the category's picture;
+- a photo, or a coloured tile with the category's picture and name;
 - **OFFER** or **NEED**;
 - the price in beans, with **/Hr** if it is priced by the hour;
 - **RECURRING** if it stays open after each deal;

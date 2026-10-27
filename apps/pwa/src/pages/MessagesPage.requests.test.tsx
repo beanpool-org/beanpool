@@ -709,6 +709,25 @@ describe('the sender\'s side', () => {
         expect(screen.queryByTestId('request-waiting')).toBeNull();
     });
 
+    it('shows Cancel request beside the waiting line and cancels it when clicked', async () => {
+        node.list = boList(pending());
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
+        vi.mocked(decideMessageRequest).mockResolvedValueOnce({
+            success: true,
+            request: { state: 'pending', from: bo.publicKey, at: REQUESTED_AT, nextLineIsRequest: true } as any,
+        });
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-waiting');
+        const cancelBtn = screen.getByTestId('request-cancel');
+        expect(cancelBtn).toHaveTextContent('Cancel request');
+        fireEvent.click(cancelBtn);
+        await waitFor(() => {
+            expect(decideMessageRequest).toHaveBeenCalledWith(CONV, 'cancel');
+        });
+        expect(await screen.findByPlaceholderText('Message...')).toBeEnabled();
+        expect(screen.queryByTestId('request-waiting')).toBeNull();
+    });
+
     it('30 days on (expired), the next line is a new request: the composer is back, saying so', async () => {
         const expired = { state: 'expired', from: bo.publicKey, at: REQUESTED_AT };
         node.list = boList(expired);

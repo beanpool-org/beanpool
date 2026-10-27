@@ -1116,3 +1116,29 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** NOT REPRODUCED (see Scout #2449)
 - **Claim:** test-door-signal fails with Retry-After below 590 s.
 - **Why not to re-file:** not reproduced on main (44/44 pass); assertion widened from 590 to 570 to dodge a wall-clock load flake, violating Scout #2449. If a fix is wanted, compute expected value from `Date.now() - tick` in the test, keeping the bound tight.
+
+### 2026-10-27 — Scout: withheld-notes suite, third filing (#2514) — CLOSED, EXEMPTIONS STILL VACUOUS (#1819, #2168)
+- **Category:** CLAIM FALSE (see #1819, #2168)
+- **Claim:** `test-withheld-notes.ts` covers the note exemptions (blank memo, self, synthetic accounts, treasury).
+- **Why not to re-file:** every exemption is still checked where no `member_blocks` row would withhold the note (the only block is Bob blocks Alice), so each check passes with its exemption deleted. Scout: assert each exemption under a block that would otherwise withhold it, and show the suite failing with that exemption removed.
+
+### 2026-10-27 — Bolt: Map lookups in native EnterpriseDecisions (#2516) — CLOSED, RE-FILE OF #1968
+- **Category:** RE-FILE (see #1968)
+- **Why not to re-file:** the phone's copy of the #1968 claim: a handful of keepers, ~2 lookups a row, and a Map keeps the last of a repeated key where `.find()` keeps the first. Re-file only with a profile of a real screen.
+
+### 2026-10-27 — Expo: first of repeated params in tool/[id].tsx, sixth filing (#2517) — CLOSED, DECIDED (#1753, #2073, #2118, #2174, #2343)
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** a link that repeats a parameter is ambiguous and refused on purpose, on EVERY screen (see #2343). Re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-27 — Forge: HTTP 400 when an assistant preview tool answers ok:false (#2519) — CLOSED, DELIBERATE DECISION (as #2007)
+- **Category:** DELIBERATE DECISION (see #2007)
+- **Claim:** `POST /api/local/admin/agent/preview` answers 200 with `{ ok: false, error }` when the tool's answer is a refusal, so it should be 400.
+- **Why not to re-file:** the tool answered; the preview shows exactly what the assistant gets, which is 200 with the tool's own error, as `/mcp` answers it. A tool that throws is already a 500. Forge: a 4xx is for a request the route refuses, not for a refusal it reports.
+
+### 2026-10-27 — Sentinel: bound DM conversation participants, again (#2521) — CLOSED, RE-FILE OF #2340 (PHANTOM)
+- **Category:** RE-FILE (see #2340)
+- **Why not to re-file:** the route already caps each key at 128 characters, refuses any type but `dm`, and requires exactly 2 distinct participants before any database work; request bodies are size-capped in `readBody`. The PR's 50-copy test already returns 400 on main.
+
+### 2026-10-27 — Flow: loading state in AgentSuggestionsPanel, third filing (#2522) — CLOSED, RE-FILE OF #1957/#2076
+- **Category:** RE-FILE (third filing)
+- **Why not to re-file:** the spinner card flashes and vanishes on the many nodes with no suggestions. See #1957.

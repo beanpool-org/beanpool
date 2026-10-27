@@ -27,10 +27,21 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(marketSrc).not.toContain('width: 96, height: \'100%\', minHeight: 96');
     });
 
-    it('empty state shows the words "Nothing here yet. Be the first:" and four CategoryTiles at thumb size', () => {
-        expect(marketSrc).toContain("Nothing here yet. Be the first:");
-        // The four categories: food, services, tools, garden
-        expect(marketSrc).toMatch(/food.*services.*tools.*garden|services.*food/);
-        expect(marketSrc).toMatch(/CategoryTile[\s\S]*?size="thumb"/);
+    it('truly empty Market (feed branch) shows the words "Nothing here yet. Be the first:" and four CategoryTiles at thumb size', () => {
+        // Must be in emptyState.kind === 'feed'
+        const feedBranch = marketSrc.split("emptyState.kind === 'feed'")[1]?.split(/:\s*\(/)[0] || '';
+        expect(feedBranch).toContain("Nothing here yet. Be the first:");
+        expect(feedBranch).toMatch(/food.*services.*tools.*garden|services.*food/);
+        expect(feedBranch).toMatch(/CategoryTile[\s\S]*?size="thumb"/);
+        expect(feedBranch).toContain('ADD POST');
+    });
+
+    it('filtered no-matches branch shows main\'s state with Clear All Filters and no tiles', () => {
+        const noMatchesBranch = marketSrc.split("emptyState.kind === 'feed'")[1]?.split(/:\s*\(/)[1] || '';
+        expect(noMatchesBranch).toContain('No items found');
+        expect(noMatchesBranch).toContain('Clear All Filters');
+        expect(noMatchesBranch).toContain('+ Post a Deal');
+        expect(noMatchesBranch).not.toContain('market-empty-tiles');
+        expect(noMatchesBranch).not.toContain('Nothing here yet. Be the first:');
     });
 });

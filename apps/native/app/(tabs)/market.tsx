@@ -1873,7 +1873,29 @@ export default function MarketScreen() {
                             </Pressable>
                         </View>
                     ) : emptyState.kind === 'feed' ? (
-                        <View>
+                        <View style={{ width: '100%' }}>
+                            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
+                                    {t('Nothing here yet. Be the first:')}
+                                </Text>
+                                <View testID="market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                                    {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
+                                        <View key={cat} style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden' }}>
+                                            <CategoryTile category={cat} size="thumb" />
+                                        </View>
+                                    ))}
+                                </View>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={{ backgroundColor: colors.action.fab || palette.gray900, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24, marginBottom: 10 }}
+                                    onPress={() => setShowNewPostTypePicker(true)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Text style={{ color: colors.text.inverse, fontSize: 16, fontWeight: '700' }}>+</Text>
+                                        <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>{t('ADD POST')}</Text>
+                                    </View>
+                                </Pressable>
+                            </View>
                             {showExamples && <ExampleListings />}
                             <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
                         </View>
@@ -1888,30 +1910,17 @@ export default function MarketScreen() {
                         </Text>
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 16 }}
+                            style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
                             onPress={() => { setFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); setGroupFilter('all'); }}
                         >
                             <Text style={{ fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 }}>{t('Clear All Filters')}</Text>
                         </Pressable>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
-                            {t('Nothing here yet. Be the first:')}
-                        </Text>
-                        <View testID="market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                            {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
-                                <View key={cat} style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden' }}>
-                                    <CategoryTile category={cat} size="thumb" />
-                                </View>
-                            ))}
-                        </View>
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: colors.action.fab || palette.gray900, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }}
-                            onPress={() => setShowNewPostTypePicker(true)}
+                            style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
+                            onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
                         >
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text style={{ color: colors.text.inverse, fontSize: 16, fontWeight: '700' }}>+</Text>
-                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>{t('ADD POST')}</Text>
-                            </View>
+                            <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>{t('+ Post a Deal')}</Text>
                         </Pressable>
                     </View>
                     )

@@ -11,7 +11,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
 import {
-    fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts,
+    fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine,
     type DirectoryCommunity, type PlaceWatch, type Point,
 } from '../utils/community-directory';
 import {
@@ -77,6 +77,8 @@ export default function FindCommunityScreen() {
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 14, marginBottom: 10 },
         name: { fontSize: 17, fontWeight: '800', color: colors.text.heading },
         facts: { fontSize: 13, color: colors.text.secondary, marginTop: 2, lineHeight: 18 },
+        /** "Not answering lately" under the name: the facts' size and colour, set apart by its slant alone. */
+        quiet: { fontStyle: 'italic' },
         contact: { fontSize: 13, color: colors.brand.primary, marginTop: 4, textDecorationLine: 'underline' },
         note: { fontSize: 14, color: colors.text.body, marginTop: 8, lineHeight: 20 },
         refusal: { fontSize: 14, color: colors.feedback.warning.fg, marginTop: 8, lineHeight: 20 },
@@ -605,6 +607,7 @@ export default function FindCommunityScreen() {
                         ...listed.map(c => (
                         <View key={c.key} style={styles.card}>
                             <Text style={styles.name} numberOfLines={2}>{communityLabel(c)}</Text>
+                            {!!notAnsweringLine(c) && <Text style={[styles.facts, styles.quiet]} testID={`find-not-answering-${c.key}`}>{notAnsweringLine(c)}</Text>}
                             {!!communityFacts(c) && <Text style={styles.facts}>{communityFacts(c)}</Text>}
                             {!!c.contactEmail && (
                                 <Text style={styles.contact} onPress={() => Linking.openURL(`mailto:${c.contactEmail}`).catch(() => {})} accessibilityRole="link">

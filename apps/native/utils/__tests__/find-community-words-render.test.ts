@@ -64,12 +64,17 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => null }));
 // What the node lists from the member's typed town: set per case.
 const listing = vi.hoisted(() => ({ communities: [] as Record<string, unknown>[], fetchedAt: '2026-10-14T08:00:00.000Z' as string | null }));
-vi.mock('../community-directory', () => ({
-    fetchCommunities: vi.fn(async () => ({ ok: true, value: { communities: listing.communities, total: listing.communities.length, fetchedAt: listing.fetchedAt } })),
-    fetchGlobalHome: vi.fn(async () => ({ ok: true, value: { watches: [] } })),
-    watchPlace: vi.fn(), unwatchPlace: vi.fn(),
-    communityLabel: (c: { name: string }) => c.name, communityFacts: () => '',
-}));
+vi.mock('../community-directory', async () => {
+    const core = await import('@beanpool/core');
+    return {
+        fetchCommunities: vi.fn(async () => ({ ok: true, value: { communities: listing.communities, total: listing.communities.length, fetchedAt: listing.fetchedAt } })),
+        fetchGlobalHome: vi.fn(async () => ({ ok: true, value: { watches: [] } })),
+        watchPlace: vi.fn(), unwatchPlace: vi.fn(),
+        communityLabel: (c: { name: string }) => c.name, communityFacts: () => '',
+        // As utils/community-directory.ts has it (tested there): core's rule, in the member's language.
+        notAnsweringLine: (c: { lastSeenAt?: string | null }) => (core.notAnsweringLately(c.lastSeenAt) ? core.t(core.FIND_COMMUNITY_WORDS.notAnswering) : null),
+    };
+});
 vi.mock('../knock', () => ({
     sendKnock: vi.fn(), readKnockStatus: vi.fn(), rememberedKnocks: vi.fn(async () => []), rememberKnock: vi.fn(), forgetKnock: vi.fn(),
     cancelKnock: vi.fn(), cancelledKnocks: vi.fn(async () => ({})), KNOCK_MESSAGES: {},
@@ -95,6 +100,7 @@ const FR = {
     [FIND_COMMUNITY_WORDS.noneNear]: 'Aucune communauté près de chez vous pour l’instant.',
     [FIND_COMMUNITY_WORDS.notLoaded]: 'La liste des communautés n’est pas disponible. Réessayez bientôt.',
     [pluralKey(FAR_ONE, FAR_MANY)]: { one: 'La plus proche est loin d’ici :', other: 'Les plus proches sont loin d’ici :' },
+    [FIND_COMMUNITY_WORDS.notAnswering]: 'Ne répond pas ces derniers temps',
 };
 const lismore = (key: string, distanceKm: number) => ({
     key, name: `Lismore ${key}`, url: `https://${key}.example`, lat: null, lng: null, radiusKm: null, memberCount: 12, contactEmail: null, contactPhone: null, distanceKm,
@@ -139,5 +145,31 @@ describe('Find a community says "nothing near" in one language', () => {
         document.body.innerHTML = '';
         listing.fetchedAt = null;
         expect(line(await render(), 'find-empty')).toBe(FR[FIND_COMMUNITY_WORDS.notLoaded]);
+    });
+});
+
+describe('a community gone quiet says so under its name (front doors S13)', () => {
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const quiet = (host: HTMLElement, key: string) => line(host, `find-not-answering-${key}`);
+
+    it('"Not answering lately" past 36 h since its last push, and not before; Ask to join stays', async () => {
+        listing.communities = [
+            { ...lismore('a', 12), lastSeenAt: hoursAgo(40) },
+            { ...lismore('b', 20), lastSeenAt: hoursAgo(35) },
+            { ...lismore('c', 30), lastSeenAt: hoursAgo(2) },
+            { ...lismore('d', 40), lastSeenAt: null },
+        ];
+        const host = await render();
+        expect(quiet(host, 'a')).toBe(FIND_COMMUNITY_WORDS.notAnswering);
+        expect(quiet(host, 'b')).toBeNull();
+        expect(quiet(host, 'c')).toBeNull();
+        expect(quiet(host, 'd')).toBeNull();
+        expect(host.querySelector('[aria-label="Ask to join Lismore a"]')).not.toBeNull();
+    });
+
+    it('in the member\'s language', async () => {
+        setLanguage('fr', [FR]);
+        listing.communities = [{ ...lismore('a', 12), lastSeenAt: hoursAgo(40) }];
+        expect(quiet(await render(), 'a')).toBe('Ne répond pas ces derniers temps');
     });
 });

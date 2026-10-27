@@ -362,6 +362,12 @@ run_check "balance_writes" node scripts/check-balance-writes.mjs
 # to it reaches only new databases. New numbered files only. Instant; skipped where there is no origin/main.
 run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 
+# The public directory (front doors S13): the directory-register Edge Function rules (supabase/functions/directory-register/
+# rules.ts: our test servers refused with the 403 sentence, the signed unlist and its two fields, the 5-minute window) and
+# the directory_listed view and the 30-day purge, read from their SQL. Instant. tsx loads rules.ts, so the command is in
+# its own script: the merge gate's harness (scripts/test-all-continue.sh) has no node_modules and stubs every script.sh.
+run_check "directory_register" bash scripts/test-directory-register.sh
+
 # Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
 # the repository's workflows and each edit the check exists to catch. Instant.

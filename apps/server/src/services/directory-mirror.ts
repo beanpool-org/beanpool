@@ -2,7 +2,8 @@
  * The communities directory, mirrored (global node G5, design §3.2 and §3.5).
  *
  * The public directory registry (Supabase `directory_nodes`: every node's publisher writes to it, services/
- * directory-publisher.ts, and the website reads it) is fetched here, server-side, once at start and then hourly, into
+ * directory-publisher.ts; the website and this mirror read its `directory_listed` view, the rows a stranger is shown) is
+ * fetched here, server-side, once at start and then hourly, into
  * `directory_cache` (engine/directory-cache.ts). GET /api/global/communities and the landing card read that table and
  * nothing else, so phones never talk to the registry and its key stays on this server.
  *
@@ -44,7 +45,12 @@ const watchNotices = (): PlaceWatchNoticeCallbacks => ({
     broadcast, dispatchPushNotification, isMember: isNodeMember, pushable: (pubkey) => pushableMembers('marketplace', pubkey),
 });
 
-export const DEFAULT_DIRECTORY_MIRROR_URL = 'https://dpemwoermzkaxoctafzg.supabase.co/rest/v1/directory_nodes?select=*';
+/**
+ * The rows a stranger is shown (front doors S13, supabase/migrations/2026102800_directory_listed.sql): pushed within 7
+ * days, with an https address or a contact, each with `shown_name` (its own name, or its address's host) and
+ * `last_seen_at`. The table under it (`directory_nodes`) stays publicly readable; this node reads the view.
+ */
+export const DEFAULT_DIRECTORY_MIRROR_URL = 'https://dpemwoermzkaxoctafzg.supabase.co/rest/v1/directory_listed?select=*';
 /** The website's publishable key (apps/website/main.js): public by design, read-only under the registry's row rules. */
 export const DEFAULT_DIRECTORY_MIRROR_KEY = 'sb_publishable_fmlYuaf6NCkTI2IwWnvZmw_bOzo-PrF';
 export const DIRECTORY_MIRROR_INTERVAL_MS = 60 * 60 * 1000;

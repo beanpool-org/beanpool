@@ -109,6 +109,24 @@ function today(now: number): string {
     return new Date(now).toISOString().slice(0, 10);
 }
 
+/**
+ * The closing day the owners set (Settings → Directory → Leave the directory), when it has come: today or before (UTC),
+ * read from the stored row itself. readPromiseTicks reads a day more than two days past as none (a push leaves it out),
+ * so it can't say a community has closed; this can, for as long as the day is stored. Null: no day, or one still to come.
+ * The publisher withdraws the community on that day and pushes no more (services/directory-publisher.ts).
+ */
+export function closingDayReached(now: number = Date.now()): string | null {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(DIRECTORY_PROMISE_KEY) as { value: string | null } | undefined;
+    if (typeof row?.value !== 'string' || row.value.length > 200) return null;
+    let v: any;
+    try { v = JSON.parse(row.value); } catch { return null; }
+    const day = v && typeof v === 'object' && typeof v.closingOn === 'string' ? v.closingOn : null;
+    if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    const t = Date.parse(`${day}T00:00:00Z`);
+    if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== day) return null;
+    return day <= today(now) ? day : null;
+}
+
 export type SetTicks = { ok: true; ticks: PromiseTicks } | { ok: false; error: string };
 
 /**

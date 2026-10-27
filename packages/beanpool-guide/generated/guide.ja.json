@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "ja",
-  "hash": "7c1743c7b5ce103ba972aede101b222a38a7737125d14b0201cd37c67748efc5",
+  "hash": "264a8f87c1f088ab506c42d906efe355646b25007dc151816a49cc9872c8fbe1",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "学びレーン",
       "summary": "BeanPoolに関する短い動画と、対応するガイドページについて説明します。",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "BeanPoolの仕組みに関するBeanPool公式の動画。",
-            "**今日の振り返り**：毎朝更新される短い思索の言葉。見出しのみであり、タップして開くものはありません。"
+            "**今日の振り返り**：毎朝更新される短い思索の言葉。タップするとその日の思索が開きます。"
           ]
         },
         {

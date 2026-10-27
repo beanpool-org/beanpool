@@ -314,6 +314,15 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         expect(screen.getByText('No items found')).toBeInTheDocument();
     });
 
+    it('the empty state shows the four category tiles and "Nothing here yet. Be the first:"', async () => {
+        await openForYou();
+        expect(screen.getByText('No items found')).toBeInTheDocument();
+        expect(screen.getByText('Nothing here yet. Be the first:')).toBeInTheDocument();
+        const emptyTiles = screen.getByTestId('market-empty-tiles');
+        expect(emptyTiles).toBeInTheDocument();
+        expect(emptyTiles.querySelectorAll('[data-testid="category-tile"]').length).toBe(4);
+    });
+
     it("a category starred here is kept on the member's account too, one truth with Home's interests (Home design §4.3)", async () => {
         localStorage.removeItem('bp_fav_categories');
         const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
@@ -439,7 +448,7 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         await openGrid();
         const gridEl = pollCard().parentElement!.parentElement as HTMLElement;
         // Anchor: this really is the Card View grid, not a wrapper.
-        expect(gridEl.className).toContain('grid-cols-1');
+        expect(gridEl.className).toContain('grid-cols-2');
         expect(gridEl.className).toContain('xl:grid-cols-5');
         expect(gridEl.className).toContain('grid-flow-row-dense');
     });

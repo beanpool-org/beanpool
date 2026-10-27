@@ -13,7 +13,9 @@ import { MARKETPLACE_CATEGORIES, type MarketplacePost } from '../lib/marketplace
 
 vi.mock('./PostAuthorTrust', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./PostAuthorTrust')>()),
-    PostAuthorTrust: ({ callsign }: { callsign: string }) => <span data-testid="author">{callsign}</span>,
+    PostAuthorTrust: ({ callsign, isFounding }: { callsign: string; isFounding?: boolean }) => (
+        <span data-testid="author">{callsign}{isFounding ? ' 🌱' : ''}</span>
+    ),
 }));
 
 import { MarketplaceCard } from './MarketplaceCard';
@@ -73,7 +75,6 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.getByText(xx('Food & Produce'))).toBeInTheDocument();
         expect(screen.getAllByText(xx('/hr')).length).toBeGreaterThan(0);
         expect(screen.getByText(xx('👤 (You)')).parentElement!.textContent).toContain(xx('by {name} ⛰️ {you}').replace('{name}', 'Kofi').split('{you}')[0]);
-        expect(screen.getByText(xx('No description provided.'))).toBeInTheDocument();
         expect(bypassing(document.body, { others })).toEqual([]);
     });
 
@@ -90,8 +91,7 @@ describe('a Market card in the pseudo-locale', () => {
         );
         expect(bracketed()).toBe(0);
         expect(screen.getByText('👤 (You)').parentElement!.textContent).toMatch(/^by Kofi ⛰️ 👤 \(You\)/);
-        expect(screen.getAllByText('🌱 FOUNDING TRADE').length).toBeGreaterThan(0);
-        expect(screen.getByText('🌱 FOUNDING')).toBeInTheDocument();
+        expect(screen.getAllByText(/🌱/).length).toBeGreaterThan(0);
         expect(screen.getAllByText('🔒 Only Garden club can see this').length).toBeGreaterThan(0);
         expect(screen.getByText('💸 CASH TOO')).toHaveAttribute('title', 'Cash also needed for fuel or materials — agreed in chat');
         expect(screen.getByText('⏳ PENDING')).toBeInTheDocument();
@@ -99,8 +99,8 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.getByText('👤 You')).toBeInTheDocument();
         expect(screen.getByText('🗞️ Daily Pulse')).toBeInTheDocument();
         expect(screen.getByText('DAILY PULSE')).toBeInTheDocument();
-        expect(screen.getAllByText('VIEW').length).toBe(2);
-        expect(screen.getByText('No description provided.')).toBeInTheDocument();
+        expect(screen.queryByText('VIEW')).toBeNull();
+        expect(screen.queryByText('No description provided.')).toBeNull();
         expect(screen.getByText('420 m')).toBeInTheDocument();
         expect(screen.getByText('2.4 km')).toBeInTheDocument();
         expect(screen.getByText('2.5')).toBeInTheDocument();

@@ -117,13 +117,12 @@ process.env.BEANPOOL_DATA_DIR = dir;
 initStateEngine();
 await initTls();
 initAdminPassword();
-const p2p = await startP2P();
+const p2p = await startP2P(0, 0);
 owner = newId('Owner');
 seedGenesisMember(owner.pk, 'owner');
 
-const server = await startHttpsServer();
-const addr = server.address() as any;
-BASE = `https://localhost:${addr.port}`;
+const port = await startHttpsServer(0);
+BASE = `https://localhost:${port}`;
 
 const alice = member('Alice');
 const bob = member('Bob');
@@ -206,7 +205,6 @@ assert(aliceSock.events.some(e => e.type === 'dm_request_updated' && e.conversat
 
 bobSock.ws.close();
 aliceSock.ws.close();
-server.close();
 await p2p.stop();
 
 console.log(`\n${passed}/${run} passed`);

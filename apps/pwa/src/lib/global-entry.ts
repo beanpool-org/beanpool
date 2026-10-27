@@ -15,12 +15,17 @@
 
 import { useEffect, useState } from 'react';
 import { audienceOf, t } from '@beanpool/core';
-import type { CommunityInfo } from './api';
+import type { AppStoreVersions, CommunityInfo } from './api';
+import { isVersionOlder, normaliseVersion } from './app-version';
 
 /** The link the BeanPool app claims (slice P4): the app at the global community's door when installed, else the store. */
 export const APP_GLOBAL_LINK = 'https://beanpool.org/global';
 /** The community that link opens in the app (apps/native/utils/global-node-url.ts GLOBAL_NODE_URL), as a bare host. */
 export const APP_GLOBAL_HOST = 'global.beanpool.org';
+/**
+ * The first iOS version with the global door (slice S14). S14's flip PR deletes this gate once the App Store build has it.
+ */
+export const IOS_GLOBAL_DOOR_FROM = '1.2.56';
 
 /** A phone's browser: a touch screen for its main pointer, and narrower than the sidebar's breakpoint (Tailwind md). */
 export const PHONE_BROWSER_QUERY = '(pointer: coarse) and (max-width: 767px)';
@@ -60,16 +65,56 @@ export function isAppsGlobal(info: Pick<CommunityInfo, 'addresses' | 'primaryAdd
     return info.primaryAddress === APP_GLOBAL_HOST || (Array.isArray(info.addresses) && info.addresses.includes(APP_GLOBAL_HOST));
 }
 
+/**
+ * Detect iPhone, iPad, or iPod browsers.
+ * Grep in apps/pwa: uses the user-agent check matching InstallPrompt.tsx and invite-trampoline.ts.
+ */
+export function isIOS(nav: Pick<Navigator, 'userAgent'> | undefined = typeof navigator !== 'undefined' ? navigator : undefined): boolean {
+    if (!nav?.userAgent) return false;
+    const ua = nav.userAgent;
+    return (/iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document)) && !(typeof window !== 'undefined' && (window as any).MSStream);
+}
+
 /** One way in on the lobby's Join card: the app (the smart link), the browser join, or "Already have BeanPool?". */
 export type LobbyJoinWay = 'app' | 'browser' | 'have-account';
+
+export interface LobbyJoinWaysOptions {
+    phone: boolean;
+    appsGlobal: boolean;
+    doorOpen: boolean;
+    platform?: string | null;
+    appVersions?: AppStoreVersions | null;
+}
 
 /**
  * The Join card's ways in, in the order they are drawn. The app comes first only on a phone's browser, at the
  * community the app's link opens, while its door is open: anywhere else that link would open a community this page
  * isn't, or one that turns strangers away.
+ *
+ * S14 gate: on an iPhone/iPad browser, offer 'app' only when the community's health appVersions.ios is at least
+ * IOS_GLOBAL_DOOR_FROM, because earlier App Store builds (e.g. 1.2.31) have no global door. S14's flip PR deletes this
+ * gate once the App Store build has it.
  */
-export function lobbyJoinWays({ phone, appsGlobal, doorOpen }: { phone: boolean; appsGlobal: boolean; doorOpen: boolean }): LobbyJoinWay[] {
-    return phone && appsGlobal && doorOpen ? ['app', 'browser', 'have-account'] : ['browser', 'have-account'];
+export function lobbyJoinWays({
+    phone,
+    appsGlobal,
+    doorOpen,
+    platform,
+    appVersions,
+}: LobbyJoinWaysOptions): LobbyJoinWay[] {
+    if (!phone || !appsGlobal || !doorOpen) {
+        return ['browser', 'have-account'];
+    }
+
+    const isIos = platform ? platform.toLowerCase() === 'ios' : isIOS();
+    if (isIos) {
+        const iosVer = normaliseVersion(appVersions?.ios);
+        if (!iosVer || isVersionOlder(iosVer, IOS_GLOBAL_DOOR_FROM)) {
+            return ['browser', 'have-account'];
+        }
+    }
+
+    return ['app', 'browser', 'have-account'];
 }
 
 /**

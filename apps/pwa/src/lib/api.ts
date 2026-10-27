@@ -551,7 +551,22 @@ export async function getInviteTree(root?: string): Promise<any[]> {
     return request('GET', root ? `/api/invite/tree?root=${encodeURIComponent(root)}` : '/api/invite/tree');
 }
 
-export async function getCommunityHealth(): Promise<any> {
+export interface AppStoreVersions {
+    android?: string | null;
+    ios?: string | null;
+    checkedAt?: string | null;
+}
+
+export interface CommunityHealth {
+    nodeName?: string;
+    version?: string;
+    minAppVersion?: string;
+    minAppVersionFrom?: string | null;
+    appVersions?: AppStoreVersions;
+    [key: string]: any;
+}
+
+export async function getCommunityHealth(): Promise<CommunityHealth> {
     return request('GET', '/api/community/health');
 }
 

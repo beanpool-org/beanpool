@@ -273,7 +273,10 @@ interface Props {
     onNavigate: (tab: string, contextId?: string) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
-    /** A community the member came to ask to join (`/?ask=<host>`, front doors S15): the Find card opens on it. */
+    /**
+     * A community the member came to ask to join (`/?ask=<host>`, front doors S15): the Find card opens on it, or, where
+     * Home draws no Find card, it stands above the cards.
+     */
     askedCommunity?: string | null;
     /** Its ✕: the Find card as usual. */
     onAskedCommunitySeen?: () => void;
@@ -2339,6 +2342,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </p>
                 )}
                 {!notesUnderFirst && firstNotes(false)}
+                {/* The community the member came to ask to join, where Home draws no Find card to hold it: Find is held on Home
+                    only for a global member's first 30 days, and a member may take it off (PR #2551 review). */}
+                {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
+                    <AskedCommunity host={askedCommunity} onClose={() => onAskedCommunitySeen?.()} />
+                )}
                 {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
                     own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
                     Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}

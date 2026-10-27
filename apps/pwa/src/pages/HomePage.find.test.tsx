@@ -4,9 +4,13 @@
  * POST /api/global/watches. Now it has both, as the phone's FindCommunityBody: Start a community opens the Start screen,
  * and "Tell me when one starts here" keeps a watch for a member at the point Home was read from. A visitor is told to
  * join first (a watch is a member's, signed); nothing is sent for them. The node is lib/api.ts mocked.
+ *
+ * And a community the member came to ask to join (`/?ask=<host>`, front doors S15): the Find card opens on it, and where
+ * Home draws no Find card (a global member past their first 30 days, or one who took Find off) it stands above the cards
+ * (PR #2551 review: before, nothing was drawn, and the "no Find card" tests here fail there).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HomeAnswer, HomeFind } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -19,6 +23,7 @@ vi.mock('../lib/api', () => ({
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: null })),
     watchPlace: vi.fn(),
+    getListedCommunityByHost: vi.fn(async () => null),
 }));
 vi.mock('../components/AddressSearch', () => ({
     AddressSearch: ({ onPick }: { onPick: (r: unknown) => void }) => (
@@ -175,5 +180,52 @@ describe('the web find card with no community near', () => {
         await screen.findByTestId('home-find-actions');
         expect(screen.queryByTestId('home-find-watch')).toBeNull();
         await waitFor(() => expect(screen.getByTestId('home-find-start')).toBeInTheDocument());
+    });
+});
+
+describe('a community the member came to ask to join', () => {
+    const RIVERSIDE = { key: 'r', name: 'Riverside', url: 'https://riverside.example', memberCount: 40, distanceKm: null };
+    /** A global member of more than 30 days (Find no longer held on Home) whose saved Home is `cards`. */
+    function longMember(cards: Array<{ id: string; type: string }>): HomeAnswer {
+        const a = globalAnswer({}, true);
+        return { ...a, layout: { v: 2, cards, dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' } } as unknown as HomeAnswer;
+    }
+    beforeEach(() => { vi.mocked(api.getListedCommunityByHost).mockReset().mockResolvedValue(RIVERSIDE); });
+
+    it('no Find card on Home: it stands above the cards, says how to ask, and its ✕ lets it go (fails before: nothing)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([])));
+        const seen = vi.fn();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" onAskedCommunitySeen={seen} />);
+        const asked = await screen.findByTestId('home-find-asked');
+        expect(await within(asked).findByRole('status')).toHaveTextContent('To ask Riverside to join, open Find a community in the BeanPool app and choose Riverside.');
+        expect(screen.queryByTestId('home-card-find')).toBeNull();
+        expect(api.getListedCommunityByHost).toHaveBeenCalledWith('riverside.example');
+        fireEvent.click(within(asked).getByTestId('home-find-asked-close'));
+        expect(seen).toHaveBeenCalledTimes(1);
+    });
+
+    it('no Find card, and not listed yet: said so, above the cards (fails before: nothing)', async () => {
+        vi.mocked(api.getListedCommunityByHost).mockResolvedValue(null);
+        vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([])));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" />);
+        const asked = await screen.findByTestId('home-find-asked');
+        expect(await within(asked).findByRole('status')).toHaveTextContent("riverside.example isn't in the list of communities yet.");
+        expect(screen.queryByTestId('home-card-find')).toBeNull();
+    });
+
+    it('Find on Home: inside the Find card, drawn once', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([{ id: 'find', type: 'find' }])));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" />);
+        const find = await screen.findByTestId('home-card-find');
+        await within(find).findByTestId('home-find-asked');
+        expect(screen.getAllByTestId('home-find-asked')).toHaveLength(1);
+    });
+
+    it('nothing asked: nothing drawn above the cards', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([])));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-grid');
+        expect(screen.queryByTestId('home-find-asked')).toBeNull();
+        expect(api.getListedCommunityByHost).not.toHaveBeenCalled();
     });
 });

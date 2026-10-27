@@ -504,7 +504,8 @@ export function App() {
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
     // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
-    // join, as it keeps a shared listing; a member lands on Home with the Find card on that community.
+    // join, as it keeps a shared listing; a member lands on Home with the Find card on that community (above the cards
+    // where Home draws no Find card).
     const [askParam] = useState(() => takeAskParam());
     const [askedCommunity, setAskedCommunity] = useState<string | null>(null);
     // Once per page, at the first identity: the identity object is replaced later (a profile saved), and that is no ask.

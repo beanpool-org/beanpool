@@ -16,8 +16,8 @@ export const ASKED_COMMUNITY_WORDS = {
 
 /**
  * Home's Find card, opened on a community a stranger came to ask to join (`/?ask=<host>`, from that community's card:
- * front doors S15): its name and facts from this community's own list of communities, and how to ask it. Scrolled into
- * view when it opens.
+ * front doors S15), or above Home's cards where Home draws no Find card: its name and facts from this community's own
+ * list of communities, and how to ask it. Scrolled into view when it opens.
  */
 export function AskedCommunity({ host, onClose }: { host: string; onClose: () => void }) {
     const [row, setRow] = useState<HomeCommunity | null | 'loading'>('loading');

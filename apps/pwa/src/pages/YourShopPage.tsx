@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BANNER_PICTURE, t, tn, type ShopCategory } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { usePictureCrop } from '../components/PictureCropDialog';
+import { DefaultBanner } from '../components/DefaultBanner';
 import {
     ShopAddOffersDialog, ShopCategoryDialog, ShopCloseDialog, ShopPauseDialog, ShopTextDialog,
     type ShopSheetRefusal, type ShopTextField,
@@ -335,23 +336,57 @@ export function YourShopPage({
                                 onClick={() => { setRefusal(null); setEditing('howToDeal'); }}
                                 testId="shop-field-howToDeal"
                             />
-                            <ToolRow
-                                title={t('Banner photo')}
-                                state={shop.photoUrl ? t('Members see it across the top of your shop') : t('Not chosen yet')}
-                                onClick={pickBanner}
-                                testId="shop-field-banner"
-                            />
-                            {shop.photoUrl ? (
-                                <div className="p-3">
+                            <div data-testid="shop-field-banner-container" className="p-3 border-t border-nature-200 dark:border-nature-800">
+                                <div className="text-sm font-bold text-nature-900 dark:text-white mb-2">
+                                    {t('Banner photo')}
+                                </div>
+                                <div
+                                    data-testid="shop-banner-preview"
+                                    className="w-full aspect-[3/1] max-w-[720px] rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 mb-2"
+                                >
+                                    {shop.photoUrl ? (
+                                        <img
+                                            src={shop.photoUrl}
+                                            alt=""
+                                            data-testid="shop-banner-image"
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <DefaultBanner
+                                            category={shop.category}
+                                            logoUrl={identity?.avatar}
+                                            pubkey={identity?.publicKey}
+                                        />
+                                    )}
+                                </div>
+                                {!shop.photoUrl ? (
+                                    <p className="m-0 mb-3 text-xs text-nature-500 dark:text-nature-400">
+                                        {t('Your picture, until you choose a banner.')}
+                                    </p>
+                                ) : (
+                                    <p className="m-0 mb-3 text-xs text-nature-500 dark:text-nature-400">
+                                        {t('Members see it across the top of your shop')}
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap gap-2">
                                     <ToolButton
                                         disabled={busy}
-                                        onClick={() => { void change({ photo: null }, 'banner'); }}
-                                        testId="shop-banner-remove"
+                                        onClick={pickBanner}
+                                        testId="shop-field-banner"
                                     >
-                                        {t('Remove the banner photo')}
+                                        {shop.photoUrl ? t('Change the banner photo') : t('Choose a banner photo')}
                                     </ToolButton>
+                                    {shop.photoUrl ? (
+                                        <ToolButton
+                                            disabled={busy}
+                                            onClick={() => { void change({ photo: null }, 'banner'); }}
+                                            testId="shop-banner-remove"
+                                        >
+                                            {t('Remove the banner photo')}
+                                        </ToolButton>
+                                    ) : null}
                                 </div>
-                            ) : null}
+                            </div>
                             {refusedAt('banner') ? (
                                 <p data-testid="shop-banner-error" className="m-0 px-3 pb-2 text-sm font-semibold text-bp-ink-danger break-words">
                                     {refusal!.message}

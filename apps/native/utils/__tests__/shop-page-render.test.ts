@@ -10,6 +10,11 @@
  * pseudo-locale; the node is the net-spy stand-in for utils/db.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+    Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import Module from 'node:module';
 import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -79,7 +84,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
-vi.mock('expo-image', () => ({ Image: ({ source }: { source?: { uri?: string } }) => createElement('img', { src: source?.uri }) }));
+vi.mock('expo-image', () => ({ Image: ({ source, testID, ...rest }: { source?: { uri?: string }; testID?: string }) => createElement('img', { src: source?.uri, 'data-testid': testID, ...rest }) }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {}, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1, WHEN_UNLOCKED: 2, AFTER_FIRST_UNLOCK: 3 }));
@@ -219,11 +224,11 @@ for (const dark of [false, true]) {
 
         it('a member reads its shopfront in order, and Message writes to its owner', async () => {
             await renderIn();
-            // No banner photo: the default banner from its logo (S3), monogram with 10 round copies on category's tint.
+            // No banner photo: the default banner from its logo (S3), echo with 1 round copy on category's tint (photo avatar).
             const defaultBanner = byId('shopfront-banner')?.querySelector('[data-testid="default-banner"]');
             expect(defaultBanner).not.toBeNull();
             expect(styleOf(defaultBanner).backgroundColor).toBe(colors().tile.tools.tint);
-            expect(defaultBanner?.querySelectorAll('[data-testid="default-banner-monogram-copy"]').length).toBe(10);
+            expect(defaultBanner?.querySelectorAll('[data-testid="default-banner-echo-copy"]').length).toBe(1);
             expect(styleOf(byId('shopfront-banner')).backgroundColor).toBe(colors().brand.tint);
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
             expect(byId('shopfront-name')?.textContent).toBe("Dave's Tool Shed");

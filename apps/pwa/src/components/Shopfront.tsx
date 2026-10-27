@@ -15,6 +15,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
+import { DefaultBanner } from './DefaultBanner';
 import {
     categoryEmoji, categoryLabel, keeperBadgeLine, keeperRoleWord, listingPriceLine, listingStateLine,
     type ShopfrontKeeper, type ShopfrontListing, type ShopSection,
@@ -65,12 +66,12 @@ export function ShopfrontHeader({ name, logoUrl, bannerUrl, category, fallbackEm
             <div
                 data-testid="shopfront-banner"
                 aria-hidden="true"
-                className="w-full max-w-[720px] aspect-[3/1] rounded-2xl bg-bp-chip-ok-tint border border-nature-200 dark:border-nature-800 flex items-center justify-center text-5xl overflow-hidden"
+                className="w-full max-w-[720px] aspect-[3/1] rounded-2xl border border-nature-200 dark:border-nature-800 flex items-center justify-center text-5xl overflow-hidden"
             >
                 {showBanner ? (
                     <img data-testid="shopfront-banner-photo" src={banner!} alt="" onError={() => setBannerFailed(banner)} className="w-full h-full object-cover" />
                 ) : (
-                    <CategoryTile category={category} size="banner" />
+                    <DefaultBanner category={category} logoUrl={logoUrl} />
                 )}
             </div>
             <div data-testid="shopfront-logo" className="-mt-8 ml-3 w-[4.5rem] h-[4.5rem] rounded-full border-4 border-white dark:border-nature-950 bg-white dark:bg-nature-950 overflow-hidden relative">

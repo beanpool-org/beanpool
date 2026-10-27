@@ -126,7 +126,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
                 return { ok: true, status: 200, json: async () => [] };
             }
             if (path === '/api/shops/mine' && method === 'PUT') {
-                shopData = { ...shopData, ...body };
+                shopData = { ...shopData, ...body, photoUrl: body.photo !== undefined ? body.photo : shopData.photoUrl };
                 return { ok: true, status: 200, json: async () => ({ shop: shopData, paused: 0, resumed: 0 }) };
             }
             return { ok: false, status: 404, json: async () => ({}) };
@@ -579,7 +579,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
                 return { ok: true, status: 200, json: async () => [] };
             }
             if (path === '/api/shops/mine' && method === 'PUT') {
-                shopData = { ...shopData, ...body };
+                shopData = { ...shopData, ...body, photoUrl: body.photo !== undefined ? body.photo : shopData.photoUrl };
                 return { ok: true, status: 200, json: async () => ({ shop: shopData, paused: 0, resumed: 0 }) };
             }
             return { ok: false, status: 404, json: async () => ({}) };
@@ -667,7 +667,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
             if (path.startsWith('/api/marketplace/posts?shop=shop-flowers')) {
                 return { ok: true, status: 200, json: async () => [] };
             }
-            if (path === '/api/members/chloe-pubkey') {
+            if (path === '/api/members/chloe-pubkey' || path === '/api/profile/chloe-pubkey') {
                 return { ok: true, status: 200, json: async () => ({ avatar: 'bundled://sunflower' }) };
             }
             return { ok: false, status: 404, json: async () => ({}) };
@@ -695,7 +695,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
             const path = url.replace(/^https?:\/\/[^/]+/, '');
             if (path === '/api/shops/shop-flowers') return { ok: true, status: 200, json: async () => shopData };
             if (path.startsWith('/api/marketplace/posts?shop=shop-flowers')) return { ok: true, status: 200, json: async () => [] };
-            if (path === '/api/members/chloe-pubkey') return { ok: true, status: 200, json: async () => ({ avatar: 'https://mullum.example/chloe.jpg' }) };
+            if (path === '/api/members/chloe-pubkey' || path === '/api/profile/chloe-pubkey') return { ok: true, status: 200, json: async () => ({ avatar: 'https://mullum.example/chloe.jpg' }) };
             return { ok: false, status: 404, json: async () => ({}) };
         });
         const view2 = render(<ShopDetailPage id="shop-flowers" identity={me} onBack={vi.fn()} />);

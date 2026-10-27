@@ -19,6 +19,7 @@ import type { AppColors } from '../../constants/colors';
 import { MemberAvatar } from '../MemberAvatar';
 import { Sentence } from '../Sentence';
 import { CategoryTile } from '../CategoryTile';
+import { DefaultBanner } from '../DefaultBanner';
 import { categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { shopCategoryLabel } from '../../utils/shop';
 import { anchorUrl } from '../../utils/node-post';
@@ -151,7 +152,7 @@ export function ShopfrontHeader({ name, ownerKey, logoUrl, category, fallbackEmo
                 {photo && photo !== failed ? (
                     <Image source={{ uri: photo }} style={s.bannerImage} contentFit="cover" cachePolicy="memory-disk" onError={() => setFailed(photo)} />
                 ) : (
-                    <CategoryTile category={category} size="banner" />
+                    <DefaultBanner category={category} logoUrl={logoUrl} ownerKey={ownerKey} />
                 )}
             </View>
             <View style={s.logo} testID="shopfront-logo">

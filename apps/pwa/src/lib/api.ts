@@ -1307,6 +1307,8 @@ export async function getMarketplacePosts(filter?: {
     sort?: 'distance' | 'recent';
     /** Online events only, wherever they are (DESIGN-event-times §9): a read by radius never meets them. Needs events in `types`. */
     online?: boolean;
+    /** Enterprise's listings as its keeper reads them: includes paused listings (routes/marketplace.ts). */
+    keeper?: boolean;
 }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1314,6 +1316,7 @@ export async function getMarketplacePosts(filter?: {
     if (filter?.types) params.set('types', filter.types);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
+    if (filter?.keeper) params.set('keeper', '1');
     if (filter?.beansOnly) params.set('beansOnly', 'true');
     if (filter?.updatedAfter) params.set('updatedAfter', filter.updatedAfter);
     if (filter?.audienceScope) params.set('audienceScope', filter.audienceScope);

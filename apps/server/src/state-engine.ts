@@ -6905,12 +6905,14 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
     return mapDisputeRow(row);
 }
 
-export function pausePost(postId: string, authorPublicKey: string): boolean {
-    return pausePostEngine(broadcast, postId, authorPublicKey);
+export function pausePost(postId: string, authorPublicKey: string, actorPubkey?: string): boolean {
+    const keeps = actorPubkey ? (enterprise: string) => isTreasuryKey(enterprise) && canOperateTreasury(actorPubkey, enterprise) : undefined;
+    return pausePostEngine(broadcast, postId, authorPublicKey, actorPubkey, keeps);
 }
 
-export function resumePost(postId: string, authorPublicKey: string): boolean {
-    return resumePostEngine(broadcast, postId, authorPublicKey);
+export function resumePost(postId: string, authorPublicKey: string, actorPubkey?: string): boolean {
+    const keeps = actorPubkey ? (enterprise: string) => isTreasuryKey(enterprise) && canOperateTreasury(actorPubkey, enterprise) : undefined;
+    return resumePostEngine(broadcast, postId, authorPublicKey, actorPubkey, keeps);
 }
 
 export function getMarketplaceTransaction(transactionId: string): MarketplaceTransaction | null {

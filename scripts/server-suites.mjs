@@ -476,6 +476,7 @@ export const SUITES = [
     'test-event-post',
     'test-enterprise-event-http',
     'test-enterprise-post-edit-http',
+    'test-enterprise-post-pause-http',
     'test-event-times-http',
     'test-event-series-http',
     'test-event-zone',

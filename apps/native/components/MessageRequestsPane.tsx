@@ -37,7 +37,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                 if (!alive) return;
                 const last = msgs[msgs.length - 1];
                 if (last) {
-                    const hasPhoto = last.type === 'image' || !!(last.attachment_mime || last.attachment_filename || last.metadata?.attachment);
+                    const hasPhoto = last.type === 'image' || !!last.metadata?.attachment;
                     setPreview({ text: last.text, photo: hasPhoto, loading: false });
                 } else {
                     setPreview({ loading: false });

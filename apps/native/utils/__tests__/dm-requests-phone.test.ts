@@ -70,10 +70,10 @@ vi.mock('../blocklist', () => ({
 const dbMocks = vi.hoisted(() => ({
     decideMessageRequest: vi.fn(),
     ignoreAllMessageRequests: vi.fn(),
-    getMessages: vi.fn(async () => []),
+    getMessages: vi.fn(async () => [] as any[]),
     syncSingleConversation: vi.fn(async () => {}),
     deleteLocalMessage: vi.fn(async () => {}),
-}));
+} as Record<string, any>));
 
 vi.mock('../db', () => ({
     decideMessageRequest: (...args: any[]) => dbMocks.decideMessageRequest(...args),

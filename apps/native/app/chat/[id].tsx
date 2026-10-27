@@ -1595,9 +1595,15 @@ function ChatScreen({ id }: { id: string }) {
                 })()}
 
                 <View onLayout={measured('composer')}>
-                {requestMode === 'to-me' ? (
+                {isPeerBlocked ? (
+                    <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
+                        <Text style={styles.blockedNoticeText}>
+                            <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>{t('You have blocked this user. Messaging is disabled.')}
+                        </Text>
+                    </View>
+                ) : requestMode === 'to-me' ? (
                     <View
-                        accessibilityRole="region"
+                        role="region"
                         accessibilityLabel={t('{name} wants to message you', { name: peerName })}
                         style={[styles.toMeContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
                     >
@@ -1653,8 +1659,8 @@ function ChatScreen({ id }: { id: string }) {
                     </View>
                 ) : requestMode === 'mine-waiting' && !editingMessage ? (
                     <View
-                        accessibilityRole="status"
-                        data-testid="request-waiting"
+                        role="status"
+                        testID="request-waiting"
                         style={[styles.waitingContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
                     >
                         <Text style={styles.waitingText}>
@@ -1671,20 +1677,14 @@ function ChatScreen({ id }: { id: string }) {
                             <Text style={styles.cancelRequestBtnText}>{t('Cancel request')}</Text>
                         </Pressable>
                     </View>
-                ) : isPeerBlocked ? (
-                    <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
-                        <Text style={styles.blockedNoticeText}>
-                            <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>{t('You have blocked this user. Messaging is disabled.')}
-                        </Text>
-                    </View>
                 ) : (
                     <ChatComposer
                         ref={composerRef}
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
-                        disabled={keyChangePending || requestMode === 'mine-loading'}
-                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : (requestMode === 'mine-unsent' ? t('Your first message goes to {name} as a request. You can write more once they accept.', { name: peerName }) : null)}
+                        disabled={keyChangePending}
+                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : null}
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

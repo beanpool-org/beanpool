@@ -153,6 +153,4 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 **Learning:** `OffboardMemberWizard.tsx` used `catch (err: any)` in async preview loading and offboard execution handlers, weakening error handling type safety.
 **Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.
 
-## 2026-12-13 - Add loading indicator for AgentSuggestionsPanel
-**Learning:** `AgentSuggestionsPanel.tsx` returned `null` while AI assistant suggestions were fetching asynchronously (`items === null`), leaving operators without visual loading feedback.
-**Action:** Render an explicit loading indicator with an animated spinner when `items === null && !message`.
+- 2026-10-27: Closed by director: AgentSuggestionsPanel loading spinner flashes on nodes without suggestions (#1957/#2076). Do NOT re-file.

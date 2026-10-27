@@ -136,7 +136,7 @@ const openRes = await call('POST', alice, '/api/messages/conversation', { recipi
 assert(openRes.status === 200, `Alice opens chat with Bob: ${openRes.status}`);
 const convId = openRes.body.conversation.id;
 
-const send1 = await call('POST', alice, '/api/messages/send', lockedDm(convId, alice.pk, bob.pk, 'Hello Bob!'));
+const send1 = await call('POST', alice, '/api/messages/send', { conversationId: convId, authorPubkey: alice.pk, ...lockedDm() });
 assert(send1.status === 200, `Alice sends first message: ${send1.status}`);
 
 // Bob sees it in requests
@@ -185,7 +185,7 @@ assert(secondCancel.status === 409 && secondCancel.body.code === 'request_not_pe
 // ── 6. Alice sends a new first line within the hour ──────────────────────────────────────────────
 // Count pushes before sending
 const bobPushesBefore = pushesTo(bob).length;
-const send2 = await call('POST', alice, '/api/messages/send', lockedDm(convId, alice.pk, bob.pk, 'Hello again Bob!'));
+const send2 = await call('POST', alice, '/api/messages/send', { conversationId: convId, authorPubkey: alice.pk, ...lockedDm() });
 assert(send2.status === 200, `Alice sends new first message: ${send2.status}`);
 
 // It is a request again: Bob sees it under requests

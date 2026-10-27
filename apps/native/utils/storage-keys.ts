@@ -64,6 +64,16 @@ export function communityBlocksStoreKey(publicKey: string): string {
 }
 
 /**
+ * The message requests waiting for one account in one community file, as that community's node last listed them (utils/db.ts
+ * saveMessageRequests): one value per (account, file), as every other piece of a community's conversations is kept apart,
+ * so a switch of community never shows another's strangers, nor sends their ids to this one's node (PR #2540 review
+ * 4394120364). `file`: the name db.ts opens the community under.
+ */
+export function messageRequestsStoreKey(publicKey: string, file: string): string {
+    return `beanpool_message_requests:${publicKey.toLowerCase()}:${file}`;
+}
+
+/**
  * The key each of one account's direct messages in one community file is sealed to, as this phone pinned it
  * (utils/dm-peer-pins.ts): `{ pins }`, conversation id lower-cased → pin. One value per (account, file), so no community's
  * node can grow another's or reach its pins (§3.4 amendment 6); its presence is the record that the update's seed of that
@@ -122,6 +132,7 @@ export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string
  */
 export const PER_FILE_STORE_KEYS: readonly ((publicKey: string, file: string) => string)[] = [
     dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey, dmConversationsSeenStoreKey, dmConversationsSeenSetAsideStoreKey, dmLinesAtUpdateStoreKey,
+    messageRequestsStoreKey,
 ];
 
 /**

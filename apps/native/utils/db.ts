@@ -17,7 +17,7 @@ import {
     noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
     type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
-import { dmLinesAtUpdateStoreKey } from './storage-keys';
+import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './nodes';
@@ -4488,8 +4488,9 @@ export async function syncMessages(publicKey: string) {
         // into its rows, so the chat names the person it is sealed to, and no reader has to put the rows back (each pass
         // writing the offered key in and each read taking it out again: #1872 ultrareview, U7).
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
-        if (myIdentity?.publicKey) {
-            await saveMessageRequests(myIdentity.publicKey, convData.requests ?? null);
+        // Kept for the community the list came from, and not at all if the phone has moved to another while it was out.
+        if (myIdentity?.publicKey && await stillOnCommunity(anchorUrl)) {
+            await saveMessageRequests(myIdentity.publicKey, expectedDbName, convData.requests ?? null);
         }
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
@@ -7277,21 +7278,25 @@ export async function signedRequest(endpoint: string, payload: any) {
     return _signedRequest(endpoint, payload);
 }
 
+/** The message requests waiting for the member in the community the phone is on, as its node last listed them. */
 export async function getMessageRequests(myPubkey: string): Promise<{ count: number; conversations: any[] } | null> {
     try {
-        const raw = await AsyncStorage.getItem(`beanpool_message_requests_${myPubkey}`);
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!anchorUrl) return null;
+        const raw = await AsyncStorage.getItem(messageRequestsStoreKey(myPubkey, getDatabaseFilenameForNode(anchorUrl)));
         return raw ? JSON.parse(raw) : null;
     } catch {
         return null;
     }
 }
 
-export async function saveMessageRequests(myPubkey: string, requests: { count: number; conversations: any[] } | null): Promise<void> {
+/** The message requests one community's node listed for the member, kept for that community (`file`) alone. */
+export async function saveMessageRequests(myPubkey: string, file: string, requests: { count: number; conversations: any[] } | null): Promise<void> {
     try {
         if (requests) {
-            await AsyncStorage.setItem(`beanpool_message_requests_${myPubkey}`, JSON.stringify(requests));
+            await AsyncStorage.setItem(messageRequestsStoreKey(myPubkey, file), JSON.stringify(requests));
         } else {
-            await AsyncStorage.removeItem(`beanpool_message_requests_${myPubkey}`);
+            await AsyncStorage.removeItem(messageRequestsStoreKey(myPubkey, file));
         }
     } catch {}
 }

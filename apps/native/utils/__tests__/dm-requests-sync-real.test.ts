@@ -15,6 +15,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 // fragment. Review 4393642158: after a cancel and a new line, the withdrawn line stayed on the phone. Review 4393642152: a
 // row the router wrote (getConversationKind asking the node) had no `request`, so the chat read as an ordinary one. Review
 // 4394119880: on the opener's own phone, a line the node withdrew (Cancel request from another app) stayed, drawn as sent.
+// Review 4394120364: the Requests list was kept per member, so it followed them into another community.
 
 const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
@@ -59,14 +60,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Bo' })) }));
-vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue('beanpool_mullum.beanpool.org.db'), addSavedNode: vi.fn(async () => {}) }));
+vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn((url: string | null) => (url && url.includes('castlemaine') ? 'community_castlemaine.db' : 'beanpool_mullum.beanpool.org.db')), addSavedNode: vi.fn(async () => {}) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage } from '../db';
+import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests } from '../db';
+import { messageRequestsStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
@@ -89,6 +91,8 @@ const node = {
     convs: [] as Conv[],
     /** Once, between the node reading a page and the phone getting it: what happens while that answer is on its way. */
     beforePage: null as null | (() => Promise<void>),
+    /** The same, for the list of conversations. */
+    beforeList: null as null | (() => Promise<void>),
 };
 let clock = Date.parse('2026-10-20T00:00:00.000Z');
 let serial = 0;
@@ -113,6 +117,9 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     if (list) {
         const mine = node.convs.filter((c) => c.participants.includes(list[1]));
         const asked = mine.filter((c) => waitingFor(c, list[1]) && node.lines.some((l) => l.conversationId === c.id));
+        const meanwhile = node.beforeList;
+        node.beforeList = null;
+        if (meanwhile) await meanwhile();
         return answer(200, {
             conversations: mine.filter((c) => !c.request || c.request.from === list[1] || c.request.state === 'accepted').map(view),
             totalUnread: 0,
@@ -183,6 +190,7 @@ beforeEach(async () => {
     node.lines = [];
     node.convs = [];
     node.beforePage = null;
+    node.beforeList = null;
     (globalThis as any).fetch = fetchMock;
     await getDb();
     for (const t of ['messages', 'conversation_participants', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
@@ -366,5 +374,41 @@ describe("which chats the node's list named (review 4394120110)", () => {
         kai2.request = { state: 'pending', from: kai.publicKey, at: new Date(clock - 500).toISOString() };
         await withScreens(() => syncMessages(bo.publicKey));
         expect((await getConversation(kai2.id, bo.publicKey))?.listed ?? null).toBeNull();
+    });
+});
+
+describe('the Requests list, kept per community (review 4394120364)', () => {
+    const CASTLEMAINE = 'https://castlemaine.beanpool.org';
+    const MULLUM_FILE = 'beanpool_mullum.beanpool.org.db';
+    const CASTLEMAINE_FILE = 'community_castlemaine.db';
+    async function rheaAsks(): Promise<Conv> {
+        const req: Conv = { id: 'dm-rhea-bo-7', participants: [rhea.publicKey, bo.publicKey], request: { state: 'pending', from: rhea.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        write(req, rhea, 'first words from Rhea');
+        return req;
+    }
+
+    it("one community's requests are never read in another, and are still there on the way back", async () => {
+        const req = await rheaAsks();
+        await withScreens(() => syncMessages(bo.publicKey));
+        expect((await getMessageRequests(bo.publicKey))?.conversations.map((c: any) => c.id)).toEqual([req.id]);
+
+        h.store.set('beanpool_anchor_url', CASTLEMAINE);
+        expect(await getMessageRequests(bo.publicKey)).toBeNull();
+
+        h.store.set('beanpool_anchor_url', ANCHOR);
+        expect((await getMessageRequests(bo.publicKey))?.conversations.map((c: any) => c.id)).toEqual([req.id]);
+    });
+
+    it('a list that comes back after the phone moved to another community is kept for neither', async () => {
+        await withScreens(() => syncMessages(bo.publicKey));
+        const before = h.store.get(messageRequestsStoreKey(bo.publicKey, MULLUM_FILE)) ?? null;
+        await rheaAsks();
+        node.beforeList = async () => { h.store.set('beanpool_anchor_url', CASTLEMAINE); };
+        await withScreens(() => syncMessages(bo.publicKey));
+
+        expect(h.store.get(messageRequestsStoreKey(bo.publicKey, CASTLEMAINE_FILE)) ?? null).toBeNull();
+        expect(h.store.get(messageRequestsStoreKey(bo.publicKey, MULLUM_FILE)) ?? null).toBe(before);
+        expect(await getMessageRequests(bo.publicKey)).toBeNull();
     });
 });

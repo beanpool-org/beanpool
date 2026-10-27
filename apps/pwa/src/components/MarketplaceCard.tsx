@@ -81,6 +81,29 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const showPrice = !isPulse && !beansMarked;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
+    // On the photo: at most ONE status chip, by precedence PENDING > YOU > RECURRING.
+    const statusChip = (() => {
+        if (post.status === 'pending') {
+            return {
+                text: t('⏳ PENDING'),
+                className: 'bg-amber-400 text-amber-950',
+            };
+        }
+        if (isOwnPost) {
+            return {
+                text: t('👤 YOU'),
+                className: 'bg-blue-600 text-white',
+            };
+        }
+        if (post.repeatable) {
+            return {
+                text: t('↻ RECURRING'),
+                className: 'bg-bp-cta-fill text-bp-cta-on',
+            };
+        }
+        return null;
+    })();
+
     const isGrid = viewMode === 'grid';
     // How far, as the node measured it (S5): one tag for every layout, nothing without a number.
     const distanceTag = typeof distanceKm === 'number' && Number.isFinite(distanceKm) ? (
@@ -148,7 +171,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             ) : elderCard ? t('by {name} ⛰️', { name: authorName }) : t('by {name}', { name: authorName })}
                             {distanceTag}
                             {foundingChip && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
+                                <span data-testid="author-founding" className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
                                     {t('🌱 FOUNDING')}
                                 </span>
                             )}
@@ -199,8 +222,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             <div 
                 className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-sm cursor-pointer transition-all duration-300 hover:shadow-md flex flex-row gap-4 h-full w-full relative overflow-hidden ${elderStyleList}`}
             >
-                {/* Left Thumbnail */}
-                <div className="w-16 h-16 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
+                {/* Left Thumbnail (80px) */}
+                <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
                     {hasPhoto ? (
                         <button
                             type="button"
@@ -267,11 +290,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     {t('💸 CASH TOO')}
                                 </span>
                             )}
-                            {foundingChip && (
-                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
-                                    {t('🌱 FOUNDING TRADE')}
-                                </span>
-                            )}
                             {groupScopeBadge && (
                                 <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
                                     {groupScopeBadge}
@@ -305,6 +323,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         publicKey={post.authorPublicKey}
                         mode="full"
                         showTier={!beansMarked}
+                        isFounding={!beansMarked && !!post.authorFoundingNeeded}
                         onOpenProfile={onOpenProfile}
                     />
                 </div>
@@ -320,53 +339,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     }
 
     // Grid View Return (Condensed tiles)
-    //
-    // Deliberately NOT `h-full`: a grid cell stretches to the tallest thing in its row, and a poll (four answers
-    // plus the voter list) is far taller than a tile. Stretching left a dead gap between the description and VIEW.
-    // Every fragment below is fixed height instead — clamped title, fixed media box, one clamped line of
-    // description — so tiles come out the same height as each other and their VIEW buttons line up across a row.
+    // Rebuilt on the phone's layout (market.tsx grid card):
+    // Photo (or CategoryTile) square and edge-to-edge at card top, radius 14, no inner padding frame;
+    // Type pill top-leading, price pill bottom-trailing; title under the photo (clamped to two lines).
+    // No description line and no VIEW button on non-Pulse cards.
     return (
         <div
-            className={`bg-white dark:bg-nature-950 overflow-hidden cursor-pointer transition-all duration-300 shadow-md hover:shadow-xl dark:shadow-2xl dark:shadow-black/40 border border-nature-100/50 dark:border-nature-800 flex flex-col rounded-xl p-3 ${elderStyleGrid}`}
+            className={`bg-white dark:bg-nature-950 overflow-hidden cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md border border-nature-200 dark:border-nature-800 flex flex-col rounded-[14px] ${elderStyleGrid}`}
         >
-            {/* Top Handle: Author + Title + Rating */}
-            <div className={`flex justify-between items-start mb-2`}>
-                <div className={`flex flex-col overflow-hidden`}>
-                    <PostAuthorTrust
-                        callsign={authorName}
-                        energyCycled={authorEnergy}
-                        rating={authorRating}
-                        avatarUrl={authorAvatarUrl}
-                        publicKey={post.authorPublicKey}
-                        mode="compact"
-                        showTier={!beansMarked}
-                        className="mb-1"
-                        onOpenProfile={onOpenProfile}
-                    />
-                    <span dir="auto" className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
-                        {post.title}
-                    </span>
-                    {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
-                    {pulsePill && <div className="mt-1">{pulsePill}</div>}
-                    {youPill && <div className="mt-1">{youPill}</div>}
-                    {pausedPill && <div className="mt-1">{pausedPill}</div>}
-                    {groupScopeBadge && (
-                        <div className="mt-1">
-                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block break-words">
-                                {groupScopeBadge}
-                            </span>
-                        </div>
-                    )}
-                </div>
-
-                <div className={`flex items-center shrink-0 bg-oat-50 dark:bg-nature-900 rounded-lg gap-0.5 px-1.5 py-0.5`}>
-                    <span className={'text-xs my-0.5'}>{emoji}</span>
-                </div>
-            </div>
-
-            {/* Image Area */}
-            {hasPhoto ? (
-                <div className={`relative w-full rounded-xl overflow-hidden shadow-sm h-[110px] mb-3`}>
+            {/* Square Media Box at Card Top (edge to edge, radius 14) */}
+            <div className="relative w-full aspect-square overflow-hidden">
+                {hasPhoto ? (
                     <button
                         type="button"
                         onClick={(e) => {
@@ -383,81 +366,52 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             }
                         }}
                         aria-label={t('View enlarged photo: {title}', { title: post.title })}
-                        className={`w-full h-full block rounded-xl overflow-hidden ${
+                        className={`w-full h-full block overflow-hidden ${
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
                     >
                         <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
                     </button>
-
-                    {/* Status Overlays */}
-                    <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>
-                        {post.status === 'pending' && (
-                            <span className={`font-bold bg-amber-400 text-amber-950 rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                {t('⏳ PENDING')}
-                            </span>
-                        )}
-                        {nodeBadge && (
-                            <span className={`font-bold bg-indigo-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                🌐 {nodeBadge}
-                            </span>
-                        )}
-                        {foundingChip && (
-                            <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                {t('🌱 FOUNDING TRADE')}
-                            </span>
-                        )}
-                    </div>
-
-                    {/* Price Overlay */}
-                    {showPrice && (
-                        <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
-                            <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <span>{priceAmount(post.credits)}</span>
-                                <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                    {priceUnit(post.priceType)}
-                                </span>
-                            </span>
-                        </div>
-                    )}
-
-                    {/* Recurring Overlay */}
-                    {post.repeatable && (
-                        <div className={`absolute left-2 bg-bp-cta-fill backdrop-blur-md text-bp-cta-on font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
-                            {t('↻ RECURRING')}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div className={`relative w-full rounded-xl overflow-hidden shadow-inner h-[110px] mb-3`}>
+                ) : (
                     <CategoryTile
                         category={post.category}
                         kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
                         size="grid"
                     />
+                )}
 
-                    {/* Status Overlays */}
-                    <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>
-                        {post.status === 'pending' && (
-                            <span className={`font-bold bg-amber-400 text-amber-950 rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                {t('⏳ PENDING')}
-                            </span>
-                        )}
-                        {nodeBadge && (
-                            <span className={`font-bold bg-indigo-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                🌐 {nodeBadge}
-                            </span>
-                        )}
-                        {foundingChip && (
-                            <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
-                                {t('🌱 FOUNDING TRADE')}
-                            </span>
-                        )}
+                {/* Top-leading: Type pill (unless pulse) */}
+                {!isPulse && (
+                    <div className="absolute top-2 left-2">
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg ${
+                            post.type === 'offer'
+                                ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
+                        }`}>
+                            {typeWords(post.type)}
+                        </span>
                     </div>
+                )}
 
+                {/* Top-trailing: Remote node badge if any */}
+                {nodeBadge && (
+                    <div className="absolute top-2 right-2 font-bold bg-indigo-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5">
+                        🌐 {nodeBadge}
+                    </div>
+                )}
+
+                {/* Foot of photo: status chip on left, price pill bottom-trailing on right */}
+                <div data-testid="grid-badge-row" className="absolute left-2 right-2 bottom-2 flex flex-wrap items-end justify-between gap-1 pointer-events-none">
+                    {/* Status chip: at most ONE by precedence PENDING > YOU > RECURRING */}
+                    {statusChip ? (
+                        <div className={`font-bold rounded-lg shadow-sm text-[0.6rem] px-2 py-1 pointer-events-auto ${statusChip.className}`}>
+                            {statusChip.text}
+                        </div>
+                    ) : <div />}
+
+                    {/* Price pill bottom-trailing */}
                     {showPrice && (
-                        <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
+                        <div className="ml-auto bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm pointer-events-auto">
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                 <span>{priceAmount(post.credits)}</span>
                                 <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
@@ -467,35 +421,61 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         </div>
                     )}
-
-                    {/* Recurring Overlay */}
-                    {post.repeatable && (
-                        <div className={`absolute left-2 bg-bp-cta-fill backdrop-blur-md text-bp-cta-on font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
-                            {t('↻ RECURRING')}
-                        </div>
-                    )}
                 </div>
-            )}
+            </div>
 
-            {/* Body Text */}
-            {/* `flex-1` here is what used to swallow the row's spare height. The line clamp already pins this to one
-                line; min-h keeps that line reserved even when the text is missing, so length never moves VIEW. */}
-            <p dir="auto" className={`text-nature-600 dark:text-nature-400 leading-relaxed px-1 text-[11px] line-clamp-1 min-h-[1.625em] mb-3`}>
-                {post.description || t('No description provided.')}
-            </p>
+            {/* Content under the photo */}
+            <div className="p-3 flex flex-col gap-1 min-w-0 flex-1">
+                {/* Two-line title */}
+                <h3 dir="auto" className="font-bold text-sm text-nature-950 dark:text-white line-clamp-2 leading-snug">
+                    {post.cashAlsoNeeded && <span className="mr-0.5">💸</span>}
+                    {post.title}
+                </h3>
 
-            {/* Action Button */}
-            <div
-                className={`w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto ${
-                    isPulse
-                        ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default'
-                        : post.type === 'offer'
-                        ? 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
-                        : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'
-                }`}
-            >
-                {isPulse ? t('DAILY PULSE') : t('VIEW')}
+                {/* Author line with PostAuthorTrust */}
+                <PostAuthorTrust
+                    callsign={authorName}
+                    energyCycled={authorEnergy}
+                    rating={authorRating}
+                    avatarUrl={authorAvatarUrl}
+                    publicKey={post.authorPublicKey}
+                    mode="compact"
+                    showTier={!beansMarked}
+                    isFounding={!beansMarked && !!post.authorFoundingNeeded}
+                    onOpenProfile={onOpenProfile}
+                />
+
+                {/* Group lock line stays under the author */}
+                {groupScopeBadge && (
+                    <div className="mt-1">
+                        <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block break-words">
+                            {groupScopeBadge}
+                        </span>
+                    </div>
+                )}
+
+                {/* Distance tag */}
+                {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
+
+                {/* Paused pill */}
+                {pausedPill && <div className="mt-1">{pausedPill}</div>}
+
+                {/* Daily Pulse keeps its description and button */}
+                {isPulse && (
+                    <>
+                        {pulsePill && <div className="mt-1">{pulsePill}</div>}
+                        {post.description && (
+                            <p dir="auto" className="text-nature-600 dark:text-nature-400 leading-relaxed text-[11px] line-clamp-1 mt-2 mb-2">
+                                {post.description}
+                            </p>
+                        )}
+                        <div className="w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default">
+                            {t('DAILY PULSE')}
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );
+}
 }

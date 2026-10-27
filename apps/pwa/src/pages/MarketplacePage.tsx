@@ -3311,7 +3311,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </p>
                                 </div>
                             ) : (
-                                <div data-testid="visitor-list" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div data-testid="visitor-list" className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                     {filtered.map((post, i) => (
                                         <div key={post.id} className="contents">
                                             {post.type === 'event' ? (
@@ -3472,7 +3472,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     // It only ever moves a tile forward past the poll, and only into a cell that
                                     // would otherwise be blank; with no item wider than one column there is nothing
                                     // to back-fill, so below `md` this changes nothing.
-                                    <div className="grid grid-flow-row-dense grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                                    <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => {
                                             if (post.type === 'event') {
                                                 return (

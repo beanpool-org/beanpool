@@ -330,6 +330,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [muteDialogOpen, setMuteDialogOpen] = useState(false);
     const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<ApiMessage | null>(null);
     const [confirmRemoveMsg, setConfirmRemoveMsg] = useState<ApiMessage | null>(null);
+    const [cancellingRequest, setCancellingRequest] = useState(false);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
     const activeConvIdRef = useRef<string | null>(null);
@@ -2952,7 +2953,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <button
                             type="button"
                             data-testid="request-cancel"
+                            disabled={cancellingRequest}
                             onClick={async () => {
+                                if (cancellingRequest) return;
+                                setCancellingRequest(true);
                                 try {
                                     const answer = await decideMessageRequest(activeConv.id, 'cancel');
                                     const nextRequest = answer.request ?? { ...activeConv.request, nextLineIsRequest: true };
@@ -2961,13 +2965,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     void loadConversations();
                                 } catch (e) {
                                     alert((e as Error | null)?.message || t('That did not go through. Please try again.'));
+                                } finally {
+                                    setCancellingRequest(false);
                                 }
                             }}
                             style={{
                                 minHeight: '44px', padding: '0.4rem 0.85rem', borderRadius: '10px',
                                 border: '1px solid var(--border-primary)', background: 'var(--bg-card)',
                                 color: 'var(--text-primary)', font: 'inherit', fontSize: '0.85rem', fontWeight: 600,
-                                cursor: 'pointer', whiteSpace: 'nowrap',
+                                cursor: cancellingRequest ? 'not-allowed' : 'pointer', opacity: cancellingRequest ? 0.6 : 1, whiteSpace: 'nowrap',
                             }}
                         >
                             {t('Cancel request')}

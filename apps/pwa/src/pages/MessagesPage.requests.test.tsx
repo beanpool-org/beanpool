@@ -728,6 +728,32 @@ describe('the sender\'s side', () => {
         expect(screen.queryByTestId('request-waiting')).toBeNull();
     });
 
+    it('cancelling a waiting request disables the button while in flight to prevent duplicate submissions', async () => {
+        let resolveCancel!: (val: any) => void;
+        const cancelPromise = new Promise((resolve) => { resolveCancel = resolve; });
+        vi.mocked(decideMessageRequest).mockImplementationOnce(() => cancelPromise as any);
+
+        node.list = boList(pending());
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-waiting');
+        const cancelBtn = screen.getByTestId('request-cancel');
+        expect(cancelBtn).toBeEnabled();
+
+        fireEvent.click(cancelBtn);
+        expect(cancelBtn).toBeDisabled();
+        fireEvent.click(cancelBtn);
+        expect(decideMessageRequest).toHaveBeenCalledTimes(1);
+
+        resolveCancel({
+            success: true,
+            request: { state: 'pending', from: bo.publicKey, at: REQUESTED_AT, nextLineIsRequest: true },
+        });
+        await waitFor(() => {
+            expect(screen.queryByTestId('request-waiting')).toBeNull();
+        });
+    });
+
     it('30 days on (expired), the next line is a new request: the composer is back, saying so', async () => {
         const expired = { state: 'expired', from: bo.publicKey, at: REQUESTED_AT };
         node.list = boList(expired);

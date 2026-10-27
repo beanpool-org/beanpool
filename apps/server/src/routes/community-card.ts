@@ -67,6 +67,20 @@ function listedInDirectory(): boolean {
     return getProfileSwitches().publishToDirectory && directoryHeldBack() === null && !!getNodeConfig().lastDirectoryPush;
 }
 
+/**
+ * The lobby with this community first: the global community's address with `?ask=<host>`, built through URL, since the
+ * operator's address is kept as typed (config/start-community.ts): a trailing `/`, a query or a fragment of theirs would
+ * otherwise give `//?ask=` or `?a=b/?ask=`. Its path stays, as the address's root.
+ */
+function lobbyAskUrl(global: string, host: string): string {
+    const url = new URL(global);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/`;
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('ask', host);
+    return url.toString();
+}
+
 /** The card as a stranger reads it now. */
 export function communityCard(): CommunityCard {
     const config = getNodeConfig();
@@ -85,7 +99,7 @@ export function communityCard(): CommunityCard {
             ? { name: config.areaName, radiusKm: typeof config.serviceRadius?.radiusKm === 'number' ? config.serviceRadius.radiusKm : null }
             : null,
         joining,
-        askUrl: global && host && joining === 'requests' && listedInDirectory() ? `${global}/?ask=${encodeURIComponent(host)}` : null,
+        askUrl: global && host && joining === 'requests' && listedInDirectory() ? lobbyAskUrl(global, host) : null,
         globalUrl: global,
     };
 }

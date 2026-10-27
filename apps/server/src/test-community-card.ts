@@ -239,6 +239,15 @@ async function main(): Promise<void> {
     j = (await get('/api/community/card')).body;
     assert(j?.askUrl === `https://lobby.example.net/?ask=${HOST}` && j?.globalUrl === 'https://lobby.example.net',
         "a node that names its own global community sends strangers there, not to ours");
+    for (const [named, ask] of [
+        ['https://lobby.example.net/', `https://lobby.example.net/?ask=${HOST}`],
+        ['https://lobby.example.net/lobby/', `https://lobby.example.net/lobby/?ask=${HOST}`],
+        ['https://lobby.example.net/?a=b#top', `https://lobby.example.net/?ask=${HOST}`],
+    ]) {
+        process.env.GLOBAL_COMMUNITY_URL = named;
+        j = (await get('/api/community/card')).body;
+        assert(j?.askUrl === ask, `GLOBAL_COMMUNITY_URL=${named}: Ask to join is ${ask}, never a doubled slash or a second query (${j?.askUrl})`);
+    }
     delete process.env.GLOBAL_COMMUNITY_URL;
 
     // ── 5. an Android phone ───────────────────────────────────────────────────────────────────────────────────

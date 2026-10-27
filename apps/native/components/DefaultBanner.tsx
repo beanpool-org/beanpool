@@ -55,7 +55,7 @@ export const DefaultBanner: React.FC<DefaultBannerProps> = ({
     const isDark = theme === 'dark';
 
     let tileKey: TileKey = 'general';
-    if (category && GROUP_CATEGORY_MAP[category]) {
+    if (category && Object.prototype.hasOwnProperty.call(GROUP_CATEGORY_MAP, category)) {
         tileKey = GROUP_CATEGORY_MAP[category];
     } else if (category) {
         const normalized = normalizeCategory(category);
@@ -70,8 +70,14 @@ export const DefaultBanner: React.FC<DefaultBannerProps> = ({
     const photoUri = useNodeUri(logoUrl);
     let imageSource: any;
     if (isBundled) {
-        const bundledRef = logoUrl && typeof logoUrl === 'string' && isBundledAvatar(logoUrl) ? logoUrl : (key ? bundledAvatarForPubkey(key) : 'bundled://bean-green');
-        imageSource = resolveBundledAvatar(bundledRef);
+        const bundledRef = logoUrl && typeof logoUrl === 'string'
+            ? (isBundledAvatar(logoUrl)
+                ? logoUrl
+                : logoUrl.startsWith('/avatars/')
+                    ? `bundled://${logoUrl.replace(/^\/avatars\/avatar_/, '').replace(/\.[^.]+$/, '').replace(/_/g, '-')}`
+                    : (key ? bundledAvatarForPubkey(key) : 'bundled://bean-green'))
+            : (key ? bundledAvatarForPubkey(key) : 'bundled://bean-green');
+        imageSource = resolveBundledAvatar(bundledRef) || resolveBundledAvatar(key ? bundledAvatarForPubkey(key) : 'bundled://bean-green');
     } else {
         imageSource = photoUri ? { uri: photoUri } : null;
     }

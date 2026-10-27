@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { MarketplacePage } from './MarketplacePage';
@@ -328,7 +328,7 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         const emptyTiles = screen.getByTestId('market-empty-tiles');
         expect(emptyTiles).toBeInTheDocument();
         expect(emptyTiles.querySelectorAll('[data-testid="category-tile"]').length).toBe(4);
-        expect(screen.getByRole('button', { name: /\+ ADD POST/ })).toBeInTheDocument();
+        expect(within(emptyTiles.parentElement!).getByRole('button', { name: /\+ ADD POST/ })).toBeInTheDocument();
         expect(screen.queryByText('No items found')).toBeNull();
     });
 

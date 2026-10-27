@@ -86,7 +86,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         if (post.status === 'pending') {
             return {
                 text: t('⏳ PENDING'),
-                className: 'bg-amber-400 text-amber-950',
+                className: 'bg-bp-gold-fill text-bp-gold-on',
             };
         }
         if (isOwnPost) {

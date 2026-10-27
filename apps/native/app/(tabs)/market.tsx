@@ -1560,8 +1560,8 @@ export default function MarketScreen() {
                         {!isPulse && (() => {
                             if (item.status === 'pending') {
                                 return (
-                                    <View style={[styles.gridBadge, { backgroundColor: theme === 'dark' ? '#f59e0b' : '#fbbf24', borderColor: '#d97706' }]}>
-                                        <Text style={[styles.gridPriceText, { color: '#451a03', fontWeight: '900' }]}>{t('⏳ PENDING')}</Text>
+                                    <View style={[styles.gridBadge, { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
+                                        <Text style={[styles.gridPriceText, { color: colors.text.onGold, fontWeight: '900' }]}>{t('⏳ PENDING')}</Text>
                                     </View>
                                 );
                             }

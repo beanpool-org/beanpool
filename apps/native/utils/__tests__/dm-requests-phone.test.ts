@@ -18,8 +18,8 @@ const alerts = vi.hoisted(() => ({ said: [] as { title: string; body?: string; b
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', region: 'region' };
     const el = (tag: string) => function MockHost(props: any) {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, ...rest } = props;
-        const attrs: Record<string, any> = { ...rest };
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID } = props;
+        const attrs: Record<string, any> = {};
         if (testID) attrs['data-testid'] = testID;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -105,16 +105,16 @@ describe('MessageRequestsPane on phone', () => {
 
     it('renders empty message when count is 0', () => {
         render(
-            <MessageRequestsPane
-                entries={[]}
-                count={0}
-                identity={{ publicKey: 'me-pubkey' }}
-                onOpen={() => {}}
-                onAccepted={() => {}}
-                onChanged={() => {}}
-            />
+            createElement(MessageRequestsPane, {
+                entries: [],
+                count: 0,
+                identity: { publicKey: 'me-pubkey' },
+                onOpen: () => {},
+                onAccepted: () => {},
+                onChanged: () => {},
+            })
         );
-        expect(screen.getByText(/No requests/)).toBeInTheDocument();
+        expect(screen.getByText(/No requests/)).toBeTruthy();
     });
 
     it('renders requests with Accept and Ignore buttons and triggers decideMessageRequest', async () => {
@@ -125,21 +125,21 @@ describe('MessageRequestsPane on phone', () => {
 
         const onAccepted = vi.fn();
         render(
-            <MessageRequestsPane
-                entries={[entry]}
-                count={1}
-                identity={{ publicKey: 'me-pubkey' }}
-                onOpen={() => {}}
-                onAccepted={onAccepted}
-                onChanged={() => {}}
-            />
+            createElement(MessageRequestsPane, {
+                entries: [entry],
+                count: 1,
+                identity: { publicKey: 'me-pubkey' },
+                onOpen: () => {},
+                onAccepted,
+                onChanged: () => {},
+            })
         );
 
-        expect(await screen.findByText('1 person wants to message you')).toBeInTheDocument();
-        expect(screen.getByText('Bob')).toBeInTheDocument();
+        expect(await screen.findByText('1 person wants to message you')).toBeTruthy();
+        expect(screen.getByText('Bob')).toBeTruthy();
 
         const acceptBtn = screen.getByTestId('request-accept');
-        expect(acceptBtn).toHaveTextContent('Accept');
+        expect(acceptBtn.textContent).toContain('Accept');
         fireEvent.click(acceptBtn);
 
         await waitFor(() => {
@@ -160,18 +160,18 @@ describe('MessageRequestsPane on phone', () => {
         const onChanged = vi.fn();
 
         render(
-            <MessageRequestsPane
-                entries={entries}
-                count={6}
-                identity={{ publicKey: 'me-pubkey' }}
-                onOpen={() => {}}
-                onAccepted={() => {}}
-                onChanged={onChanged}
-            />
+            createElement(MessageRequestsPane, {
+                entries,
+                count: 6,
+                identity: { publicKey: 'me-pubkey' },
+                onOpen: () => {},
+                onAccepted: () => {},
+                onChanged,
+            })
         );
 
         const ignoreAllBtn = screen.getByRole('button', { name: 'Ignore all' });
-        expect(ignoreAllBtn).toBeInTheDocument();
+        expect(ignoreAllBtn).toBeTruthy();
 
         fireEvent.click(ignoreAllBtn);
         expect(alerts.said.length).toBe(1);

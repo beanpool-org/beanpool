@@ -4477,8 +4477,8 @@ export async function syncMessages(publicKey: string) {
         // into its rows, so the chat names the person it is sealed to, and no reader has to put the rows back (each pass
         // writing the offered key in and each read taking it out again: #1872 ultrareview, U7).
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
-        if (myIdentity?.publicKey && convData.requests !== undefined) {
-            await saveMessageRequests(myIdentity.publicKey, convData.requests);
+        if (myIdentity?.publicKey) {
+            await saveMessageRequests(myIdentity.publicKey, convData.requests ?? null);
         }
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
@@ -4657,7 +4657,8 @@ export async function syncMessages(publicKey: string) {
         // Local cleanup of conversations that were deleted/consolidated on the server; none while the pins are unread (the
         // gate: a prune is the node's word on a DM's rows too).
         try {
-            const serverIds = convData.conversations.map((c: any) => c.id);
+            const requestIds = (convData.requests?.conversations || []).map((c: any) => c.id);
+            const serverIds = [...convData.conversations.map((c: any) => c.id), ...requestIds];
             const localConvs = await database.getAllAsync<any>(
                 'SELECT conversation_id FROM conversation_participants WHERE public_key = ?',
                 [publicKey]
@@ -4739,7 +4740,21 @@ export async function syncSingleConversation(conversationId: string) {
             try {
                 const reqJson = msgData.conversation.request ? JSON.stringify(msgData.conversation.request) : null;
                 const db = await getDb();
-                await db.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [reqJson, conversationId]);
+                const conv = msgData.conversation;
+                await db.runAsync(`
+                    INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET request = excluded.request
+                    WHERE request IS NOT excluded.request
+                `, [
+                    conversationId,
+                    conv.type || 'dm',
+                    conv.postId || conv.post_id || null,
+                    conv.name || null,
+                    conv.createdBy || '',
+                    conv.createdAt || new Date().toISOString(),
+                    reqJson
+                ]);
             } catch (e: any) {
                 console.warn(`[Sync] Could not update conversation request: ${e?.message || e}`);
             }

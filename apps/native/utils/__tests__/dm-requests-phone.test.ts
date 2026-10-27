@@ -136,9 +136,9 @@ describe('MessageRequestsPane on phone', () => {
         );
 
         expect(await screen.findByText('1 person wants to message you')).toBeTruthy();
-        expect(screen.getByText('Bob')).toBeTruthy();
-
         const openBtn = screen.getByTestId('request-card-open');
+        // The name is drawn twice on the card (the name line and the avatar), so ask for all of them.
+        expect(screen.getAllByText('Bob').length).toBeGreaterThan(0);
         expect(await screen.findByText('Hello from Bob')).toBeTruthy();
         expect(openBtn.getAttribute('aria-label')).toBe('Bob. Hello from Bob. Open the chat to read it.');
 

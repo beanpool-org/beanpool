@@ -12,6 +12,7 @@ const mockDb = {
     withTransactionAsync: vi.fn().mockImplementation(async (cb: () => Promise<void>) => { await cb(); }),
 };
 
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn().mockImplementation(() => Promise.resolve(mockDb)) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
@@ -22,6 +23,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid', getRandomBytes: () => new Uint8Array(16) }));
+vi.mock('expo-file-system/legacy', () => ({
+    cacheDirectory: '/tmp/cache/',
+    getInfoAsync: vi.fn().mockResolvedValue({ exists: false }),
+    makeDirectoryAsync: vi.fn().mockResolvedValue(undefined),
+    writeAsStringAsync: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue('beanpool_test.db'), addSavedNode: vi.fn() }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 vi.mock('../crypto', async (orig) => ({

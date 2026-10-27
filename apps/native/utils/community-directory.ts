@@ -291,6 +291,20 @@ export function nearbyPostsLine(home: Pick<GlobalHome, 'nearbyPosts'>): string |
 }
 
 /**
+ * The community the card's headline names (findCommunityCardCopy): the nearest while one is near, the nearest listed
+ * with a distance while all are far, else none. The card says "Not answering lately" under it (notAnsweringLine), as
+ * the web's card does under its first row.
+ */
+export function findCardNamed(home: GlobalHome): DirectoryCommunity | null {
+    const { communities } = home;
+    switch (findCommunityState(home)) {
+        case 'near': return communities[0];
+        case 'far': return communities.find(c => c.distanceKm !== null) ?? communities[0];
+        default: return null;
+    }
+}
+
+/**
  * The card's headline, from what the node said (or couldn't). The rule is @beanpool/core's, shared with the web: "No
  * community near you yet." is the one "none" sentence, said only once the directory has loaded; a community 12,000 km
  * away is named with its distance under it, never as near you. The card's buttons (Start a community, Tell me when
@@ -303,7 +317,7 @@ export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint
     const { communities } = home.value;
     switch (findCommunityState(home.value)) {
         case 'near': {
-            const nearest = communities[0];
+            const nearest = findCardNamed(home.value)!;
             const name = communityLabel(nearest);
             const km = nearest.distanceKm;
             // "More nearby" counts only those within 250 km: never one 12,000 km away.
@@ -311,7 +325,7 @@ export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint
             return { title, body: nearSentence(name, km, more) };
         }
         case 'far': {
-            const nearest = communities.find(c => c.distanceKm !== null) ?? communities[0];
+            const nearest = findCardNamed(home.value)!;
             const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null });
             return { title, body: t('{none} The nearest listed is {name}, {where}.', { none: t(FIND_COMMUNITY_WORDS.noneNear), name: communityLabel(nearest), where }) };
         }

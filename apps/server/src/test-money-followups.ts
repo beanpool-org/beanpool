@@ -34,10 +34,12 @@ import { initTls } from './services/tls.js';
 import { initAdminPassword, getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db, createCrowdfundProject } from './db/db.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost, acceptPost, requestPost, approvePostRequest, getBalance, runLedgerAudit,
+    initStateEngine, transfer, createPost as rawCreatePost, acceptPost, requestPost, approvePostRequest, getBalance, runLedgerAudit,
     getCommonsBalanceExact, persistCommonsBalance, persistDecayAndCommons,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { resumeTakeoverAtBoot, getTakeoverProgress, TAKEOVER_JOURNAL_FILE } from './services/takeover.js';
 import { setMemberPhoto } from '@beanpool/engine';

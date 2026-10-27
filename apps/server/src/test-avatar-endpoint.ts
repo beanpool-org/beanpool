@@ -19,7 +19,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from './db/db.js';
-import { initStateEngine, createPost, createTreasury, updateProfile } from './state-engine.js';
+import { initStateEngine, createPost as rawCreatePost, createTreasury, updateProfile } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { avatarRefOf, avatarUrlOf, avatarVersionOf } from '@beanpool/core';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { createAvatarRoutes } from './routes/avatar.js';
@@ -498,7 +501,7 @@ async function main() {
     // 49 posts across these members
     for (let i = 0; i < 49; i++) {
         const author = i < 35 ? photoMembers[i % photoMembers.length] : bundledMembers[i % bundledMembers.length];
-        createPost('offer', 'goods', `Listing Item #${i + 1}`, `Description for item ${i + 1}`, 10 + i, 'fixed', author);
+        createPost('offer', 'goods', `Listing Item #${i + 1}`, `Description for item ${i + 1}`, 10 + i, 'fixed', author, undefined, undefined, undefined, undefined, undefined, undefined, { allowNoPhoto: true });
     }
 
     // 6.1 /api/community/members Benchmark

@@ -205,7 +205,7 @@ export async function setAvatar(node, identity) {
 export async function postOffer(node, identity, title, credits, opts = {}) {
     const r = await signed(node, identity, 'POST', '/api/marketplace/posts', {
         type: 'offer', category: 'other', title, description: 'Cross-node federation test listing',
-        credits, priceType: 'fixed', authorPublicKey: identity.publicKey,
+        credits, priceType: 'fixed', authorPublicKey: identity.publicKey, photos: [TINY_PNG],
         ...(opts.reach !== undefined ? { reach: opts.reach } : {}),
         ...(opts.reachPeers !== undefined ? { reachPeers: opts.reachPeers } : {}),
     });

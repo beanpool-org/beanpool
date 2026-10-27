@@ -63,6 +63,7 @@ process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
 import { haversineKm, boundingBox, getNearbySet, exactPlacesFor, neighbourhoodOf, neighbourhoodBox } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
@@ -868,7 +869,7 @@ async function main() {
     async function postPlaceless(id: Id, fields: Record<string, unknown> = {}): Promise<{ status: number; id?: string; error?: string }> {
         db.prepare("UPDATE members SET avatar_ref = 'seeded-face' WHERE public_key = ?").run(id.pubKeyHex);
         const path = '/api/marketplace/posts';
-        const body = JSON.stringify({ type: 'offer', category: 'food', title: 'Eggs, no pin', description: 'A dozen', credits: 0, ...fields, authorPublicKey: id.pubKeyHex });
+        const body = JSON.stringify({ type: 'offer', category: 'food', title: 'Eggs, no pin', description: 'A dozen', credits: 0, photos: TEST_PHOTOS, ...fields, authorPublicKey: id.pubKeyHex });
         const res = await localFetch(`${BASE}${path}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) } });
         const out = await res.json().catch(() => ({})) as any;
         if (res.status >= 300) console.error('  POST:', res.status, JSON.stringify(out).slice(0, 200));

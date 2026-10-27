@@ -245,6 +245,7 @@ export default function PostDetailModal() {
         editPicker: { color: colors.text.body, height: 50 },
         editInput: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, paddingVertical: 12, color: colors.text.body, fontSize: 15, marginBottom: 10 },
         editPhotoLabel: { color: colors.text.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 8 },
+        requiredStar: { color: colors.feedback.danger.fg },
         editPhotosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
         editPhotoThumb: { width: 60, height: 60, borderRadius: 12, overflow: 'hidden', position: 'relative' },
         editPhotoImg: { width: 60, height: 60, borderRadius: 12 },
@@ -878,6 +879,7 @@ export default function PostDetailModal() {
 
     const handleSave = async () => {
         if (!editTitle.trim()) { Alert.alert(t('Error'), t('Title is required')); return; }
+        if (photos.length > 0 && editPhotos.length === 0) { Alert.alert(t('Error'), t('Add a photo first')); return; }
         // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, never saved as 0. Any decimals, as
         // before; an empty box is 0, as before.
         const price = showsBeans ? parseAmount(editCredits, undefined, ANY_DECIMALS) : null;
@@ -1459,7 +1461,10 @@ export default function PostDetailModal() {
                             ) : null}
 
                             {/* Photos */}
-                            <Text style={styles.editPhotoLabel}>{t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}</Text>
+                            <Text style={styles.editPhotoLabel}>
+                                {t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}
+                                {photos.length > 0 ? <Text style={styles.requiredStar}> *</Text> : null}
+                            </Text>
                             <View style={styles.editPhotosRow}>
                                 {editPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
@@ -1483,7 +1488,7 @@ export default function PostDetailModal() {
                                 <Pressable accessibilityRole="button" style={styles.editCancelBtn} onPress={() => setEditMode(false)}>
                                     <Text style={styles.editCancelBtnText}>{t('Cancel')}</Text>
                                 </Pressable>
-                                <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || !editTitle.trim()) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || !editTitle.trim()}>
+                                <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)}>
                                     <Text style={styles.editSaveBtnText}>{saving ? t('Saving...') : t('💾 Save')}</Text>
                                 </Pressable>
                             </View>

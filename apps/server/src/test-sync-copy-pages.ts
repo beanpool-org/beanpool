@@ -349,6 +349,26 @@ function merged(pages: any[]): Record<string, any[]> {
 const asSet = (rows: any[] | undefined) => (rows ?? []).map((r) => JSON.stringify(r)).sort();
 const sameSet = (a: any[] | undefined, b: any[] | undefined) => JSON.stringify(asSet(a)) === JSON.stringify(asSet(b));
 
+/**
+ * The pages' listing photos as the whole payload carries them. A page names a photo held in M's image store by reference
+ * (its object's sha256, media type and size: engine/sync.ts photoRowsByReference) where the payload puts its bytes back
+ * (restoreInlinePhotos), and every listing the routes make has its photo there. A row by reference is the payload's row
+ * when the payload's bytes for that listing and slot are that object, at the same stamp; any other row stays as it came.
+ */
+function photosAsPayload(pageRows: any[] | undefined, payloadRows: any[] | undefined): any[] {
+    const inPayload = new Map((payloadRows ?? []).map((r) => [`${r.post_id}|${r.order_num}`, r]));
+    return (pageRows ?? []).map((r) => {
+        if (typeof r?.sha256 !== 'string') return r;
+        const p = inPayload.get(`${r.post_id}|${r.order_num}`);
+        const url = typeof p?.photo_data === 'string' ? /^data:([^;]+);base64,(.*)$/.exec(p.photo_data) : null;
+        if (!url) return r;
+        const bytes = Buffer.from(url[2], 'base64');
+        const named = url[1] === r.mime && bytes.length === r.bytes && p.updated_at === r.updated_at
+            && crypto.createHash('sha256').update(bytes).digest('hex') === r.sha256;
+        return named ? p : r;
+    });
+}
+
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
@@ -437,6 +457,7 @@ async function main(): Promise<void> {
         for (const who of [ann, bo, cy, dee]) await join(who);
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
         await offer(gwen, 'Sourdough', 4);
@@ -458,7 +479,10 @@ async function main(): Promise<void> {
             const r = built(`Ann writes to Bo (${i + 1})`, await As(ann, '/api/messages/send', { conversationId, authorPubkey: ann.pk, ...lockedDm() }));
             lines.push(r.message?.id ?? r.id);
         }
-        await main.send('sql', { sql: `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 0, ?)`, args: [honey.id, TINY_PNG, new Date().toISOString()] });
+        // Every listing's photo goes into the image store, and a copy's page names it by reference. Honey's becomes a row
+        // that still holds its bytes inline (as one written before the store, or that the store couldn't reproduce), which
+        // a page carries with its bytes: so a copy here carries both kinds.
+        await main.send('sql', { sql: `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, 0, ?)`, args: [honey.id, TINY_PNG, new Date().toISOString()] });
         await main.send('flood', { kind: 'messages', n: 1200, prefix: 'pre', conversationId, author: ann.pk });
         await main.send('flood', { kind: 'members', n: 300, prefix: 'pre' });
         await main.send('flood', { kind: 'posts', n: 200, prefix: 'pre', author: cy.pk });
@@ -480,7 +504,7 @@ async function main(): Promise<void> {
         // Every list the whole payload carries, and every category the pages carry: none missing on either side.
         const categories = [...new Set([...Object.keys(payload).filter((k) => Array.isArray(payload[k])), ...Object.keys(w)])]
             .filter((k) => !NOT_ROWS.has(k) && !k.startsWith('plainTables.'));
-        const differing = categories.filter((k) => !sameSet(w[k], payload[k]));
+        const differing = categories.filter((k) => !sameSet(k === 'photos' ? photosAsPayload(w[k], payload[k]) : w[k], payload[k]));
         const plainDiffering = Object.keys({ ...payload.plainTables, ...opening.rowCounts.plainTables })
             .filter((t) => !sameSet(w[`plainTables.${t}`], payload.plainTables?.[t]));
         assert(whole.pages.length > 10, `a whole copy of it takes many pages at ${PAGE_ROWS} rows or ${PAGE_BYTES / 1024} KB (${whole.pages.length})`);
@@ -494,7 +518,11 @@ async function main(): Promise<void> {
         assert(JSON.stringify(closing.tableHashes) !== undefined && JSON.stringify(Object.entries(closing.tableHashes?.tables ?? {}).sort())
             === JSON.stringify(Object.entries(payload.tableHashes?.tables ?? {}).sort()),
             `its last page carries the payload's table hashes (${Object.keys(closing.tableHashes?.tables ?? {}).length} tables)`);
-        assert(w.photos?.length === 1 && w.photos[0].photo_data === TINY_PNG, `the listing photo travels with its bytes put back (${JSON.stringify(w.photos)?.slice(0, 120)})`);
+        const honeyPhotos = (w.photos ?? []).filter((p: any) => p.post_id === honey.id);
+        assert(honeyPhotos.length === 1 && honeyPhotos[0].photo_data === TINY_PNG, `the listing photo travels with its bytes put back (${JSON.stringify(honeyPhotos).slice(0, 120)})`);
+        const byReference = (w.photos ?? []).filter((p: any) => typeof p.sha256 === 'string');
+        assert(byReference.length === 2 && byReference.every((p: any) => p.photo_data === undefined),
+            `the photos in M's image store go by reference, without their bytes (${byReference.length} of ${w.photos?.length})`);
 
         // ── 2. Pages under writes hold the snapshot; the delta after carries the writes ──
         console.log('\n— 2. a copy\'s pages under writes on M hold the snapshot; the delta from its cursor carries the writes —');

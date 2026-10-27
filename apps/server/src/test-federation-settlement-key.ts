@@ -64,6 +64,7 @@ import { beginOutboundSettlement, abandonOutboundSettlement, SettlementError } f
 import { getSettlement } from './federation-settlement-state.js';
 import { rotateDailyPulse } from './daily-pulse.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--settlement-key-child';
@@ -396,9 +397,9 @@ async function httpChecks(): Promise<void> {
         const pledgedB = await call(pat, `/api/crowdfund/projects/${projectB}/pledge`, { amount: 30 });
         assert(!!projectA && !!projectB && pledgedA.status === 200 && pledgedB.status === 200 && balOf(`escrow_${projectA}`) === 50 && balOf(`escrow_${projectB}`) === 30,
             `setup: Cara's two projects, with Pat's 50 and 30 in their escrows (${show(made)}; ${show(pledgedA)}; ${show(pledgedB)})`);
-        const offer = await call(sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Lawn mowing', description: 'test', credits: 4, authorPublicKey: sam.pk });
+        const offer = await call(sam, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Lawn mowing', description: 'test', credits: 4, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
         // A member takes an offer once they have listed one of their own (CONTRIBUTION_REQUIRED).
-        const beasOwn = await call(bea, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sourdough', description: 'test', credits: 2, authorPublicKey: bea.pk });
+        const beasOwn = await call(bea, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sourdough', description: 'test', credits: 2, authorPublicKey: bea.pk, photos: TEST_PHOTOS });
         const accepted = await call(bea, '/api/marketplace/posts/accept', { postId: offer.body?.post?.id, buyerPublicKey: bea.pk });
         const deal = accepted.body?.transaction?.id as string;
         assert(!!deal && balOf(`escrow_${deal}`) === 4, `setup: Bea takes Sam's mowing, and the deal's escrow holds her 4 (${show(offer)}; ${show(beasOwn)}; ${show(accepted)})`);
@@ -493,7 +494,7 @@ async function httpChecks(): Promise<void> {
 
         // ── A post's id ───────────────────────────────────────────────────────────────────────────────────────
         console.log('\n--- 5. a post\'s id names no money ---');
-        const post = (id: unknown) => call(vic, '/api/marketplace/posts', { id, type: 'offer', category: 'other', title: 'Firewood', description: 'test', credits: 1, authorPublicKey: vic.pk });
+        const post = (id: unknown) => call(vic, '/api/marketplace/posts', { id, type: 'offer', category: 'other', title: 'Firewood', description: 'test', credits: 1, authorPublicKey: vic.pk, photos: TEST_PHOTOS });
         const postIds: [unknown, string][] = [
             [projectA, 'a project\'s id'], [deal, 'a deal\'s id'], [`escrow_${deal}`, 'escrow_<deal>'], [joKey, 'a settlement\'s key'],
             [link, 'an enterprise\'s key'], ['COMMONS_POOL', 'the Commons'], [7, 'a number'], [['x'], 'a list'],

@@ -34,7 +34,9 @@ delete process.env.APPLE_SERVICES_ID;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db } from './db/db.js';
@@ -220,7 +222,7 @@ async function main(): Promise<void> {
     // ── 2. the same ring still hides a brand-new account's post ──────────────────────────────────
     console.log('\n── 2. the same ring against a brand-new account ──');
     const sid = member('Sid', 0);
-    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', credits: 0, authorPublicKey: sid.pk });
+    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', credits: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
     assert(sidPost.status === 200, `setup: a member who joined today posts (${sidPost.status})`);
     await reportAll(ring, sidPost.body?.post?.id, sid);
     assert(!!hiddenAt(sidPost.body?.post?.id), 'three week-old members hide a brand-new account\'s post: it is not well above them');

@@ -73,7 +73,7 @@ async function main(): Promise<void> {
         const host = member('FfHost'), eve = member('FfEve'), gus = member('FfGus');
         const g = se.createGroup({ name: 'Ff club', createdBy: host.pk, joinPolicy: 'invite_only' } as any);
         for (const m of [eve, gus]) db.prepare("INSERT INTO group_members (group_id, member_pubkey, role, status) VALUES (?, ?, 'member', 'active')").run(g.id, m.pk);
-        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff bee', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), audienceScope: 'group', targetGroupId: g.id });
+        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff bee', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), audienceScope: 'group', targetGroupId: g.id, photos: [TINY_PNG] });
         const id = ev.body?.post?.id;
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, eve, { status: 'going' });
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, gus, { status: 'going' });
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     // ── E3: Not going, on a cancelled or ended event ──
     {
         const host = member('FfWdHost'), grace = member('FfGrace'), hal = member('FfHal');
-        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff far', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 300 * DAY).toISOString() });
+        const ev = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff far', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 300 * DAY).toISOString(), photos: [TINY_PNG] });
         const id = ev.body?.post?.id;
         await req('POST', `/api/marketplace/posts/${id}/rsvp`, grace, { status: 'going' });
         await req('POST', '/api/marketplace/posts/remove', host, { id, authorPublicKey: host.pk });
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
         check('E3', wd.status === 200 && !left && !seat && !!tomb, `Grace takes her name off a cancelled event → 200, row and chat seat gone, tombstone written (got ${wd.status} ${JSON.stringify(wd.body).slice(0, 80)}, row ${!!left}, seat ${!!seat}, tomb ${!!tomb})`);
         const back = await req('POST', `/api/marketplace/posts/${id}/rsvp`, grace, { status: 'going' });
         check('E3-control', back.status === 400, `…but can't say Going to it again (got ${back.status})`);
-        const ev2 = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff past', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + DAY).toISOString() });
+        const ev2 = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff past', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + DAY).toISOString(), photos: [TINY_PNG] });
         const id2 = ev2.body?.post?.id;
         await req('POST', `/api/marketplace/posts/${id2}/rsvp`, hal, { status: 'going' });
         db.prepare('UPDATE posts SET event_start_at=?, event_end_at=? WHERE id=?').run(new Date(Date.now() - 3 * HOUR).toISOString(), new Date(Date.now() - HOUR).toISOString(), id2);
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
         const ymd = sat.toISOString().slice(0, 10), prev = new Date(sat.getTime() - 7 * DAY).toISOString().slice(0, 10);
         // A new event must start ahead, so while that date is running it is made on the one after; its dates are set below.
         const made = satMs + 8 * HOUR <= now.getTime() ? new Date(satMs + 7 * DAY).toISOString().slice(0, 10) : ymd;
-        const s = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff weekly', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartLocal: `${made}T18:00`, eventEndLocal: `${made}T19:00`, eventTz: 'Australia/Brisbane', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA' } });
+        const s = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff weekly', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartLocal: `${made}T18:00`, eventEndLocal: `${made}T19:00`, eventTz: 'Australia/Brisbane', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA' }, photos: [TINY_PNG] });
         const id = s.body?.post?.id;
         const endMs = Date.now() - 20_000;
         db.prepare('UPDATE posts SET event_start_at=?, event_end_at=?, event_start_local=?, event_end_local=? WHERE id=?').run(new Date(endMs - HOUR).toISOString(), new Date(endMs).toISOString(), `${prev}T18:00`, `${prev}T19:00`, id);
@@ -143,9 +143,9 @@ async function main(): Promise<void> {
     // ── M5: a start past year 9999 ──
     {
         const host = member('FfFar');
-        const r = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff 10000', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: '+010000-01-01T10:00:00.000Z' });
+        const r = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff 10000', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: '+010000-01-01T10:00:00.000Z', photos: [TINY_PNG] });
         check('M5', r.status === 400, `a start in year 10000 (stored as "+010000-…", which sorts before every real date) → 400 (got ${r.status})`);
-        const ok = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff 9999', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: '9999-12-31T10:00:00.000Z' });
+        const ok = await req('POST', '/api/marketplace/posts', host, { type: 'event', title: 'Ff 9999', description: 'x', authorPublicKey: host.pk, lat: -28.55, lng: 153.5, eventStartAt: '9999-12-31T10:00:00.000Z', photos: [TINY_PNG] });
         check('M5-control', ok.status === 200, `9999-12-31 stays allowed (No far-future limit, docs/events-on-the-map.md) (got ${ok.status})`);
     }
 

@@ -19,8 +19,8 @@ const needNoPhoto: PostFormState = {
 };
 
 describe('postFormRules', () => {
-    it('Beans off: a blocked newcomer\'s Need is not blocked, its photo is optional, and no profile photo is asked for', () => {
-        expect(postFormRules(GLOBAL.features, 'need', true)).toEqual({ needBlocked: false, photoRequired: false, profilePhoto: false });
+    it('Beans off: a blocked newcomer\'s Need is not blocked, no profile photo is asked for, but a listing photo is required', () => {
+        expect(postFormRules(GLOBAL.features, 'need', true)).toEqual({ needBlocked: false, photoRequired: true, profilePhoto: false });
         // An Offer still carries a photo.
         expect(postFormRules(GLOBAL.features, 'offer', true).photoRequired).toBe(true);
     });
@@ -33,9 +33,9 @@ describe('postFormRules', () => {
         }
     });
 
-    it('the button: a Need with no photo is ready where Beans are off, and asks for one where they are on', () => {
+    it('the button: a Need with no photo asks for one everywhere (Beans on and off)', () => {
         const off = postFormRules(GLOBAL.features, 'need', true);
-        expect(postFormSubmitLabel({ ...needNoPhoto, needBlocked: off.needBlocked, photoRequired: off.photoRequired }, GLOBAL.features)).toBe('Post Need');
+        expect(postFormSubmitLabel({ ...needNoPhoto, needBlocked: off.needBlocked, photoRequired: off.photoRequired }, GLOBAL.features)).toBe('📷 Add a photo');
         const on = postFormRules(LOCAL.features, 'need', true);
         expect(postFormSubmitLabel({ ...needNoPhoto, needBlocked: on.needBlocked, photoRequired: on.photoRequired }, LOCAL.features))
             .toBe('🟢 List an Offer first to post Needs');

@@ -186,7 +186,7 @@ async function main(): Promise<void> {
     const outsider = newId();
 
     const make = (title: string, photos: string[]): string => {
-        const p = se.createPost('offer', 'food', title, `${title}, described`, 0, 'fixed', alice.pk, -28.55, 153.5, photos, false)!;
+        const p = se.createPost('offer', 'food', title, `${title}, described`, 0, 'fixed', alice.pk, -28.55, 153.5, photos, false, undefined, false, photos.length === 0 ? { allowNoPhoto: true } : undefined)!;
         return p.id as string;
     };
     /** The listing's photo URLs, as its author's read by id hands them out. */

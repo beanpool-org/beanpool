@@ -268,6 +268,8 @@ async function main() {
     console.log('The phone\'s Market after a sync is the board, whatever the authors\' standing...\n');
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } = await import('./admin-key-auth.js');
@@ -308,9 +310,9 @@ async function main() {
         db.prepare(`UPDATE members SET can_operate = 1 WHERE public_key = ?`).run(keeper.pubKeyHex);
     };
     const offer = (author: string, title: string, repeatable = true) =>
-        se.createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, repeatable)!.id;
+        createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, repeatable)!.id;
     const need = (author: string, title: string, credits = 5) =>
-        se.createPost('need', 'work', title, '', credits, 'fixed', author)!.id;
+        createPost('need', 'work', title, '', credits, 'fixed', author)!.id;
 
     // ── Who is who ──
     const carol = seed('ReaderCarol');   // reads the board, and syncs her phone
@@ -325,10 +327,10 @@ async function main() {
     const hanaPosts = [
         offer(hana.pubKeyHex, 'Lemons'),
         need(hana.pubKeyHex, 'A ladder'),
-        se.createPost('poll', 'community', 'Where should the tool library go?', '', 0, 'fixed', hana.pubKeyHex,
+        createPost('poll', 'community', 'Where should the tool library go?', '', 0, 'fixed', hana.pubKeyHex,
             undefined, undefined, undefined, false, undefined, false,
             { pollOptions: [{ id: 'a', text: 'The hall' }, { id: 'b', text: 'The shed' }] })!.id,
-        se.createPost('event', 'community', 'Seed swap', '', 0, 'fixed', hana.pubKeyHex, -37.06, 144.21,
+        createPost('event', 'community', 'Seed swap', '', 0, 'fixed', hana.pubKeyHex, -37.06, 144.21,
             undefined, false, undefined, false, {
                 eventStartAt: new Date(Date.now() + 3 * 86_400_000).toISOString(),
                 eventEndAt: new Date(Date.now() + 3 * 86_400_000 + 7_200_000).toISOString(),
@@ -349,7 +351,7 @@ async function main() {
     keep(mill, pat, 'lead');
     const millPosts = [offer(mill, 'Flour'), need(mill, 'Sacks')];
     // A poll the mill ran and closed: on the board (a closed poll is) for as long as the mill is.
-    const millPoll = se.createPost('poll', 'community', 'Mill open day?', '', 0, 'fixed', mill,
+    const millPoll = createPost('poll', 'community', 'Mill open day?', '', 0, 'fixed', mill,
         undefined, undefined, undefined, false, undefined, false,
         { pollOptions: [{ id: 'a', text: 'Saturday' }, { id: 'b', text: 'Sunday' }] })!.id;
     se.closePoll(millPoll, mill);
@@ -365,8 +367,8 @@ async function main() {
     keep(bakery, dora);
     se.transfer('genesis', bakery, 50, 'grant', 'direct', true);
     // 40 Beans: the sale earns the surplus the 20-Bean claim needs.
-    const bread = se.createPost('offer', 'food', 'Sourdough', '', 40, 'fixed', bakery, undefined, undefined, undefined, true)!.id;
-    const shift = se.createPost('need', 'work', 'Bake shift', '', 20, 'fixed', bakery)!.id;
+    const bread = createPost('offer', 'food', 'Sourdough', '', 40, 'fixed', bakery, undefined, undefined, undefined, true)!.id;
+    const shift = createPost('need', 'work', 'Bake shift', '', 20, 'fixed', bakery)!.id;
     const doraBid = se.requestPost(shift, dora.pubKeyHex);
     let refused = false;
     // Approved by Pat, the other keeper, as the routes sign it: a wage claim is recorded only on a keeper's say-so.

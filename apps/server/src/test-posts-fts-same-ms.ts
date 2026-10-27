@@ -40,11 +40,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, createPost, getPosts, transfer,
+    initStateEngine, createPost as rawCreatePost, getPosts, transfer,
     acceptPost, completePostTransaction, cancelPostTransaction, adminDeletePost,
     exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { rsvpEvent, updatePost as updatePostWriter } from './engine/posts.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';

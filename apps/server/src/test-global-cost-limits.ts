@@ -132,7 +132,7 @@ async function main() {
     const listing = (author: Id, title: string, photos: number, days: number, opts: { status?: 'paused' | 'cancelled' | 'completed'; at?: { lat: number; lng: number } } = {}): string => {
         const at = opts.at ?? FAR;
         const p = se.createPost('offer', 'general', title, `${title}, described`, 0, 'fixed', author.pubKeyHex, at.lat, at.lng,
-            Array(photos).fill(TINY_PNG));
+            Array(photos).fill(TINY_PNG), false, undefined, false, photos === 0 ? { allowNoPhoto: true } : undefined);
         if (!p) throw new Error(`could not make ${title}`);
         const stamp = ago(days);
         if (opts.status) {

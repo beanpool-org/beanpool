@@ -235,7 +235,9 @@ async function child(): Promise<void> {
     if (scenario === 'lived-in' || scenario === 'claimed') {
         // One row of S2b on a server of its own: a server that takes the file only replaces this child's data folder.
         const row = process.env.TEST_ROW!;
-        const { initStateEngine, seedGenesisMember, grantNodeRole, createPost } = await import('./state-engine.js');
+        const { wrapCreatePost } = await import('./post-test-helper.js');
+        const { initStateEngine, seedGenesisMember, grantNodeRole, createPost: rawCreatePost } = await import('./state-engine.js');
+        const createPost = wrapCreatePost(rawCreatePost);
         const { db } = await import('./db/db.js');
         const { ensureGenesis } = await import('./genesis.js');
         const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');

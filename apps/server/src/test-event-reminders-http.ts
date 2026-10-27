@@ -33,6 +33,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { createPost as createPostEngine, removePost, rsvpEvent } from './engine/posts.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -88,11 +89,11 @@ async function signedFetch(method: 'GET' | 'POST' | 'PUT', path: string, body: u
 
 let hostSeq = 0;
 /** An event starting `startMs` from now. A fresh host each time — five upcoming events per member is the cap. */
-function newEvent(startMs: number, title: string) {
+function newEvent(startMs: number, title: string, photos: string[] = TEST_PHOTOS, extra: Record<string, unknown> = {}) {
     const author = makeIdentity(`EvHost${++hostSeq}`).pubKeyHex;
     return createPostEngine(() => { }, 'event', 'other', title, 'Bring gloves', 0, 'fixed', author,
-        -28.55, 153.5, [], false, undefined, true,
-        { eventStartAt: at(startMs), eventEndAt: at(startMs + 2 * HOUR), eventPlaceName: 'The old bowls club' } as any)!;
+        -28.55, 153.5, photos, false, undefined, true,
+        { eventStartAt: at(startMs), eventEndAt: at(startMs + 2 * HOUR), eventPlaceName: 'The old bowls club', ...extra } as any)!;
 }
 
 const storedOffsets = (postId: string, pubkey: string): string | null =>
@@ -109,7 +110,8 @@ async function main(): Promise<void> {
     const me = makeIdentity('MineMaeve');
     const someoneElse = makeIdentity('OtherOtto');
 
-    const soon = newEvent(2 * DAY, 'Soonest');
+    // Photoless, as an event from before the photo rule (or another node) left it: the shape check below reads photo: null.
+    const soon = newEvent(2 * DAY, 'Soonest', [], { allowNoPhoto: true });
     const later = newEvent(5 * DAY, 'Later');
     const theirs = newEvent(3 * DAY, 'Not mine');
     const calledOff = newEvent(4 * DAY, 'Called off');

@@ -113,6 +113,8 @@ import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { tidyKnocks } from './engine/knocks.js';
 
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
+
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -310,7 +312,7 @@ async function main(): Promise<void> {
     const bob = makeMember('BobVA');
     const carol = makeMember('CarolVA');
     const mia = makeMember('MiaVA');          // the control: a member making every write in the table
-    const offer = (m: Id, title: string, credits = 5) => createPost('offer', 'produce', title, `${title}, fresh`, credits, 'fixed', m.pk)!;
+    const offer = (m: Id, title: string, credits = 5) => createPost('offer', 'produce', title, `${title}, fresh`, credits, 'fixed', m.pk, undefined, undefined, [TINY_PNG])!;
     for (const m of [alice, bob, carol, mia]) offer(m, `${m.name} seedlings`);
 
     // A trade each for Mia and Alice (standing for Decisions, a trade to rate) and for Bob.
@@ -325,7 +327,7 @@ async function main(): Promise<void> {
     const aliceOffer2 = offer(alice, 'Alice figs');
     const poll = createPost('poll', 'community', 'Market day?', '', 0, 'fixed', alice.pk, undefined, undefined, [], false,
         undefined, false, { pollOptions: [{ id: 'a', text: 'Saturday' }, { id: 'b', text: 'Sunday' }] } as any)!;
-    const event = createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', alice.pk, -28.55, 153.5, [],
+    const event = createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', alice.pk, -28.55, 153.5, [TINY_PNG],
         false, undefined, false, { eventStartAt: inHours(24), eventPlaceName: 'The community garden', eventPrivateNote: NOTE } as any)!;
     rsvpEvent(event.id, bob.pk, 'going');
     const group = createGroup({ name: 'Garden club VA', createdBy: alice.pk, joinPolicy: 'open' } as any);
@@ -414,7 +416,7 @@ async function main(): Promise<void> {
         { name: 'report a post (row 6)', method: 'POST', path: () => '/api/reports',
             body: a => ({ reporterPubkey: a.pk, targetPubkey: alice.pk, targetPostId: aliceOffer.id, reason: 'spam' }) },
         { name: 'post an offer (row 7)', method: 'POST', path: () => '/api/marketplace/posts',
-            body: a => ({ type: 'offer', category: 'produce', title: `Plums from ${a.name}`, description: 'A box', credits: 3, priceType: 'fixed', authorPublicKey: a.pk }) },
+            body: a => ({ type: 'offer', category: 'produce', title: `Plums from ${a.name}`, description: 'A box', credits: 3, priceType: 'fixed', authorPublicKey: a.pk, photos: [TINY_PNG] }) },
         { name: 'post a poll (row 7)', method: 'POST', path: () => '/api/marketplace/posts',
             body: a => ({ type: 'poll', category: 'community', title: `Which day, ${a.name}?`, description: '', credits: 0, priceType: 'fixed', authorPublicKey: a.pk,
                 pollOptions: [{ id: 'x', text: 'Monday' }, { id: 'y', text: 'Friday' }] }) },
@@ -583,7 +585,7 @@ async function main(): Promise<void> {
         assert(treasuryKeepers(apiary).find(k => k.publicKey === vera.pk)?.suspended === true && keeperOf(vera.pk).length === 0 && !canOperate(vera.pk),
             "the keepers' list shows her rows as ones that can't act, and she operates nothing");
         // An event the orchard hosts: whoever keeps it hosts it and reads its note and who is going; Vera doesn't.
-        const orchardEvent = createPost('event', 'community', 'Apple picking', 'Bring a basket', 0, 'fixed', orchard, -28.55, 153.5, [], false, undefined, false,
+        const orchardEvent = createPost('event', 'community', 'Apple picking', 'Bring a basket', 0, 'fixed', orchard, -28.55, 153.5, [TINY_PNG], false, undefined, false,
             { eventStartAt: inHours(48), eventPlaceName: 'The orchard', eventPrivateNote: 'Orchard gate 5580' } as any)!;
         const kaiReads = await call('GET', kai, `/api/marketplace/posts?id=${orchardEvent.id}`);
         const veraReads = await call('GET', vera, `/api/marketplace/posts?id=${orchardEvent.id}`);
@@ -1175,7 +1177,7 @@ async function main(): Promise<void> {
         const aliceSays = await call('POST', alice, '/api/messages/send', { conversationId: veraDm.id, authorPubkey: alice.pk, ...lockedDm() });
         const sid = makeMember('SidVA');
         db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(sid.pk);
-        const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', credits: 2, priceType: 'fixed', authorPublicKey: sid.pk });
+        const sidPosts = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Sid chutney', description: 'Jars', credits: 2, priceType: 'fixed', authorPublicKey: sid.pk, photos: [TINY_PNG] });
         assert(aliceSays.status === 200 && JSON.stringify(sidPosts.body) !== GATE_ANSWER,
             `a member writes in the DM, and a suspended member is answered by the route, not the gate (${show(aliceSays)}; ${show(sidPosts)})`);
         gate?.setVisitorGateForTests(false);
@@ -1230,7 +1232,7 @@ async function main(): Promise<void> {
             `an admin's announcement is pushed to a member's phone, and not to a visitor's nor a key with no row's (${who(announcement)}; ${show(announced)})`);
 
         // An event Bob and Vera are Going to (hers from before this rule): Alice moves it, then cancels it, over HTTP.
-        const bee = createPost('event', 'community', 'Probe bee 5c', 'Bring a hat', 0, 'fixed', alice.pk, -28.55, 153.5, [], false, undefined, false,
+        const bee = createPost('event', 'community', 'Probe bee 5c', 'Bring a hat', 0, 'fixed', alice.pk, -28.55, 153.5, [TINY_PNG], false, undefined, false,
             { eventStartAt: inHours(30), eventPlaceName: 'The hall' } as any)!;
         rsvpEvent(bee.id, bob.pk, 'going');
         asBeforeThisRule(vera, () => { rsvpEvent(bee.id, vera.pk, 'going'); });
@@ -1249,7 +1251,7 @@ async function main(): Promise<void> {
 
         // Found while testing, the same class: a reminder. An event that starts in 50 minutes, which Bob and Vera (from before this
         // rule) are Going to with a reminder an hour before, chosen two hours ago; the node's own sweep sends it.
-        const picnic = createPost('event', 'community', 'Probe picnic 5c', 'Bring a rug', 0, 'fixed', alice.pk, -28.55, 153.5, [], false, undefined, false,
+        const picnic = createPost('event', 'community', 'Probe picnic 5c', 'Bring a rug', 0, 'fixed', alice.pk, -28.55, 153.5, [TINY_PNG], false, undefined, false,
             { eventStartAt: new Date(Date.now() + 50 * 60_000).toISOString(), eventPlaceName: 'The park' } as any)!;
         rsvpEvent(picnic.id, bob.pk, 'going');
         asBeforeThisRule(vera, () => { rsvpEvent(picnic.id, vera.pk, 'going'); });
@@ -1264,11 +1266,11 @@ async function main(): Promise<void> {
 
         // 4111438923: she takes down her own listing, from before this rule, and nothing else.
         const aliceQuinces = offer(alice, 'Alice quinces 5c');
-        const seedPackets = createPost('offer', 'produce', 'Seed packets 5c', 'Seeds', 1, 'fixed', enterpriseKey)!;
+        const seedPackets = createPost('offer', 'produce', 'Seed packets 5c', 'Seeds', 1, 'fixed', enterpriseKey, undefined, undefined, [TINY_PNG])!;
         let herEvent = '';
         let herPoll = '';
         asBeforeThisRule(vera, () => {
-            herEvent = createPost('event', 'community', 'Vera open garden 5c', 'Come and see', 0, 'fixed', vera.pk, -28.55, 153.5, [], false, undefined, false,
+            herEvent = createPost('event', 'community', 'Vera open garden 5c', 'Come and see', 0, 'fixed', vera.pk, -28.55, 153.5, [TINY_PNG], false, undefined, false,
                 { eventStartAt: inHours(40), eventPlaceName: 'Her yard' } as any)!.id;
             herPoll = createPost('poll', 'community', 'Vera asks: honey or wax?', '', 0, 'fixed', vera.pk, undefined, undefined, [], false,
                 undefined, false, { pollOptions: [{ id: 'h', text: 'Honey' }, { id: 'w', text: 'Wax' }] } as any)!.id;
@@ -1350,7 +1352,7 @@ async function main(): Promise<void> {
         const invite = await call('POST', alice, '/api/invite/generate', { publicKey: alice.pk });
         const redeem = await call('POST', vera, '/api/invite/redeem', { code: invite.body?.invite?.code, publicKey: vera.pk, callsign: 'Vera' });
         assert(redeem.status === 200 && !isVisitorRow(vera.pk), `its own signed redeem makes its row a member's (${show(redeem)})`);
-        const post = await call('POST', vera, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Vera honey, second batch', description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: vera.pk });
+        const post = await call('POST', vera, '/api/marketplace/posts', { type: 'offer', category: 'produce', title: 'Vera honey, second batch', description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: vera.pk, photos: [TINY_PNG] });
         const rsvp = await call('POST', vera, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' });
         const join = await call('POST', vera, `/api/groups/${group.id}/join`);
         const report = await call('POST', vera, '/api/reports', { reporterPubkey: vera.pk, targetPubkey: alice.pk, targetPostId: aliceOffer.id, reason: 'spam' });
@@ -1368,7 +1370,7 @@ async function main(): Promise<void> {
     console.log('\n── 7. Global profile: visitors report nothing and watch no place');
     {
         process.env.NODE_PROFILE = 'global';
-        const target = createPost('offer', 'other', 'Honest offer', 'Nothing wrong with it', 0, 'fixed', carol.pk)!.id;
+        const target = createPost('offer', 'other', 'Honest offer', 'Nothing wrong with it', 0, 'fixed', carol.pk, undefined, undefined, [TINY_PNG])!.id;
         const weekOld: Id[] = [];
         for (let i = 0; i < 3; i++) {
             const v = keypair(`OldVisitor${i}VA`);

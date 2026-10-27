@@ -87,6 +87,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -278,6 +279,7 @@ async function main(): Promise<void> {
         clear();
         const made = await call(alice, '/api/marketplace/posts', {
             type: 'offer', category: 'other', title: 'Doorbell offer', description: 'A doorbell test offer', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
+            photos: TEST_PHOTOS,
         });
         const postId = made.body?.post?.id as string | undefined;
         assert(made.status === 200 && !!postId, `Alice posts (got ${made.status} ${JSON.stringify(made.body).slice(0, 120)})`);
@@ -403,6 +405,7 @@ async function main(): Promise<void> {
         const offer = async (who: Id, title: string): Promise<string> => {
             const made = await call(who, '/api/marketplace/posts', {
                 type: 'offer', category: 'other', title, description: `${title}, a doorbell test`, authorPublicKey: who.pk, lat: -28.5, lng: 153.5,
+                photos: TEST_PHOTOS,
             });
             const id = made.body?.post?.id as string | undefined;
             assert(made.status === 200 && !!id, `setup: "${title}" posted over HTTP (got ${made.status} ${JSON.stringify(made.body).slice(0, 120)})`);
@@ -471,7 +474,7 @@ async function main(): Promise<void> {
         const lead = member('DoorbellLead', { earned: 10 });
         se.adminAssignTreasuryOperator(shed, lead.pk);
         db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, lead.pk);
-        const shedOffer = se.createPost('offer', 'tools', 'Doorbell shovel', 'A doorbell test listing of an enterprise', 0, 'fixed', shed)?.id ?? '';
+        const shedOffer = se.createPost('offer', 'tools', 'Doorbell shovel', 'A doorbell test listing of an enterprise', 0, 'fixed', shed, undefined, undefined, TEST_PHOTOS)?.id ?? '';
         assert(!!shedOffer && (await board()).includes(shedOffer), `setup: an enterprise lists an offer, and ${READER} reads it`);
         const step = async (what: string, act: () => unknown, doorbell: 'post_removed' | 'post_updated', shown: boolean, memberGets: string[]): Promise<void> => {
             await sleep(100);

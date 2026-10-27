@@ -24,6 +24,7 @@ import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 import { nodeCredential } from '../../lib/profiles';
 import { useInPageConfirm } from '../common/InPageConfirm';
 
@@ -107,6 +108,7 @@ export function EconomySection({
     const [offerTitle, setOfferTitle] = useState('');
     const [offerCredits, setOfferCredits] = useState('15');
     const [offerCategory, setOfferCategory] = useState('food');
+    const [offerPhotos, setOfferPhotos] = useState<string[]>([]);
     const [seedingOffer, setSeedingOffer] = useState(false);
 
     // Commons proposals state
@@ -396,6 +398,8 @@ export function EconomySection({
     const handleSeedOffer = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!seedOfferTreasury || !offerTitle.trim()) return;
+        // The node refuses a new Offer with no photo; the button says so and stays off until one is chosen.
+        if (offerPhotos.length === 0) return;
         setSeedingOffer(true);
         try {
             const pk = seedOfferTreasury.publicKey || '';
@@ -406,6 +410,7 @@ export function EconomySection({
                     title: offerTitle.trim(),
                     category: offerCategory,
                     credits: Number(offerCredits) || 10,
+                    photos: offerPhotos,
                     description: `${seedOfferTreasury.name} community offer`,
                 },
                 nodeCredential(activeNode),
@@ -413,6 +418,7 @@ export function EconomySection({
             );
             setSeedOfferTreasury(null);
             setOfferTitle('');
+            setOfferPhotos([]);
             await loadTreasuries();
             onRefresh();
         } catch (e: unknown) {
@@ -1114,9 +1120,10 @@ export function EconomySection({
                 </ModalBackdrop>
             )}
 
-            {/* Seed Offer Modal */}
+            {/* Seed Offer Modal. No items-center on the backdrop: with the photo step it can be taller than a phone, and a centred
+                flex child that overflows puts its top out of reach; m-auto on the panel centres it when it fits and scrolls when not; scroll-pb-4 keeps a scrolled-to last button off the very edge. */}
             {seedOfferTreasury && (
-                <ModalBackdrop onClose={() => setSeedOfferTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <ModalBackdrop onClose={() => setSeedOfferTreasury(null)} className="fixed inset-0 overflow-y-auto scroll-pb-4 bg-black/80 backdrop-blur-sm z-50 flex p-4">
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">
                             Post Initial Offer for {seedOfferTreasury.name}
@@ -1162,6 +1169,7 @@ export function EconomySection({
                                     />
                                 </div>
                             </div>
+                            <OfferPhotoPicker photos={offerPhotos} onChange={setOfferPhotos} />
                             <div className="flex items-center justify-end gap-2 pt-2">
                                 <button
                                     type="button"
@@ -1172,10 +1180,10 @@ export function EconomySection({
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={seedingOffer}
+                                    disabled={seedingOffer || offerPhotos.length === 0}
                                     className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                                 >
-                                    {seedingOffer ? 'Posting...' : 'Post Offer'}
+                                    {seedingOffer ? 'Posting...' : offerPhotos.length === 0 ? '📷 Add a photo' : 'Post Offer'}
                                 </button>
                             </div>
                         </form>

@@ -36,10 +36,12 @@ process.env.ADMIN_PASSWORD = 'KnownPledgeOnce123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import * as se from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, getBalance, getEnterpriseUnderlyingFloor,
+    initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, acceptPost, getBalance, getEnterpriseUnderlyingFloor,
     getMemberTrustProfile, adminAssignTreasuryOperator, applyDueKeeperChanges, getCommonsBalanceExact,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -168,7 +170,7 @@ async function main(): Promise<void> {
     // the Beans in escrow. A refusal counts only as the floor's: the Need was posted, the words are the balance check's,
     // and nothing moved.
     const spendAs = async (keeper: Id, co: string, beans: number) => {
-        const need = await call('POST', keeper, `/api/treasury/${co}/need`, { title: `Help wanted ${crypto.randomUUID().slice(0, 6)}`, category: 'work', credits: beans });
+        const need = await call('POST', keeper, `/api/treasury/${co}/need`, { title: `Help wanted ${crypto.randomUUID().slice(0, 6)}`, category: 'work', credits: beans, photos: TEST_PHOTOS });
         const before = getBalance(co).balance;
         const bid = await call('POST', sink, '/api/marketplace/posts/request', { postId: need.body?.post?.id, buyerPublicKey: sink.pk });
         const approved = bid.status === 200 ? await call('POST', keeper, `/api/treasury/${co}/approve`, { transactionId: bid.body?.transaction?.id }) : null;

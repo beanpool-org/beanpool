@@ -10,6 +10,7 @@ import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNode
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
 import type { KnownFloorException } from './MemberKnownFloorPanel';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 
 export interface MemberItem {
     publicKey?: string;
@@ -258,6 +259,7 @@ export function MembersModule({
     const [offerCategory, setOfferCategory] = useState('food');
     const [offerCredits, setOfferCredits] = useState('12');
     const [offerDescription, setOfferDescription] = useState('');
+    const [offerPhotos, setOfferPhotos] = useState<string[]>([]);
     const [seedingOffer, setSeedingOffer] = useState(false);
 
     // The known floor (community modes slice 4): which members an admin lowered or froze, marked in the list. Empty with
@@ -463,18 +465,22 @@ export function MembersModule({
 
     const handleSeedOffer = async () => {
         if (!activeNodeUrl || !offerTreasury || !offerTitle.trim()) return;
+        // The node refuses a new Offer with no photo; the button says so and stays off until one is chosen.
+        if (offerPhotos.length === 0) return;
         setSeedingOffer(true);
         try {
             await seedTreasuryOffer(activeNodeUrl, offerTreasury.publicKey, {
                 title: offerTitle.trim(),
                 category: offerCategory,
                 credits: Number(offerCredits) || 0,
+                photos: offerPhotos,
                 description: offerDescription.trim(),
                 repeatable: true
             }, adminPassword, tfaToken);
             setOfferTreasury(null);
             setOfferTitle('');
             setOfferDescription('');
+            setOfferPhotos([]);
             reloadTreasuries();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -1266,16 +1272,17 @@ export function MembersModule({
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-white font-bold"
                                 />
                             </div>
+                            <OfferPhotoPicker photos={offerPhotos} onChange={setOfferPhotos} label="Photo:" labelClassName="block text-nature-300 font-semibold mb-1" />
                         </div>
 
                         <div className="pt-3 border-t border-nature-800 flex justify-end gap-3">
                             <button onClick={() => setOfferTreasury(null)} className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold text-xs">Cancel</button>
                             <button
                                 onClick={handleSeedOffer}
-                                disabled={seedingOffer || !offerTitle.trim()}
+                                disabled={seedingOffer || !offerTitle.trim() || offerPhotos.length === 0}
                                 className="px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 font-bold text-bp-cta-on text-xs transition-all shadow-md"
                             >
-                                {seedingOffer ? 'Posting...' : 'Post Offer to Market'}
+                                {seedingOffer ? 'Posting...' : offerPhotos.length === 0 ? '📷 Add a photo' : 'Post Offer to Market'}
                             </button>
                         </div>
                     </div>

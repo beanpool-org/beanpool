@@ -49,8 +49,15 @@ vi.mock('expo-location', () => ({
     getLastKnownPositionAsync: async () => null,
     getCurrentPositionAsync: async () => { throw new Error('off'); },
 }));
-vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: async () => { throw new Error(''); } }));
-vi.mock('expo-image-manipulator', () => ({ manipulateAsync: async () => ({}), SaveFormat: { JPEG: 'jpeg' } }));
+// The camera roll won't open, unless a case has it give a photo: a new event needs one before Create.
+const roll = vi.hoisted(() => ({ gives: false }));
+vi.mock('expo-image-picker', () => ({
+    launchImageLibraryAsync: async () => {
+        if (!roll.gives) throw new Error('');
+        return { canceled: false, assets: [{ uri: 'file:///roll/garden.jpg' }] };
+    },
+}));
+vi.mock('expo-image-manipulator', () => ({ manipulateAsync: async () => ({ base64: '/9j/4AAQSkZJRg' }), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid-1' }));
 vi.mock('expo-image', async () => {
     const { createElement: h } = await import('react');
@@ -164,6 +171,7 @@ beforeEach(() => {
     node.createError = null;
     node.updateError = null;
     picks.answer = false;
+    roll.gives = false;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
@@ -195,6 +203,16 @@ const pressAlert = async (english: string) => {
 };
 const said = () => alerts.said;
 const byText = (shown: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === shown) ?? null;
+/** The form's photo, from the camera roll: Create waits for one. */
+const addPhoto = async () => {
+    roll.gives = true;
+    // The photo button opens the shared source sheet (#2512): Camera, Gallery, Browse files.
+    await click(byLabel(xx('Add a photo')), 'Add a photo');
+    await pressAlert('Gallery');
+    alerts.said.length = 0;
+    roll.gives = false;
+    expect(byLabel(xx('Event photo')), 'the photo, shown').not.toBeNull();
+};
 
 describe('an event\'s page in the pseudo-locale: every word came through t() (words S3l)', () => {
     it('a member: the header, the date, the counts, Going and Interested, the place, the host line, Share, Add to calendar, Report', async () => {
@@ -421,7 +439,7 @@ describe('the event form in the pseudo-locale', () => {
         await renderIn('xx', createElement(NewEventModal, { visible: true, onClose() {} }));
         for (const english of ['New Event', 'TITLE *', 'STARTS *', 'ENDS (OPTIONAL)', 'Pick a date and time', '2 hours after start if blank', 'WHERE', 'At a place',
             'PLACE NAME *', 'FIND AN ADDRESS', 'PIN ON THE MAP *', 'The map is not available in this build. Use your location.', 'Tap the map to place the pin.',
-            '📍 Use my location', "Anyone who opens this node's map will see this spot.", 'Approximate (~100 m)', 'DESCRIPTION', 'PHOTO (OPTIONAL)', '📷 Add a photo',
+            '📍 Use my location', "Anyone who opens this node's map will see this spot.", 'Approximate (~100 m)', 'DESCRIPTION', 'PHOTO *', '📷 Add a photo',
             'NOTE FOR PEOPLE WHO ARE GOING', 'POST AS', 'WHO CAN SEE IT', 'This community', 'Addresses from OpenStreetMap. What you type here is sent to them.']) {
             expect(host.textContent, english).toContain(xx(english));
         }
@@ -431,6 +449,12 @@ describe('the event form in the pseudo-locale', () => {
         expect(byLabel(xx('Publishes your new event to the Market feed')) ?? host.querySelector(`[data-hint="${xx('Publishes your new event to the Market feed')}"]`)).not.toBeNull();
         expect(bypassing(host, MEMBERS, said())).toEqual([]);
 
+        // With no photo, the header's button asks for one and does nothing else; with one, it is Create.
+        await click(byLabel(xx('Create event')), 'Create');
+        expect(said()).toEqual([]);
+        await addPhoto();
+        expect(byLabel(xx('Create event'))?.textContent).toBe(xx('Create'));
+        expect(host.textContent).toContain(xx('Remove photo'));
         await click(byLabel(xx('Create event')), 'Create');
         expect(said()).toEqual([xx('Almost there'), xx('Give the event a title.')]);
         alerts.said.length = 0;
@@ -441,6 +465,8 @@ describe('the event form in the pseudo-locale', () => {
         await click(byLabel(xx('Use my location for the pin')), 'Use my location');
         expect(said()).toEqual([xx('Location is off'), xx('Allow location in settings, or tap the map to place the pin.'), xx('Cancel'), xx('Open Settings')]);
         alerts.said.length = 0;
+        // The photo taken off again, and a camera roll that won't open.
+        await click(byLabel(xx('Remove photo')), 'Remove photo');
         await click(byLabel(xx('Add a photo')), 'Add a photo');
         // The shared photo sheet (utils/post-photo.ts askPhotoSource); Android: Cancel is Back or a tap outside.
         expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
@@ -459,6 +485,7 @@ describe('the event form in the pseudo-locale', () => {
         await type(byLabel(xx('Event title')), 'Garden dinner');
         await type(host.querySelector(`[placeholder="${xx('e.g. The old bowls club')}"]`), 'Bangalow Hall');
         await click(byLabel(xx('{label}: {placeholder}').replace('{label}', xx('STARTS *')).replace('{placeholder}', xx('Pick a date and time'))), 'Starts');
+        await addPhoto();
         const cases: Array<[string, string]> = [
             ...['You are currently offline. Please connect to a BeanPool Node to broadcast your post.', 'No identity found.',
                 'Network request failed or server rejected the post.', 'Network request failed. You must be connected to a node to post.'].map((s): [string, string] => [s, xx(s)]),
@@ -517,7 +544,7 @@ describe('in English nothing is bracketed, and the words are as they were', () =
         root = createRoot(host);
         await renderIn('en', createElement(NewEventModal, { visible: true, onClose() {} }));
         expect(bracketed(host)).toBe(0);
-        for (const english of ['New Event', 'TITLE *', 'Pick a date and time', 'Tap the map to place the pin.', 'Approximate (~100 m)', 'This community', 'Create']) {
+        for (const english of ['New Event', 'TITLE *', 'Pick a date and time', 'Tap the map to place the pin.', 'Approximate (~100 m)', 'This community', '📷 Add a photo']) {
             expect(host.textContent, english).toContain(english);
         }
     });

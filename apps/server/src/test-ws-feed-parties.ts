@@ -28,6 +28,7 @@ import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -126,8 +127,8 @@ async function main() {
     console.log('\n— a trade —');
     clear(...all);
     const TITLE = 'Ironbark firewood ' + crypto.randomBytes(3).toString('hex');
-    const post = se.createPost('offer', 'goods', TITLE, 'seasoned', 30, 'fixed', A.pubKeyHex)!;
-    se.createPost('offer', 'services', 'Mowing', 'lawns', 10, 'fixed', B.pubKeyHex); // B has an offer listed, so may request
+    const post = se.createPost('offer', 'goods', TITLE, 'seasoned', 30, 'fixed', A.pubKeyHex, undefined, undefined, TEST_PHOTOS)!;
+    se.createPost('offer', 'services', 'Mowing', 'lawns', 10, 'fixed', B.pubKeyHex, undefined, undefined, TEST_PHOTOS); // B has an offer listed, so may request
     await sleep(150);
     clear(...all);
 
@@ -179,7 +180,7 @@ async function main() {
     se.postGroupThreadMessage(group.id, B.pubKeyHex, gLine);
 
     const ev = se.createPost('event', 'social', 'Street picnic', 'Bring a plate', 0, 'fixed', A.pubKeyHex, -28.55, 153.5,
-        undefined, undefined, undefined, undefined, { eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventPlaceName: 'The park' })!;
+        TEST_PHOTOS, undefined, undefined, undefined, { eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventPlaceName: 'The park' })!;
     se.rsvpEvent(ev.id, B.pubKeyHex, 'going');
     const ETEXT = 'event-line-' + crypto.randomBytes(4).toString('hex');
     se.postEventThreadMessage(ev.id, B.pubKeyHex, ETEXT);

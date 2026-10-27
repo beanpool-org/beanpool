@@ -25,8 +25,10 @@ import {
     canOperateTreasury, canAdministerTreasury, keeperOf, treasuryKeepers,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     getBalance, adminSetUserStatus, adminDeletePost, getAdminPubkey,
-    transfer, createPost,
+    transfer, createPost as rawCreatePost,
 } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
@@ -88,14 +90,14 @@ async function main() {
     assert(canOperateTreasury(river.pubKeyHex, eggs) === false, 'a keeper of Firewood may NOT drive Eggs');
 
     // Every operator-gated route, not just one — a scope check is only as good as its coverage.
-    const offer = { title: 'Dozen eggs', category: 'food', credits: 12 };
+    const offer = { title: 'Dozen eggs', category: 'food', credits: 12, photos: TEST_PHOTOS };
     const own = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
     assert(own.status === 200, `keeper posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
     const offerRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(own.body.post.id) as any;
     assert(offerRow?.created_by === doone.pubKeyHex, 'offer post created_by records acting operator');
 
     // Keeper posts a Need, worker bids, keeper approves and completes — verifying audit trail
-    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', credits: 20 });
+    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', credits: 20, photos: TEST_PHOTOS });
     assert(needRes.status === 200, `keeper posts a Need on enterprise (got ${needRes.status})`);
     const needRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(needRes.body.post.id) as any;
     assert(needRow?.created_by === doone.pubKeyHex, 'need post created_by records acting operator');
@@ -266,10 +268,10 @@ async function main() {
 
     // Repair and moderation actions succeed for admin:
     adminSetUserStatus(eggs, 'disabled');
-    const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', credits: 10 });
+    const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', credits: 10, photos: TEST_PHOTOS });
     assert(pausedOffer.status === 403 && Boolean(pausedOffer.error?.startsWith('This enterprise has been closed')), `pausing enterprise blocks route operations (got ${pausedOffer.status} "${pausedOffer.error}")`);
     adminSetUserStatus(eggs, 'active');
-    const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', credits: 10 });
+    const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', credits: 10, photos: TEST_PHOTOS });
     assert(unpausedOffer.status === 200, 'unpausing enterprise restores keeper operations');
 
     // Admin legitimately appointed to keep an enterprise:
@@ -280,7 +282,7 @@ async function main() {
     assert(keeperOf(admin.pubKeyHex).includes(eggs), 'appointed admin lists Eggs in keeperOf');
 
     // Appointed admin can now spend:
-    const adminOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin posted offer', category: 'food', credits: 15 });
+    const adminOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin posted offer', category: 'food', credits: 15, photos: TEST_PHOTOS });
     assert(adminOffer.status === 200, `appointed admin can post offer (got ${adminOffer.status})`);
     if (adminOffer.body?.post?.id) {
         const deleted = adminDeletePost(adminOffer.body.post.id);
@@ -292,7 +294,7 @@ async function main() {
     // Revoking removes spending again:
     adminRevokeTreasuryOperator(eggs, admin.pubKeyHex);
     assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'revoking admin appointment removes spending authority');
-    const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', credits: 15 });
+    const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', credits: 15, photos: TEST_PHOTOS });
     assert(afterRevokeOffer.status === 403, `revoked admin is REFUSED again on spend route (got ${afterRevokeOffer.status})`);
 
     // ── 9. Two-person rule & self-dealing guard for enterprise Needs ───────────
@@ -303,9 +305,9 @@ async function main() {
     adminAssignTreasuryOperator(bakery, alice.pubKeyHex, 'admin');
 
     // Keeper Alice posts Offer then Need for Bakery
-    const bakeryOffer = await signedFetch('POST', `/api/treasury/${bakery}/offer`, alice, { title: 'Sourdough loaf', category: 'food', credits: 8 });
+    const bakeryOffer = await signedFetch('POST', `/api/treasury/${bakery}/offer`, alice, { title: 'Sourdough loaf', category: 'food', credits: 8, photos: TEST_PHOTOS });
     assert(bakeryOffer.status === 200, 'Alice posts offer on Bakery');
-    const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', credits: 30 });
+    const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', credits: 30, photos: TEST_PHOTOS });
     assert(bakeryNeed.status === 200, 'Alice posts need on Bakery');
 
     // Under Rules 5 & 6 (PR #775), enterprises cannot borrow into credit to pay keepers;
@@ -346,8 +348,8 @@ async function main() {
     const solo = createTreasury('SoloEnterprise', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
     const charlie = makeIdentity('charlie');
     adminAssignTreasuryOperator(solo, charlie.pubKeyHex, 'admin');
-    await signedFetch('POST', `/api/treasury/${solo}/offer`, charlie, { title: 'Solo item', category: 'goods', credits: 10 });
-    const soloNeed = await signedFetch('POST', `/api/treasury/${solo}/need`, charlie, { title: 'Solo errand', category: 'work', credits: 20 });
+    await signedFetch('POST', `/api/treasury/${solo}/offer`, charlie, { title: 'Solo item', category: 'goods', credits: 10, photos: TEST_PHOTOS });
+    const soloNeed = await signedFetch('POST', `/api/treasury/${solo}/need`, charlie, { title: 'Solo errand', category: 'work', credits: 20, photos: TEST_PHOTOS });
     const soloBid = await signedFetch('POST', '/api/marketplace/posts/request', charlie, { postId: soloNeed.body.post.id, buyerPublicKey: charlie.pubKeyHex });
     const soloApprove = await signedFetch('POST', `/api/treasury/${solo}/approve`, charlie, { transactionId: soloBid.body.transaction.id });
     assert(soloApprove.status === 403, `single keeper cannot approve own bid (got ${soloApprove.status})`);
@@ -370,7 +372,7 @@ async function main() {
     // ── 8. Active deals on enterprise Offers (sales) visible to operator ────────────
     transfer('genesis', river.pubKeyHex, 50, 'seed river for offer purchase', 'direct', true);
     createPost('offer', 'help', 'River gardening', 'Garden help', 10, 'fixed', river.pubKeyHex);
-    const freshOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Fresh dozen eggs', category: 'food', credits: 12 });
+    const freshOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Fresh dozen eggs', category: 'food', credits: 12, photos: TEST_PHOTOS });
     assert(freshOffer.status === 200, 'keeper posts fresh offer for sale test');
     const riverOfferReq = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: freshOffer.body.post.id, buyerPublicKey: river.pubKeyHex });
     assert(riverOfferReq.status === 200, `buyer requests enterprise offer (got ${riverOfferReq.status} ${riverOfferReq.error ?? ''})`);
@@ -384,7 +386,7 @@ async function main() {
     assert(activeOfferDeal?.peer_callsign === 'riverbend', 'peer callsign resolved to buyer');
 
     // ── 9. CAS guard on rejectPostRequest ──────────────────────────────────────────
-    const rejNeed = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Paint the fence', category: 'work', credits: 18 });
+    const rejNeed = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Paint the fence', category: 'work', credits: 18, photos: TEST_PHOTOS });
     assert(rejNeed.status === 200, 'keeper posts fresh need for reject test');
     const rejNeedRes = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: rejNeed.body.post.id, buyerPublicKey: river.pubKeyHex });
     assert(rejNeedRes.status === 200, 'worker requests enterprise need for reject test');

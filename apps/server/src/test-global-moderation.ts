@@ -58,10 +58,12 @@ delete process.env.ENFORCE_WS_AUTH;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState, importRemoteState, setNodeRole,
     payFromCommons, createGroup, dispatchPushNotification,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db, createCrowdfundProject } from './db/db.js';
@@ -162,7 +164,7 @@ const photo = (seed: string) => {
 };
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** A post written straight into the engine, as it would be by a member long before the test, out of any window. */
 function oldPost(id: Id, title: string, extra: { lat?: number; lng?: number; photos?: string[] } = {}): string {
     const p = createPost('offer', 'other', title, `${title} description`, 0, 'fixed', id.pk, extra.lat, extra.lng, extra.photos)!;
@@ -945,8 +947,8 @@ async function main(): Promise<void> {
         ['starting a crowdfund', await call('POST', max, '/api/crowdfund/projects', { title: 'Buy now', description: 'spam.example', goalAmount: 50 })],
         ['editing a crowdfund', await call('POST', max, '/api/crowdfund/projects/update', { id: crypto.randomUUID(), title: 'Buy now', goalAmount: 50 })],
         ['starting an enterprise', await call('POST', max, '/api/enterprise', { name: 'Max Co', purpose: 'Buy now' })],
-        ['posting as an enterprise he keeps', await call('POST', max, `/api/treasury/${hub.pk}/offer`, { title: 'Buy now', category: 'other' })],
-        ['posting for a muted enterprise, as a keeper who isn\'t muted', await call('POST', kit, `/api/treasury/${shop.pk}/offer`, { title: 'Buy now', category: 'other' })],
+        ['posting as an enterprise he keeps', await call('POST', max, `/api/treasury/${hub.pk}/offer`, { title: 'Buy now', category: 'other', photos: TEST_PHOTOS })],
+        ['posting for a muted enterprise, as a keeper who isn\'t muted', await call('POST', kit, `/api/treasury/${shop.pk}/offer`, { title: 'Buy now', category: 'other', photos: TEST_PHOTOS })],
         ['a rating', await call('POST', max, '/api/ratings', { targetPubkey: zed.pk, stars: 5, comment: 'Buy now', transactionId: crypto.randomUUID() })],
         ['putting a paused post back up', await call('POST', max, '/api/marketplace/posts/resume', { postId: maxPost, authorPublicKey: max.pk })],
         ['a note with Beans', await call('POST', max, '/api/ledger/transfer', { to: zed.pk, amount: 1, memo: 'Buy now' })],

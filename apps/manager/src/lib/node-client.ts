@@ -1891,10 +1891,12 @@ export async function clearEnterpriseLocation(
     return res.json();
 }
 
+// `photos` is not optional: the node refuses a new Offer with none ("Add a photo first"), this admin route included.
+// Each one a JPEG/PNG/WebP data URL, at most 800 px (lib/photo-resize.ts); the node keeps five.
 export async function seedTreasuryOffer(
     nodeUrl: string,
     treasuryPubkey: string,
-    offer: { title: string; category: string; credits: number; description?: string; priceType?: string; repeatable?: boolean },
+    offer: { title: string; category: string; credits: number; photos: string[]; description?: string; priceType?: string; repeatable?: boolean },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; post: Record<string, unknown> }> {

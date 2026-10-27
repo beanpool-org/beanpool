@@ -17,6 +17,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
+const PHOTO = 'data:image/png;base64,iVBORw0KGgo=';
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 let run = 0, passed = 0;
@@ -77,17 +78,17 @@ async function main() {
     // Make sure members who request offers or create needs have listed an offer post first
     await signedFetch('POST', '/api/marketplace/posts', offerRequester, {
         type: 'offer', category: 'general', title: 'OfferRequester Offer', description: 'Sample offer',
-        credits: 5, priceType: 'fixed', authorPublicKey: offerRequester.pubKeyHex,
+        credits: 5, priceType: 'fixed', authorPublicKey: offerRequester.pubKeyHex, photos: [PHOTO],
     });
     await signedFetch('POST', '/api/marketplace/posts', needAuthor, {
         type: 'offer', category: 'general', title: 'NeedAuthor Offer', description: 'Sample offer',
-        credits: 5, priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex,
+        credits: 5, priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex, photos: [PHOTO],
     });
 
     // Create an Offer post (OfferAuthor creates, OfferRequester requests -> OfferRequester is buyer)
     const offerPostRes = await signedFetch('POST', '/api/marketplace/posts', offerAuthor, {
         type: 'offer', category: 'general', title: 'Lawn Mowing', description: 'Mow front yard',
-        credits: 15, priceType: 'fixed', authorPublicKey: offerAuthor.pubKeyHex,
+        credits: 15, priceType: 'fixed', authorPublicKey: offerAuthor.pubKeyHex, photos: [PHOTO],
     });
     assert(offerPostRes.status === 200, 'offer author created a post successfully');
     const offerPostId = offerPostRes.body?.post?.id;
@@ -96,7 +97,7 @@ async function main() {
     // Create a Need post (NeedAuthor creates, NeedRequester requests -> NeedAuthor is buyer, NeedRequester is seller)
     const needPostRes = await signedFetch('POST', '/api/marketplace/posts', needAuthor, {
         type: 'need', category: 'general', title: 'Need Math Tutor', description: 'Algebra tutoring',
-        credits: 20, priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex,
+        credits: 20, priceType: 'fixed', authorPublicKey: needAuthor.pubKeyHex, photos: [PHOTO],
     });
     assert(needPostRes.status === 200, 'need author created a post successfully');
     const needPostId = needPostRes.body?.post?.id;

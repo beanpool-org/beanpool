@@ -291,8 +291,10 @@ function personValues(value: unknown, allow: (p: string, v: string) => boolean, 
 async function main(): Promise<void> {
     console.log(`\n=== The listings, not the people (G9a) ${MODE} ===\n`);
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost, TEST_PHOTOS } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
-    const { initStateEngine, createPost, createGroup, getPosts } = se;
+    const { initStateEngine, createGroup, getPosts } = se;
+    const createPost = wrapCreatePost(se.createPost);
     const https = await import('./https-server.js') as any;
     const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
     const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');
@@ -803,7 +805,7 @@ async function main(): Promise<void> {
         const byArea = getProfileSwitches().nearbyListings;
         if (byArea) (await import('./engine/member-area.js')).setMemberArea(bob.pk, { lat: 12.3, lng: 45.7 });
         await sleep(200);
-        const made = await call('POST', alice, POSTS, { type: 'offer', category: 'other', title: 'Sentinel live offer', description: 'Sentinel live', authorPublicKey: alice.pk, lat: 12.34567, lng: 45.67891 });
+        const made = await call('POST', alice, POSTS, { type: 'offer', category: 'other', title: 'Sentinel live offer', description: 'Sentinel live', authorPublicKey: alice.pk, lat: 12.34567, lng: 45.67891, photos: TEST_PHOTOS });
         assert(made.status === 200 && made.body?.success, `Alice posts over HTTP (got ${made.status} ${made.text.slice(0, 100)})`);
         await sleep(400);
         for (const [who, s] of [['an unsigned', sockets.unsigned], ['a non-member-signed', sockets.outsider]] as const) {

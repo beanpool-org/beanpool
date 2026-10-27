@@ -54,7 +54,10 @@ delete process.env.APPLE_SERVICES_ID;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, createPost } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, revokeNodeRole, createPost as rawCreatePost } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db } from './db/db.js';
@@ -132,7 +135,7 @@ const as = (session: string) => (method: 'GET' | 'POST', path: string, body?: un
     call(method, null, path, body, { 'x-admin-session': session });
 
 const post = async (id: Id, title: string): Promise<string> => {
-    const r = await call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, cheap`, credits: 0, authorPublicKey: id.pk });
+    const r = await call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, cheap`, credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
     if (r.status !== 200 || typeof r.body?.post?.id !== 'string') throw new Error(`post refused: ${r.status} ${JSON.stringify(r.body)}`);
     return r.body.post.id;
 };
@@ -641,7 +644,7 @@ async function main(): Promise<void> {
     const early = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: vic.pk, targetPostId: chosenId, reason: 'spam' });
     assert(early.status === 404 && early.body?.error === 'not_found' && onChosen() === 0,
         `a report on a post id nobody has posted here is refused, and nothing is filed (${early.status} ${early.body?.error ?? ''}, ${onChosen()} row)`);
-    const samPost = await call('POST', sam, '/api/marketplace/posts', { id: chosenId, type: 'offer', category: 'other', title: 'Sam watches', description: 'Sam watches, cheap', credits: 0, authorPublicKey: sam.pk });
+    const samPost = await call('POST', sam, '/api/marketplace/posts', { id: chosenId, type: 'offer', category: 'other', title: 'Sam watches', description: 'Sam watches, cheap', credits: 0, authorPublicKey: sam.pk, photos: TEST_PHOTOS });
     assert(samPost.status === 200 && samPost.body?.post?.id === chosenId, `setup: Sam posts under that id (${samPost.status} ${samPost.body?.post?.id === chosenId})`);
     // One that got in anyway: filed before this rule, or copied in from another server's rows.
     const earlyRow = crypto.randomUUID();

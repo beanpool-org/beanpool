@@ -58,7 +58,8 @@ async function child(): Promise<void> {
         ...serveCommands,
         'setup-primary': async (a: { replicationToken: string; owner: string; kai: string; enterprise: string }) => {
             const { seedGenesisMember } = await import('./engine/members.js');
-            const { createPost } = await import('./state-engine.js');
+            const { wrapCreatePost } = await import('./post-test-helper.js');
+            const createPost = wrapCreatePost((await import('./state-engine.js')).createPost);
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             const { grantNodeRole } = await import('./engine/node-roles.js');

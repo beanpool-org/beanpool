@@ -426,6 +426,7 @@ async function main(): Promise<void> {
         for (const who of [ann, bo, cy, dee]) await join(who);
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
@@ -443,6 +444,7 @@ async function main(): Promise<void> {
         built('Ann lists a swarm for the group alone', await As(ann, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title: 'Swarm', description: 'A swarm, for the group', credits: 3, priceType: 'fixed',
             authorPublicKey: ann.pk, audienceScope: 'group', targetGroupId: groupId,
+            photos: [TINY_PNG],
         }));
         const conv = built('Ann opens a DM with Bo', await As(ann, '/api/messages/conversation', { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));
         const conversationId: string = conv.conversation?.id ?? conv.id;

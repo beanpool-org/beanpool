@@ -160,15 +160,15 @@ async function main() {
     assert(s3.status === 403 && s3.body?.code === 'profile_no_beans', `…before any other check, even a malformed send (${s3.status})`);
 
     // Posts
-    const priced = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 10, authorPublicKey: alice.pubKeyHex }, alice);
+    const priced = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 10, authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     assert(priced.status === 403 && priced.body?.code === 'profile_no_beans' && priced.body?.error === profile.BEANS_OFF_PRICE_MESSAGE,
         `a post with a Beans price → 403 profile_no_beans, saying how to post it instead (${priced.status} ${JSON.stringify(priced.body)})`);
     assert(count('posts') === 0, 'and nothing was stored');
-    const free = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag, free', authorPublicKey: alice.pubKeyHex }, alice);
+    const free = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag, free', authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     const freeId = free.body?.post?.id;
     const storedCredits = () => (db.prepare('SELECT credits FROM posts WHERE id = ?').get(freeId) as { credits: number } | undefined)?.credits;
     assert(free.status === 200 && freeId && storedCredits() === 0, `a post with no price is stored, at 0 Beans (${free.status} ${storedCredits()})`);
-    const zero = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'A ladder', description: 'Borrow it for a day', credits: '0', authorPublicKey: bob.pubKeyHex }, bob);
+    const zero = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'A ladder', description: 'Borrow it for a day', credits: '0', authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
     assert(zero.status === 200 && zero.body?.post?.credits === 0, `credits "0" is stored as 0 (${zero.status} ${JSON.stringify(zero.body)})`);
     const repriced = await call('POST', '/api/marketplace/posts/update', { id: freeId, authorPublicKey: alice.pubKeyHex, credits: 15 }, alice);
     assert(repriced.status === 403 && repriced.body?.code === 'profile_no_beans' && storedCredits() === 0,
@@ -283,7 +283,7 @@ async function main() {
     assert(refuses(() => pledgeToProject('tx1', 'no-such-project', alice.pubKeyHex, 1, 'pledge'), 'profile_no_beans'), 'a crowdfund pledge refuses before it looks for the project');
     assert(refuses(() => se.acceptPost(freeId, bob.pubKeyHex), 'feature_off') && refuses(() => se.requestPost(freeId, bob.pubKeyHex), 'feature_off')
         && refuses(() => se.approvePostRequest('x', alice.pubKeyHex), 'feature_off'), 'the escrow engine refuses to open an escrow (request, approve, accept)');
-    assert(refuses(() => se.createPost('offer', 'food', 'Eggs', '', 3, 'fixed', alice.pubKeyHex), 'profile_no_beans'), 'createPost() refuses a price whoever calls it');
+    assert(refuses(() => se.createPost('offer', 'food', 'Eggs', '', 3, 'fixed', alice.pubKeyHex, undefined, undefined, [AVATAR]), 'profile_no_beans'), 'createPost() refuses a price whoever calls it');
 
     const audit = se.runLedgerAudit();
     assert(audit.ok && Math.abs(audit.drift) < 1e-9 && audit.strandedEscrows === 0, `the ledger audit is clean (${JSON.stringify(audit)})`);
@@ -341,7 +341,7 @@ async function main() {
     const s4 = await send(alice, bob);
     assert(s4.status === 400 && s4.body?.code === undefined && /first completed trade/.test(s4.body?.error ?? ''),
         `a send by a member with no trade yet fails for the old reason, not the profile (${s4.status} ${s4.body?.error})`);
-    const lemons = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 10, authorPublicKey: alice.pubKeyHex }, alice);
+    const lemons = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 10, authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     assert(lemons.status === 200 && lemons.body?.post?.credits === 10, `a post keeps its Beans price (${lemons.status} ${lemons.body?.post?.credits})`);
     for (const path of ['/api/treasuries', '/api/crowdfund/projects', '/api/commons/projects']) {
         const r = await call('GET', path, null, carol);
@@ -350,7 +350,7 @@ async function main() {
     // A real escrow: Bob is given Beans the way a prune write-off pays out, lists an offer (the contribution rule),
     // and accepts Alice's lemons.
     se.payFromCommons(bob.pubKeyHex, 20, 'Test: Beans for Bob', { allowDeficit: true });
-    await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'Ladder loan', description: 'Any day', credits: 1, authorPublicKey: bob.pubKeyHex }, bob);
+    await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'Ladder loan', description: 'Any day', credits: 1, authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
     const accepted = await call('POST', '/api/marketplace/posts/accept', { postId: lemons.body.post.id, buyerPublicKey: bob.pubKeyHex }, bob);
     const escrowTx = accepted.body?.transaction?.id;
     assert(accepted.status === 200 && escrowTx, `Bob accepts: an escrow opens (${accepted.status} ${JSON.stringify(accepted.body).slice(0, 160)})`);
@@ -374,7 +374,7 @@ async function main() {
     assert(sw5.beans && sw5.escrow, 'Beans and escrow stay on');
     const s5 = await send(alice, bob);
     assert(s5.status !== 403 && s5.body?.code !== 'profile_no_beans', `a send is not refused for the profile (${s5.status} ${s5.body?.error})`);
-    const priced5 = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Eggs', description: 'A dozen', credits: 4, authorPublicKey: alice.pubKeyHex }, alice);
+    const priced5 = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Eggs', description: 'A dozen', credits: 4, authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     assert(priced5.status === 200 && priced5.body?.post?.credits === 4, `a Beans price is still kept (${priced5.status})`);
     clearOverrides();
 

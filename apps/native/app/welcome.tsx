@@ -17,7 +17,7 @@ import {
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
-import { lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
+import { bundledAvatarForPubkey, lowercaseRecoveryWords, photoStepNote } from '@beanpool/core';
 import {
     doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
 } from '../components/welcome/welcome-lines';
@@ -2046,11 +2046,12 @@ export default function WelcomeScreen() {
                                     accessibilityLabel={t('Your selected profile picture')}
                                 />
                             ) : (
-                                <View style={profileStyles.previewPlaceholder}>
-                                    <Text style={profileStyles.previewPlaceholderText}>
-                                        {pendingIdentity.callsign.charAt(0).toUpperCase()}
-                                    </Text>
-                                </View>
+                                <Image
+                                    source={resolveBundledAvatar(bundledAvatarForPubkey(pendingIdentity.publicKey))!}
+                                    style={profileStyles.previewImage}
+                                    accessibilityElementsHidden={true}
+                                    importantForAccessibility="no-hide-descendants"
+                                />
                             )}
                             <Text style={profileStyles.previewCallsign}>
                                 {pendingIdentity.callsign}

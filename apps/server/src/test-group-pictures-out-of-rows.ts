@@ -41,6 +41,8 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const HERE = path.dirname(SCRIPT);
 const DB_TS = path.join(HERE, 'db', 'db.ts');
 const STATE_ENGINE_TS = path.join(HERE, 'state-engine.ts');
+// Resolved here: a boot script runs from the temp data dir, where a bare '@beanpool/engine' resolves to nothing.
+const ENGINE = import.meta.resolve('@beanpool/engine');
 
 /** A JPEG the photo rules take (its structure walks), about `size` bytes, as a data URL. */
 function jpegUrl(size: number, seed = 1): string {
@@ -325,16 +327,17 @@ async function migration(root: string): Promise<void> {
         }
         const NEW_PICTURE = jpegUrl(12_000, 77);
         // Boot 1, and the node runs on: the disk is freed (the trigger goes), and X's convenor sets a new picture and Y's
-        // removes theirs, by the group route's own writer (state-engine updateGroup).
+        // removes theirs, by the group picture writer (setGroupPicture; updateGroup refuses clearing under S4).
         const boot1 = bootInto(stopDir, { GROUP_PICTURE_MOVE_BYTES: '100000' }, `
             console.error = (...a) => console.log(...a);
             const se = await import(${JSON.stringify(STATE_ENGINE_TS)});
+            const { setGroupPicture } = await import(${JSON.stringify(ENGINE)});
             const { db } = await import(${JSON.stringify(DB_TS)});
             se.initStateEngine();
             console.log('COMMITTED=' + db.prepare('SELECT COUNT(*) AS n FROM group_pictures gp JOIN groups g ON g.id = gp.group_id WHERE g.created_by = ?').get(${JSON.stringify(CREATOR)}).n);
             db.exec('DROP TRIGGER injected_failure');
             se.updateGroup(${JSON.stringify(x.id)}, ${JSON.stringify(CREATOR)}, { avatarUrl: ${JSON.stringify(NEW_PICTURE)} });
-            se.updateGroup(${JSON.stringify(y.id)}, ${JSON.stringify(CREATOR)}, { avatarUrl: '' });
+            setGroupPicture(db, ${JSON.stringify(y.id)}, null);
             console.log('BOOT_OK');
             process.exit(0);
         `);
@@ -400,7 +403,7 @@ async function standbyCopy(): Promise<void> {
             const p = await pullAndSwap(false);
             const [s, mm] = [await groupsOf(standby), await groupsOf(main)];
             const pictured = mm.filter((g) => g.picture !== null);
-            assert(p.ok && pictured.length === 3 && same(s, mm),
+            assert(p.ok && pictured.length === 4 && same(s, mm),
                 `S's copy holds each group's picture, reference, size and stamp as M does (${pictured.length} pictures; ${s.length} groups on S, ${mm.length} on M)`);
             const diff = await exactNow();
             assert(diff.length === 0, `every copied table hashes the same on S as on M, group_pictures and groups included (differences ${first(diff)})`);
@@ -408,12 +411,14 @@ async function standbyCopy(): Promise<void> {
 
         await step('6b. a delta brings a changed picture, a removed one and a new group\'s', async () => {
             const changed = await Patch(ann, `/api/groups/${garden.id}`, { avatarUrl: jpegUrl(25_000, 41) });
-            const removed = await Patch(ann, `/api/groups/${quiet.id}`, { avatarUrl: '' });
-            require_(changed.status === 200 && removed.status === 200, `M: Ann changes one picture and removes another (${changed.status}, ${removed.status})`);
+            const patchRemoved = await Patch(ann, `/api/groups/${quiet.id}`, { avatarUrl: '' });
+            assert(patchRemoved.status === 400 && /keeps a picture/i.test(patchRemoved.body?.error ?? ''), `M: Ann cannot clear a group picture via PATCH (${patchRemoved.status})`);
+            await main.send('remove-picture', { id: quiet.id });
+            require_(changed.status === 200, `M: Ann changes one picture (${changed.status})`);
             built('Dee starts a group with a picture', await As(dee, '/api/groups', { name: 'Late', avatarUrl: jpegUrl(20_000, 42) }));
             const p = await pullAndSwap(false);
             const [s, mm] = [await groupsOf(standby), await groupsOf(main)];
-            assert(p.ok && p.mode !== 'resync' && same(s, mm) && mm.find((g) => g.id === quiet.id)?.picture === null && mm.filter((g) => g.picture !== null).length === 3,
+            assert(p.ok && p.mode !== 'resync' && same(s, mm) && mm.find((g) => g.id === quiet.id)?.picture === null && mm.filter((g) => g.picture !== null).length === 4,
                 `S's delta (${p.mode}) brings the change, the removal and the new group's picture, each with M's stamp (S ${s.length} groups, M ${mm.length})`);
             const diff = await exactNow();
             assert(diff.length === 0, `and every copied table still hashes the same (differences ${first(diff)})`);
@@ -435,7 +440,13 @@ async function main(): Promise<void> {
 }
 
 if (process.argv.includes('--child')) {
-    runPagedCopyChild().catch((e) => { console.error(e); process.exit(1); });
+    runPagedCopyChild({
+        'remove-picture': async (a: { id: string }) => {
+            const { setGroupPicture } = await import('@beanpool/engine');
+            const { db } = await import('./db/db.js');
+            return setGroupPicture(db, a.id, null);
+        },
+    }).catch((e) => { console.error(e); process.exit(1); });
 } else {
     main().catch((e) => { console.error(e); process.exit(1); });
 }

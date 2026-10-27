@@ -11,6 +11,7 @@ import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
 import { dmNotLockedLine } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { resolveAvatarUrl } from '../lib/avatar';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -547,6 +548,27 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         expect(screen.getByText('Bob')).toBeInTheDocument();
     });
 
+    it("a group chat is drawn with the group's own picture, in the list and its chat's header, never a member's face (Pictures S4)", async () => {
+        const face = '/api/avatar/peer-pubkey?v=1';
+        mockConversations = [
+            { ...group('grp-1', 'Garden crew'), avatarUrl: 'bundled://leaf', category: 'social', peerAvatar: face },
+            // A group from before pictures were required: its category's emblem, as the phone draws it.
+            { ...group('grp-2', 'Street choir'), avatarUrl: null, category: 'guild', peerAvatar: face },
+        ];
+        mockConversationDetails = { 'grp-1': mockConversations[0] };
+        mockMessagesByConv = { 'grp-1': [] };
+        const srcs = (root: ParentNode) => Array.from(root.querySelectorAll('img')).map((i) => i.getAttribute('src'));
+        const { container } = render(<MessagesPage identity={mockIdentity} onNavigate={vi.fn()} />);
+        await screen.findByText('Garden crew');
+        expect(srcs(container)).toEqual(expect.arrayContaining(['bundled://leaf', 'bundled://crystal']));
+        expect(srcs(container)).not.toContain(face);
+        expect(screen.queryByText('👥')).toBeNull();
+
+        fireEvent.click(screen.getByText('Garden crew'));
+        const header = await screen.findByTestId('chat-owner-header');
+        expect(srcs(header)).toEqual(['bundled://leaf']);
+    });
+
     it("the Groups chip carries the groups' unread total and says it to a screen reader", async () => {
         render(<MessagesPage identity={mockIdentity} />);
         await screen.findByText('Garden crew');
@@ -613,7 +635,8 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         const dialog = await screen.findByRole('dialog');
         // The Beans hand-off belongs to Commons, where the project and enterprise forms are.
         expect(within(dialog).queryByTestId('create-group-with-beans')).not.toBeInTheDocument();
-        const nameField = dialog.querySelector('input')!;
+        // By its placeholder: the Picture row's file input comes first now (Pictures S4).
+        const nameField = within(dialog).getByPlaceholderText('e.g. Bindarrabi Garden Crew, Solar Guild');
         fireEvent.change(nameField, { target: { value: 'Bike fixers' } });
         fireEvent.submit(nameField.closest('form')!);
 
@@ -1503,5 +1526,58 @@ describe('MessagesPage: a block or an unblock the community did not take is said
         await waitFor(() => expect(window.alert).toHaveBeenCalledWith(OFFLINE_UNBLOCK));
         expect(unblockUser).toHaveBeenCalledWith('peer-pubkey');
         expect(screen.getByText(/You have blocked this user/)).toBeInTheDocument();
+    });
+});
+
+describe('MessagesPage: a chat with no picture has one ready-made face, the same in the list and in its header (#2511 review)', () => {
+    // The resolver's ready-made face, told apart by what it is chosen from: the page must hand it a key, never a name, as
+    // People, MemberAvatar and the phone do, or the same photoless person is one face in the list and another one tap later.
+    const preset = (url: string | null | undefined, key?: string | null) => url || (key ? `/preset/${key}` : null);
+    const srcs = (root: ParentNode) => Array.from(root.querySelectorAll('img')).map((i) => i.getAttribute('src'));
+    const before = vi.mocked(resolveAvatarUrl).getMockImplementation()!;
+    const chat = (id: string, extra: Partial<Conversation>): Conversation => ({
+        id, type: 'dm', name: null, participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+        peerCallsign: 'Bob', peerAvatar: null, unreadCount: 0, createdAt: '2026-10-14T00:00:00Z', ...extra,
+    });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(resolveAvatarUrl).mockImplementation(preset);
+        mockConversations = [
+            chat('dm-1', {}),
+            chat('trade-1', { participants: ['my-pubkey', 'other-pubkey'], peerCallsign: 'Charlie', postId: 'post-1', postTitle: 'Lemons' }),
+            // An enterprise's thread: its id is the enterprise's key, and the node names it after the enterprise.
+            chat('ent-pubkey', { type: 'enterprise_thread' as Conversation['type'], name: 'Bakery', createdBy: 'peer-pubkey' }),
+        ];
+        mockConversationDetails = Object.fromEntries(mockConversations.map((c) => [c.id, c]));
+        mockMessagesByConv = {};
+    });
+    afterEach(() => { vi.mocked(resolveAvatarUrl).mockImplementation(before); });
+
+    it("a DM's row and its header both draw the other person's face from their key, never from their name", async () => {
+        const { container } = render(<MessagesPage identity={mockIdentity} onOpenProfile={vi.fn()} />);
+        await screen.findByText('Bob');
+        expect(srcs(container)).toContain('/preset/peer-pubkey');
+        expect(srcs(container).filter((src) => src?.startsWith('/preset/') && !src.endsWith('-pubkey'))).toEqual([]);
+
+        fireEvent.click(screen.getByText('Bob'));
+        expect(srcs(await screen.findByTestId('dm-header-profile'))).toEqual(['/preset/peer-pubkey']);
+    });
+
+    it("a listing's chat badges the other person with the face their own DM has", async () => {
+        const { container } = render(<MessagesPage identity={mockIdentity} />);
+        await screen.findByText('Bob');
+        expect(srcs(container)).toContain('/preset/other-pubkey');
+        expect(srcs(container)).not.toContain('/preset/Charlie');
+    });
+
+    it("an enterprise's thread is the enterprise's face, from its key, in the list and in its header", async () => {
+        const { container } = render(<MessagesPage identity={mockIdentity} onNavigate={vi.fn()} />);
+        await screen.findByText('Bakery');
+        expect(srcs(container)).toContain('/preset/ent-pubkey');
+        expect(srcs(container)).not.toContain('/preset/Bakery');
+
+        fireEvent.click(screen.getByText('Bakery'));
+        expect(srcs(await screen.findByTestId('chat-owner-header'))).toEqual(['/preset/ent-pubkey']);
     });
 });

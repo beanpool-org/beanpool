@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { PROTOCOL_CONSTANTS, TIER_LEVELS, getTier } from '@beanpool/core';
 import { PostAuthorTrust, getTrustTier, isElder } from './PostAuthorTrust';
+import { resolveAvatarUrl } from '../lib/avatar';
 
 const coreTier = (credit: number) => getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit).name;
 
@@ -59,5 +60,23 @@ describe('PostAuthorTrust tier', () => {
         } finally {
             setLanguage('en');
         }
+    });
+});
+
+// Pictures S4 (Marty: never a bare initial): an author with no photo shows the ready-made picture their key picks, on
+// both card sizes, as the phone's author line does.
+describe('PostAuthorTrust face', () => {
+    const KEY = 'a1'.repeat(32);
+    it.each(['full', 'compact'] as const)('%s: no photo, so the key\'s ready-made picture, never the initial', (mode) => {
+        const { container } = render(<PostAuthorTrust callsign="Rowan" publicKey={KEY} avatarUrl={null} mode={mode} />);
+        expect(screen.queryByText('R')).toBeNull();
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('src')).toBe(resolveAvatarUrl(null, KEY));
+        expect(img?.getAttribute('src')).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
+    });
+
+    it('a photo is drawn as it was', () => {
+        const { container } = render(<PostAuthorTrust callsign="Rowan" publicKey={KEY} avatarUrl="/api/avatar/abc?v=1" />);
+        expect(container.querySelector('img')?.getAttribute('src')).toBe('/api/avatar/abc?v=1');
     });
 });

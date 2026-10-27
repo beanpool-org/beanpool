@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getTreasuries, getDecisions, getCommonsBalance, getGroups } from '../lib/api';
+import { getTreasuries, getDecisions, getCommonsBalance, getGroups, createEnterprise } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -147,9 +147,11 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
 
         fireEvent.click(within(dialog).getByRole('button', { name: /^Enterprise/i }));
 
-        // Propose modal is open
+        // Propose modal is open. Logo is mandatory, button reads "Choose a logo" until chosen
         const proposeModal = screen.getByRole('dialog', { name: /Start an enterprise/i });
         expect(proposeModal).toBeInTheDocument();
+        expect(within(proposeModal).getByRole('button', { name: /Choose a logo/i })).toBeInTheDocument();
+        fireEvent.click(within(proposeModal).getByRole('button', { name: /Select Green Bean avatar/i }));
         expect(within(proposeModal).getByRole('button', { name: /Start the enterprise 🏛️/i })).toBeInTheDocument();
     });
 
@@ -164,6 +166,8 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
 
         const proposeModal = screen.getByRole('dialog', { name: /Start a project/i });
         expect(proposeModal).toBeInTheDocument();
+        expect(within(proposeModal).getByRole('button', { name: /Choose a logo/i })).toBeInTheDocument();
+        fireEvent.click(within(proposeModal).getByRole('button', { name: /Select Green Bean avatar/i }));
         expect(within(proposeModal).getByRole('button', { name: /Start the project 🌱/i })).toBeInTheDocument();
     });
 
@@ -199,9 +203,11 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         const submitBtn = within(proposeModal).getByRole('button', { name: /Choose a project or an enterprise first/i });
         expect(submitBtn).toBeDisabled();
 
-        // Picking Project updates title and submit text
+        // Picking Project updates title and submit text requires logo
         fireEvent.click(within(proposeModal).getByRole('button', { name: /🌱 Project/i }));
         expect(within(proposeModal).getByRole('heading', { level: 2 })).toHaveTextContent(/Start a project/i);
+        expect(within(proposeModal).getByRole('button', { name: /Choose a logo/i })).toBeInTheDocument();
+        fireEvent.click(within(proposeModal).getByRole('button', { name: /Select Green Bean avatar/i }));
         expect(within(proposeModal).getByRole('button', { name: /Start the project 🌱/i })).toBeInTheDocument();
     });
 
@@ -328,9 +334,11 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         const emptyProposeBtn = screen.getByRole('button', { name: /\+ Propose a Project/i });
         fireEvent.click(emptyProposeBtn);
 
-        // Modal should open with "Start a project" and submit enabled
+        // Modal should open with "Start a project" and submit asks for logo
         proposeModal = screen.getByRole('dialog', { name: /Start a project/i });
         expect(proposeModal).toBeInTheDocument();
+        expect(within(proposeModal).getByRole('button', { name: /Choose a logo/i })).toBeInTheDocument();
+        fireEvent.click(within(proposeModal).getByRole('button', { name: /Select Green Bean avatar/i }));
         expect(within(proposeModal).getByRole('button', { name: /Start the project 🌱/i })).toBeInTheDocument();
     });
 
@@ -387,5 +395,79 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         expect(await screen.findByTestId('local-community-sheet')).toBeInTheDocument();
         // Section switched to Decide preview
         expect(screen.getByTestId('decide-preview')).toBeInTheDocument();
+    });
+
+    it('Pictures S4: Start modal requires logo (label LOGO, Start button says "Choose a logo" until picked, sends avatar)', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Project/i }));
+
+        const modal = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(modal).toBeInTheDocument();
+
+        // Label must be LOGO (no '(optional)')
+        expect(within(modal).getByText(/^LOGO$/i)).toBeInTheDocument();
+        expect(within(modal).queryByText(/LOGO \(optional\)/i)).toBeNull();
+
+        // Start button reads "Choose a logo" and is disabled until logo is chosen
+        const submitBtn = within(modal).getByRole('button', { name: /Choose a logo/i });
+        expect(submitBtn).toBeDisabled();
+
+        // Fill in required fields
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. Community Tool Shed/i), { target: { value: 'Local Garden' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Grow food together' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. 500/i), { target: { value: '100' } });
+
+        // Still disabled because no logo
+        expect(submitBtn).toBeDisabled();
+
+        // Select a preset avatar (e.g. Green Bean)
+        const presetBtn = within(modal).getByRole('button', { name: /Select Green Bean avatar/i });
+        fireEvent.click(presetBtn);
+
+        // Now button becomes enabled and reads "Start the project 🌱"
+        const startBtn = within(modal).getByRole('button', { name: /Start the project 🌱/i });
+        expect(startBtn).not.toBeDisabled();
+
+        fireEvent.click(startBtn);
+        await waitFor(() => {
+            expect(createEnterprise).toHaveBeenCalledWith(expect.objectContaining({
+                name: 'Local Garden',
+                avatar: 'bundled://bean-green',
+                photos: ['bundled://bean-green'],
+            }));
+        });
+    });
+
+    it('Pictures S4: keyboard form submit without logo fails with "Choose a logo"', async () => {
+        render(<ProjectsPage identity={mockIdentity} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+
+        fireEvent.click(screen.getByRole('button', { name: /Start something/i }));
+        const dialog = screen.getByRole('dialog', { name: /Start something/i });
+        fireEvent.click(within(dialog).getByRole('button', { name: /^Project/i }));
+
+        const modal = screen.getByRole('dialog', { name: /Start a project/i });
+        expect(modal).toBeInTheDocument();
+
+        // Fill in required fields without picking logo
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. Community Tool Shed/i), { target: { value: 'Local Garden' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'Grow food together' } });
+        fireEvent.change(within(modal).getByPlaceholderText(/e\.g\. 500/i), { target: { value: '100' } });
+
+        // Submit form via submit event (keyboard Enter)
+        const form = modal.querySelector('form')!;
+        fireEvent.submit(form);
+
+        // The line above the form says it; the Start button says the same words and stays off.
+        await waitFor(() => {
+            const lines = within(modal).getAllByText('Choose a logo').filter((el) => el.closest('button') === null);
+            expect(lines).toHaveLength(1);
+        });
+        expect(within(modal).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
+        expect(createEnterprise).not.toHaveBeenCalled();
     });
 });

@@ -13,6 +13,11 @@
  * generous 0.62 em a letter).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -106,6 +111,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
+// Group info's picture sheet (components/AvatarPickerSheet) opens the system picker only when asked.
+vi.mock('expo-image-picker', () => ({ requestCameraPermissionsAsync: vi.fn(), launchCameraAsync: vi.fn(), launchImageLibraryAsync: vi.fn() }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {}, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1, WHEN_UNLOCKED: 2, AFTER_FIRST_UNLOCK: 3 }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: async () => true }));

@@ -10,12 +10,18 @@
  * DM report box's "Reported" dialog; a refusal says why and keeps the box open with the member's choice.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', radio: 'radio', alert: 'alert' };
     const el = (tag: string) => (props: Record<string, any>) => {

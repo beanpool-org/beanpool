@@ -1,6 +1,6 @@
 /**
  * enterprise-logo-presets — web tests:
- * - Propose's "Logo (optional)" offers presets via a shared picker component.
+ * - Propose's "Logo" (required since Pictures S4: Start says "Choose a logo" until one is) offers presets via a shared picker component.
  * - Selecting a preset sets the logo to bundled://<id> and sends that to createEnterprise.
  * - Enterprise logo edit in EnterpriseManage offers the presets.
  * - Selecting a preset sends bundled://<id> to changeEnterpriseFace.
@@ -88,7 +88,7 @@ describe('enterprise logo presets (web)', () => {
     });
 
     describe('Propose Enterprise modal (ProjectsPage)', () => {
-        it('offers preset avatars under Logo (optional); picking a preset sends bundled://<id>', async () => {
+        it('offers preset avatars under Logo; Start says "Choose a logo" until one is picked; picking a preset sends bundled://<id>', async () => {
             render(<ProjectsPage identity={mockIdentity} />);
 
             fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
@@ -96,7 +96,9 @@ describe('enterprise logo presets (web)', () => {
             fireEvent.click(within(sheet).getByRole('button', { name: /^Enterprise/i }));
 
             const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
-            expect(within(dialog).getByText('Logo (optional)')).toBeInTheDocument();
+            expect(within(dialog).getByText('LOGO')).toBeInTheDocument();
+            expect(within(dialog).queryByText('Logo (optional)')).toBeNull();
+            expect(within(dialog).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
 
             // Preset avatar buttons should be offered
             const leafPreset = within(dialog).getByRole('button', { name: 'Select Leaf avatar' });

@@ -62,31 +62,18 @@ function relativeDate(dateStr: string): string {
     return t('{n}y ago', { n: diffYears });
 }
 
-/** Avatar circle with image or initials fallback */
-function Avatar({ callsign, avatarUrl, size = 40 }: { callsign: string; avatarUrl?: string | null; size?: number }) {
-    const initial = callsign.charAt(0).toUpperCase();
+/** Avatar circle with image or deterministic preset (no bare initials, Pictures S4) */
+function Avatar({ callsign, avatarUrl, pubkey, size = 40 }: { callsign: string; avatarUrl?: string | null; pubkey?: string | null; size?: number }) {
     const sizeStyle = { width: size, height: size, minWidth: size };
-
-    const resolved = resolveAvatarUrl(avatarUrl);
-
-    if (resolved) {
-        return (
-            <img 
-                src={resolved} 
-                alt={callsign}
-                className="rounded-full object-cover border border-nature-200 dark:border-nature-700"
-                style={sizeStyle}
-            />
-        );
-    }
+    const resolved = resolveAvatarUrl(avatarUrl, pubkey || callsign) || '/avatars/avatar_bean_green.jpg';
 
     return (
-        <div 
-            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border-nature-200 dark:border-nature-700"
+        <img 
+            src={resolved} 
+            alt={callsign}
+            className="rounded-full object-cover border border-nature-200 dark:border-nature-700 shrink-0"
             style={sizeStyle}
-        >
-            {initial}
-        </div>
+        />
     );
 }
 
@@ -255,7 +242,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
                 onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
             >
-                <Avatar callsign={m.callsign} avatarUrl={m.avatarUrl} size={36} />
+                <Avatar callsign={m.callsign} avatarUrl={m.avatarUrl} pubkey={m.publicKey} size={36} />
                 <span className="min-w-0">
                     <span className="block font-bold text-[14px] text-nature-900 dark:text-white break-words">{m.callsign}</span>
                     <span className="block text-[11px] text-nature-500 dark:text-nature-400 font-medium mt-0.5">
@@ -356,7 +343,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                         aria-label={t('{name} added you. Open their profile', { name: a.callsign })}
                                         className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
                                     >
-                                        <Avatar callsign={a.callsign} avatarUrl={a.avatarUrl} size={32} />
+                                        <Avatar callsign={a.callsign} avatarUrl={a.avatarUrl} pubkey={a.publicKey} size={32} />
                                         <span className="min-w-0 text-[14px] text-text-primary break-words">
                                             <Sentence text={t('{name} added you')} parts={{ name: <strong className="font-bold">{a.callsign}</strong> }} />
                                         </span>
@@ -398,6 +385,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             <Avatar 
                                                 callsign={f.callsign} 
                                                 avatarUrl={f.avatarUrl || memberAvatarMap[f.publicKey]}
+                                                pubkey={f.publicKey}
                                                 size={36}
                                             />
                                         </button>
@@ -548,7 +536,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 className="bg-transparent border-none p-0 cursor-pointer text-left hover:opacity-80 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
                                                 onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
                                             >
-                                                <Avatar callsign={m.callsign} avatarUrl={m.avatarUrl} size={36} />
+                                                <Avatar callsign={m.callsign} avatarUrl={m.avatarUrl} pubkey={m.publicKey} size={36} />
                                             </button>
                                             <div>
                                                 <button 

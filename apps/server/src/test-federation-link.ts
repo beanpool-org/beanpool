@@ -420,6 +420,10 @@ async function main() {
     const made = await signedPost(her, '/api/enterprise', { name: 'riverbend Link', purpose: 'Our own enterprise' });
     const hers = made.json?.publicKey as string;
     assert(made.status === 200 && !!hers, `12c. setup: Rhea makes "riverbend Link" with no photo through the route (got ${made.status} ${made.json?.error ?? ''})`);
+    // The route now gives an enterprise sent with no logo the ready-made one (Pictures S4). One made before that holds no
+    // photo, which is what the old fallback took for a link: hers is made into one.
+    assert(getMemberPhoto(db, hers) === 'bundled://bean-green', `12c. (the route gives it the ready-made logo: ${getMemberPhoto(db, hers)})`);
+    setMemberPhoto(db, hers, null);
     const herKeepers = keepersOf(hers);
     const herRow = db.prepare('SELECT callsign, avatar_ref FROM members WHERE public_key = ?').get(hers) as any;
     assert(herRow?.avatar_ref === null && getMemberPhoto(db, hers) === null && herKeepers.length === 1 && herKeepers[0].member_pubkey === her.pk && herKeepers[0].role === 'lead',

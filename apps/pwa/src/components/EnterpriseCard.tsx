@@ -37,8 +37,13 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
     const progress = Math.min(100, (currentRaised / goal) * 100);
     const isFunded = hasGoal && (currentRaised >= goal || treasury.status === 'funded' || treasury.status === 'completed');
     const daysRemaining = getDaysRemaining(treasury.deadlineAt);
-    const resolvedAvatar = resolveAvatarUrl(treasury.avatar || treasury.avatarUrl);
-    const avatarSrc = resolvedAvatar && !failedAvatars.has(resolvedAvatar) ? resolvedAvatar : null;
+    const resolvedAvatar = resolveAvatarUrl(treasury.avatar || treasury.avatarUrl, treasury.publicKey);
+    const fallbackAvatar = resolveAvatarUrl(null, treasury.publicKey);
+    const avatarSrc = (resolvedAvatar && !failedAvatars.has(resolvedAvatar))
+        ? resolvedAvatar
+        : (fallbackAvatar && !failedAvatars.has(fallbackAvatar))
+            ? fallbackAvatar
+            : null;
     // The line under the name: its handle and two facts, each whole in the member's language.
     const liveOffers = treasury.liveOffers ?? 0;
     const stateText = treasury.status === 'completed'

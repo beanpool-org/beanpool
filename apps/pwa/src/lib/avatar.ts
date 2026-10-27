@@ -4,7 +4,11 @@
  * Maps bundled:// protocol references (stored in the ledger) to local
  * static asset paths served from /avatars/. Falls through for regular
  * URLs, data URIs, and null values.
+ *
+ * When url is absent and a pubkey is provided (Marty's addition, Pictures S4),
+ * resolves deterministically to the pubkey's ready-made preset avatar.
  */
+import { avatarPresetForPubkey } from '@beanpool/core';
 
 const BUNDLED_MAP: Record<string, string> = {
     'bean-green':  '/avatars/avatar_bean_green.jpg',
@@ -33,8 +37,14 @@ const BUNDLED_MAP: Record<string, string> = {
     'cybereye':    '/avatars/avatar_cybereye.jpg',
 };
 
-export function resolveAvatarUrl(url: string | null | undefined): string | null {
-    if (!url) return null;
+export function resolveAvatarUrl(url: string | null | undefined, pubkey?: string | null): string | null {
+    if (!url || !url.trim()) {
+        if (pubkey && pubkey.trim()) {
+            const presetId = avatarPresetForPubkey(pubkey);
+            return BUNDLED_MAP[presetId] || null;
+        }
+        return null;
+    }
     if (url.startsWith('bundled://')) {
         const id = url.replace('bundled://', '').split('?')[0];
         return BUNDLED_MAP[id] || null;

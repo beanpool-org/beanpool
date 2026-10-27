@@ -10,6 +10,11 @@
  * plain tags (as enterprise-decisions-render.test.ts does), and a stubbed node behind utils/db.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ScopedDecisionCard, ScopedDecisionList } from '@beanpool/core';
@@ -17,6 +22,9 @@ import type { ScopedDecisionCard, ScopedDecisionList } from '@beanpool/core';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
+// Group info's picture sheet (Change the picture) is not what this file draws: a stand-in, as banner-after-start's.
+vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', radio: 'radio' };
     const el = (tag: string) => (props: Record<string, any>) => {

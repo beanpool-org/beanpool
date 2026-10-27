@@ -8,6 +8,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import type { ApiMessage } from '../lib/api';
 import { decideMessageRequest, ignoreAllMessageRequests, getMessageAttachmentApi, sendMessageApi, toggleMessageReactionApi, createConversationApi, getConversationMessages } from '../lib/api';
 import { blockUser } from '../lib/blocklist';
+import { resolveAvatarUrl } from '../lib/avatar';
 import { lockForDm } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
@@ -477,6 +478,24 @@ describe('the chat in request mode, for the person it is for', () => {
         expect(screen.getAllByText('Photo: shown when you accept').length).toBeGreaterThan(0);
         await act(async () => {});
         expect(getMessageAttachmentApi).not.toHaveBeenCalled();
+    });
+
+    it("the sender's face on the card is the face in the chat's header: chosen from their key, never their name (#2511 review)", async () => {
+        const before = vi.mocked(resolveAvatarUrl).getMockImplementation()!;
+        vi.mocked(resolveAvatarUrl).mockImplementation((url, key) => url || (key ? `/preset/${key}` : null));
+        try {
+            node.list = annListWith([requestEntry(bo, CONV)]);
+            node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+            render(<MessagesPage identity={idOf(ann)} onOpenProfile={vi.fn()} />);
+            const card = within(await openRequests()).getByTestId('request-card');
+            const face = `/preset/${bo.publicKey}`;
+            expect(Array.from(card.querySelectorAll('img')).map((i) => i.getAttribute('src'))).toEqual([face]);
+            fireEvent.click(await within(card).findByText('Hello'));
+            await screen.findByTestId('request-mode');
+            expect(Array.from(screen.getByTestId('request-header-profile').querySelectorAll('img')).map((i) => i.getAttribute('src'))).toEqual([face]);
+        } finally {
+            vi.mocked(resolveAvatarUrl).mockImplementation(before);
+        }
     });
 
     it('the sender\'s name in the header opens their profile', async () => {

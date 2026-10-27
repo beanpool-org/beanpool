@@ -380,8 +380,8 @@ async function main() {
 
     const mainJs = fs.readFileSync(path.join(WEBSITE, 'main.js'), 'utf-8');
     const wordsBlock = mainJs.slice(mainJs.indexOf('const WORDS = {'), mainJs.indexOf('\n};', mainJs.indexOf('const WORDS = {')));
-    const langs = [...wordsBlock.matchAll(/^    '?([a-zA-Z-]+)'?: \{$/gm)].map((m) => m[1]);
-    const lines = [...wordsBlock.matchAll(/^        notAnswering: '([^']+)',$/gm)].map((m) => m[1]);
+    const langs = [...wordsBlock.matchAll(/^ {4}'?([a-zA-Z-]+)'?: \{$/gm)].map((m) => m[1]);
+    const lines = [...wordsBlock.matchAll(/^ {8}notAnswering: '([^']+)',$/gm)].map((m) => m[1]);
     assert(langs.length === 25 && lines.length === 25 && lines[0] === FIND_COMMUNITY_WORDS.notAnswering && new Set(lines).size === 25,
         `every one of the site's 25 languages has its own "Not answering lately" (${langs.length} languages, ${lines.length} lines)`);
 

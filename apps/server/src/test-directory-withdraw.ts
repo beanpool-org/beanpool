@@ -31,7 +31,8 @@ import { peerIdFromPublicKey } from '@libp2p/peer-id';
 import { localFetch } from './keepalive-test-fetch.js';
 
 // The function's own rules file, outside this package (so outside tsc's rootDir): loaded by URL, under tsx as the
-// runner runs every suite.
+// runner runs every suite. No package.json above it says "module", so tsx loads it as CommonJS: its exports arrive on
+// the default import.
 interface Rules {
     checkBeforeSignature(payload: unknown, now: number): { status: number; error: string } | null;
     decideAfterSignature(payload: unknown, denyList: readonly string[]): { action: 'unlist' } | { action: 'upsert' } | { action: 'refuse'; status: 403; error: string };
@@ -39,7 +40,9 @@ interface Rules {
     DENIED_HOST_MESSAGE: string;
 }
 const RULES_URL = new URL('../../../supabase/functions/directory-register/rules.ts', import.meta.url).href;
-const { checkBeforeSignature, decideAfterSignature, parseDenyHosts, DENIED_HOST_MESSAGE } = await import(RULES_URL) as Rules;
+const loadedRules = await import(RULES_URL) as Rules & { default?: Rules };
+const { checkBeforeSignature, decideAfterSignature, parseDenyHosts, DENIED_HOST_MESSAGE } =
+    typeof loadedRules.default?.checkBeforeSignature === 'function' ? loadedRules.default : loadedRules;
 
 // The publisher's own first push, 30 s after each start of its timer (initDirectoryPublisher, which Listed on and off
 // call), is its schedule, not what this suite tests: a stray one landing mid-section would list the community again.
@@ -47,7 +50,7 @@ const { checkBeforeSignature, decideAfterSignature, parseDenyHosts, DENIED_HOST_
 const realSetTimeout = globalThis.setTimeout;
 globalThis.setTimeout = ((fn: (...a: unknown[]) => void, ms?: number, ...rest: unknown[]) =>
     (typeof fn === 'function' && fn.name === 'safePush' && ms === 30_000 ? realSetTimeout(() => { /* the publisher's first timed push */ }, 0)
-        : realSetTimeout(fn, ms, ...rest))) as typeof setTimeout;
+        : realSetTimeout(fn, ms, ...rest))) as unknown as typeof setTimeout;
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;

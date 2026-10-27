@@ -641,6 +641,8 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_photo TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_credits REAL;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN request TEXT;`); } catch (e) {}
+        // 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
+        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN listed INTEGER;`); } catch (e) {}
 
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
@@ -4508,7 +4510,7 @@ export async function syncMessages(publicKey: string) {
             let needsConvWrite = false;
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, type, post_title, post_status, post_photo, post_credits, request FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, post_credits, request, listed FROM conversations WHERE id = ?', [conv.id]);
                 // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
                 if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
                     console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
@@ -4520,7 +4522,8 @@ export async function syncMessages(publicKey: string) {
                     (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
                     (localConv.post_photo ?? null) !== postPhotoString ||
                     (localConv.post_credits ?? null) !== (conv.postCredits ?? null) ||
-                    (localConv.request ?? null) !== requestJson
+                    (localConv.request ?? null) !== requestJson ||
+                    localConv.listed !== 1
                 ) {
                     needsConvWrite = true;
                 } else if (people) {
@@ -4562,7 +4565,7 @@ export async function syncMessages(publicKey: string) {
                     const localConv = await txn.getFirstAsync<any>('SELECT id FROM conversations WHERE id = ?', [conv.id]);
                     if (!localConv) {
                         await txn.runAsync(
-                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits, request) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits, request, listed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
                             [
                                 conv.id,
                                 heldType,
@@ -4579,7 +4582,7 @@ export async function syncMessages(publicKey: string) {
                         );
                     } else {
                         await txn.runAsync(
-                            'UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, request = ? WHERE id = ?',
+                            'UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, request = ?, listed = 1 WHERE id = ?',
                             [
                                 conv.postTitle || null,
                                 conv.postStatus || null,
@@ -4667,6 +4670,8 @@ export async function syncMessages(publicKey: string) {
         // gate: a prune is the node's word on a DM's rows too).
         try {
             const requestIds = (convData.requests?.conversations || []).map((c: any) => c.id);
+            // One the list now names as a request waiting for the member is no longer known to be an ordinary chat.
+            for (const id of requestIds) await database.runAsync('UPDATE conversations SET listed = NULL WHERE id = ? AND listed IS NOT NULL', [id]);
             const serverIds = [...convData.conversations.map((c: any) => c.id), ...requestIds];
             const localConvs = await database.getAllAsync<any>(
                 'SELECT conversation_id FROM conversation_participants WHERE public_key = ?',
@@ -4972,7 +4977,7 @@ export async function getConversation(id: string, myPubkey?: string) {
     let res: any;
     if (myPubkey) {
         res = await database.getFirstAsync<any>(`
-            SELECT c.name, c.type as type, c.post_id as postId, c.request as request, c.created_by as createdBy, p.title as postTitle,
+            SELECT c.name, c.type as type, c.post_id as postId, c.request as request, c.listed as listed, c.created_by as createdBy, p.title as postTitle,
             COALESCE(
                 (SELECT mt2.status FROM marketplace_transactions mt2
                  WHERE mt2.post_id = c.post_id

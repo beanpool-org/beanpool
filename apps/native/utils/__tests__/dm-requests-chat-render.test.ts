@@ -276,6 +276,29 @@ describe('a request waiting for this member, on the phone', () => {
     });
 });
 
+describe('an ordinary DM someone else opened, with no answer from the node (review 4394120110)', () => {
+    const KOFIS = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', createdBy: 'kofi-key', request: null };
+
+    it("the node's list named it: the composer sends, offline too", async () => {
+        standIn({ getConversation: { ...KOFIS, listed: 1 }, getMessages: [], syncSingleConversation: false, insertMessage: 'line-1' });
+        await open();
+
+        expect(host.textContent).not.toContain('Loading the chat');
+        expect(box()).not.toBeNull();
+        await typeAndSend('hi there');
+        expect(sent()).toBe(1);
+    });
+
+    it('control: a row the list never named (a push, a link) still waits for the node', async () => {
+        standIn({ getConversation: KOFIS, getMessages: [], syncSingleConversation: false, insertMessage: 'line-1' });
+        await open();
+
+        expect(host.textContent).toContain('Loading the chat');
+        await typeAndSend('hi there');
+        expect(sent()).toBe(0);
+    });
+});
+
 describe("the opener's first line, on the phone", () => {
     const MINE = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', createdBy: 'me-key', request: { state: 'pending', from: 'me-key', at: iso(now - 120_000), nextLineIsRequest: true } };
     const lineAs = (sendState?: string) => [{ id: 'line-1', senderId: 'me-key', authorPubkey: 'me-key', type: 'text', text: 'hello Kofi', outgoing: true, sendState, rawTimestamp: iso(now - 1_000), timestamp: '' }];

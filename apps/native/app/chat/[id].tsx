@@ -698,12 +698,13 @@ function ChatScreen({ id }: { id: string }) {
 
     // Before the node has answered, a request for this reader is decided as one whose lines aren't read yet (the Accept card,
     // no composer), and a chat this phone holds no request on waits for the node, unless the reader opened it or has a line
-    // in it the node took, which no request for them allows without accepting it (PR #2540 review 4393642152). A local read
-    // is never the node's: the line may not be here yet, or be one its opener withdrew since.
+    // in it the node took, which no request for them allows without accepting it (PR #2540 review 4393642152), or the node's
+    // list named it among their chats, where no request waiting for them is: a DM someone else opened answers offline too
+    // (review 4394120110). A local read is never the node's: the line may not be here yet, or be one its opener withdrew since.
     const me = identity?.publicKey ?? '';
     const heldRequest = convRow?.request ?? null;
     const requestKnown = nodeAnswered || (!!heldRequest && heldRequest.from === me)
-        || (!!convRow && !heldRequest && (convRow.createdBy === me || messages.some((m: any) => m.senderId === me && !m.sendState)));
+        || (!!convRow && !heldRequest && (convRow.listed === 1 || convRow.createdBy === me || messages.some((m: any) => m.senderId === me && !m.sendState)));
     const modeFromRows = requestModeOf(convRow ? { ...convRow, id: String(id) } : null, me, firstLoadDone && requestKnown ? messages : null);
     const requestMode = modeFromRows === 'none' && !requestKnown && heldRequest?.state !== 'accepted' ? 'mine-loading' : modeFromRows;
     // The request's line sent from here: taken by the node, the chat waits for the other's answer; refused, or never

@@ -346,3 +346,25 @@ describe("a request on its opener's own phone (review 4394119880)", () => {
         expect(rowsOf(req.id, rhea.publicKey)).toEqual([hers.id]);
     });
 });
+
+describe("which chats the node's list named (review 4394120110)", () => {
+    it('a chat the list names is marked so; a request waiting for Bo never is, and one the list moves under requests loses it', async () => {
+        expect((await getConversation('dm-bo-kai', bo.publicKey))?.listed).toBe(1);
+
+        const req: Conv = { id: 'dm-rhea-bo-6', participants: [rhea.publicKey, bo.publicKey], request: { state: 'pending', from: rhea.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        write(req, rhea, 'first words from Rhea');
+        await withScreens(() => syncMessages(bo.publicKey));
+        await withScreens(() => syncSingleConversation(req.id));
+        expect((await getConversation(req.id, bo.publicKey))?.listed ?? null).toBeNull();
+
+        const kai2: Conv = { id: 'dm-kai-bo-2', participants: [kai.publicKey, bo.publicKey], request: null };
+        node.convs.push(kai2);
+        write(kai2, kai, 'an ordinary chat');
+        await withScreens(() => syncMessages(bo.publicKey));
+        expect((await getConversation(kai2.id, bo.publicKey))?.listed).toBe(1);
+        kai2.request = { state: 'pending', from: kai.publicKey, at: new Date(clock - 500).toISOString() };
+        await withScreens(() => syncMessages(bo.publicKey));
+        expect((await getConversation(kai2.id, bo.publicKey))?.listed ?? null).toBeNull();
+    });
+});

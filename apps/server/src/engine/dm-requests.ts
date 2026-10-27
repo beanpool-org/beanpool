@@ -103,6 +103,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { nodeRoleOf } from './node-roles.js';
 import { hasBlocked } from './member-blocks.js';
+import { withheldConversationOwnedBy } from './withheld-lines.js';
 
 // The words layer in English: a node never writes in the device language (core words.test N11). A refusal a member reads
 // is marked with word() instead, and member-words.ts translates it on the way out; one with a {name} in it is written here in
@@ -618,22 +619,32 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         if (row && row.to_pubkey === actor) {
             throw new RequestDecisionError(403, 'not_request_opener', word('Only the person who sent a message request can cancel it.'));
         }
-        const real = !!row && !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(row.conversation_id, actor);
+        const real = !!row && (
+            !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(row.conversation_id, actor)
+            || !!withheldConversationOwnedBy(row.conversation_id, actor)
+        );
         if (!row || row.from_pubkey !== actor || !real) {
             throw new RequestDecisionError(404, 'request_not_found', word('There is no message request for you in this chat.'));
         }
-        const hidden = acceptanceHiddenFrom(row, actor);
-        const asked = (row.state === 'accepted' && !hidden)
-            || !!db.prepare(`SELECT 1 FROM dm_requests r WHERE r.conversation_id = ? AND ${OPENER_WROTE}`).get(row.conversation_id);
-        if (row.state !== 'pending' || !asked) {
+        const isAccepted = row.state === 'accepted' && !acceptanceHiddenFrom(row, actor);
+        const asked = isAccepted || openerLinesSince(row) > 0;
+        if (isAccepted || over(row, now) || !asked) {
             throw new RequestDecisionError(409, 'request_not_pending', word('Only a pending message request can be cancelled.'));
         }
         assertPlainTablesWritable();
-        db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(row.conversation_id);
-        db.prepare('DELETE FROM withheld_lines WHERE conversation_id = ?').run(row.conversation_id);
-        const updatedView = viewOf(row, actor, now);
-        ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: updatedView }, [actor, row.to_pubkey]);
-        return updatedView;
+        db.transaction(() => {
+            db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(row.conversation_id);
+            db.prepare('DELETE FROM withheld_lines WHERE conversation_id = ?').run(row.conversation_id);
+        })();
+        const isReal = !!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(row.conversation_id);
+        const openerView = viewOf(row, actor, now);
+        const recipientHears = isReal && !hasBlocked(row.to_pubkey, actor) && row.state !== 'ignored';
+        ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: openerView }, [actor]);
+        if (recipientHears) {
+            const recipientView = viewOf(row, row.to_pubkey, now);
+            ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: recipientView }, [row.to_pubkey]);
+        }
+        return openerView;
     }
     if (row && row.from_pubkey === actor) {
         throw new RequestDecisionError(403, 'not_request_recipient', word('Only the person a message request was sent to can accept or ignore it.'));

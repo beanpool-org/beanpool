@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "fr",
-  "hash": "c58a965e5c441e3a83c0eb575fc7fe546b238b6ff2d8d483e401ca8625abd64a",
+  "hash": "eccdeccbd84d4806ce0dd3fa3a62344274c15faca43d8c375960c191b0fa5713",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "L'espace Découvrir",
       "summary": "Courtes vidéos sur BeanPool et pages du guide correspondantes.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "des vidéos de BeanPool expliquant son fonctionnement ;",
-            "la **Réflexion quotidienne**, une courte pensée renouvelée chaque matin. Il s'agit simplement d'un titre ; il n'y a rien à ouvrir."
+            "la **Réflexion quotidienne**, une courte pensée renouvelée chaque matin. Touchez-le pour ouvrir la réflexion du jour."
           ]
         },
         {

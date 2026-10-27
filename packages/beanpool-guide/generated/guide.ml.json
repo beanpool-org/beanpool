@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "ml",
-  "hash": "c4f642f1f7ab3298077136d7c9a798080ce8c178c2facbe49f3e489b588f11ed",
+  "hash": "ba8bbd0334d5fb0f5bfc13179a118fd5fc8429c53e90d9a4a99ace882812e8c0",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "പഠന വിഭാഗം",
       "summary": "BeanPool-നെക്കുറിച്ചുള്ള ചെറിയ വീഡിയോകളും അവയ്ക്കൊപ്പമുള്ള ഗൈഡ് പേജുകളും.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നു എന്നതിനെക്കുറിച്ചുള്ള വീഡിയോകള്‍;",
-            "**Daily Reflection**, എല്ലാ ദിവസവും രാവിലെ മാറുന്ന ഒരു ചെറിയ ചിന്ത. ഇതൊരു തലക്കെട്ട് മാത്രമാണ്; തുറക്കാൻ ഒന്നുമില്ല."
+            "**Daily Reflection**, എല്ലാ ദിവസവും രാവിലെ മാറുന്ന ഒരു ചെറിയ ചിന്ത. അന്നത്തെ ചിന്ത തുറക്കാൻ അതിൽ ടാപ്പ് ചെയ്യുക."
           ]
         },
         {

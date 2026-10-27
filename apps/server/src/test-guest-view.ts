@@ -714,7 +714,7 @@ async function main(): Promise<void> {
         const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
         assert(probe.status === (id ? 403 : 401) && !('isMember' in (probe.body ?? {})) && !probe.text.includes('SentinelAlice'),
             `${who}: the membership probe is refused, and says nothing of Alice's key (got ${probe.status} ${JSON.stringify(probe.body)})`);
-        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
+        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed', '/api/pulse/daily']) {
             const gated = await call('GET', id, p);
             assert(gated.status === (id ? 403 : 401), `${who}: ${p} is for members only (got ${gated.status})`);
             // The router answers a path with one trailing slash as the path itself, so the gate must hold there too.
@@ -724,7 +724,7 @@ async function main(): Promise<void> {
     }
     await prunedRefused('the listings in every shape, the membership probe and the members-only reads', [
         `${POSTS}?${ALL_TYPES}`, `${POSTS}?${ALL_TYPES}&sync=true`, `${POSTS}?author=${alice.pk}`, `/api/community/membership/${alice.pk}`,
-        `/api/community/membership/${pruned.pk}`, '/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed',
+        `/api/community/membership/${pruned.pk}`, '/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed', '/api/pulse/daily',
     ]);
     {
         const own = await call('GET', alice, `/api/community/membership/${alice.pk}`);
@@ -732,7 +732,7 @@ async function main(): Promise<void> {
         const other = await call('GET', bob, `/api/community/membership/${alice.pk}`);
         assert(other.status === 403 && !('isMember' in (other.body ?? {})) && !other.text.includes('SentinelAlice'),
             `signed by another member, it is refused and names nobody either (got ${other.status} ${other.text.slice(0, 80)})`);
-        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
+        for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed', '/api/pulse/daily']) {
             const r = await call('GET', bob, p);
             assert(r.status === 200, `a member reads ${p} (got ${r.status})`);
             const slashed = await call('GET', bob, `${p}/`);
@@ -1446,7 +1446,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',
             'POST /api/pricing-guide/reports/:id/status',
             'GET /api/profile/:publicKey', 'POST /api/profile/unvouch', 'POST /api/profile/update', 'POST /api/profile/vouch',
-            'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
+            'GET /api/pulse/daily', 'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',

@@ -212,18 +212,19 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
         expect(img).toHaveAttribute('alt', baseEvent.title);
     });
 
-    it('shows no photo at all when the event has none, and the card reads as it always did', () => {
+    it('shows the event category tile when the event has no photo', () => {
         renderAt320(<EventCard post={baseEvent} identity={identity} distanceKm={2.4} />);
         const card = screen.getByTestId('event-card');
         expect(within(card).queryByRole('img')).toBeNull();
-        const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
-        expect(lines[0].textContent).toBe('SAT 28 SEP ·9:00–12:00');
-        expect(lines[1].textContent).toBe(baseEvent.title);
+        expect(within(card).getByTestId('category-tile')).toBeInTheDocument();
+        expect(within(card).getByTestId('category-tile').textContent).toMatch(/EVENT/i);
     });
 
-    it('treats an empty photo list as no photo', () => {
+    it('treats an empty photo list as no photo and renders event tile', () => {
         renderAt320(<EventCard post={{ ...baseEvent, photos: [] }} identity={identity} />);
-        expect(within(screen.getByTestId('event-card')).queryByRole('img')).toBeNull();
+        const card = screen.getByTestId('event-card');
+        expect(within(card).queryByRole('img')).toBeNull();
+        expect(within(card).getByTestId('category-tile')).toBeInTheDocument();
     });
 
     // Decision 3: the photo lives inside the tap target that opens the event. It must not become a second one —

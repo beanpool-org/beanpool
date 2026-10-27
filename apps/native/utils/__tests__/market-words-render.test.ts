@@ -293,6 +293,7 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         expect(host.textContent).toContain('Where should the market go?');
         expect(host.textContent).toContain('Repair café');
         expect(byTestId('page-title-market')).not.toBeNull();
+        expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
         expect(bracketed()).toBeGreaterThan(30);
         expect(bypassing()).toEqual([]);
     });
@@ -301,8 +302,10 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         await renderIn('xx');
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Grid view')}"]`), 'the view toggle');
         expect(byTestId('grid-badge-row')).not.toBeNull();
+        expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
         expect(bypassing()).toEqual([]);
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Compact view')}"]`), 'the view toggle, again');
+        expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
         expect(host.textContent).toContain('Kofi');
         expect(bypassing()).toEqual([]);
     });
@@ -346,8 +349,8 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         await click(byLabel(pseudoLocalise('Cancel location picker')), 'Cancel');
 
         await click(host.querySelector(`[aria-label^="${pseudoLocalise('My Deals, {n} pending').slice(0, 6)}"]`), 'My Deals');
-        // In Progress lists the listing held in trust (its own card), History the finished deal.
-        expect(byTestId('deal-card-p-ladder')).not.toBeNull();
+        // In Progress lists the deal held in trust (its own card, Deals S3b), History the finished deal.
+        expect(byTestId('deal-card-tx-held')).not.toBeNull();
         expect(bypassing(), 'My Deals, in progress').toEqual([]);
         for (const tab of ['My Posts', 'History']) {
             await click(Array.from(host.querySelectorAll('[data-modal] button')).find((b) => b.textContent === pseudoLocalise(tab)) ?? null, tab);

@@ -892,6 +892,7 @@
   "Camera Unavailable": "カメラを利用できません",
   "Could not launch camera.": "カメラを起動できませんでした。",
   "Gallery": "ギャラリー",
+  "Browse files": "ファイルを参照",
   "Offer": "ゆずれる",
   "Need": "もとむ",
   "● DAILY PULSE": "● 今日のパルス",
@@ -5872,5 +5873,6 @@
   "{tries} tries, {ms} ms a try ({expected} expected on average)": "{tries}回、1回あたり{ms}ミリ秒（平均で{expected}回の想定）",
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "「{title}」は投稿されましたが、お店には入っていません。入れるには、投稿を開いて「投稿を編集」をタップし、「これをお店に入れる」にチェックを入れてください。",
   "✓ Friend": "✓ フレンド",
-  "✓ nonce issued": "✓ ノンス発行済み"
+  "✓ nonce issued": "✓ ノンス発行済み",
+  "Failed to load": "読み込みに失敗しました"
 }

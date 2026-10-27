@@ -3,7 +3,7 @@ slug: learn
 title: Seksyon ng Alamin
 summary: Maikling mga video tungkol sa BeanPool, at ang mga pahina ng gabay na kasama ng mga ito.
 related: the-pulse, the-bean, how-it-works, your-channels
-source-hash: d668d9d4149309e7
+source-hash: 166271998bd0833a
 ---
 
 ## Kung ano ang nasa loob nito
@@ -11,7 +11,7 @@ source-hash: d668d9d4149309e7
 Sa telepono, buksan ang **Balita** at i-tap ang **Alamin**. Sa web app, buksan ang Pulse at i-tap ang **Paano ito gumagana** sa may itaas. Naglalaman ito ng:
 
 - mga video mula sa BeanPool tungkol sa kung paano ito gumagana;
-- ang **Pang-araw-araw na Pagninilay**, isang maikling kaisipan na nagbabago tuwing umaga. Isa lamang itong pamagat; walang mabubuksan.
+- ang **Pang-araw-araw na Pagninilay**, isang maikling kaisipan na nagbabago tuwing umaga. I-tap ito para buksan ang pagninilay sa araw na ito.
 
 Maaari ding magdagdag ang mga miyembro ng kanilang sariling mga how-to channel sa Alamin, sa pamamagitan ng pagpili sa paksang **Paano ito gumagana** kapag nagdagdag sila ng channel. Ang mga videong iyon ay sa mismong mga miyembro, hindi sa BeanPool: suriin kung sino ang nag-post ng video bago mo sundin ang payo nito.
 

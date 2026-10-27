@@ -5,8 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Picker } from '@react-native-picker/picker';
 import * as Crypto from 'expo-crypto';
 import { 
@@ -23,9 +21,11 @@ import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
+import { askForPostPhoto } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
+import { CategoryTile } from '../../components/CategoryTile';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
@@ -1033,43 +1033,11 @@ export default function PostDetailModal() {
         setAccepting(false);
     };
 
-    const pickEditPhoto = async () => {
+    const pickEditPhoto = () => {
         if (editPhotos.length >= 5) return;
-        Alert.alert(t('Add Photo'), t('Choose a source'), [
-            { text: t('Camera'), onPress: async () => {
-                try {
-                    const perm = await ImagePicker.requestCameraPermissionsAsync();
-                    if (!perm.granted) return;
-                    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
-                    if (!result.canceled && result.assets[0].uri) {
-                        const manipResult = await ImageManipulator.manipulateAsync(
-                            result.assets[0].uri,
-                            [{ resize: { width: 800 } }],
-                            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                        );
-                        if (manipResult.base64) {
-                            setEditPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                        }
-                    }
-                } catch (e: any) {
-                    Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
-                }
-            }},
-            { text: t('Gallery'), onPress: async () => {
-                const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
-                if (!result.canceled && result.assets[0].uri) {
-                    const manipResult = await ImageManipulator.manipulateAsync(
-                        result.assets[0].uri,
-                        [{ resize: { width: 800 } }],
-                        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                    );
-                    if (manipResult.base64) {
-                        setEditPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                    }
-                }
-            }},
-            { text: t('Cancel'), style: 'cancel' },
-        ]);
+        askForPostPhoto((photo) => {
+            setEditPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev));
+        });
     };
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
@@ -1124,6 +1092,17 @@ export default function PostDetailModal() {
                                 ? t('Only {group} can see this', { group: post.target_group_name || post.targetGroupName })
                                 : t('Only group members can see this')}
                         </Text>
+                    </View>
+                )}
+
+                {/* Photos or CategoryTile Banner */}
+                {photos.length === 0 && (
+                    <View style={{ width: '100%', aspectRatio: 3 / 1, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
+                        <CategoryTile
+                            category={post.category}
+                            kind={isPulsePost ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
+                            size="banner"
+                        />
                     </View>
                 )}
 

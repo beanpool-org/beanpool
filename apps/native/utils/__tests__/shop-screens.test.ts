@@ -396,6 +396,11 @@ describe('Your shop (app/shop/mine.tsx)', () => {
                 node.log.length = 0;
                 await draw(createElement(YourShopScreen));
                 await click('shop-field-banner');
+                expect(alerts.buttons.map(b => b.text)).toEqual([t('Gallery'), t('Browse files'), t('Cancel')]);
+                const gallery = alerts.buttons.find(b => b.text === t('Gallery'));
+                await act(async () => { await gallery?.onPress?.(); });
+                await settle(6);
+                expect(vi.mocked(ImagePicker.launchImageLibraryAsync).mock.calls.at(-1)?.[0]).toMatchObject({ defaultTab: 'albums' });
                 expect(vi.mocked(ImagePicker.launchImageLibraryAsync).mock.calls.at(-1)?.[0]).not.toMatchObject({ allowsEditing: true });
                 expect(byTestId('picture-crop')).not.toBeNull();
                 // The crop screen at 320 dp and 1.3× text, in the pseudo-locale: every word through t(), none too wide, every
@@ -406,6 +411,9 @@ describe('Your shop (app/shop/mine.tsx)', () => {
                 expect(byTestId('picture-crop')).toBeNull();
                 expect(node.log.filter((r) => r.method === 'PUT')).toEqual([]);
                 await click('shop-field-banner');
+                const gallery2 = alerts.buttons.find(b => b.text === t('Gallery'));
+                await act(async () => { await gallery2?.onPress?.(); });
+                await settle(6);
                 await click('picture-crop-done');
                 expect(vi.mocked(ImageManipulator.manipulateAsync).mock.calls.at(-1)).toEqual([
                     'file:///working.jpg',

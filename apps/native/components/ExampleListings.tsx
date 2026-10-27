@@ -12,6 +12,14 @@ import { View, Text, StyleSheet } from 'react-native';
 import { t, upperCase } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleCardA11y } from '../utils/example-listings';
+import { CategoryTile } from './CategoryTile';
+
+const EXAMPLE_CATEGORY_MAP: Record<string, string> = {
+    seedlings: 'garden',
+    couch: 'goods',
+    mending: 'services',
+    drill: 'tools',
+};
 
 /** The section's words, word() keys from utils/example-listings.ts, shown here through t(). */
 const LINES = { badge: EXAMPLE_BADGE, heading: EXAMPLES_HEADING, note: EXAMPLES_NOTE };
@@ -31,8 +39,8 @@ export function ExampleListings() {
                         {...exampleCardA11y(example)}
                         style={[styles.card, { borderColor: colors.border.strong, backgroundColor: colors.surface.subtle }]}
                     >
-                        <View style={[styles.tile, { borderColor: colors.border.strong }]}>
-                            <Text style={styles.emoji} maxFontSizeMultiplier={1.3}>{example.emoji}</Text>
+                        <View style={[styles.tile, { borderColor: colors.border.strong, overflow: 'hidden' }]}>
+                            <CategoryTile category={EXAMPLE_CATEGORY_MAP[example.key] ?? 'general'} size="thumb" />
                         </View>
                         <View style={styles.body}>
                             <View style={styles.badges}>

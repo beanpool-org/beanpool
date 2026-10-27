@@ -3503,5 +3503,10 @@
   "Full-size photo": "全尺寸相片",
   "Dismiss full-size photo": "關閉全尺寸相片",
   "Close photo": "關閉相片",
-  "It will read \"This message was deleted\" for both of you.": "雙方都會看到「此訊息已被刪除」。"
+  "It will read \"This message was deleted\" for both of you.": "雙方都會看到「此訊息已被刪除」。",
+  "🌱 Daily Reflection": "🌱 每日心得",
+  "Loading": "正在載入",
+  "⚠️ Action Required": "⚠️ 需要處理",
+  "⏳ Awaiting Approval": "⏳ 等待核准",
+  "⏸ PAUSED": "⏸ 已暫停"
 }

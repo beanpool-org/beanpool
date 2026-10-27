@@ -3628,5 +3628,10 @@
   "Full-size photo": "বড় ছবি",
   "Dismiss full-size photo": "বড় ছবি বন্ধ করুন",
   "Close photo": "ছবি বন্ধ করুন",
-  "It will read \"This message was deleted\" for both of you.": "এটি আপনাদের দুজনের জন্যই \"এই বার্তাটি মুছে ফেলা হয়েছে\" দেখাবে।"
+  "It will read \"This message was deleted\" for both of you.": "এটি আপনাদের দুজনের জন্যই \"এই বার্তাটি মুছে ফেলা হয়েছে\" দেখাবে।",
+  "🌱 Daily Reflection": "🌱 দৈনিক প্রতিফলন",
+  "Loading": "লোড হচ্ছে",
+  "⚠️ Action Required": "⚠️ করণীয় প্রয়োজন",
+  "⏳ Awaiting Approval": "⏳ অনুমোদনের অপেক্ষায়",
+  "⏸ PAUSED": "⏸ স্থগিত"
 }

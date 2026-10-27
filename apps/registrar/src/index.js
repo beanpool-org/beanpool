@@ -1,6 +1,6 @@
 // Beanpool node-address registrar — Cloudflare Worker.
 //   fetch:     claim / heal / rotate / status / release / holder (signed by node key) + admin approve/pause/resume/block/
-//              release + switchboard; notices from the admin to names, carried by each node's /status (migration 0012), and
+//              release + /i/* redirect to invite help; notices from the admin to names, carried by each node's /status (migration 0012), and
 //              their one-use reply links, checked and taken through the ReplyTokens entrypoint (src/worker.js)
 //   scheduled: attestation sweep — pauses a live name's routing only on proof that something other than its own node
 //              answers at it (ANOTHER node key, or for about an hour a page that is no attest at all), never on anything
@@ -123,7 +123,7 @@ export const isOwnRow = (row, pubkey) =>
 const awaitingApproval = async (env, a) => a.status === 'pending' && (!!a.held_reason || (await db.policyTier(env, a.name)) !== 'auto');
 
 // On probation (migration 0011, design §4.3.2): a live name that has not yet answered as its own node in enough sweeps in
-// a row, for long enough (settings probation_sweeps, probation_s). Routed, but off the switchboard (/i/), its node told
+// a row, for long enough (settings probation_sweeps, probation_s). Routed, but its node told
 // `probation: true` (its directory listing waits), and its "New community" alert waits for its verification (applyVerdict).
 // Only NULL is probation: a row read from a database without the column (undefined) is never held back by it.
 const onProbation = (a) => !!a && a.verified_at === null;
@@ -876,7 +876,7 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
-    // A new tenure is on probation (its "New community" alert, its directory listing and the switchboard wait for it).
+    // A new tenure is on probation (its "New community" alert and its directory listing wait for it).
     if (onProbation({ verified_at: a.verified_at !== undefined ? a.verified_at : existing?.verified_at })) out.probation = true;
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
@@ -1925,86 +1925,6 @@ async function handleNoticeList(env, url) {
     }
 }
 
-// --- Switchboard (Invite resolution / trampoline) ---
-// A paused community still exists (the app shows it unreachable, which is true), so its invites still resolve;
-// a released, abandoned or blocked name's do not. Nor do a name's on probation (onProbation): beanpool.org vouches for
-// a new name only once it has answered as its own node for a while (design §4.3.2).
-const routesInvites = (alloc) => !!alloc && (alloc.status === 'live' || alloc.status === 'paused') && !onProbation(alloc);
-
-// `?n=` names the node to join, as a label or a hostname. Only a name this registrar holds live is answered, and only
-// at its own hostname; anything else is refused (null), never sent on: beanpool.org must not vouch for a host it doesn't
-// route (M2 of the 2026-10-01 review — `?n=` sent the app's join flow to any server, under a beanpool.org link).
-async function liveHostname(env, queryN) {
-    const base = `.${env.BASE_DOMAIN || 'beanpool.org'}`;
-    const label = queryN.endsWith(base) ? queryN.slice(0, -base.length) : queryN;
-    if (!NAME_RE.test(label) || !env.DB) return null;
-    try {
-        const alloc = await db.getAllocation(env, label);
-        return alloc?.status === 'live' && !onProbation(alloc) && alloc.hostname === `${label}${base}` ? alloc.hostname : null;
-    } catch { return null; }
-}
-
-async function resolveNodeHostname(env, code, queryN) {
-    if (queryN) return liveHostname(env, queryN);
-    if (!code) return null;
-
-    if (env.DB) {
-        try {
-            const invite = await db.getInvite(env, code);
-            if (invite && invite.node_name) {
-                const alloc = await db.getAllocation(env, invite.node_name);
-                if (routesInvites(alloc)) {
-                    if (alloc.hostname) return alloc.hostname;
-                    return `${invite.node_name}.${env.BASE_DOMAIN || 'beanpool.org'}`;
-                }
-            }
-        } catch { /* ignore */ }
-
-        try {
-            const alloc = await db.getAllocation(env, code.toLowerCase());
-            if (routesInvites(alloc) && alloc.hostname) {
-                return alloc.hostname;
-            }
-        } catch { /* ignore */ }
-    }
-    return null;
-}
-
-async function handleSwitchboard(url, env) {
-    const code = decodeURIComponent(url.pathname.replace(/^\/i\//, '')).trim();
-    const queryN = (url.searchParams.get('n') || '').trim().toLowerCase();
-
-    const hostname = await resolveNodeHostname(env, code, queryN);
-    if (!hostname) {
-        const errHtml = `<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>Invite Not Found</title>
-<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.25rem;text-align:center;color:#1f2937}
-.card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:.75rem;padding:2rem;margin-top:2rem}
-h1{font-size:1.5rem;color:#dc2626}</style></head><body>
-<h1>🫘 Invite code not found</h1>
-<div class=card>
-<p>The invite code you followed is invalid, expired, or unmapped.</p>
-<p>Please check your link or ask the node operator for a fresh invite.</p>
-</div>
-</body></html>`;
-        return new Response(errHtml, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } });
-    }
-
-    const scheme = `beanpool://join?node=${encodeURIComponent(hostname)}&code=${encodeURIComponent(code)}`;
-    const html = `<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>Join on beanpool</title>
-<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1.25rem;text-align:center;color:#1f2937}
-.btn{display:block;margin:.75rem 0;padding:.9rem;border-radius:.75rem;background:#10b981;color:#fff;text-decoration:none;font-weight:700}
-.muted{color:#6b7280;font-size:.9rem}</style></head><body>
-<h1>🫘 You're invited</h1>
-<p>Open the invite in the beanpool app.</p>
-<a class=btn href="${scheme}">Open in beanpool</a>
-<a class=btn href="https://apps.apple.com/app/beanpool">Get it on the App Store</a>
-<a class=btn href="https://play.google.com/store/apps/details?id=org.beanpool">Get it on Google Play</a>
-<p class=muted>${hostname ? 'Community node: ' + hostname : ''}</p>
-</body></html>`;
-    return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
-}
 
 // --- Attestation ---
 // Three verdicts, and only one of them is evidence against a node. On 2026-09-24 a Worker that could not verify
@@ -2150,7 +2070,7 @@ async function applyVerdict(env, r, limits, verified, verifiedNow = []) {
         const oks = (cur.ok_sweeps || 0) + 1;
         const done = oks >= limits.probation_sweeps && now - (cur.decided_at || cur.requested_at || now) >= limits.probation_s;
         if ((await db.updateIfUnchanged(env, a.name, cur, { ...ok, ok_sweeps: oks, ...(done ? { verified_at: now } : {}) })) && done) {
-            await logEvent(env, a.name, 'verified', `probation over: ${oks} ok sweeps in a row, live since ${new Date((cur.decided_at || cur.requested_at) * 1000).toISOString()}; listed on the switchboard, and its node's directory listing goes ahead`);
+            await logEvent(env, a.name, 'verified', `probation over: ${oks} ok sweeps in a row, live since ${new Date((cur.decided_at || cur.requested_at) * 1000).toISOString()}; its node's directory listing goes ahead`);
             verifiedNow.push(cur);
         }
         return;
@@ -2568,7 +2488,12 @@ export default {
                 } });
             }
 
-            if (method === 'GET' && p.startsWith('/i/')) return await handleSwitchboard(url, env);
+            if ((method === 'GET' || method === 'HEAD') && (p === '/i' || p.startsWith('/i/'))) {
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: 'https://beanpool.org/getting-started#invite' },
+                });
+            }
 
             return json({ error: 'not found' }, 404);
         } catch (e) {

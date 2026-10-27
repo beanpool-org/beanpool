@@ -658,6 +658,12 @@ for (const scheme of ['light', 'dark'] as const) {
                 // The DM itself is the node's to make: refused here, the card is kept all the same.
                 const row = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Rosa'))!;
                 await press(row);
+                // A DM start first asks about notifications through a lazy import (createConversationApi): a module load
+                // can outlast press()'s few ticks on a busy machine, so wait for the start to finish, not for a tick count.
+                await vi.waitFor(async () => {
+                    await settle();
+                    expect(host.querySelector('[data-spinner]')).toBeNull();
+                }, { timeout: 20_000, interval: 50 });
                 const kept = await (await db.getDb()).getFirstAsync<{ callsign: string; card_fetched_at: string | null }>('SELECT callsign, card_fetched_at FROM members WHERE public_key = ?', [ROSA]);
                 expect(kept?.callsign).toBe('Rosa');
                 expect(kept?.card_fetched_at).toBeTruthy();

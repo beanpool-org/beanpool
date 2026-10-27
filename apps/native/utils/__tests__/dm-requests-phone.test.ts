@@ -138,6 +138,10 @@ describe('MessageRequestsPane on phone', () => {
         expect(await screen.findByText('1 person wants to message you')).toBeTruthy();
         expect(screen.getByText('Bob')).toBeTruthy();
 
+        const openBtn = screen.getByTestId('request-card-open');
+        expect(await screen.findByText('Hello from Bob')).toBeTruthy();
+        expect(openBtn.getAttribute('aria-label')).toBe('Bob. Hello from Bob. Open the chat to read it.');
+
         const acceptBtn = screen.getByTestId('request-accept');
         expect(acceptBtn.textContent).toContain('Accept');
         fireEvent.click(acceptBtn);
@@ -146,6 +150,27 @@ describe('MessageRequestsPane on phone', () => {
             expect(dbMocks.decideMessageRequest).toHaveBeenCalledWith('conv-req-1', 'accept');
         });
         expect(onAccepted).toHaveBeenCalledWith(entry);
+    });
+
+    it('sets accessibilityLabel with who, photo preview line, and open state', async () => {
+        dbMocks.getMessages.mockResolvedValueOnce([
+            { id: 'm2', type: 'image', text: 'Check this out', authorPubkey: 'bob-pubkey', timestamp: '2026-10-27T00:00:00Z' } as any,
+        ]);
+
+        render(
+            createElement(MessageRequestsPane, {
+                entries: [entry],
+                count: 1,
+                identity: { publicKey: 'me-pubkey' },
+                onOpen: () => {},
+                onAccepted: () => {},
+                onChanged: () => {},
+            })
+        );
+
+        const openBtn = screen.getByTestId('request-card-open');
+        expect(await screen.findByText(/Photo: shown when you accept/)).toBeTruthy();
+        expect(openBtn.getAttribute('aria-label')).toBe('Bob. Photo: shown when you accept. Check this out. Open the chat to read it.');
     });
 
     it('offers Ignore all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {

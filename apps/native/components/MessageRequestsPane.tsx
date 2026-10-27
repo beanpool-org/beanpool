@@ -231,7 +231,12 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
 
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={t('Open the chat to read it.')}
+                accessibilityLabel={preview.loading ? t('Loading…') : [
+                    name,
+                    preview.photo ? t('Photo: shown when you accept') : null,
+                    preview.text,
+                    t('Open the chat to read it.')
+                ].filter(Boolean).join('. ')}
                 testID="request-card-open"
                 style={styles.previewBtn}
                 onPress={() => onOpen(entry)}

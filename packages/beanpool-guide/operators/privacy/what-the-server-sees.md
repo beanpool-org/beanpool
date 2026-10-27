@@ -37,7 +37,7 @@ So others can read how each member voted. Whoever runs the machine can copy the 
 
 ## Members' sign-in recovery copies
 
-A member who connects Google, Apple or Facebook in the app, and everyone who joins the global community with a sign-in or adds one to a 12-words account, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
+In an app built with BeanPool's key vault, a sign-in a member connects, joins with or adds in the phone app keeps its copy at the vault, not on your server. Your server still keeps a locked copy of a member's account, so that sign-in can bring the account back, for a sign-in connected before the vault, until the member moves it to the vault or removes it, and for everyone who joins the global community with a sign-in, or adds one to a 12-words account, in the web app. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
 
 Whoever holds the database and that key can open a member's copy, though, with the id that member's sign-in account gives the server. The server receives that id every time the member signs in. That means whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup. The members' guide tells members this plainly, and that only their 12 words keep everyone else out. Don't look.
 

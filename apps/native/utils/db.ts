@@ -1239,6 +1239,15 @@ function isRequestFor(request: unknown, me: string): boolean {
     return !!r && typeof r === 'object' && typeof r.from === 'string' && r.from !== me && r.state !== 'accepted';
 }
 
+/**
+ * isRequestFor in SQL, over a conversations row's `request` column: true when the row is NOT a request for the member its
+ * one `?` binds. A request's card preview writes its people and lines (syncSingleConversation), so joining
+ * conversation_participants no longer leaves it out: every reader of the phone's chats that counts or names them (the Talk
+ * badge, Needs you, Recents) applies this, as the node's own unread counts leave requests out. Unreadable JSON is no request.
+ */
+const NOT_A_REQUEST_FOR_ME = (column: string) => `(CASE WHEN json_valid(${column}) THEN (CASE WHEN json_type(${column}, '$.from') = 'text'
+    AND json_extract(${column}, '$.from') != ? AND json_extract(${column}, '$.state') IS NOT 'accepted' THEN 0 ELSE 1 END) ELSE 1 END)`;
+
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
@@ -1519,11 +1528,12 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
         FROM messages m
         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
         JOIN conversations c ON c.id = m.conversation_id
-        WHERE cp.public_key = ? 
+        WHERE cp.public_key = ?
         AND (c.type IS NULL OR c.type != 'enterprise_thread')
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
-    `, [myPubkey, myPubkey]);
+        AND ${NOT_A_REQUEST_FOR_ME('c.request')}
+    `, [myPubkey, myPubkey, myPubkey]);
     return result?.count || 0;
 }
 
@@ -1546,8 +1556,9 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
         AND (c.type IS NULL OR c.type != 'enterprise_thread')
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
+        AND ${NOT_A_REQUEST_FOR_ME('c.request')}
         GROUP BY c.id
-    `, [myPubkey, myPubkey, myPubkey]);
+    `, [myPubkey, myPubkey, myPubkey, myPubkey]);
     return rows.map(r => ({
         id: r.id,
         type: r.type || 'dm',
@@ -8207,10 +8218,11 @@ export async function getRecentChatMembers(myPubkey: string, limit = 10): Promis
          JOIN members m ON m.public_key = cp2.public_key
          LEFT JOIN messages msg ON msg.conversation_id = c.id
          WHERE cp.public_key = ? AND c.type = 'dm' AND c.post_id IS NULL
+           AND ${NOT_A_REQUEST_FOR_ME('c.request')}
          GROUP BY m.public_key
          ORDER BY lastChatAt DESC
          LIMIT ?`,
-        [myPubkey, myPubkey, limit]
+        [myPubkey, myPubkey, myPubkey, limit]
     );
 }
 

@@ -15,7 +15,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 // fragment. Review 4393642158: after a cancel and a new line, the withdrawn line stayed on the phone. Review 4393642152: a
 // row the router wrote (getConversationKind asking the node) had no `request`, so the chat read as an ordinary one. Review
 // 4394119880: on the opener's own phone, a line the node withdrew (Cancel request from another app) stayed, drawn as sent.
-// Review 4394120364: the Requests list was kept per member, so it followed them into another community.
+// Review 4394120364: the Requests list was kept per member, so it followed them into another community. Review 4394670854:
+// once the preview wrote a request's people, the Talk badge, Home's Needs you and the contact picker's Recents counted it.
 
 const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
@@ -67,7 +68,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests } from '../db';
+import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests, getGlobalUnreadCount, getUnreadByConversation, getRecentChatMembers } from '../db';
 import { messageRequestsStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
@@ -352,6 +353,54 @@ describe("a request on its opener's own phone (review 4394119880)", () => {
 
         expect(rowsOf(req.id, bo.publicKey)).toEqual([his.id]);
         expect(rowsOf(req.id, rhea.publicKey)).toEqual([hers.id]);
+    });
+});
+
+describe('a request waiting for Bo is counted and named nowhere but under Requests (review 4394670854)', () => {
+    /** The Talk tab's number, Home's Needs you and the contact picker's Recents, as Bo's phone reads them. */
+    async function counted() {
+        return {
+            badge: await getGlobalUnreadCount(bo.publicKey),
+            needsYou: (await getUnreadByConversation(bo.publicKey)).map((c) => c.id).sort(),
+            recents: (await getRecentChatMembers(bo.publicKey)).map((m: any) => m.publicKey).sort(),
+        };
+    }
+
+    it('after its card preview, as before it; once he accepts, it counts as his chat', async () => {
+        // A phone that holds their cards, as one that has synced the members does.
+        for (const p of [kai, rhea]) sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign) VALUES (?, ?)').run(p.publicKey, p.name);
+        const before = await counted();
+        expect(before).toEqual({ badge: 1, needsYou: ['dm-bo-kai'], recents: [kai.publicKey] });
+
+        const req: Conv = { id: 'dm-rhea-bo-8', participants: [rhea.publicKey, bo.publicKey], request: { state: 'pending', from: rhea.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        write(req, rhea, 'first words from Rhea');
+        await withScreens(() => syncMessages(bo.publicKey));
+        expect(await withScreens(() => syncSingleConversation(req.id))).toBe(true);
+        // The preview wrote her people and her line (review 4393642140), so only the rule on `request` keeps it out.
+        expect(rowsOf(req.id, rhea.publicKey)).toHaveLength(1);
+        expect(await counted()).toEqual(before);
+
+        req.request = { ...req.request!, state: 'ignored' };
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(await counted()).toEqual(before);
+
+        // Control: the same rows, accepted, are his chat and count everywhere.
+        req.request = { ...req.request!, state: 'accepted' };
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(await counted()).toEqual({ badge: 2, needsYou: ['dm-bo-kai', req.id].sort(), recents: [kai.publicKey, rhea.publicKey].sort() });
+    });
+
+    it("a request Bo made is his own chat: the person he asked is in his Recents", async () => {
+        for (const p of [kai, rhea]) sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign) VALUES (?, ?)').run(p.publicKey, p.name);
+        const req: Conv = { id: 'dm-bo-rhea-9', participants: [bo.publicKey, rhea.publicKey], request: { state: 'pending', from: bo.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        write(req, bo, 'hello Rhea');
+        await withScreens(() => syncMessages(bo.publicKey));
+        await withScreens(() => syncSingleConversation(req.id));
+
+        expect((await withScreens(() => getConversations(bo.publicKey))).map((c: any) => c.id).sort()).toEqual(['dm-bo-kai', req.id].sort());
+        expect(await counted()).toEqual({ badge: 1, needsYou: ['dm-bo-kai'], recents: [kai.publicKey, rhea.publicKey].sort() });
     });
 });
 

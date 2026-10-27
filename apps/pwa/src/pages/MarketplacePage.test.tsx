@@ -416,23 +416,21 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('reserves the clamped description line instead of letting it absorb the row', async () => {
+    it('removes the description line on non-Pulse grid cards (Pictures S5)', async () => {
         await openGrid();
         for (const title of ['Bicycle Repair', 'Chainsaw']) {
-            const description = tileOf(title).querySelector('p') as HTMLElement;
-            expect(description.className).toContain('line-clamp-1');
-            expect(description.className).toContain('min-h-[1.625em]');
-            // `flex-1` is the stretch: in a cell taller than the tile it swallowed the difference.
-            expect(description.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+            const description = tileOf(title).querySelector('p');
+            expect(description).toBeNull();
         }
     });
 
-    it('gives a tile with a photo and one without the same media height, so VIEW lines up', async () => {
+    it('gives a tile with a photo and one without the same square media (aspect-square), and no VIEW button (Pictures S5)', async () => {
         await openGrid();
-        const mediaHeight = (title: string) =>
-            (tileOf(title).querySelector('div.relative.w-full') as HTMLElement).className.match(/h-\[\d+px\]/)?.[0];
-        expect(mediaHeight('Bicycle Repair')).toBe('h-[110px]'); // emoji placeholder
-        expect(mediaHeight('Chainsaw')).toBe('h-[110px]');       // photo
+        for (const title of ['Bicycle Repair', 'Chainsaw']) {
+            const media = tileOf(title).querySelector('div.relative.w-full') as HTMLElement;
+            expect(media.className).toContain('aspect-square');
+            expect(tileOf(title).textContent).not.toContain('VIEW');
+        }
     });
 
     it('gives the poll two of the columns from md up, and lays its answers out in two', async () => {

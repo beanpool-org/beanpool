@@ -32,7 +32,7 @@ const WORDS = {
         notLoaded: "The list of communities isn't available right now. Try again soon.",
         members: (n) => `${n} members`,
         radius: (km) => `${km}km radius`,
-        visit: (host) => `Visit ${host} →`,
+        see: (name) => `See ${name}`,
         subscribing: 'Subscribing...',
         alreadySubscribed: "You're already subscribed! 🫘",
         checkInbox: 'Check your inbox for a confirmation email! 🫘',
@@ -45,7 +45,7 @@ const WORDS = {
         notLoaded: 'La lista de comunidades no está disponible en este momento. Inténtalo de nuevo pronto.',
         members: (n) => `${n} miembros`,
         radius: (km) => `Radio de ${km}km`,
-        visit: (host) => `Visitar ${host} →`,
+        see: (name) => `Ver ${name}`,
         subscribing: 'Suscribiendo...',
         alreadySubscribed: '¡Ya estás suscrito! 🫘',
         checkInbox: '¡Revisa tu bandeja de entrada para el correo de confirmación! 🫘',
@@ -58,7 +58,7 @@ const WORDS = {
         notLoaded: 'A lista de comunidades não está disponível no momento. Tente novamente em breve.',
         members: (n) => `${n} membros`,
         radius: (km) => `Raio de ${km}km`,
-        visit: (host) => `Visitar ${host} →`,
+        see: (name) => `Ver ${name}`,
         subscribing: 'Inscrevendo...',
         alreadySubscribed: 'Você já está inscrito! 🫘',
         checkInbox: 'Verifique sua caixa de entrada para o e-mail de confirmação! 🫘',
@@ -71,7 +71,7 @@ const WORDS = {
         notLoaded: 'La liste des communautés n\'est pas disponible pour le moment. Réessayez bientôt.',
         members: (n) => `${n} membres`,
         radius: (km) => `Rayon de ${km}km`,
-        visit: (host) => `Visiter ${host} →`,
+        see: (name) => `Voir ${name}`,
         subscribing: 'Inscription en cours...',
         alreadySubscribed: 'Vous êtes déjà inscrit ! 🫘',
         checkInbox: 'Vérifiez votre boîte de réception pour un e-mail de confirmation ! 🫘',
@@ -84,7 +84,7 @@ const WORDS = {
         notLoaded: 'Список сообществ сейчас недоступен. Попробуйте позже.',
         members: (n) => `${n} участников`,
         radius: (km) => `Радиус ${km} км`,
-        visit: (host) => `Перейти на ${host} →`,
+        see: (name) => `Посмотреть: ${name}`,
         subscribing: 'Подписка...',
         alreadySubscribed: 'Вы уже подписаны! 🫘',
         checkInbox: 'Проверьте почту для подтверждения! 🫘',
@@ -97,7 +97,7 @@ const WORDS = {
         notLoaded: 'قائمة المجتمعات غير متاحة حالياً. حاول مرة أخرى قريباً.',
         members: (n) => `${n} أعضاء`,
         radius: (km) => `نصف القطر ${km} كم`,
-        visit: (host) => `زيارة ${host} ←`,
+        see: (name) => `عرض ${name}`,
         subscribing: 'جارٍ الاشتراك...',
         alreadySubscribed: 'أنت مشترك بالفعل! 🫘',
         checkInbox: 'تحقق من بريدك الإلكتروني للحصول على رسالة التأكيد! 🫘',
@@ -110,7 +110,7 @@ const WORDS = {
         notLoaded: 'समुदायों की सूची अभी उपलब्ध नहीं है। कृपया थोड़ी देर बाद पुनः प्रयास करें।',
         members: (n) => `${n} सदस्य`,
         radius: (km) => `${km} किमी का दायरा`,
-        visit: (host) => `${host} पर जाएँ →`,
+        see: (name) => `${name} देखें`,
         subscribing: 'सहेजा जा रहा है...',
         alreadySubscribed: 'आप पहले से ही सब्सक्राइब हैं! 🫘',
         checkInbox: 'पुष्टि ईमेल के लिए अपना इनबॉक्स देखें! 🫘',
@@ -123,7 +123,7 @@ const WORDS = {
         notLoaded: 'কমিউনিটির তালিকা এই মুহূর্তে পাওয়া যাচ্ছে না। কিছুক্ষণ পরে আবার চেষ্টা করুন।',
         members: (n) => `${n} জন সদস্য`,
         radius: (km) => `${km} কিমি ব্যাসার্ধ`,
-        visit: (host) => `${host} দেখুন →`,
+        see: (name) => `${name} দেখুন`,
         subscribing: 'সাবস্ক্রাইব করা হচ্ছে...',
         alreadySubscribed: 'আপনি ইতিমধ্যেই সাবস্ক্রাইব করেছেন! 🫘',
         checkInbox: 'নিশ্চিতকরণ ইমেলের জন্য আপনার ইনবক্স চেক করুন! 🫘',
@@ -136,7 +136,7 @@ const WORDS = {
         notLoaded: 'Daftar komunitas saat ini tidak tersedia. Coba lagi segera.',
         members: (n) => `${n} anggota`,
         radius: (km) => `Radius ${km}km`,
-        visit: (host) => `Kunjungi ${host} →`,
+        see: (name) => `Lihat ${name}`,
         subscribing: 'Berlangganan...',
         alreadySubscribed: 'Anda sudah berlangganan! 🫘',
         checkInbox: 'Periksa kotak masuk Anda untuk email konfirmasi! 🫘',
@@ -149,7 +149,7 @@ const WORDS = {
         notLoaded: '社区列表目前无法获取。请稍后再试。',
         members: (n) => `${n} 位成员`,
         radius: (km) => `${km} 公里半径`,
-        visit: (host) => `访问 ${host} →`,
+        see: (name) => `查看 ${name}`,
         subscribing: '正在订阅...',
         alreadySubscribed: '您已经订阅了！🫘',
         checkInbox: '请检查您的收件箱以获取确认邮件！🫘',
@@ -162,7 +162,7 @@ const WORDS = {
         notLoaded: '社群列表目前無法取得。請稍後再試。',
         members: (n) => `${n} 位成員`,
         radius: (km) => `${km} 公里半徑`,
-        visit: (host) => `造訪 ${host} →`,
+        see: (name) => `查看 ${name}`,
         subscribing: '正在訂閱...',
         alreadySubscribed: '您已經訂閱了！🫘',
         checkInbox: '請檢查您的收件匣以獲取確認電子郵件！🫘',
@@ -175,7 +175,7 @@ const WORDS = {
         notLoaded: 'L\'elenco delle comunità non è al momento disponibile. Riprova presto.',
         members: (n) => `${n} membri`,
         radius: (km) => `Raggio di ${km}km`,
-        visit: (host) => `Visita ${host} →`,
+        see: (name) => `Vedi ${name}`,
         subscribing: 'Iscrizione in corso...',
         alreadySubscribed: 'Sei già iscritto! 🫘',
         checkInbox: 'Controlla la tua casella di posta per un\'email di conferma! 🫘',
@@ -188,7 +188,7 @@ const WORDS = {
         notLoaded: 'Die Community-Liste ist derzeit nicht verfügbar. Bitte versuche es bald wieder.',
         members: (n) => `${n} Mitglieder`,
         radius: (km) => `${km}km Umkreis`,
-        visit: (host) => `${host} besuchen →`,
+        see: (name) => `${name} ansehen`,
         subscribing: 'Wird abonniert...',
         alreadySubscribed: 'Du bist bereits abonniert! 🫘',
         checkInbox: 'Prüfe deinen Posteingang für eine Bestätigungs-E-Mail! 🫘',
@@ -201,7 +201,7 @@ const WORDS = {
         notLoaded: 'Topluluk listesi şu anda kullanılamıyor. Lütfen yakında tekrar deneyin.',
         members: (n) => `${n} üye`,
         radius: (km) => `${km}km yarıçap`,
-        visit: (host) => `${host} adresini ziyaret et →`,
+        see: (name) => `Gör: ${name}`,
         subscribing: 'Abone olunuyor...',
         alreadySubscribed: 'Zaten abonesiniz! 🫘',
         checkInbox: 'Onay e-postası için gelen kutunuzu kontrol edin! 🫘',
@@ -214,7 +214,7 @@ const WORDS = {
         notLoaded: 'Orodha ya jumuiya haipatikani kwa sasa. Jaribu tena hivi karibuni.',
         members: (n) => `wanachama ${n}`,
         radius: (km) => `kipenyo cha km ${km}`,
-        visit: (host) => `Tembelea ${host} →`,
+        see: (name) => `Tazama ${name}`,
         subscribing: 'Inajiandikisha...',
         alreadySubscribed: 'Umejiandikisha tayari! 🫘',
         checkInbox: 'Angalia kikasha chako kwa barua pepe ya uthibitisho! 🫘',
@@ -227,7 +227,7 @@ const WORDS = {
         notLoaded: 'കമ്മ്യൂണിറ്റികളുടെ ലിസ്റ്റ് ഇപ്പോൾ ലഭ്യമല്ല. ഉടൻ വീണ്ടും ശ്രമിക്കുക.',
         members: (n) => `${n} അംഗങ്ങൾ`,
         radius: (km) => `${km} കി.മീ പരിധി`,
-        visit: (host) => `${host} സന്ദർശിക്കുക →`,
+        see: (name) => `${name} കാണുക`,
         subscribing: 'സബ്‌സ്‌ക്രൈബ് ചെയ്യുന്നു...',
         alreadySubscribed: 'നിങ്ങൾ ഇതിനകം സബ്‌സ്‌ക്രൈബ് ചെയ്‌തിരിക്കുന്നു! 🫘',
         checkInbox: 'സ്ഥിരീകരണ ഇമെയിലിനായി നിങ്ങളുടെ ഇൻബോക്സ് പരിശോധിക്കുക! 🫘',
@@ -240,7 +240,7 @@ const WORDS = {
         notLoaded: 'சமூகங்களின் பட்டியல் தற்போது கிடைக்கவில்லை. விரைவில் மீண்டும் முயற்சிக்கவும்.',
         members: (n) => `${n} உறுப்பினர்கள்`,
         radius: (km) => `${km} கி.மீ சுற்றளவு`,
-        visit: (host) => `${host} ஐப் பார்வையிடவும் →`,
+        see: (name) => `${name} ஐப் பார்க்கவும்`,
         subscribing: 'பதிவு செய்யப்படுகிறது...',
         alreadySubscribed: 'நீங்கள் ஏற்கனவே குழுசேர்ந்துள்ளீர்கள்! 🫘',
         checkInbox: 'உறுதிப்படுத்தல் மின்னஞ்சலுக்கு உங்கள் இன்பாக்ஸைச் சரிபார்க்கவும்! 🫘',
@@ -253,7 +253,7 @@ const WORDS = {
         notLoaded: 'Список спільнот зараз недоступний. Спробуйте знову незабаром.',
         members: (n) => `${n} учасників`,
         radius: (km) => `Радіус ${km} км`,
-        visit: (host) => `Відвідати ${host} →`,
+        see: (name) => `Переглянути: ${name}`,
         subscribing: 'Підписка...',
         alreadySubscribed: 'Ви вже підписалися! 🫘',
         checkInbox: 'Перевірте поштову скриньку для підтвердження! 🫘',
@@ -266,7 +266,7 @@ const WORDS = {
         notLoaded: 'کمیونٹیز کی فہرست فی الحال دستیاب نہیں ہے۔ براہ کرم جلد دوبارہ کوشش کریں۔',
         members: (n) => `${n} اراکین`,
         radius: (km) => `${km} کلومیٹر رداس`,
-        visit: (host) => `${host} پر جائیں ←`,
+        see: (name) => `${name} دیکھیں`,
         subscribing: 'سبسکرائب ہو رہا ہے...',
         alreadySubscribed: 'آپ پہلے سے ہی سبسکرائب ہیں! 🫘',
         checkInbox: 'تصدیقی ای میل کے لیے اپنا ان باکس چیک کریں! 🫘',
@@ -279,7 +279,7 @@ const WORDS = {
         notLoaded: 'فهرست جوامع در حال حاضر در دسترس نیست. به زودی دوباره امتحان کنید.',
         members: (n) => `${n} عضو`,
         radius: (km) => `شعاع ${km} کیلومتر`,
-        visit: (host) => `بازدید از ${host} ←`,
+        see: (name) => `دیدن ${name}`,
         subscribing: 'در حال اشتراک...',
         alreadySubscribed: 'شما قبلاً مشترک شده‌اید! 🫘',
         checkInbox: 'برای ایمیل تأیید، صندوق ورودی خود را بررسی کنید! 🫘',
@@ -292,7 +292,7 @@ const WORDS = {
         notLoaded: 'Danh sách cộng đồng hiện không khả dụng. Vui lòng thử lại sớm.',
         members: (n) => `${n} thành viên`,
         radius: (km) => `Bán kính ${km}km`,
-        visit: (host) => `Truy cập ${host} →`,
+        see: (name) => `Xem ${name}`,
         subscribing: 'Đang đăng ký...',
         alreadySubscribed: 'Bạn đã đăng ký rồi! 🫘',
         checkInbox: 'Kiểm tra hộp thư đến của bạn để nhận email xác nhận! 🫘',
@@ -305,7 +305,7 @@ const WORDS = {
         notLoaded: 'Η λίστα κοινοτήτων δεν είναι διαθέσιμη αυτή τη στιγμή. Δοκιμάστε ξανά σύντομα.',
         members: (n) => `${n} μέλη`,
         radius: (km) => `Ακτίνα ${km}χλμ`,
-        visit: (host) => `Επισκεφθείτε το ${host} →`,
+        see: (name) => `Δείτε: ${name}`,
         subscribing: 'Εγγραφή...',
         alreadySubscribed: 'Είστε ήδη εγγεγραμμένοι! 🫘',
         checkInbox: 'Ελέγξτε τα εισερχόμενά σας για το email επιβεβαίωσης! 🫘',
@@ -318,7 +318,7 @@ const WORDS = {
         notLoaded: 'Hindi available ang listahan ng mga komunidad ngayon. Subukang muli mamaya.',
         members: (n) => `${n} miyembro`,
         radius: (km) => `${km}km radius`,
-        visit: (host) => `Bisitahin ang ${host} →`,
+        see: (name) => `Tingnan ang ${name}`,
         subscribing: 'Nagsu-subscribe...',
         alreadySubscribed: 'Naka-subscribe ka na! 🫘',
         checkInbox: 'Tingnan ang iyong inbox para sa email ng kumpirmasyon! 🫘',
@@ -331,7 +331,7 @@ const WORDS = {
         notLoaded: 'コミュニティ一覧は現在利用できません。しばらくしてからもう一度お試しください。',
         members: (n) => `${n} 人のメンバー`,
         radius: (km) => `半径 ${km}km`,
-        visit: (host) => `${host} を訪問 →`,
+        see: (name) => `${name} を見る`,
         subscribing: '登録中...',
         alreadySubscribed: 'すでに登録されています！🫘',
         checkInbox: '確認メールを受信トレイでご確認ください！🫘',
@@ -344,7 +344,7 @@ const WORDS = {
         notLoaded: '커뮤니티 목록을 지금 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
         members: (n) => `멤버 ${n}명`,
         radius: (km) => `반경 ${km}km`,
-        visit: (host) => `${host} 방문 →`,
+        see: (name) => `${name} 보기`,
         subscribing: '구독 중...',
         alreadySubscribed: '이미 구독하셨습니다! 🫘',
         checkInbox: '확인 이메일을 받으려면 받은편지함을 확인하세요! 🫘',
@@ -486,6 +486,12 @@ function contact(value, href) {
     return a;
 }
 
+/** The name "See {name}" says: the community's own, else its host (a default or missing name says nothing). */
+function seeName(row) {
+    const own = row.name && !/^beanpool community$/i.test(row.name) ? row.name : '';
+    return own || new URL(row.url).host;
+}
+
 function directoryPopup(row) {
     const box = element('div', 'font-family:Inter,sans-serif;');
     box.appendChild(element('strong', null, row.name));
@@ -504,11 +510,13 @@ function directoryPopup(row) {
     }
     if (row.url) {
         box.appendChild(element('br'));
-        const visit = element('a', 'color:var(--success-ink); text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', word('visit', new URL(row.url).host));
-        visit.setAttribute('href', row.url);
-        visit.setAttribute('target', '_blank');
-        visit.setAttribute('rel', 'noopener');
-        box.appendChild(visit);
+        // The community's own address, where a stranger reads its public card (front doors S15): "See {name}", by its own
+        // name, or its host where it has none of its own.
+        const see = element('a', 'color:var(--success-ink); text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600; overflow-wrap:anywhere;', word('see', seeName(row)));
+        see.setAttribute('href', row.url);
+        see.setAttribute('target', '_blank');
+        see.setAttribute('rel', 'noopener');
+        box.appendChild(see);
     }
     return box;
 }

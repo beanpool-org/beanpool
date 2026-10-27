@@ -13,7 +13,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 // PR #2540 review 4393642140: a request reached only through syncSingleConversation (the Requests card's preview) had no
 // people on the phone, so its line didn't open ("[Encrypted — update your app to read]") and the chat was named by an id
 // fragment. Review 4393642158: after a cancel and a new line, the withdrawn line stayed on the phone. Review 4393642152: a
-// row the router wrote (getConversationKind asking the node) had no `request`, so the chat read as an ordinary one.
+// row the router wrote (getConversationKind asking the node) had no `request`, so the chat read as an ordinary one. Review
+// 4394119880: on the opener's own phone, a line the node withdrew (Cancel request from another app) stayed, drawn as sent.
 
 const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
@@ -65,7 +66,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation } from '../db';
+import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage } from '../db';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
@@ -83,7 +84,12 @@ function person(name: string): Person {
 
 interface Line { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; type: string; systemType: null; metadata: null; timestamp: string; editedAt: null }
 interface Conv { id: string; participants: string[]; request: { state: string; from: string; at: string } | null }
-const node = { lines: [] as Line[], convs: [] as Conv[] };
+const node = {
+    lines: [] as Line[],
+    convs: [] as Conv[],
+    /** Once, between the node reading a page and the phone getting it: what happens while that answer is on its way. */
+    beforePage: null as null | (() => Promise<void>),
+};
 let clock = Date.parse('2026-10-20T00:00:00.000Z');
 let serial = 0;
 
@@ -94,8 +100,15 @@ function answer(status: number, body: unknown) {
 const view = (c: Conv) => ({ id: c.id, type: 'dm', name: null, participants: c.participants, createdBy: c.participants[0], createdAt: '2026-10-20T00:00:00.000Z', request: c.request });
 const waitingFor = (c: Conv, key: string) => !!c.request && c.request.from !== key && c.request.state === 'pending';
 
-const fetchMock = vi.fn(async (url: string) => {
+const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     const u = new URL(url);
+    if (init.method === 'POST' && u.pathname === '/api/messages/send') {
+        const b = JSON.parse(init.body);
+        clock += 1000;
+        const line: Line = { id: b.id, conversationId: b.conversationId, authorPubkey: b.authorPubkey, ciphertext: b.ciphertext, nonce: b.nonce, type: 'text', systemType: null, metadata: null, timestamp: new Date(clock).toISOString(), editedAt: null };
+        node.lines.push(line);
+        return answer(200, { success: true, message: line });
+    }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
     if (list) {
         const mine = node.convs.filter((c) => c.participants.includes(list[1]));
@@ -112,7 +125,11 @@ const fetchMock = vi.fn(async (url: string) => {
         const conv = node.convs.find((c) => c.id === decodeURIComponent(page[1]));
         if (!conv) return answer(404, { error: 'Conversation not found' });
         const limit = Number(u.searchParams.get('limit') ?? 50);
-        return answer(200, { conversation: view(conv), messages: node.lines.filter((l) => l.conversationId === conv.id).slice(-limit).map((l) => ({ ...l })) });
+        const body = { conversation: view(conv), messages: node.lines.filter((l) => l.conversationId === conv.id).slice(-limit).map((l) => ({ ...l })) };
+        const meanwhile = node.beforePage;
+        node.beforePage = null;
+        if (meanwhile) await meanwhile();
+        return answer(200, body);
     }
     if (u.pathname === '/api/members') return answer(200, []);
     return answer(404, { error: 'not here' });
@@ -165,6 +182,7 @@ beforeEach(async () => {
     h.me = { publicKey: bo.publicKey, privateKey: bo.privateKey };
     node.lines = [];
     node.convs = [];
+    node.beforePage = null;
     (globalThis as any).fetch = fetchMock;
     await getDb();
     for (const t of ['messages', 'conversation_participants', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
@@ -250,5 +268,81 @@ describe("a request on the phone of the person it is for", () => {
         const conv = await getConversation(req.id, bo.publicKey);
         expect(conv?.request).toMatchObject({ state: 'pending', from: rhea.publicKey });
         expect(conv?.otherPubkey).toBe(rhea.publicKey);
+    });
+});
+
+describe("a request on its opener's own phone (review 4394119880)", () => {
+    /** Bo's request to Rhea, waiting, and on his phone as the list writes it. */
+    async function bosRequest(id: string): Promise<Conv> {
+        const req: Conv = { id, participants: [bo.publicKey, rhea.publicKey], request: { state: 'pending', from: bo.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        await withScreens(() => syncMessages(bo.publicKey));
+        return req;
+    }
+    /** A line of Bo's this phone never had confirmed, as the send path leaves it. */
+    function unsent(conv: Conv, id: string, state: 'sending' | 'failed'): void {
+        sql.prepare('INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(id, conv.id, bo.publicKey, 'x', 'y', JSON.stringify({ __sendState: state }), new Date(clock).toISOString());
+    }
+
+    it('cancelled from his other app: the withdrawn line goes from this phone, and his unsent lines stay', async () => {
+        const req = await bosRequest('dm-bo-rhea-1');
+        const first = write(req, bo, 'words he withdrew from the web app');
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(rowsOf(req.id, bo.publicKey)).toEqual([first.id]);
+        unsent(req, 'unsent-sending', 'sending');
+        unsent(req, 'unsent-failed', 'failed');
+
+        cancel(req);
+        expect(await withScreens(() => syncSingleConversation(req.id))).toBe(true);
+
+        expect(rowsOf(req.id, bo.publicKey)).toEqual(['unsent-failed', 'unsent-sending']);
+        // Control: the chat the list names keeps its line.
+        expect(await texts('dm-bo-kai')).toEqual(['control words']);
+    });
+
+    it('a page from before his own cancel brings the line back, and the next one takes it away again', async () => {
+        const req = await bosRequest('dm-bo-rhea-2');
+        const first = write(req, bo, 'words he withdrew here');
+        await withScreens(() => syncSingleConversation(req.id));
+        // The poll in flight read the page before the cancel; the cancel empties the phone's copy as handleCancelRequest does.
+        node.beforePage = async () => {
+            cancel(req);
+            sql.prepare('DELETE FROM messages WHERE conversation_id = ?').run(req.id);
+        };
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(rowsOf(req.id, bo.publicKey)).toEqual([first.id]);
+
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(rowsOf(req.id, bo.publicKey)).toEqual([]);
+    });
+
+    it('a page asked for before the node took his new line drops none of his lines, and a line the node has stays', async () => {
+        const req = await bosRequest('dm-bo-rhea-3');
+        let sent = '';
+        node.beforePage = async () => {
+            sent = await insertMessage(req.id, bo.publicKey, 'his first words');
+            await vi.waitFor(() => expect(node.lines.some((l) => l.id === sent)).toBe(true));
+            await vi.waitFor(async () => expect((await getMessages(req.id)).every((m: any) => !m.sendState)).toBe(true));
+        };
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(sent).not.toBe('');
+        expect(rowsOf(req.id, bo.publicKey)).toEqual([sent]);
+
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(rowsOf(req.id, bo.publicKey)).toEqual([sent]);
+        expect(await texts(req.id)).toEqual(['his first words']);
+    });
+
+    it('once Rhea accepts, his lines the node still has stay with hers', async () => {
+        const req = await bosRequest('dm-bo-rhea-4');
+        const his = write(req, bo, 'hello Rhea');
+        await withScreens(() => syncSingleConversation(req.id));
+        req.request = { ...req.request!, state: 'accepted' };
+        const hers = write(req, rhea, 'hello Bo');
+        await withScreens(() => syncSingleConversation(req.id));
+
+        expect(rowsOf(req.id, bo.publicKey)).toEqual([his.id]);
+        expect(rowsOf(req.id, rhea.publicKey)).toEqual([hers.id]);
     });
 });

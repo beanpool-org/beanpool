@@ -4716,6 +4716,13 @@ export async function syncMessages(publicKey: string) {
 // preview fetch instead of returning before the node has answered (PR #2540 review 4393642152).
 const _conversationSyncsInFlight = new Map<string, Promise<boolean>>();
 
+// How many lines of mine the node has taken (its 200) per conversation, counted before the line's row says so: a page asked
+// for before one of them was taken doesn't have it, so its poll drops none of my lines (dropMyWithdrawnRequestLines).
+const _ownLinesTaken = new Map<string, number>();
+function ownLineTaken(conversationId: string): void {
+    _ownLinesTaken.set(conversationId, (_ownLinesTaken.get(conversationId) ?? 0) + 1);
+}
+
 /**
  * This conversation's newest lines and its request from the node, written to this phone. True once the node's answer has
  * been written here (its lines, and a request's people and withdrawn lines); false when there was no answer, or the pins'
@@ -4733,6 +4740,7 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return false;
+        const takenBefore = _ownLinesTaken.get(conversationId) ?? 0;
 
         // 12s (not 5s) to ride out a slow node: an abort throws the whole response
         // away and the incoming message waits for the NEXT tick to try again — that
@@ -4826,6 +4834,16 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
             } catch (e: any) {
                 console.warn(`[Sync] Could not drop the request's withdrawn lines: ${e?.message || e}`);
             }
+        } else if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && req?.from === myIdentity.publicKey && req.state !== 'accepted') {
+            // My own request, not accepted: none of my lines the node withdrew stay here either (Cancel request from the web
+            // app, or a page from before this phone's own cancel; review 4394119880). Never one still sending or failed, and
+            // none at all on a page asked for before the node took a line of mine.
+            try {
+                withdrawn = await dropMyWithdrawnRequestLines(database, conversationId, myIdentity.publicKey, messages,
+                    () => (_ownLinesTaken.get(conversationId) ?? 0) === takenBefore);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not drop my request's withdrawn lines: ${e?.message || e}`);
+            }
         }
         const cursors = msgData.conversation?.readCursors;
         let cursorAdvances: Array<{ publicKey: string; lastReadAt: string }> = [];
@@ -4909,18 +4927,43 @@ const NODE_PAGE_LINES = 50;
  * opener's lines go, never one of this reader's (their unsent ones neither). Their photos' decrypted copies go with them.
  */
 async function dropWithdrawnRequestLines(database: SQLite.SQLiteDatabase, conversationId: string, req: { from: string; state?: string }, messages: any[]): Promise<number> {
-    const onNode = messages.map((m: any) => m?.id).filter((id: unknown): id is string => typeof id === 'string');
-    const stamps = messages.map((m: any) => m?.timestamp).filter((t: unknown): t is string => typeof t === 'string').sort();
-    const pageOnly = req.state === 'accepted' && messages.length >= NODE_PAGE_LINES && stamps.length > 0;
-    const where = ['conversation_id = ?', 'author_pubkey = ?'];
-    const args: string[] = [conversationId, req.from];
-    if (onNode.length > 0) { where.push(`id NOT IN (${onNode.map(() => '?').join(', ')})`); args.push(...onNode); }
-    if (pageOnly) { where.push('timestamp > ?'); args.push(stamps[0]); }
-    const gone = await database.getAllAsync<{ id: string }>(`SELECT id FROM messages WHERE ${where.join(' AND ')}`, args);
+    const { where, args } = linesNotOnPage(conversationId, req.from, messages, req.state === 'accepted');
+    const gone = await database.getAllAsync<{ id: string }>(`SELECT id FROM messages WHERE ${where}`, args);
     if (gone.length === 0) return 0;
-    await database.runAsync(`DELETE FROM messages WHERE ${where.join(' AND ')}`, args);
+    await database.runAsync(`DELETE FROM messages WHERE ${where}`, args);
     for (const g of gone) await forgetCachedChatImage(g.id);
     return gone.length;
+}
+
+/**
+ * My own request's lines, not accepted, on my phone that the node no longer has (review 4394119880): I cancelled it from the
+ * web app, or a page from before this phone's own cancel brought them back. Every line in it is mine, so the newest page
+ * holds them all; a full one judges only the stretch it covers. One still sending or failed isn't on the node yet and stays
+ * (review 4390653768), and none go when `pageIsCurrent` says, once they are read, that the node took a line of mine after
+ * the page was asked for: the page lacks it. Each goes by its id, so a line written meanwhile is never among them. Their
+ * photos' decrypted copies go with them.
+ */
+async function dropMyWithdrawnRequestLines(database: SQLite.SQLiteDatabase, conversationId: string, me: string, messages: any[], pageIsCurrent: () => boolean): Promise<number> {
+    const { where, args } = linesNotOnPage(conversationId, me, messages, true);
+    const rows = await database.getAllAsync<{ id: string; metadata: string | null }>(`SELECT id, metadata FROM messages WHERE ${where}`, args);
+    const gone = rows.filter(r => !isUndeliveredRow(r.metadata, me, me));
+    if (gone.length === 0 || !pageIsCurrent()) return 0;
+    for (const g of gone) {
+        await database.runAsync('DELETE FROM messages WHERE id = ? AND conversation_id = ?', [g.id, conversationId]);
+        await forgetCachedChatImage(g.id);
+    }
+    return gone.length;
+}
+
+/** `author`'s lines in a conversation that the node's page doesn't list; with `pageOnly`, a full page's stretch alone. */
+function linesNotOnPage(conversationId: string, author: string, messages: any[], pageOnly: boolean): { where: string; args: string[] } {
+    const onNode = messages.map((m: any) => m?.id).filter((id: unknown): id is string => typeof id === 'string');
+    const stamps = messages.map((m: any) => m?.timestamp).filter((t: unknown): t is string => typeof t === 'string').sort();
+    const where = ['conversation_id = ?', 'author_pubkey = ?'];
+    const args: string[] = [conversationId, author];
+    if (onNode.length > 0) { where.push(`id NOT IN (${onNode.map(() => '?').join(', ')})`); args.push(...onNode); }
+    if (pageOnly && messages.length >= NODE_PAGE_LINES && stamps.length > 0) { where.push('timestamp > ?'); args.push(stamps[0]); }
+    return { where: where.join(' AND '), args };
 }
 
 
@@ -6409,6 +6452,7 @@ async function _deliverPendingMessage(
             throw new Error(errMsg);
         }
 
+        ownLineTaken(body.conversationId);
         const data = await res.json();
         const serverMsg = data.message;
 
@@ -6566,6 +6610,7 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
         try { const j = JSON.parse(await res.text()); if (j.error) errMsg = j.error; } catch {}
         throw new Error(errMsg);
     }
+    ownLineTaken(conversationId);
     const serverMsg = (await res.json()).message;
     await database.runAsync(
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',

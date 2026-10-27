@@ -53,7 +53,7 @@ import { useAppDocumentPolicy } from '../app-document-csp.js';
 import type { RouteDeps } from './types.js';
 
 /**
- * The web app's hint that this browser keeps an account here (apps/pwa src/lib/account-hint.ts): set while it holds one,
+ * The web app's hint that this browser keeps an account here (apps/pwa src/lib/community-card.ts): set while it holds one,
  * cleared at sign-out. Not a credential and never trusted for anything but which page `/` opens: a stranger who sets it
  * gets the web app's welcome page, which shows this same card.
  */

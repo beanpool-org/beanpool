@@ -533,16 +533,6 @@ function tieRank(order: number, key: string): number {
     return h >>> 0;
 }
 
-/**
- * The listed communities. From a point (design §1.2): nearest first by the centre of each one's service radius, in
- * bands of {@link DISTANCE_BAND_KM} km; within a band, the communities that keep the listing promise and take requests
- * to join, at an address a stranger can ask them at, come first, then the rest, each group in the order of this read's
- * shuffle (`order`, new on every read unless the caller sends one), so no community is always the first a stranger
- * sees; those with no place after them, by name. A row with no address is never first, whatever it says of knocks: the
- * phone has nothing to knock on, and an older node says it takes knocks without one.
- * The member count never orders anything. Without a point, by name, ties by key. Within a band, an equal rank goes by
- * key, so paging with the same `order` never skips or repeats. `total` is how many match.
- */
 /** The host of a row's https origin, lowercased with its port, or null. */
 function urlHost(url: string | null): string | null {
     if (!url) return null;
@@ -553,6 +543,16 @@ function urlHost(url: string | null): string | null {
     }
 }
 
+/**
+ * The listed communities. From a point (design §1.2): nearest first by the centre of each one's service radius, in
+ * bands of {@link DISTANCE_BAND_KM} km; within a band, the communities that keep the listing promise and take requests
+ * to join, at an address a stranger can ask them at, come first, then the rest, each group in the order of this read's
+ * shuffle (`order`, new on every read unless the caller sends one), so no community is always the first a stranger
+ * sees; those with no place after them, by name. A row with no address is never first, whatever it says of knocks: the
+ * phone has nothing to knock on, and an older node says it takes knocks without one.
+ * The member count never orders anything. Without a point, by name, ties by key. Within a band, an equal rank goes by
+ * key, so paging with the same `order` never skips or repeats. `total` is how many match.
+ */
 export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number } {
     const needle = query.q ? foldForSearch(query.q.trim()) : '';
     const order = query.order ?? newDirectoryOrder();

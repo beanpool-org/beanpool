@@ -34,7 +34,7 @@ Someone who opens your community's address in a browser, and has no account ther
 
 Nothing else is on the card: no member's name or face, no listing, no balance. Your members' listings stay theirs, as before.
 
-**On your own server**, the global community is BeanPool's unless you name another with GLOBAL_COMMUNITY_URL in the server's .env. Set it to off and the card links nothing of BeanPool's: no Ask to join link and no Look around the global community, only **Ask to join from the BeanPool app.** Your server never contacts the global community either way: these are links a visitor may follow.
+**On your own server**, the global community is BeanPool's unless you name another with GLOBAL_COMMUNITY_URL in the server's .env. Set it to off and the card links nothing of the global community: no Look around the global community, and Ask to join opens the BeanPool app on an Android phone (or the app's store page when it isn't installed); anywhere else the card says **Ask to join from the BeanPool app.** Your server never contacts the global community either way: these are links a visitor may follow.
 
 ## What the open door keeps
 

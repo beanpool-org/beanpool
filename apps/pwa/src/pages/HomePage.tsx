@@ -39,6 +39,7 @@ import {
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
+import { AskedCommunity } from '../components/AskedCommunity';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, isHomeCardId,
@@ -272,6 +273,10 @@ interface Props {
     onNavigate: (tab: string, contextId?: string) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
+    /** A community the member came to ask to join (`/?ask=<host>`, front doors S15): the Find card opens on it. */
+    askedCommunity?: string | null;
+    /** Its ✕: the Find card as usual. */
+    onAskedCommunitySeen?: () => void;
     /**
      * The Market's "Save this search to Home" (Marty, 7 Oct): once Home knows the member's list, the saved search's dialog
      * opens with it filled in (Add to Home its last button), or Home says why not; then `onSaveSearchTaken`.
@@ -927,7 +932,7 @@ function CommunityBody({
     );
 }
 
-export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken }: Props) {
+export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
     // Moves on when a clear (here or in another tab) has this page land again: the community may have changed with it.
     const [landing, setLanding] = useState(0);
@@ -1885,6 +1890,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>
+                        {askedCommunity && identity && <AskedCommunity host={askedCommunity} onClose={() => onAskedCommunitySeen?.()} />}
                         <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-body">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);

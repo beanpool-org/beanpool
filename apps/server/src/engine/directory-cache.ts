@@ -495,6 +495,11 @@ export interface CommunityQuery {
     point?: { lat: number; lng: number } | null;
     /** A name search, as the reader typed it. */
     q?: string | null;
+    /**
+     * One community by the host of its address (core askHost: lowercased, port kept), as a community's card names it in
+     * `?ask=<host>` (front doors S15): the lobby opens its Find card on that community.
+     */
+    host?: string | null;
     limit?: number;
     offset?: number;
     /**
@@ -538,11 +543,22 @@ function tieRank(order: number, key: string): number {
  * The member count never orders anything. Without a point, by name, ties by key. Within a band, an equal rank goes by
  * key, so paging with the same `order` never skips or repeats. `total` is how many match.
  */
+/** The host of a row's https origin, lowercased with its port, or null. */
+function urlHost(url: string | null): string | null {
+    if (!url) return null;
+    try {
+        return new URL(url).host.toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
 export function listCommunities(query: CommunityQuery): { communities: Community[]; total: number } {
     const needle = query.q ? foldForSearch(query.q.trim()) : '';
     const order = query.order ?? newDirectoryOrder();
     const rows = listed()
         .filter(x => !needle || (x.folded !== null && x.folded.includes(needle)))
+        .filter(x => !query.host || urlHost(x.row.url) === query.host)
         .map(({ row: r, folded }) => {
             const d = query.point && r.lat !== null && r.lng !== null ? haversineKm(query.point.lat, query.point.lng, r.lat, r.lng) : null;
             return {

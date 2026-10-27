@@ -356,8 +356,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         return () => { cancelled = true; };
     }, [doorCheck]);
     // A local community's public card (front doors S15), drawn above the invite form: what a stranger may read about it,
-    // and its doors. None from a node too old to have one: the page is as before.
-    const [communityCard, setCommunityCard] = useState<CommunityCard | null>(null);
+    // and its doors. None from a node too old to have one: the page is as before. 'loading' until the node has answered,
+    // when the page draws neither the card nor the old "No invite?" box, whose Look around links BeanPool's global
+    // community, which a node that names none (GLOBAL_COMMUNITY_URL=off) must never show.
+    const [communityCard, setCommunityCard] = useState<CommunityCard | null | 'loading'>('loading');
     useEffect(() => {
         if (!localCommunity) return;
         let cancelled = false;
@@ -2681,7 +2683,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
-                            {localCommunity && communityCard && (
+                            {localCommunity && communityCard && communityCard !== 'loading' && (
                                 <CommunityCardPanel
                                     card={communityCard}
                                     compact={welcomeDoor === 'invite'}
@@ -2799,7 +2801,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
                             {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28). Its card above
                                 says the same with its own doors (front doors S15); this is for a node too old to send one. ===== */}
-                            {localCommunity && !communityCard && (
+                            {localCommunity && communityCard === null && (
                                 <div data-testid="welcome-no-invite" style={{
                                     marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', textAlign: 'center',
                                     background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',

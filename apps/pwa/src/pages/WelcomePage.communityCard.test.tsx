@@ -1,10 +1,11 @@
 /**
  * A stranger at a local community's web app (front doors S15): its public card above the invite form, from the node's
  * GET /api/community/card; the card's own doors at the bare address land here with `?door=invite` (the form) and
- * `?door=signin` (the ways back). A node too old to send a card: the page as before, its "No invite?" box and all.
+ * `?door=signin` (the ways back). A node too old to send a card: the page as before, its "No invite?" box and all. While
+ * the card is on its way, neither: the box's Look around links BeanPool's global community, which a node may name none of.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -25,6 +26,7 @@ function stubNode(card: unknown) {
         const path = String(input);
         asked.push(path);
         if (path === '/api/community/info') return json(200, LOCAL);
+        if (path === '/api/community/card' && card instanceof Promise) return card;
         if (path === '/api/community/card') return card === 404 ? json(404, { error: 'Not Found' }) : json(200, card);
         return json(404, { error: 'Not Found' });
     }));
@@ -77,6 +79,22 @@ describe("a local community's card on its welcome page", () => {
         await screen.findByTestId('community-card');
         expect(screen.queryByTestId('community-card-ask')).toBeNull();
         expect(document.activeElement?.id).toBe('inviteCode');
+    });
+
+    it('while the card is on its way: the form, and neither the card nor the old box with its link to BeanPool\'s global community', async () => {
+        let answer!: (r: Response) => void;
+        const asked = stubNode(new Promise<Response>((resolve) => { answer = resolve; }));
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Join with Invite Code/);
+        await waitFor(() => expect(asked).toContain('/api/community/card'));
+        expect(screen.queryByTestId('welcome-no-invite')).toBeNull();
+        expect(screen.queryByTestId('look-around-global')).toBeNull();
+        expect(screen.queryByTestId('community-card')).toBeNull();
+        // The card comes: drawn, and still no box.
+        await act(async () => { answer(json(200, { ...CARD, askUrl: null, globalUrl: null })); });
+        await screen.findByTestId('community-card');
+        expect(screen.queryByTestId('welcome-no-invite')).toBeNull();
+        expect(document.querySelector('a[href^="https://global.beanpool.org"]')).toBeNull();
     });
 
     it('a node too old to send a card: the page as before', async () => {

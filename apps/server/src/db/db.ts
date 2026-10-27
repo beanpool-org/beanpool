@@ -2966,6 +2966,18 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
 }
 
 /**
+ * Whether `pubkey` leads the project: the one rule its edit (updateCrowdfundProject) and its cancel (deleteCrowdfundProject)
+ * both ask. Its lead is getCrowdfundProject's creator_pubkey, its lead keeper (treasury_operators, role 'lead'), never the
+ * projects row's own creator_pubkey: that column keeps whoever made it, and the lead changes after (a keepers' vote, or a
+ * lead who stepped down or closed their account and a keeper promoted in their place). Asked of that column, the maker who
+ * no longer led it could still cancel it, refunding every backer and deleting it, and the new lead could not (review of #2525).
+ */
+export function leadsProject(projectId: string, pubkey: string): boolean {
+    const lead = getCrowdfundProject(projectId)?.creator_pubkey;
+    return !!lead && lead === pubkey;
+}
+
+/**
  * Has an admin switched this member's operator access off? True when they keep at least one
  * treasury_operators binding but members.can_operate = 0 (adminSetOperator suspends a steward node-wide
  * without deleting their bindings). A member with no binding at all is simply not a keeper yet.
@@ -3175,7 +3187,7 @@ export function updateCrowdfundProject(
     if (namesNoProject(id)) throw new Error("Project not found");
     const project = getCrowdfundProject(id);
     if (!project) throw new Error("Project not found");
-    if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");
+    if (!leadsProject(id, creator_pubkey)) throw new Error("Unauthorized: You do not own this project");
     // As on a create (#1493); the title and description it already holds, sent back unchanged, are kept.
     title = typeof title === 'string' ? replaceLoneSurrogates(title) : title;
     description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
@@ -3203,7 +3215,7 @@ export function updateCrowdfundProject(
     const rowName = projectRowName(db, title, id);
 
     // The projects row by its id alone: its creator_pubkey is whoever made the project, and the check above already
-    // holds the change to the lead today (getCrowdfundProject's creator_pubkey). Matched on the maker, a new lead's change
+    // holds the change to the lead today (leadsProject). Matched on the maker, a new lead's change
     // (the leader closed their account, a keeper took over) was answered 200 and missed the row the return, the end-date
     // notice and the pledge gate read (review of #2525).
     db.transaction(() => {
@@ -3398,7 +3410,8 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     // Never a person's row (namesNoProject): a projects row under a member's key pruned that member.
     if (!project || namesNoProject(projectId)) throw new Error("Project not found");
-    if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
+    // Its lead's, as its edit is (leadsProject): this row's creator_pubkey is whoever made it.
+    if (!leadsProject(projectId, requesterPubkey)) throw new Error("Unauthorized to delete this project");
 
     // Guard against deleting funded/completed projects
     if (project.status !== 'ACTIVE') {

@@ -10,7 +10,8 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerForPushNotifications, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { registerWhenNotificationsAllowed } from '../utils/notification-permission';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
 import { parseRekeyLink } from '../utils/rekey-redeem';
@@ -764,11 +765,17 @@ function RootLayoutNav() {
         if (notice) router.push(notice);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 
-    // Register for push notifications when identity is available. One that doesn't land is tried again as the app comes
-    // back and with the 5-minute sync (RootLayout, retryPushRegistrations), not only at the next cold start.
+    // When the phone allows notifications (e.g. Android <= 12, or a restored account on a device where permission was
+    // already granted), silently register the push token for this identity without prompting: now, and on each return
+    // to the app once the phone starts allowing them (Turn on → Open Settings → allow → back).
     useEffect(() => {
         if (!identity?.publicKey) return;
-        registerForPushNotifications(identity.publicKey).catch(console.warn);
+        const registerIfAllowed = registerWhenNotificationsAllowed(identity.publicKey);
+        void registerIfAllowed();
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') void registerIfAllowed();
+        });
+        return () => sub.remove();
     }, [identity?.publicKey]);
 
     // Kick a sync whenever the active identity changes. The boot sync

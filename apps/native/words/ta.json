@@ -6113,5 +6113,9 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” பதிவிடப்பட்டுள்ளது, ஆனால் உங்கள் கடையில் இல்லை. அதை உள்ளே வைக்க, அதைத் திறந்து, பதிவைத் திருத்து என்பதைத் தட்டி, இதை உங்கள் கடையில் வையுங்கள் என்பதைத் தேர்ந்தெடுக்கவும்.",
   "✓ Friend": "✓ நண்பர்",
   "✓ nonce issued": "✓ nonce வழங்கப்பட்டது",
-  "Failed to load": "ஏற்றுவதில் தோல்வி"
+  "Failed to load": "ஏற்றுவதில் தோல்வி",
+  "Turn on": "இயக்கு",
+  "Turn on notifications?": "அறிவிப்புகளை இயக்கவா?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "யாராவது உங்களுக்குப் பதிலளிக்கும் போது, செய்தி அனுப்பும் போது அல்லது இணையக் கோரும் போது நீங்கள் அறிந்துகொள்ள. வேறு எதுவுமில்லை.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "உங்கள் தொலைபேசி அமைப்புகளில் BeanPool அறிவிப்புகள் முடக்கப்பட்டுள்ளன. அவற்றை இயக்க அமைப்புகளைத் திறக்கவும்."
 }

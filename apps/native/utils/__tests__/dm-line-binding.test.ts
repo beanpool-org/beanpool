@@ -84,6 +84,20 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: undefined } }));
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ ...h.me, callsign: 'Me' })) }));
+// Front doors S3 (#2524 finding 4): createConversationApi makes the first-message notification ask for every DM start.
+// Recorded here with what the node had been asked by then (onAsk), so a test can tell the ask came first.
+const firstMessageAsk = vi.hoisted(() => ({
+    calls: [] as Array<{ action: string; key: string | null | undefined; seen: unknown }>,
+    onAsk: null as null | (() => unknown),
+    fail: false,
+}));
+vi.mock('../notification-permission', () => ({
+    askNotificationPermissionOnAction: vi.fn(async (action: string, key?: string | null) => {
+        firstMessageAsk.calls.push({ action, key, seen: firstMessageAsk.onAsk?.() });
+        if (firstMessageAsk.fail) throw new Error('the ask failed');
+        return 'unanswered';
+    }),
+}));
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn((url: string | null) => (url && url.includes('castlemaine') ? 'community_castlemaine.db' : 'beanpool_mullum.beanpool.org.db')), addSavedNode: vi.fn(async () => {}) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 vi.mock('../crypto', async (orig) => ({
@@ -5225,6 +5239,39 @@ describe('the DM guard list: one bounded list per community file, never read as 
         expect(s).toMatchObject({ err: 'DmKeyChangedError', posts: 0, plaintext: [], readBy: [] });
         expect(await isDmKeyChangePending(made.id)).toBe(true);
         expect(storedPins(ana)[made.id.toLowerCase()]).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
+    }, 120_000);
+
+    // Front doors S3 (#2524 finding 4): the first message's notification ask covered only the New message picker. Every DM
+    // start (Message on a listing, a profile, People, a shop, a project's keeper, a deal's approve or decline, New
+    // message) calls createConversationApi, so the ask is made there, before the node is asked to make the chat.
+    it('S3 every DM start makes the first-message notification ask, for this account, before the node is asked', async () => {
+        node.convs = [];
+        await phoneOf(ana);
+        firstMessageAsk.calls.length = 0;
+        firstMessageAsk.onAsk = () => node.convs.length;
+        try {
+            const made = await askedForBen([ana.publicKey, ben.publicKey]);
+            expect(made.result.err).toBeNull();
+            expect(firstMessageAsk.calls).toEqual([{ action: 'message', key: ana.publicKey, seen: 0 }]);
+        } finally {
+            firstMessageAsk.onAsk = null;
+        }
+    }, 120_000);
+
+    it('S3 an ask that fails never stops the chat', async () => {
+        node.convs = [];
+        await phoneOf(ana);
+        firstMessageAsk.calls.length = 0;
+        firstMessageAsk.fail = true;
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const made = await askedForBen([ana.publicKey, ben.publicKey]);
+            expect(firstMessageAsk.calls).toHaveLength(1);
+            expect(made.result).toMatchObject({ err: null, row: 'dm', people: ['Ana', 'Ben'] });
+        } finally {
+            firstMessageAsk.fail = false;
+            warn.mockRestore();
+        }
     }, 120_000);
 
     // SEC2b (confirmation 11, finding 1): the creation pin was unchecked, so the history rule judged it again at the first

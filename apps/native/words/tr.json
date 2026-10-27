@@ -6113,5 +6113,9 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” yayında ama dükkânında değil. Koymak için onu aç, İlanı Düzenle'ye dokun ve Bunu dükkânına koy'u işaretle.",
   "✓ Friend": "✓ Arkadaş",
   "✓ nonce issued": "✓ nonce verildi",
-  "Failed to load": "Yüklenemedi"
+  "Failed to load": "Yüklenemedi",
+  "Turn on": "Aç",
+  "Turn on notifications?": "Bildirimleri aç?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "BeanPool bildirimleri telefonunuzun ayarlarında kapalı. Açmak için Ayarlar'ı açın."
 }

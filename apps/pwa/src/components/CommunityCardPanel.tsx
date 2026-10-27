@@ -11,7 +11,7 @@ export function CommunityCardPanel({ card, onSignIn, compact = false }: { card: 
     const name = communityCardName(card, { t });
     const facts = communityCardFacts(card, { t, tn });
     const ask = askDoor(card, onAndroid());
-    const door = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold no-underline break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
+    const door = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
     return (
         <section data-testid="community-card" aria-label={name} className="text-left mb-6 pb-6 border-b border-nature-200 dark:border-nature-800">
             <p className="m-0 mb-1 text-sm font-semibold text-bp-ink-accent">{t(W.kicker)}</p>
@@ -24,7 +24,7 @@ export function CommunityCardPanel({ card, onSignIn, compact = false }: { card: 
             {!compact && (
                 <div className="grid gap-3">
                     {ask.href && (
-                        <a href={ask.href} data-testid="community-card-ask" className={`${door} bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on`}>
+                        <a href={ask.href} data-testid="community-card-ask" className={`${door} no-underline bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on`}>
                             {t(W.ask)}
                         </a>
                     )}

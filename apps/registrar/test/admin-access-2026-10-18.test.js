@@ -292,6 +292,7 @@ test('node-facing /api/registrar/* routes and invites need no token under Access
         assert.equal((await w.heal(key, {})).status, 200);
         assert.equal((await w.holder(key, { name: 'nodename' })).status, 200);
         assert.equal((await w.release(key)).body.status, 'released');
+        assert.deepEqual(await w.invite('nodename'), { status: 302, location: 'https://beanpool.org/getting-started#invite' });
         // A garbage Access header on a node route is ignored, not refused.
         const r = await worker.fetch(new Request('https://beanpool.org/api/registrar/available?name=othername', { headers: { 'cf-access-jwt-assertion': 'garbage' } }), w.env);
         assert.equal(r.status, 200);

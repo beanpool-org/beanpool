@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, communitiesNear, findCommunityState, isNearKm, knownCommunityCount } from '../find-community';
+import {
+    FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, NOT_ANSWERING_AFTER_HOURS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount,
+    notAnsweringLately,
+} from '../find-community';
 
 const FETCHED = '2026-10-14T08:00:00.000Z';
 const at = (km: number | null) => ({ distanceKm: km });
@@ -65,5 +68,25 @@ describe('findCommunityState: what "Find your community" may say', () => {
         const all = [FIND_COMMUNITY_WORDS.notLoaded, FIND_COMMUNITY_WORDS.noneNear, FIND_COMMUNITY_WORDS.farLead(2), FIND_COMMUNITY_WORDS.start].join(' ');
         expect(all).not.toMatch(/ask to be told|Beans|Ʀ/i);
         expect(FIND_COMMUNITY_WORDS.notLoaded).not.toMatch(/\bno community\b|\bnone\b/i);
+    });
+});
+
+describe('notAnsweringLately: "Not answering lately" past 36 h since the last push (front doors S13)', () => {
+    const NOW = Date.parse('2026-10-28T12:00:00.000Z');
+    const ago = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
+    it('says it past 36 h, and not before', () => {
+        expect(NOT_ANSWERING_AFTER_HOURS).toBe(36);
+        expect(notAnsweringLately(ago(1), NOW)).toBe(false);
+        expect(notAnsweringLately(ago(35.9), NOW)).toBe(false);
+        expect(notAnsweringLately(ago(36), NOW)).toBe(false);
+        expect(notAnsweringLately(ago(36.1), NOW)).toBe(true);
+        expect(notAnsweringLately(ago(6 * 24 + 23), NOW)).toBe(true);
+    });
+    it('never says it when the time is unknown or in the future', () => {
+        for (const v of [null, undefined, '', 'yesterday', 1_700_000_000_000, {}, 'x'.repeat(80)]) expect(notAnsweringLately(v, NOW)).toBe(false);
+        expect(notAnsweringLately(ago(-48), NOW)).toBe(false);
+    });
+    it('is a word() key both apps translate', () => {
+        expect(FIND_COMMUNITY_WORDS.notAnswering).toBe('Not answering lately');
     });
 });

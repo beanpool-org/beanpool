@@ -133,7 +133,7 @@ for (const theme of ['light', 'dark']) {
             const [g, t, reg] = v.rows;
             assert.match(g.text, /^The global community Answering global\.beanpool\.org 99\.87% of checks answered since 20 Sept?\. Last incident: 15 Oct,? (?:at )?12:00 for 35 minutes: it did not answer in time\.$/);
             assert.match(t.text, /^The test community Down test\.beanpool\.org 99\.84% of checks answered since 20 Sept?\. Down since 18 Oct,? (?:at )?11:48: it answered with an error \(HTTP 502\)\.$/);
-            assert.match(reg.text, /^Community addresses Answering beanpool\.org: gives communities .* new ones and beanpool\.org\/i\/ links wait\. 99\.79% of its 5-minute checks ran since 20 Sept?\. Last incident: 13 Oct,? (?:at )?12:00 for 1 hour: the checks did not run\.$/);
+            assert.match(reg.text, /^Community addresses Answering beanpool\.org: gives communities .* new ones wait\. 99\.79% of its 5-minute checks ran since 20 Sept?\. Last incident: 13 Oct,? (?:at )?12:00 for 1 hour: the checks did not run\.$/);
             assert.match(v.note, /^Checked 18 Oct,? (?:at )?11:58 UTC\.$/);
             assert.equal(v.tone, null);
             assert.equal(g.word, v.tokens.up, 'answering: --success-ink');

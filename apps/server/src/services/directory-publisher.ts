@@ -4,7 +4,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { isDirectoryPushInterval, DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS, LEGACY_NEVER_INTERVAL } from '../config/community-settings.js';
 import { getP2PNode, getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
-import { listingFields, PROMISE_GAP_MESSAGES, type ListingFields, type PromiseGap, type PromiseStatus } from '../engine/directory-promise.js';
+import { listingFields, closingDayReached, PROMISE_GAP_MESSAGES, type ListingFields, type PromiseGap, type PromiseStatus } from '../engine/directory-promise.js';
 
 // The URL of the directory registry Edge Function. Read at every push, so a test can point it at a fixture.
 function directoryRegistryUrl(): string {
@@ -25,6 +25,8 @@ export const DEFAULT_COMMUNITY_NAME = 'BeanPool Community';
 export const HELD_BACK_NAME_MESSAGE = `Not listed in the directory yet: this community has no name of its own ("${DEFAULT_COMMUNITY_NAME}" is the default). Name it in Settings and it is listed at once.`;
 /** Why a server with DIRECTORY_UNLISTED set is held back. */
 export const HELD_BACK_UNLISTED_MESSAGE = 'Not listed in the directory: DIRECTORY_UNLISTED is set in this server\'s .env (our test and review nodes set it). Remove it and restart to be listed.';
+/** Why a community whose closing day has come pushes no more (it was withdrawn on the day). */
+export const CLOSED_MESSAGE = 'Not listed in the directory: the closing day set in Settings → Directory has come, so this community left the directory. Clear the closing day, or set a later one, to be listed again.';
 /** Why a community whose new beanpool.org address is still on the address service's probation is held back. */
 export const HELD_BACK_PROBATION_MESSAGE = 'Not listed in the directory yet: this server\'s beanpool.org address is new, and the address service checks a new address for a while before it is listed. It is listed by itself once that is done.';
 
@@ -216,6 +218,80 @@ async function signedPush(payload: Record<string, unknown>, privateKey: NonNulla
     });
 }
 
+/** Why the node withdraws: the owners switched Listed off, the closing day came, or DIRECTORY_UNLISTED was found at boot. */
+export type WithdrawReason = 'listed_off' | 'closing_day' | 'unlisted_at_boot';
+
+export interface WithdrawResult {
+    /** Whether a withdraw was sent at all. */
+    sent: boolean;
+    /** Whether the registry took it (2xx). */
+    ok: boolean;
+    /** Why nothing was sent, or what went wrong. */
+    reason?: string;
+}
+
+let withdrawing: Promise<WithdrawResult> | null = null;
+
+/**
+ * Takes this community off the public directory at once (front doors S13, design §2.2): POSTs `{ nodeId, timestamp,
+ * unlist: true }`, signed exactly as a push is (signedPush: the node key, the same two headers), and the registry deletes
+ * the row whose node_id is this key's PeerId (supabase/functions/directory-register, v6). Nothing else is in it, not even
+ * the callsign: a registry from before v6 refuses it for the missing field (400) and never mistakes it for a push.
+ *
+ * Only a main server, and only one that has pushed (`lastDirectoryPush` recorded): a node that was never listed sends
+ * nothing, so no node needs our servers for anything here. A withdraw the registry took clears `lastDirectoryPush`, so
+ * each way out sends one and never repeats; one that failed keeps it (Listed off's and the boot's are tried again at the
+ * next boot, the closing day's at the next timed push; the directory drops a row unpushed for 7 days in any case).
+ * Never throws.
+ */
+export async function withdrawFromDirectory(reason: WithdrawReason): Promise<WithdrawResult> {
+    if (getNodeRole() !== 'primary') return { sent: false, ok: false, reason: 'not a main server' };
+    if (!getNodeConfig().lastDirectoryPush) return { sent: false, ok: false, reason: 'never pushed' };
+    if (withdrawing) return withdrawing;
+    const run = (async (): Promise<WithdrawResult> => {
+        try {
+            const p2pNode = getP2PNode();
+            const privateKey = getPrivateKey();
+            if (!p2pNode || !privateKey) return { sent: false, ok: false, reason: 'P2P node not ready' };
+            const res = await signedPush({ nodeId: p2pNode.peerId.toString(), timestamp: Date.now(), unlist: true }, privateKey);
+            if (!res.ok) {
+                const why = `HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`;
+                console.warn(`[Directory] ⚠️ Could not take this community off the directory (${reason}): ${why}. The directory drops a row not pushed for 7 days.`);
+                return { sent: true, ok: false, reason: why };
+            }
+            await res.body?.cancel().catch(() => { /* answered */ });
+            updateNodeConfig({ lastDirectoryPush: undefined });
+            console.log(`[Directory] 📴 Took this community off the directory (${reason}).`);
+            return { sent: true, ok: true };
+        } catch (err: any) {
+            console.warn(`[Directory] ⚠️ Could not take this community off the directory (${reason}): ${err?.message || err}`);
+            return { sent: true, ok: false, reason: String(err?.message || err) };
+        }
+    })();
+    // Cleared once it settles, from outside it: a run that returns before its first await would otherwise clear the slot
+    // before it was set, and hold it for good.
+    withdrawing = run;
+    void run.finally(() => { if (withdrawing === run) withdrawing = null; });
+    return run;
+}
+
+/** The owners switched Listed off (config/community-shape-write.ts): the row goes now, not in 7 days. Not awaited. */
+export function listedSwitchedOff(): void {
+    withdrawFromDirectory('listed_off').catch(() => { /* never throws */ });
+}
+
+/**
+ * At boot (index.ts, a main server): DIRECTORY_UNLISTED is set, or Listed is off, and this node pushed before, so its row
+ * may still be out there: the withdraw at Listed off failed (the registry down, the node offline), or the server stopped
+ * before it was sent. It goes now, once (the withdraw clears the record). Null when there is nothing to do: a listed
+ * community, or one that never pushed (the global profile, which is never listed, among them).
+ */
+export async function withdrawIfUnlistedAtBoot(): Promise<WithdrawResult | null> {
+    const unlistedByEnv = directoryUnlistedByEnv();
+    if ((!unlistedByEnv && getProfileSwitches().publishToDirectory) || getNodeRole() !== 'primary' || !getNodeConfig().lastDirectoryPush) return null;
+    return withdrawFromDirectory(unlistedByEnv ? 'unlisted_at_boot' : 'listed_off');
+}
+
 export async function pushDirectoryNow() {
     if (getNodeRole() !== 'primary') {
         return { success: false, error: 'Directory push is only allowed on primary nodes' };
@@ -228,6 +304,12 @@ export async function pushDirectoryNow() {
     // Read at every push too: the timer runs for an unnamed community, and sends nothing until it is named.
     const held = holdBack();
     if (held) return { success: false, error: HELD_BACK_MESSAGES[held], heldBack: held };
+    // The closing day has come: the community leaves the directory now (once: the withdraw clears lastDirectoryPush) and
+    // is pushed no more, or the next timed push would list it again. Clearing the day, or a later one, lists it again.
+    if (closingDayReached()) {
+        const withdrawn = await withdrawFromDirectory('closing_day');
+        return { success: false, error: CLOSED_MESSAGE, closed: true, withdrawn: withdrawn.sent && withdrawn.ok };
+    }
     try {
         const directoryInfo = getDirectoryInfo();
         const localConfig = getLocalConfig();
@@ -291,8 +373,20 @@ export async function pushDirectoryNow() {
         }
         
         // Update lastDirectoryPush
-        updateNodeConfig({ lastDirectoryPush: new Date().toISOString() });
-        
+        const pushedAt = new Date().toISOString();
+        updateNodeConfig({ lastDirectoryPush: pushedAt });
+
+        // Listed went off while this push was out (the boot's, the timer's, a rename's): the withdraw sent then may have
+        // reached the registry first, and this push has put the row back. So it is withdrawn again now, once any withdraw
+        // still out has settled (it may clear the record, and a second call would only wait on it), with this push
+        // recorded so that the withdraw is sent.
+        if (!getProfileSwitches().publishToDirectory) {
+            await withdrawing;
+            updateNodeConfig({ lastDirectoryPush: pushedAt });
+            const withdrawn = await withdrawFromDirectory('listed_off');
+            return { success: false, error: NOT_LISTED_MESSAGE, withdrawn: withdrawn.sent && withdrawn.ok };
+        }
+
         console.log(`[Directory] ✅ Successfully published to directory registry`);
         return {
             success: true, timestamp: new Date().toISOString(),

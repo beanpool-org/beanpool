@@ -45,8 +45,8 @@ test('a paused name is taken: available says so, another key\'s claim is 409, an
             assert.equal((await w.available('riverside')).body.available, false, reason);
             assert.equal((await w.claim(other, { name: 'riverside' })).status, 409, reason);
         }
-        // An invite for a paused community still resolves (it exists; the app shows it unreachable).
-        assert.equal(await w.invite('riverside'), 200);
+        // An invite path now redirects to getting-started#invite regardless of status.
+        assert.deepEqual(await w.invite('riverside'), { status: 302, location: 'https://beanpool.org/getting-started#invite' });
     } finally { w.restore(); }
 });
 
@@ -376,7 +376,7 @@ test('a released name: held 30 days for the same key, refused to others, then fr
         assert.equal(w.cf.liveTunnel(first.tunnel_id), null);
         assert.equal(w.cf.recordAt('lakeside.beanpool.org'), null);
         assert.equal((await w.status(owner)).body.status, 'released');
-        assert.equal(await w.invite('lakeside'), 404);
+        assert.deepEqual(await w.invite('lakeside'), { status: 302, location: 'https://beanpool.org/getting-started#invite' });
 
         // Held: taken to everyone else.
         assert.deepEqual((await w.available('lakeside')).body, { available: false, reason: 'taken', tier: 'auto' });
@@ -435,7 +435,7 @@ test('admin block: the name is blocked — held, never free, and its owner canno
         const st = await w.status(owner);
         assert.equal(st.body.status, 'blocked');
         assert.equal(st.body.reason, 'admin');
-        assert.equal(await w.invite('badname'), 404);
+        assert.deepEqual(await w.invite('badname'), { status: 302, location: 'https://beanpool.org/getting-started#invite' });
 
         // `revoke` is block's old name: an admin revoke no longer frees anything.
         await liveName(w, 'otherbad', other);

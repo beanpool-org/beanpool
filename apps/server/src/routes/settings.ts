@@ -492,9 +492,9 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const result = await pushDirectoryNow();
     if (!result.success) {
-        // Not listed by the profile's switch (the global node), or held back (no name of its own yet, DIRECTORY_UNLISTED),
-        // is the node's setting, not a server failure: 409, with the answer saying which.
-        ctx.status = (result.error === NOT_LISTED_MESSAGE || result.heldBack) ? 409 : 500;
+        // Not listed by the profile's switch (the global node), held back (no name of its own yet, DIRECTORY_UNLISTED), or
+        // past its closing day, is the node's setting, not a server failure: 409, with the answer saying which.
+        ctx.status = (result.error === NOT_LISTED_MESSAGE || result.heldBack || result.closed) ? 409 : 500;
     }
     ctx.body = result;
 });

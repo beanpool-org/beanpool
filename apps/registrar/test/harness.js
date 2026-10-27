@@ -286,7 +286,12 @@ export async function world({ migrations, env: extra, serve = {} } = {}) {
         available: async (name) => call(new Request(`https://beanpool.org/api/registrar/available?name=${name}`)),
         // `body`: the action's JSON body, when it takes one (release: { free_now: true }).
         admin: async (name, action, body) => call(adminRequest(name, action, body)),
-        invite: async (code) => (await worker.fetch(new Request(`https://beanpool.org/i/${code}`), env)).status,
+        invite: async (code = '') => {
+            const p = String(code).startsWith('/') ? code : `/i/${code}`;
+            const url = String(code).startsWith('http') ? code : `https://beanpool.org${p}`;
+            const res = await worker.fetch(new Request(url), env);
+            return { status: res.status, location: res.headers.get('location') };
+        },
         backdate: async (name, fields) => db.updateAllocation(env, name, fields),
         // A live name's probation over (migration 0011), as enough ok sweeps would end it: for a test about something else.
         verify: async (name) => db.updateAllocation(env, name, { verified_at: nowS() }),

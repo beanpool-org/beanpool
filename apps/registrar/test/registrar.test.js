@@ -200,58 +200,53 @@ test('Ed25519 Signature Verification: claim and status endpoints', async () => {
     assert.equal(badStatusRes.status, 401);
 });
 
-test('R2: /i/:code Invite resolution and deep-linking response', async () => {
-    const d1 = createMockD1();
-    const env = mockEnv(d1);
+test('R2: /i/* routes redirect 302 to getting-started#invite without touching DB or KV', async () => {
+    let dbTouched = false;
+    let kvTouched = false;
+    const env = {
+        DB: new Proxy({}, {
+            get(_, prop) {
+                dbTouched = true;
+                throw new Error(`DB.${String(prop)} should not be accessed on /i/ route`);
+            }
+        }),
+        STATUS: new Proxy({}, {
+            get(_, prop) {
+                kvTouched = true;
+                throw new Error(`STATUS.${String(prop)} should not be accessed on /i/ route`);
+            }
+        }),
+    };
 
-    // Seed an allocation and an invite
-    const { pubHex } = await generateKeypair();
-    await db.insertAllocation(env, {
-        name: 'mullum',
-        node_pubkey: pubHex,
-        hostname: 'mullum.beanpool.org',
-        mode: 'tunnel',
-        status: 'live',
-        requested_at: Math.floor(Date.now() / 1000)
-    });
-    await db.insertInvite(env, 'INV-1234-5678', 'mullum');
+    const targetUrl = 'https://beanpool.org/getting-started#invite';
 
-    // Case 1: Query param ?n= provided. Until the 2026-10-01 review (M2) this asserted that ?n=cairns — a name nobody
-    // holds — got a join page for cairns.beanpool.org: beanpool.org vouching for a host it doesn't route. Now ?n= must
-    // name a live name of this registrar.
-    const resUnheld = await worker.fetch(new Request('https://beanpool.org/i/cairns?n=cairns', { method: 'GET' }), env);
-    assert.equal(resUnheld.status, 404);
-    assert.ok(!(await resUnheld.text()).includes('beanpool://join'));
-    const reqWithN = new Request('https://beanpool.org/i/cairns?n=mullum', { method: 'GET' });
-    const resN = await worker.fetch(reqWithN, env);
-    assert.equal(resN.status, 200);
-    const htmlN = await resN.text();
-    assert.ok(htmlN.includes('beanpool://join?node=mullum.beanpool.org&code=cairns'));
-    assert.ok(htmlN.includes('Community node: mullum.beanpool.org'));
-    assert.ok(htmlN.includes('apps.apple.com/app/beanpool'));
-    assert.ok(htmlN.includes('play.google.com/store/apps/details?id=org.beanpool'));
+    // /i/abc -> 302 with Location
+    const resAbc = await worker.fetch(new Request('https://beanpool.org/i/abc', { method: 'GET' }), env);
+    assert.equal(resAbc.status, 302);
+    assert.equal(resAbc.headers.get('location'), targetUrl);
 
-    // Case 2: D1 invite lookup match
-    const reqInvite = new Request('https://beanpool.org/i/INV-1234-5678', { method: 'GET' });
-    const resInvite = await worker.fetch(reqInvite, env);
-    assert.equal(resInvite.status, 200);
-    const htmlInvite = await resInvite.text();
-    assert.ok(htmlInvite.includes('beanpool://join?node=mullum.beanpool.org&code=INV-1234-5678'));
-    assert.ok(htmlInvite.includes('Community node: mullum.beanpool.org'));
+    // /i/ -> 302 with Location
+    const resBare = await worker.fetch(new Request('https://beanpool.org/i/', { method: 'GET' }), env);
+    assert.equal(resBare.status, 302);
+    assert.equal(resBare.headers.get('location'), targetUrl);
 
-    // Case 3: Allocation lookup directly by node name code
-    const reqAlloc = new Request('https://beanpool.org/i/mullum', { method: 'GET' });
-    const resAlloc = await worker.fetch(reqAlloc, env);
-    assert.equal(resAlloc.status, 200);
-    const htmlAlloc = await resAlloc.text();
-    assert.ok(htmlAlloc.includes('beanpool://join?node=mullum.beanpool.org&code=mullum'));
+    // /i/x?n=foo -> 302 with Location
+    const resQuery = await worker.fetch(new Request('https://beanpool.org/i/x?n=foo', { method: 'GET' }), env);
+    assert.equal(resQuery.status, 302);
+    assert.equal(resQuery.headers.get('location'), targetUrl);
 
-    // Case 4: Invalid/unmapped code without ?n= -> 404 Error Page
-    const reqBad = new Request('https://beanpool.org/i/unmapped-code-999', { method: 'GET' });
-    const resBad = await worker.fetch(reqBad, env);
-    assert.equal(resBad.status, 404);
-    const htmlBad = await resBad.text();
-    assert.ok(htmlBad.includes('Invite code not found'));
+    // /i/INV-1234-5678 -> 302 with Location
+    const resInvite = await worker.fetch(new Request('https://beanpool.org/i/INV-1234-5678', { method: 'GET' }), env);
+    assert.equal(resInvite.status, 302);
+    assert.equal(resInvite.headers.get('location'), targetUrl);
+
+    // HEAD method also redirects 302 with Location
+    const resHead = await worker.fetch(new Request('https://beanpool.org/i/abc', { method: 'HEAD' }), env);
+    assert.equal(resHead.status, 302);
+    assert.equal(resHead.headers.get('location'), targetUrl);
+
+    assert.equal(dbTouched, false, 'database must not be accessed on /i/ route');
+    assert.equal(kvTouched, false, 'KV must not be accessed on /i/ route');
 });
 
 // Until 2026-09-24 part 2 below asserted that this reply — JSON, but no valid signature — was a 'mismatch' and

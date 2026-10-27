@@ -39,6 +39,7 @@ const WORDS = {
         somethingWrong: 'Something went wrong. Please try again.',
         subscribe: 'Subscribe',
         readIn: (lang) => `Read this in ${lang} →`,
+        notAnswering: 'Not answering lately',
     },
     es: {
         noneNear: 'Aún no hay una comunidad cerca de ti.',
@@ -52,6 +53,7 @@ const WORDS = {
         somethingWrong: 'Algo salió mal. Por favor, inténtalo de nuevo.',
         subscribe: 'Suscribirse',
         readIn: (lang) => `Leer esto en ${lang} →`,
+        notAnswering: 'No responde últimamente',
     },
     pt: {
         noneNear: 'Ainda não há comunidade perto de você.',
@@ -65,6 +67,7 @@ const WORDS = {
         somethingWrong: 'Algo deu errado. Por favor, tente novamente.',
         subscribe: 'Inscrever-se',
         readIn: (lang) => `Ler isto em ${lang} →`,
+        notAnswering: 'Sem resposta ultimamente',
     },
     fr: {
         noneNear: 'Pas encore de communauté près de chez vous.',
@@ -78,6 +81,7 @@ const WORDS = {
         somethingWrong: 'Un problème est survenu. Veuillez réessayer.',
         subscribe: 'S\'inscrire',
         readIn: (lang) => `Lire en ${lang} →`,
+        notAnswering: 'Ne répond pas ces derniers temps',
     },
     ru: {
         noneNear: 'Рядом с вами пока нет сообщества.',
@@ -91,6 +95,7 @@ const WORDS = {
         somethingWrong: 'Что-то пошло не так. Пожалуйста, попробуйте еще раз.',
         subscribe: 'Подписаться',
         readIn: (lang) => `Читать на ${lang} →`,
+        notAnswering: 'В последнее время не отвечает',
     },
     ar: {
         noneNear: 'لا يوجد مجتمع بالقرب منك بعد.',
@@ -104,6 +109,7 @@ const WORDS = {
         somethingWrong: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.',
         subscribe: 'اشتراك',
         readIn: (lang) => `اقرأ هذا باللغة ${lang} ←`,
+        notAnswering: 'لا يستجيب مؤخرًا',
     },
     hi: {
         noneNear: 'आपके पास अभी कोई समुदाय नहीं है।',
@@ -117,6 +123,7 @@ const WORDS = {
         somethingWrong: 'कुछ गलत हो गया। कृपया पुन: प्रयास करें।',
         subscribe: 'सब्सक्राइब करें',
         readIn: (lang) => `इसे ${lang} में पढ़ें →`,
+        notAnswering: 'हाल में जवाब नहीं दे रहा',
     },
     bn: {
         noneNear: 'আপনার আশেপাশে এখনও কোনো কমিউনিটি নেই।',
@@ -130,6 +137,7 @@ const WORDS = {
         somethingWrong: 'কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
         subscribe: 'সাবস্ক্রাইব করুন',
         readIn: (lang) => `এটি ${lang} এ পড়ুন →`,
+        notAnswering: 'সম্প্রতি সাড়া দিচ্ছে না',
     },
     id: {
         noneNear: 'Belum ada komunitas di dekat Anda.',
@@ -143,6 +151,7 @@ const WORDS = {
         somethingWrong: 'Terjadi kesalahan. Silakan coba lagi.',
         subscribe: 'Berlangganan',
         readIn: (lang) => `Baca ini dalam ${lang} →`,
+        notAnswering: 'Belakangan tidak merespons',
     },
     'zh-Hans': {
         noneNear: '您附近暂无社区。',
@@ -156,6 +165,7 @@ const WORDS = {
         somethingWrong: '出了点问题。请重试。',
         subscribe: '订阅',
         readIn: (lang) => `用${lang}阅读 →`,
+        notAnswering: '最近没有响应',
     },
     'zh-Hant': {
         noneNear: '您附近尚無社群。',
@@ -169,6 +179,7 @@ const WORDS = {
         somethingWrong: '發生問題。請再試一次。',
         subscribe: '訂閱',
         readIn: (lang) => `用${lang}閱讀 →`,
+        notAnswering: '最近沒有回應',
     },
     it: {
         noneNear: 'Nessuna comunità ancora vicino a te.',
@@ -182,6 +193,7 @@ const WORDS = {
         somethingWrong: 'Qualcosa è andato storto. Riprova.',
         subscribe: 'Iscriviti',
         readIn: (lang) => `Leggi in ${lang} →`,
+        notAnswering: 'Non risponde di recente',
     },
     de: {
         noneNear: 'Noch keine Community in deiner Nähe.',
@@ -195,6 +207,7 @@ const WORDS = {
         somethingWrong: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
         subscribe: 'Abonnieren',
         readIn: (lang) => `Dies auf ${lang} lesen →`,
+        notAnswering: 'Antwortet in letzter Zeit nicht',
     },
     tr: {
         noneNear: 'Yakınınızda henüz bir topluluk yok.',
@@ -208,6 +221,7 @@ const WORDS = {
         somethingWrong: 'Bir şeyler ters gitti. Lütfen tekrar deneyin.',
         subscribe: 'Abone Ol',
         readIn: (lang) => `Bunu ${lang} dilinde oku →`,
+        notAnswering: 'Son zamanlarda yanıt vermiyor',
     },
     sw: {
         noneNear: 'Bado hakuna jumuiya karibu nawe.',
@@ -221,6 +235,7 @@ const WORDS = {
         somethingWrong: 'Hitilafu imetokea. Tafadhali jaribu tena.',
         subscribe: 'Jiandikishe',
         readIn: (lang) => `Soma hii kwa ${lang} →`,
+        notAnswering: 'Haijibu siku za karibuni',
     },
     ml: {
         noneNear: 'നിങ്ങളുടെ അടുത്ത് ഇതുവരെ കമ്മ്യൂണിറ്റികളൊന്നുമില്ല.',
@@ -234,6 +249,7 @@ const WORDS = {
         somethingWrong: 'എന്തോ കുഴപ്പമുണ്ടായി. വീണ്ടും ശ്രമിക്കുക.',
         subscribe: 'സബ്‌സ്‌ക്രൈബ് ചെയ്യുക',
         readIn: (lang) => `ഇത് ${lang}ൽ വായിക്കുക →`,
+        notAnswering: 'അടുത്തിടെ പ്രതികരിക്കുന്നില്ല',
     },
     ta: {
         noneNear: 'உங்கள் அருகில் இன்னும் சமூகம் இல்லை.',
@@ -247,6 +263,7 @@ const WORDS = {
         somethingWrong: 'ஏதோ தவறாகிவிட்டது. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
         subscribe: 'குழுசேர்',
         readIn: (lang) => `இதை ${lang} இல் படிக்கவும் →`,
+        notAnswering: 'சமீபத்தில் பதிலளிக்கவில்லை',
     },
     uk: {
         noneNear: 'Поблизу вас поки немає спільноти.',
@@ -260,6 +277,7 @@ const WORDS = {
         somethingWrong: 'Щось пішло не так. Будь ласка, спробуйте ще раз.',
         subscribe: 'Підписатися',
         readIn: (lang) => `Читати ${lang} мовою →`,
+        notAnswering: 'Останнім часом не відповідає',
     },
     ur: {
         noneNear: 'آپ کے قریب ابھی کوئی کمیونٹی نہیں ہے۔',
@@ -273,6 +291,7 @@ const WORDS = {
         somethingWrong: 'کچھ خرابی پیش آگئی۔ براہ کرم دوبارہ کوشش کریں۔',
         subscribe: 'سبسکرائب کریں',
         readIn: (lang) => `اسے ${lang} میں پڑھیں ←`,
+        notAnswering: 'حال ہی میں جواب نہیں دے رہا',
     },
     fa: {
         noneNear: 'هنوز جامعه‌ای نزدیک شما وجود ندارد.',
@@ -286,6 +305,7 @@ const WORDS = {
         somethingWrong: 'مشکلی پیش آمد. لطفاً دوباره تلاش کنید.',
         subscribe: 'اشتراک',
         readIn: (lang) => `این را به زبان ${lang} بخوانید ←`,
+        notAnswering: 'اخیراً پاسخ نمی‌دهد',
     },
     vi: {
         noneNear: 'Chưa có cộng đồng nào gần bạn.',
@@ -299,6 +319,7 @@ const WORDS = {
         somethingWrong: 'Đã xảy ra lỗi. Vui lòng thử lại.',
         subscribe: 'Đăng ký',
         readIn: (lang) => `Đọc bằng ${lang} →`,
+        notAnswering: 'Gần đây không phản hồi',
     },
     el: {
         noneNear: 'Δεν υπάρχει ακόμα κοινότητα κοντά σας.',
@@ -312,6 +333,7 @@ const WORDS = {
         somethingWrong: 'Κάτι πήγε στραβά. Παρακαλώ δοκιμάστε ξανά.',
         subscribe: 'Εγγραφή',
         readIn: (lang) => `Διαβάστε το στα ${lang} →`,
+        notAnswering: 'Δεν απαντά τελευταία',
     },
     fil: {
         noneNear: 'Wala pang komunidad na malapit sa iyo.',
@@ -325,6 +347,7 @@ const WORDS = {
         somethingWrong: 'May nagkaproblema. Pakisubukan muli.',
         subscribe: 'Mag-subscribe',
         readIn: (lang) => `Basahin ito sa ${lang} →`,
+        notAnswering: 'Hindi sumasagot nitong mga nakaraan',
     },
     ja: {
         noneNear: 'お近くにコミュニティはまだありません。',
@@ -338,6 +361,7 @@ const WORDS = {
         somethingWrong: '問題が発生しました。もう一度お試しください。',
         subscribe: '登録する',
         readIn: (lang) => `${lang}で読む →`,
+        notAnswering: '最近応答がありません',
     },
     ko: {
         noneNear: '주변에 아직 커뮤니티가 없습니다.',
@@ -351,6 +375,7 @@ const WORDS = {
         somethingWrong: '문제가 발생했습니다. 다시 시도해 주세요.',
         subscribe: '구독',
         readIn: (lang) => `${lang}로 읽기 →`,
+        notAnswering: '최근 응답 없음',
     }
 };
 
@@ -448,6 +473,47 @@ function number(v) {
     return Number.isFinite(n) ? n : null;
 }
 
+// ======================== WHICH ROWS ARE SHOWN ========================
+// A listed row is a live, real, named community that leads somewhere (front doors S13). The directory's view,
+// directory_listed, already gives only the rows pushed within 7 days with an https address or a contact, each with its
+// shown_name and last_seen_at; the site checks the same again here, because every row is still what someone
+// published, and because the view may not be there yet (then the site reads the table, with these same rules). The
+// stats count only the rows shown.
+const LISTED_FOR_MS = 7 * 24 * 3600 * 1000;
+/** Past this since its last push, a row says "Not answering lately" under its name (core NOT_ANSWERING_AFTER_HOURS). */
+const NOT_ANSWERING_AFTER_MS = 36 * 3600 * 1000;
+/** The name a node stores when nobody named the community: never a name on the map (the host is shown instead). */
+const DEFAULT_COMMUNITY_NAME = 'beanpool community';
+/** Our own test and review servers: never a community on the map (the directory function refuses their pushes too). */
+const OUR_TEST_HOSTS = ['review.beanpool.org', 'test.beanpool.org', '*.test.beanpool.org'];
+
+function ourTestHost(host) {
+    if (!host) return false;
+    const h = host.toLowerCase();
+    return OUR_TEST_HOSTS.some((entry) => entry.startsWith('*.')
+        ? h.endsWith(entry.slice(1)) && h.length > entry.length - 1
+        : h === entry);
+}
+
+/** A time the directory gave (ms), or null. */
+function timeOf(v) {
+    if (typeof v !== 'string' || v.length > 64) return null;
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : null;
+}
+
+/** Whether a row is shown: not one of ours, somewhere to go (an address or a contact), and pushed within 7 days. */
+function shownRow(row, now) {
+    if (row.host && ourTestHost(row.host)) return false;
+    if (!row.url && !row.email && !row.phone) return false;
+    if (row.lastSeen !== null && now - row.lastSeen > LISTED_FOR_MS) return false;
+    return true;
+}
+
+function notAnswering(row, now) {
+    return row.lastSeen !== null && now - row.lastSeen > NOT_ANSWERING_AFTER_MS;
+}
+
 /** A directory row as the map shows it; anything that isn't what it should be is null or empty. */
 function readRow(node) {
     const r = node && typeof node === 'object' ? node : {};
@@ -458,15 +524,22 @@ function readRow(node) {
     const onEarth = lat !== null && lng !== null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !(lat === 0 && lng === 0);
     const radiusKm = number(sr.radiusKm);
     const members = number(r.member_count);
+    const url = nodeHref(text(r.node_url));
+    const host = url ? new URL(url).hostname : null;
+    // The community's own name; the default or none is shown as its host, so two unnamed rows are never one name.
+    const own = text(r.community_name);
+    const ownName = own && own.toLowerCase() !== DEFAULT_COMMUNITY_NAME ? own : '';
     return {
-        name: text(r.community_name) || text(r.callsign) || 'BeanPool community',
+        name: text(r.shown_name) || ownName || host || own || text(r.callsign) || 'BeanPool community',
         lat: onEarth ? lat : null,
         lng: onEarth ? lng : null,
         radiusKm: radiusKm !== null && radiusKm > 0 && radiusKm <= 20037 ? radiusKm : null,
         memberCount: members !== null && Number.isSafeInteger(members) && members >= 0 ? members : null,
         email: text(r.contact_email),
         phone: text(r.contact_phone),
-        url: nodeHref(text(r.node_url)),
+        url,
+        host,
+        lastSeen: timeOf(r.last_seen_at) ?? timeOf(r.updated_at),
     };
 }
 
@@ -492,10 +565,17 @@ function seeName(row) {
     return own || new URL(row.url).host;
 }
 
-function directoryPopup(row) {
+function directoryPopup(row, now = Date.now()) {
     const box = element('div', 'font-family:Inter,sans-serif;');
     box.appendChild(element('strong', null, row.name));
     box.appendChild(element('br'));
+    if (notAnswering(row, now)) {
+        // Still listed, and still worth a try: the link stays (design §2.3).
+        const quiet = element('span', 'color:var(--text-secondary);font-size:0.85em;font-style:italic;', word('notAnswering'));
+        quiet.className = 'directory-not-answering';
+        box.appendChild(quiet);
+        box.appendChild(element('br'));
+    }
     const facts = [];
     if (row.memberCount !== null) facts.push(word('members', row.memberCount));
     if (row.radiusKm !== null) facts.push(word('radius', row.radiusKm));
@@ -531,15 +611,25 @@ function popupOptions() {
     };
 }
 
+/**
+ * The directory's rows: its view of the rows a stranger is shown (directory_listed), or, while the view is not there yet
+ * (the PR that made it merges before the director applies it), the table itself; the same rules are applied to both
+ * here (shownRow). Throws when neither answers.
+ */
+async function readDirectory() {
+    const listed = await supabaseClient.from('directory_listed').select('*');
+    if (!listed.error) return listed.data;
+    const table = await supabaseClient.from('directory_nodes').select('*');
+    if (table.error) throw listed.error;
+    return table.data;
+}
+
 async function pollNodes() {
     if (!supabaseClient) return;
 
     try {
-        const { data: nodes, error } = await supabaseClient
-            .from('directory_nodes')
-            .select('*');
-
-        if (error) throw error;
+        const nodes = await readDirectory();
+        const now = Date.now();
 
         directoryLoaded = true;
         totalNodes = 0;
@@ -548,13 +638,15 @@ async function pollNodes() {
 
         (Array.isArray(nodes) ? nodes : []).forEach((node) => {
             const row = readRow(node);
+            // Only the rows shown are counted: never our test servers, a row that leads nowhere, or one gone quiet.
+            if (!shownRow(row, now)) return;
             totalNodes++;
             totalMembers += row.memberCount || 0;
             if (row.lat === null || row.lng === null) return;
 
             if (markersLayer && nodeIcon) {
                 L.marker([row.lat, row.lng], { icon: nodeIcon })
-                    .bindPopup(directoryPopup(row), popupOptions())
+                    .bindPopup(directoryPopup(row, now), popupOptions())
                     .addTo(markersLayer);
 
                 if (row.radiusKm !== null) {

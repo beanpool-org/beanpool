@@ -444,7 +444,9 @@ async function main() {
                         try {
                             if (batches.length === failOnCall) return { ok: false, status: 503, json: async () => ({ error: 'The Commons pot is unknown', code: 'POT_UNKNOWN' }) };
                             // The stand-in auth reads the header; settings.js sends the password in the body.
-                            return await realFetch(`${adminBase}${u}`, { ...init, headers: { ...init.headers, 'x-admin-password': body.password } });
+                            // Connection: close — making 950 photo posts blocks the loop past the server's 5 s keep-alive, and
+                            // Node 22's fetch then reuses the socket the server just closed (ECONNRESET on CI, #2508).
+                            return await realFetch(`${adminBase}${u}`, { ...init, headers: { ...init.headers, 'x-admin-password': body.password, connection: 'close' } });
                         } finally { inFlight--; }
                     },
                 });

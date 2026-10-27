@@ -1,4 +1,4 @@
-<!-- source-hash: f7c812a815d0f741 -->
+<!-- source-hash: 0f59c3638bb7f88d -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,6 +25,9 @@
         .global-door .global-browser { text-align: center; margin: 0.6rem 0 0; }
         /* the browser line is a link people tap on a phone: a 48px row, underlined so it reads as one */
         .global-door .global-browser a { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+        /* no Google Play: the download page, a 48px row like the browser line */
+        .global-door .global-apk { margin: 0.25rem 0 0; }
+        .global-door .global-apk a { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
         .global-door.ios-open-pending { display: flex; flex-direction: column; }
         .global-door.ios-open-pending .hero-doors { order: 2; }
         .global-door.ios-open-pending .global-browser { order: 1; margin: 0.5rem 0 1rem; }
@@ -73,6 +76,7 @@
             <div class="hero-door" id="door-play">
                 <a class="btn btn-primary" id="play" href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;referrer=global%3D1">在 Google Play 下載 BeanPool</a>
                 <p>適用於 Android 手機。</p>
+                <p class="global-apk"><a href="android.html">沒有 Google Play？下載應用程式</a></p>
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">在 App Store 下載 BeanPool</a>

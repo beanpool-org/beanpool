@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android-க்கான BeanPool — நேரடிப் பதிவிறக்கம்</title>
+    <meta name="description" content="Google Play இல்லாமல் Android-க்கான BeanPool-ஐப் பதிவிறக்குங்கள்: அதே செயலி, அதே சாவியால் கையொப்பமிடப்பட்டது. தற்போதைய பதிப்பு, அதை எப்படி நிறுவுவது, அது எங்களுடையது என்று எப்படிச் சரிபார்ப்பது.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.6">
+    <style>
+        /* beanpool.org/android: the download, how to install it, and the key to check it by */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The headings land below the fixed bar when a link opens one (#download, #check…) */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content .callout { border-inline-start: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content p strong, .rules-content li strong { color: var(--text-primary); }
+        .rules-content ol { padding-inline-start: 1.75rem; margin-bottom: 1.5rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .rules-content .apk-download a.btn-primary { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+        .rules-content [data-apk="version"] { white-space: nowrap; }
+        /* The key, the command and the file's digest: wrapped anywhere at 320 px, and left to right on every page */
+        .rules-content .apk-code { display: block; padding: 0.75rem 1rem; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.88rem; line-height: 1.6; color: var(--accent-ink); overflow-wrap: anywhere; text-align: left; }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/android">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/android">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/android">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/android">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/android">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/android">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/android">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/android">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/android">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/android">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/android">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/android">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/android">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/android">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/android">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/android">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/android">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/android">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/android">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/android">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/android">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/android">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/android">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/android">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/android">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/android">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool ஐகான்" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                <a href="rules.html">விதிகள்</a>
+                <a href="index.html#features">அம்சங்கள்</a>
+                <a href="help.html">உதவி</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">பயிற்சிகள்</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube-ல் வீடியோ பயிற்சிகளைக் காண்க (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit சமூகத்தில் இணையுங்கள் (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub-ல் காண்க">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <details class="lang-menu desktop-lang-menu">
+                    <summary class="lang-btn" aria-label="மொழியைத் தேர்ந்தெடுக்கவும்" title="மொழியைத் தேர்ந்தெடுக்கவும்"><span aria-hidden="true">🌐</span></summary>
+                    <div class="lang-dropdown">
+                        <a href="../android.html" hreflang="en" lang="en">English</a>
+                        <a href="../es/android.html" hreflang="es" lang="es">Español</a>
+                        <a href="../pt/android.html" hreflang="pt" lang="pt">Português</a>
+                        <a href="../hi/android.html" hreflang="hi" lang="hi">हिन्दी</a>
+                        <a href="../bn/android.html" hreflang="bn" lang="bn">বাংলা</a>
+                        <a href="../fr/android.html" hreflang="fr" lang="fr">Français</a>
+                        <a href="../ar/android.html" hreflang="ar" lang="ar">العربية</a>
+                        <a href="../id/android.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                        <a href="../ru/android.html" hreflang="ru" lang="ru">Русский</a>
+                        <a href="../zh-Hans/android.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                        <a href="../zh-Hant/android.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                        <a href="../it/android.html" hreflang="it" lang="it">Italiano</a>
+                        <a href="../de/android.html" hreflang="de" lang="de">Deutsch</a>
+                        <a href="../tr/android.html" hreflang="tr" lang="tr">Türkçe</a>
+                        <a href="../sw/android.html" hreflang="sw" lang="sw">Kiswahili</a>
+                        <a href="../ml/android.html" hreflang="ml" lang="ml">മലയാളം</a>
+                        <a href="android.html" hreflang="ta" lang="ta" aria-current="page">தமிழ்</a>
+                        <a href="../uk/android.html" hreflang="uk" lang="uk">Українська</a>
+                        <a href="../ur/android.html" hreflang="ur" lang="ur">اردو</a>
+                        <a href="../fa/android.html" hreflang="fa" lang="fa">فارسی</a>
+                        <a href="../vi/android.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                        <a href="../el/android.html" hreflang="el" lang="el">Ελληνικά</a>
+                        <a href="../fil/android.html" hreflang="fil" lang="fil">Filipino</a>
+                        <a href="../ja/android.html" hreflang="ja" lang="ja">日本語</a>
+                        <a href="../ko/android.html" hreflang="ko" lang="ko">한국어</a>
+                    </div>
+                </details>
+                <a href="getting-started.html" class="nav-cta">தொடங்குங்கள்</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="மெனுவைத் திற"><span aria-hidden="true">☰</span> மெனு</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">தொடங்குங்கள்</a>
+                    <details class="lang-menu phone-lang-menu">
+                        <summary class="lang-btn" aria-label="மொழியைத் தேர்ந்தெடுக்கவும்" title="மொழியைத் தேர்ந்தெடுக்கவும்"><span aria-hidden="true">🌐</span> <span>மொழியைத் தேர்ந்தெடுக்கவும்</span></summary>
+                        <div class="lang-dropdown">
+                        <a href="../android.html" hreflang="en" lang="en">English</a>
+                        <a href="../es/android.html" hreflang="es" lang="es">Español</a>
+                        <a href="../pt/android.html" hreflang="pt" lang="pt">Português</a>
+                        <a href="../hi/android.html" hreflang="hi" lang="hi">हिन्दी</a>
+                        <a href="../bn/android.html" hreflang="bn" lang="bn">বাংলা</a>
+                        <a href="../fr/android.html" hreflang="fr" lang="fr">Français</a>
+                        <a href="../ar/android.html" hreflang="ar" lang="ar">العربية</a>
+                        <a href="../id/android.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                        <a href="../ru/android.html" hreflang="ru" lang="ru">Русский</a>
+                        <a href="../zh-Hans/android.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                        <a href="../zh-Hant/android.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                        <a href="../it/android.html" hreflang="it" lang="it">Italiano</a>
+                        <a href="../de/android.html" hreflang="de" lang="de">Deutsch</a>
+                        <a href="../tr/android.html" hreflang="tr" lang="tr">Türkçe</a>
+                        <a href="../sw/android.html" hreflang="sw" lang="sw">Kiswahili</a>
+                        <a href="../ml/android.html" hreflang="ml" lang="ml">മലയാളം</a>
+                        <a href="android.html" hreflang="ta" lang="ta" aria-current="page">தமிழ்</a>
+                        <a href="../uk/android.html" hreflang="uk" lang="uk">Українська</a>
+                        <a href="../ur/android.html" hreflang="ur" lang="ur">اردو</a>
+                        <a href="../fa/android.html" hreflang="fa" lang="fa">فارسی</a>
+                        <a href="../vi/android.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                        <a href="../el/android.html" hreflang="el" lang="el">Ελληνικά</a>
+                        <a href="../fil/android.html" hreflang="fil" lang="fil">Filipino</a>
+                        <a href="../ja/android.html" hreflang="ja" lang="ja">日本語</a>
+                        <a href="../ko/android.html" hreflang="ko" lang="ko">한국어</a>
+                        </div>
+                    </details>
+                    <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                    <a href="rules.html">விதிகள்</a>
+                    <a href="index.html#features">அம்சங்கள்</a>
+                    <a href="help.html">உதவி</a>
+                    <a href="../guide/index.html">உறுப்பினர்களுக்கான வழிகாட்டி</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube-ல் பயிற்சிகள்</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit-ல் r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub-ல் மூலக் குறியீடு</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Android-க்கான BeanPool, பதிவிறக்கமாக</h1>
+        <p class="lede">Google Play இல்லாத Android தொலைபேசிகளுக்கு, அல்லது Google Play-ஐ அடைவது கடினமான இடங்களுக்கு. பெரும்பாலானோர் <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=ta" target="_blank" rel="noopener">Google Play</a>-ஐப் பயன்படுத்த வேண்டும்.</p>
+        <p class="callout"><strong>இது Google Play-இல் உள்ள அதே செயலி, அதே சாவியால் கையொப்பமிடப்பட்டது.</strong> உங்கள் தொலைபேசியில் ஏற்கனவே உள்ள BeanPool மேல் இது நிறுவப்படும், அது Google Play-இலிருந்து வந்தாலும் இங்கிருந்து வந்தாலும், உங்கள் கணக்கு அப்படியே இருக்கும்.</p>
+
+        <h2 id="download">பதிவிறக்கம்</h2>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">BeanPool <span data-apk="version">1.2.83</span> பதிவிறக்கு</span></a></p>
+        <p>பதிப்பு <span data-apk="version">1.2.83</span>, <span data-apk="mb">166</span> MB கோப்பு: முடிந்தால் Wi-Fi பயன்படுத்துங்கள். இது <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a>-இல் உள்ள BeanPool வெளியீடுகளிலிருந்து வருகிறது.</p>
+
+        <h2 id="install">நிறுவுதல்</h2>
+        <ol>
+            <li>பதிவிறக்கம் முடிந்ததும் கோப்பைத் திறங்கள்: அறிவிப்பில் அதைத் தட்டுங்கள், அல்லது தொலைபேசியின் பதிவிறக்கங்களில் தேடுங்கள்.</li>
+            <li>முதல் முறை, உங்கள் உலாவி செயலிகளை நிறுவ அனுமதிக்கும்படி Android கேட்கும். திறக்கும் அமைப்புகளில் அனுமதித்து, பின்னர் திரும்புங்கள்.</li>
+            <li>நிறுவலை உறுதிசெய்யுங்கள். BeanPool ஏற்கனவே உங்கள் தொலைபேசியில் இருந்தால், Android அதைப் புதுப்பிப்பு என்று அழைக்கும். பிறகு BeanPool-ஐத் திறங்கள்.</li>
+        </ol>
+
+        <h2 id="updates">புதுப்பிப்புகள்</h2>
+        <p>இங்கிருந்து பதிவிறக்கிய செயலி தானாகப் புதுப்பிக்காது. புதிய பதிப்பு வந்ததும் BeanPool உங்களுக்குச் சொல்லும்: இந்தப் பக்கத்துக்குத் திரும்பி வந்து, அதைப் பதிவிறக்கி, உங்களிடம் உள்ளதன் மேல் நிறுவுங்கள். உங்கள் கணக்கும் செயலியில் உள்ள அனைத்தும் அப்படியே இருக்கும்.</p>
+
+        <h2 id="words">உங்கள் 12 சொற்களைப் பாதுகாப்பாக வையுங்கள்</h2>
+        <p>உங்கள் கணக்கு என்பது உங்கள் தொலைபேசியின் செயலியில் வைக்கப்பட்ட ஒரு சாவி. இதைப் போடுவதற்காக BeanPool-ஐ ஒருபோதும் நீக்காதீர்கள், ஏனெனில் நீக்கினால் உங்கள் கணக்கு தொலைபேசியிலிருந்து போய்விடும்: அதற்குப் பதிலாக அதன் மேல் நிறுவுங்கள். செயலியில் <strong>பாதுகாப்புக் காப்புப்பிரதி</strong>-இல் உள்ள உங்கள் 12 சொற்கள் புதிய தொலைபேசியில் உங்கள் கணக்கைத் திரும்பக் கொண்டுவரும். அவற்றை எழுதி வைத்துப் பாதுகாப்பாக வையுங்கள்.</p>
+
+        <h2 id="check">இது எங்களுடையது என்று சரிபாருங்கள்</h2>
+        <p>Android-க்கான BeanPool ஒரே சாவியால் கையொப்பமிடப்படுகிறது. அதன் சான்றிதழின் SHA-256 கைரேகை:</p>
+        <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
+        <p>Android-இன் build கருவிகள் உள்ள கணினியில் இதை இயக்குங்கள்:</p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p>apksigner எழுதும் விதத்தில், அதே கைரேகையை இது காட்ட வேண்டும்:</p>
+        <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
+        <p>அதே சாவியால் கையொப்பமிடப்பட்ட புதுப்பிப்பை மட்டுமே Android நிறுவும், எனவே வேறு எந்தச் சாவியால் கையொப்பமிட்ட கோப்பும் உங்கள் BeanPool-ஐ மாற்ற முடியாது.</p>
+        <p>கோப்பின் சொந்த SHA-256:</p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+
+        <h2 id="other-ways">BeanPool-ஐப் பெற மற்ற வழிகள்</h2>
+        <ul>
+            <li><a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=ta" target="_blank" rel="noopener">Google Play</a>, பெரும்பாலான Android தொலைபேசிகளுக்கு. இது செயலியை உங்களுக்காகப் புதுப்பித்து வைக்கும்.</li>
+            <li><a href="https://apps.apple.com/app/id6761870086" target="_blank" rel="noopener">App Store</a>, iPhone மற்றும் iPad-க்கு.</li>
+        </ul>
+        <p>செயலியே வேண்டாமா? உலகளாவிய சமூகம் உங்கள் தொலைபேசியின் உலாவியில் <a href="https://global.beanpool.org/?lang=ta">global.beanpool.org</a>-இல் திறக்கும்.</p>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPool ஐகான்" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>உங்கள் அண்டை வீட்டாருடன் பயறுகள் மூலம் பரிமாற்றம் செய்வதற்கான ஒரு இலவச செயலி.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">உதவி மையம்</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                    <a href="getting-started.html">தொடங்குதல்</a>
+                    <a href="rules.html">விதிகள்</a>
+                    <a href="safety.html">குழந்தைகள் பாதுகாப்பு</a>
+                    <a href="../privacy.html">தனியுரிமைக் கொள்கை</a>
+                    <a href="../terms.html">சேவை விதிமுறைகள்</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../android.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/android.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/android.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/android.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/android.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/android.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/android.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/android.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/android.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/android.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/android.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/android.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/android.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/android.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/android.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/android.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="android.html" hreflang="ta" lang="ta" aria-current="page">தமிழ்</a>
+                    <a href="../uk/android.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/android.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/android.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/android.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/android.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/android.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/android.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/android.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT உரிமத்தின் கீழ் திறவூற்று. சமூகங்களால், சமூகங்களுக்காக <img src="../bean.png" alt="அன்புடன்" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> உருவாக்கப்பட்டது. நேர மண்டல எல்லைகள் © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap பங்களிப்பாளர்கள்</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

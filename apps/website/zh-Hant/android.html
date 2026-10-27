@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android 版 BeanPool — 直接下載</title>
+    <meta name="description" content="不需 Google Play 即可下載 Android 版 BeanPool：同一個應用程式，以同一把金鑰簽署。目前版本、安裝方法，以及如何確認它來自我們。">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.6">
+    <style>
+        /* beanpool.org/android: the download, how to install it, and the key to check it by */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The headings land below the fixed bar when a link opens one (#download, #check…) */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content .callout { border-inline-start: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content p strong, .rules-content li strong { color: var(--text-primary); }
+        .rules-content ol { padding-inline-start: 1.75rem; margin-bottom: 1.5rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .rules-content .apk-download a.btn-primary { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+        .rules-content [data-apk="version"] { white-space: nowrap; }
+        /* The key, the command and the file's digest: wrapped anywhere at 320 px, and left to right on every page */
+        .rules-content .apk-code { display: block; padding: 0.75rem 1rem; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.88rem; line-height: 1.6; color: var(--accent-ink); overflow-wrap: anywhere; text-align: left; }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/android">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/android">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/android">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/android">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/android">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/android">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/android">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/android">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/android">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/android">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/android">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/android">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/android">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/android">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/android">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/android">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/android">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/android">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/android">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/android">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/android">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/android">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/android">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/android">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/android">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/android">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool 圖示" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">運作方式</a>
+                <a href="rules.html">規則</a>
+                <a href="index.html#features">功能特色</a>
+                <a href="help.html">說明</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">教學</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上觀看教學影片">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="加入 Reddit 社群 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="在 GitHub 上查看">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <details class="lang-menu desktop-lang-menu">
+                    <summary class="lang-btn" aria-label="選擇語言" title="選擇語言"><span aria-hidden="true">🌐</span></summary>
+                    <div class="lang-dropdown">
+                        <a href="../android.html" hreflang="en" lang="en">English</a>
+                        <a href="../es/android.html" hreflang="es" lang="es">Español</a>
+                        <a href="../pt/android.html" hreflang="pt" lang="pt">Português</a>
+                        <a href="../hi/android.html" hreflang="hi" lang="hi">हिन्दी</a>
+                        <a href="../bn/android.html" hreflang="bn" lang="bn">বাংলা</a>
+                        <a href="../fr/android.html" hreflang="fr" lang="fr">Français</a>
+                        <a href="../ar/android.html" hreflang="ar" lang="ar">العربية</a>
+                        <a href="../id/android.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                        <a href="../ru/android.html" hreflang="ru" lang="ru">Русский</a>
+                        <a href="../zh-Hans/android.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                        <a href="android.html" hreflang="zh-Hant" lang="zh-Hant" aria-current="page">繁體中文</a>
+                        <a href="../it/android.html" hreflang="it" lang="it">Italiano</a>
+                        <a href="../de/android.html" hreflang="de" lang="de">Deutsch</a>
+                        <a href="../tr/android.html" hreflang="tr" lang="tr">Türkçe</a>
+                        <a href="../sw/android.html" hreflang="sw" lang="sw">Kiswahili</a>
+                        <a href="../ml/android.html" hreflang="ml" lang="ml">മലയാളം</a>
+                        <a href="../ta/android.html" hreflang="ta" lang="ta">தமிழ்</a>
+                        <a href="../uk/android.html" hreflang="uk" lang="uk">Українська</a>
+                        <a href="../ur/android.html" hreflang="ur" lang="ur">اردو</a>
+                        <a href="../fa/android.html" hreflang="fa" lang="fa">فارسی</a>
+                        <a href="../vi/android.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                        <a href="../el/android.html" hreflang="el" lang="el">Ελληνικά</a>
+                        <a href="../fil/android.html" hreflang="fil" lang="fil">Filipino</a>
+                        <a href="../ja/android.html" hreflang="ja" lang="ja">日本語</a>
+                        <a href="../ko/android.html" hreflang="ko" lang="ko">한국어</a>
+                    </div>
+                </details>
+                <a href="getting-started.html" class="nav-cta">開始使用</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="開啟選單"><span aria-hidden="true">☰</span> 選單</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">開始使用</a>
+                    <details class="lang-menu phone-lang-menu">
+                        <summary class="lang-btn" aria-label="選擇語言" title="選擇語言"><span aria-hidden="true">🌐</span> <span>選擇語言</span></summary>
+                        <div class="lang-dropdown">
+                        <a href="../android.html" hreflang="en" lang="en">English</a>
+                        <a href="../es/android.html" hreflang="es" lang="es">Español</a>
+                        <a href="../pt/android.html" hreflang="pt" lang="pt">Português</a>
+                        <a href="../hi/android.html" hreflang="hi" lang="hi">हिन्दी</a>
+                        <a href="../bn/android.html" hreflang="bn" lang="bn">বাংলা</a>
+                        <a href="../fr/android.html" hreflang="fr" lang="fr">Français</a>
+                        <a href="../ar/android.html" hreflang="ar" lang="ar">العربية</a>
+                        <a href="../id/android.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                        <a href="../ru/android.html" hreflang="ru" lang="ru">Русский</a>
+                        <a href="../zh-Hans/android.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                        <a href="android.html" hreflang="zh-Hant" lang="zh-Hant" aria-current="page">繁體中文</a>
+                        <a href="../it/android.html" hreflang="it" lang="it">Italiano</a>
+                        <a href="../de/android.html" hreflang="de" lang="de">Deutsch</a>
+                        <a href="../tr/android.html" hreflang="tr" lang="tr">Türkçe</a>
+                        <a href="../sw/android.html" hreflang="sw" lang="sw">Kiswahili</a>
+                        <a href="../ml/android.html" hreflang="ml" lang="ml">മലയാളം</a>
+                        <a href="../ta/android.html" hreflang="ta" lang="ta">தமிழ்</a>
+                        <a href="../uk/android.html" hreflang="uk" lang="uk">Українська</a>
+                        <a href="../ur/android.html" hreflang="ur" lang="ur">اردو</a>
+                        <a href="../fa/android.html" hreflang="fa" lang="fa">فارسی</a>
+                        <a href="../vi/android.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                        <a href="../el/android.html" hreflang="el" lang="el">Ελληνικά</a>
+                        <a href="../fil/android.html" hreflang="fil" lang="fil">Filipino</a>
+                        <a href="../ja/android.html" hreflang="ja" lang="ja">日本語</a>
+                        <a href="../ko/android.html" hreflang="ko" lang="ko">한국어</a>
+                        </div>
+                    </details>
+                    <a href="index.html#how-it-works">運作方式</a>
+                    <a href="rules.html">規則</a>
+                    <a href="index.html#features">功能特色</a>
+                    <a href="help.html">說明</a>
+                    <a href="../guide/index.html">成員指南</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 教學</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit 上的 r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 原始碼</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Android 版 BeanPool，直接下載</h1>
+        <p class="lede">適用於沒有 Google Play 或難以使用 Google Play 的 Android 手機。大多數人應使用 <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=zh-Hant" target="_blank" rel="noopener">Google Play</a>。</p>
+        <p class="callout"><strong>這與 Google Play 上的是同一個應用程式，以同一把金鑰簽署。</strong> 無論你手機上原有的 BeanPool 來自 Google Play 還是這裡，它都會覆蓋安裝在上面，並保留你的帳戶。</p>
+
+        <h2 id="download">下載</h2>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">下載 BeanPool <span data-apk="version">1.2.83</span></span></a></p>
+        <p>版本 <span data-apk="version">1.2.83</span>，檔案大小 <span data-apk="mb">166</span> MB：盡量使用 Wi-Fi。檔案來自 BeanPool 在 <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a> 上的發行版本。</p>
+
+        <h2 id="install">安裝</h2>
+        <ol>
+            <li>下載完成後開啟檔案：在通知中輕觸它，或在手機的「下載」中找到它。</li>
+            <li>第一次安裝時，Android 會請你允許瀏覽器安裝應用程式。在開啟的設定中允許，然後返回。</li>
+            <li>確認安裝。如果手機上已有 BeanPool，Android 會稱之為更新。然後開啟 BeanPool。</li>
+        </ol>
+
+        <h2 id="updates">更新</h2>
+        <p>從這裡下載的應用程式不會自動更新。有新版本時，BeanPool 會告訴你：回到本頁面，下載新版本，並覆蓋安裝在現有版本之上。你的帳戶和應用程式中的一切都會保留。</p>
+
+        <h2 id="words">妥善保管你的 12 個助記詞</h2>
+        <p>你的帳戶是一把保存在手機應用程式裡的金鑰。千萬不要為了裝這個版本而解除安裝 BeanPool，因為解除安裝會把你的帳戶從手機上移除：請直接覆蓋安裝。你的 12 個助記詞（在應用程式的<strong>安全備份</strong>中）可以在新手機上找回你的帳戶。請把它們寫下來並妥善保管。</p>
+
+        <h2 id="check">確認它來自我們</h2>
+        <p>Android 版 BeanPool 只用一把金鑰簽署。其憑證的 SHA-256 指紋為：</p>
+        <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
+        <p>在裝有 Android 建置工具的電腦上執行：</p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p>它應顯示相同的指紋，格式與 apksigner 的寫法一致：</p>
+        <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
+        <p>Android 只會安裝以同一把金鑰簽署的更新，因此以其他任何金鑰簽署的檔案都無法取代你的 BeanPool。</p>
+        <p>檔案本身的 SHA-256：</p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+
+        <h2 id="other-ways">取得 BeanPool 的其他方式</h2>
+        <ul>
+            <li><a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=zh-Hant" target="_blank" rel="noopener">Google Play</a>：適用於大多數 Android 手機，會自動為你更新應用程式。</li>
+            <li><a href="https://apps.apple.com/app/id6761870086" target="_blank" rel="noopener">App Store</a>：適用於 iPhone 和 iPad。</li>
+        </ul>
+        <p>完全不裝應用程式？全球社群可在手機瀏覽器中透過 <a href="https://global.beanpool.org/?lang=zh-Hant">global.beanpool.org</a> 開啟。</p>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPool 圖示" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>一款使用豆子與鄰居進行互助交易的免費應用程式。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">說明中心</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">運作方式</a>
+                    <a href="getting-started.html">新手入門</a>
+                    <a href="rules.html">規則</a>
+                    <a href="safety.html">兒童安全</a>
+                    <a href="../privacy.html">隱私權政策</a>
+                    <a href="../terms.html">服務條款</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../android.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/android.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/android.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/android.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/android.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/android.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/android.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/android.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/android.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/android.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="android.html" hreflang="zh-Hant" lang="zh-Hant" aria-current="page">繁體中文</a>
+                    <a href="../it/android.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/android.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/android.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/android.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/android.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/android.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/android.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/android.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/android.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/android.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/android.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/android.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/android.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/android.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>以 MIT 授權條款開源發行。由社群用<img src="../bean.png" alt="愛心" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />打造，服務於社群。時區邊界資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 貢獻者</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

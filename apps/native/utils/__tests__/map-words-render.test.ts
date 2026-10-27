@@ -349,9 +349,9 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
         vi.useRealTimers();
         expect(host.textContent).not.toContain(xx('⚠️ Please complete all required fields'));
-        // Adding a photo, and the camera refused.
+        // Adding a photo: the shared sheet (utils/post-photo), with Browse files on Android and closed by Back. Then the camera refused.
         await click(byLabel(xx('Add photo')), 'Add photo');
-        expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Cancel')]);
+        expect(said()).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
         await pressAlert(xx('Camera'));
         expect(said().at(-1)).toBe(xx('Permission needed'));
         // My location, refused, then a phone that can't find itself.

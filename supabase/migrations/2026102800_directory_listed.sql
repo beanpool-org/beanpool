@@ -12,10 +12,20 @@
 -- A row is in public.directory_listed (what the website map, global's mirror and from there both apps read) only when:
 --   1. Live: its last signed push (updated_at) is within the last 7 days. A node pushes 30 s after boot and every 12 h by
 --      default, so 7 days is 14 missed pushes. It comes back on its next push.
---   2. Somewhere to go: node_url is an https address, or there is a contact email or phone. "An https address" is
---      `https://host…` or a bare host name (every reader already treats a bare host as its https address: the website's
---      nodeHref, the node's directory-cache communityUrl): a host name with a dot and a top-level part that starts with a
---      letter, no user:password@. Not http://, not an IP address, not localhost.
+--   2. Somewhere to go: node_url is an https address, or there is a contact email or phone. "An https address" is one
+--      every reader turns into a link (global's engine/directory-cache.ts communityUrl, the website's nodeHref, and the
+--      phone's utils/community-origin.ts after global): at most 300 bytes (so at most the 300 characters a reader allows,
+--      however it counts them), and either
+--        - `https://` + host + an optional port from 1 to 65535 + an optional path from "/", or
+--        - a bare host with nothing after it but an optional "/" (a reader reads it as `https://host`; one with a port
+--          or a path reads as no address there, so it is none here),
+--      where the host is two or more labels of letters, digits and inner hyphens, each 1 to 63 characters, the last one
+--      starting with a letter, with no trailing dot. Not http://, not user:password@, not an IP address, not localhost.
+--      The one thing a pattern cannot check is punycode: an `xn--` label is taken as written. One that does not decode
+--      is no link to a reader, so such a row with no contact would be listed with nowhere to go. A node pushes the host
+--      its owners typed, so only a mistyped `xn--` name gets here, and like any mistyped host name (which no pattern can
+--      tell either) it leads nowhere; refusing every `xn--` label would hide the communities on internationalised
+--      domains (.рф among them) instead.
 --   3. Named: `shown_name` is the trimmed community_name, unless it is blank or the default "BeanPool Community" (in any
 --      case), when it is the host of node_url, so two unnamed rows are never one name. A default-named row with no address
 --      (a contact only) keeps its own name.
@@ -55,12 +65,13 @@ select
     d.updated_at as last_seen_at
 from public.directory_nodes d
 cross join lateral (
-    -- The host of an https address (or a bare host), lower case, without a port or a trailing dot; null when node_url is
-    -- no https address. The pattern allows nothing between the host (and port) and the path's first "/", so cutting at
-    -- the first "/" and then the first ":" leaves the host.
+    -- The host of an https address (or a bare host), lower case, without a port; null when node_url is no https address
+    -- (rule 2 above). The pattern allows nothing between the host (and port) and the path's first "/", so cutting at the
+    -- first "/" and then the first ":" leaves the host.
     select case
-        when btrim(d.node_url) ~* '^(https://)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*\.?(:[0-9]{1,5})?(/.*)?$'
-            then rtrim(split_part(split_part(regexp_replace(lower(btrim(d.node_url)), '^https://', ''), '/', 1), ':', 1), '.')
+        when octet_length(btrim(d.node_url)) <= 300
+         and btrim(d.node_url) ~* '^(https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?(:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?(/.*)?|([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?/?)$'
+            then split_part(split_part(regexp_replace(lower(btrim(d.node_url)), '^https://', ''), '/', 1), ':', 1)
     end as host
 ) address
 where d.updated_at >= now() - interval '7 days'

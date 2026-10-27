@@ -3,7 +3,9 @@
 // and holds it to the rules the readers depend on: the 7-day bound, the address-or-contact rule, the default name →
 // host rule, last_seen_at, security_invoker and the grants; and the daily purge at 30 days. The view's address pattern
 // is also taken out of the SQL and run (a POSIX ARE this simple means the same in a JS RegExp) on the addresses the
-// readers see, with the host cut the view makes, so a change to either is a change this test sees.
+// readers see, with the host cut the view makes, so a change to either is a change this test sees. And it is held to the
+// readers' own rule (global's communityUrl, the website's nodeHref, the phone's communityOrigin, copied here and pinned
+// to their files): every address the view takes, they take, so a row listed by its address leads somewhere real.
 //
 // The director's read-only checks after applying it are in the PR body (a row at 6 d 23 h shown, at 7 d 1 h not, the
 // default name → host, no address and no contact → not shown).
@@ -63,21 +65,24 @@ test('anon and authenticated may read it, and nobody may write through it', () =
     assert.ok(!/\b(insert into|update public|delete from)\b/.test(lower()), 'no row is written');
 });
 
-/** The address pattern and host cut, as the view has them. */
+/** The address pattern, its length bound and host cut, as the view has them. */
 function addressRule() {
     const m = view().match(/btrim\(d\.node_url\) ~\* '([^']+)'/);
     assert.ok(m, 'the view tests node_url with a case-insensitive pattern');
+    const bound = view().match(/when octet_length\(btrim\(d\.node_url\)\) <= (\d+) and btrim\(d\.node_url\) ~\* /);
+    assert.ok(bound, 'the view bounds node_url in bytes before its pattern');
     const pattern = new RegExp(m[1], 'i');
     return (nodeUrl) => {
-        const v = (nodeUrl ?? '').trim();
-        if (!pattern.test(v)) return null;
-        // rtrim(split_part(split_part(regexp_replace(lower(btrim(node_url)), '^https://', ''), '/', 1), ':', 1), '.')
-        return v.toLowerCase().replace(/^https:\/\//, '').split('/')[0].split(':')[0].replace(/\.+$/, '');
+        // btrim: spaces only.
+        const v = (nodeUrl ?? '').replace(/^ +| +$/g, '');
+        if (Buffer.byteLength(v, 'utf8') > Number(bound[1]) || !pattern.test(v)) return null;
+        // split_part(split_part(regexp_replace(lower(btrim(node_url)), '^https://', ''), '/', 1), ':', 1)
+        return v.toLowerCase().replace(/^https:\/\//, '').split('/')[0].split(':')[0];
     };
 }
 
 test('the address rule: an https address or a bare host name, nothing else', () => {
-    assert.ok(lower().includes("rtrim(split_part(split_part(regexp_replace(lower(btrim(d.node_url)), '^https://', ''), '/', 1), ':', 1), '.')"),
+    assert.ok(lower().includes("then split_part(split_part(regexp_replace(lower(btrim(d.node_url)), '^https://', ''), '/', 1), ':', 1) end as host"),
         'the host cut is the one this test runs');
     const host = addressRule();
     const shown = {
@@ -92,6 +97,131 @@ test('the address rule: an https address or a bare host name, nothing else', () 
         'javascript:alert(1)', 'ftp://x.example.org', '', null, 'https://', 'https://x.example.org?q=1']) {
         assert.equal(host(url), null, String(url));
     }
+});
+
+// ── The readers' rule (deciding pass on #2541, finding 4) ───────────────────────────────────────────────────────────
+
+const READER_FILES = {
+    global: 'apps/server/src/engine/directory-cache.ts',
+    website: 'apps/website/main.js',
+    phone: 'apps/native/utils/community-origin.ts',
+};
+const BARE_HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?\/?$/i;
+
+/** apps/server/src/engine/directory-cache.ts communityUrl (the website's nodeHref is the same rule): an https origin or null. */
+function readerUrl(v) {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    if (!s || s.length > 300) return null;
+    const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : BARE_HOST.test(s) ? `https://${s}` : null;
+    if (!withScheme) return null;
+    let u;
+    try { u = new URL(withScheme); } catch { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password) return null;
+    if (!/\.[a-z][a-z0-9-]*$/i.test(u.hostname)) return null;
+    return u.origin;
+}
+
+/** apps/native/utils/community-origin.ts communityOrigin on global's origin, less its IPv4 and global-node cases (the view takes neither). */
+function phoneOrigin(raw) {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!/^https:\/\//i.test(trimmed) || trimmed.length > 300) return null;
+    const m = /^https:\/\/([^/?#@\s]+)(?=[/?#]|$)/i.exec(trimmed);
+    const h = m ? m[1].toLowerCase().replace(/:443$/, '') : null;
+    if (!h) return null;
+    const name = h.replace(/:\d{1,5}$/, '');
+    const label = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+    if (/^[\d.]+$/.test(name) || !new RegExp(`^${label}(?:\\.${label})+$`).test(name)) return null;
+    return `https://${h}`;
+}
+
+test('the readers\' rule this test copies is still theirs (change a reader: change the view and this copy with it)', () => {
+    const src = (f) => fs.readFileSync(path.join(ROOT, f), 'utf-8');
+    const global = src(READER_FILES.global);
+    assert.ok(global.includes(`const BARE_HOST = ${BARE_HOST};`), 'global: BARE_HOST');
+    for (const line of [
+        'if (!s || s.length > 300) return null;',
+        'const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : BARE_HOST.test(s) ? `https://${s}` : null;',
+        "if (u.protocol !== 'https:' || u.username || u.password) return null;",
+        'if (!/\\.[a-z][a-z0-9-]*$/i.test(u.hostname)) return null;',
+    ]) assert.ok(global.includes(line), `global: ${line}`);
+    const website = src(READER_FILES.website);
+    assert.ok(website.includes(`: ${BARE_HOST}.test(value) ? \`https://\${value}\` : null;`), 'website: the same bare host');
+    assert.ok(website.includes('if (!value || value.length > 300) return null;'), 'website: the same 300');
+    assert.ok(website.includes('if (!/\\.[a-z][a-z0-9-]*$/i.test(u.hostname)) return null;'), 'website: the same top-level part');
+    const phone = src(READER_FILES.phone);
+    assert.ok(phone.includes('const m = /^https:\\/\\/([^/?#@\\s]+)(?=[/?#]|$)/i.exec(url);'), 'phone: the host');
+    assert.ok(phone.includes("const label = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';"), 'phone: each label 1 to 63 characters');
+});
+
+test('an address the readers turn into no link is no address to the view either (the shapes the pass measured, and more)', () => {
+    const host = addressRule();
+    for (const url of [
+        'bare.example.org/path', // a bare host with a path
+        'https://port.example.org:99999', // a port above 65535
+        'https://port.example.org:65536',
+        'https://Mullum.Example.ORG.:8443/x', // a trailing dot, before a port
+        'https://mullum.example.org./x', // ... or a path
+        'mullum.example.org.',
+        'mullum.example.org:8443', // a bare host with a port: a reader takes "mullum.example.org:" for a scheme
+        `https://a.example.org/${'x'.repeat(300)}`, // longer than 300
+        `https://a.example.org/${'😀'.repeat(140)}`, // 162 characters in Postgres, 302 to a reader (an emoji is two)
+        `https://${'a'.repeat(64)}.example.org`, // a label longer than 63: global takes it, the phone does not
+        'https://a.example.or-', // a last label ending in a hyphen: likewise
+    ]) {
+        assert.equal(host(url), null, `view: ${url}`);
+        const g = readerUrl(url);
+        assert.ok(g === null || phoneOrigin(g) === null, `and no reader links it: ${url}`);
+    }
+    // Port 0: a reader makes a link of it, but nothing answers there. The view may be stricter than a reader, never looser.
+    assert.equal(host('https://port.example.org:0'), null, 'view: port 0');
+    // The other way round: each reader takes these, and so does the view, at the same host.
+    for (const [url, h] of Object.entries({
+        'https://port.example.org:65535': 'port.example.org',
+        'https://mullum.example.org:8443/x': 'mullum.example.org',
+        'bare.example.org/': 'bare.example.org',
+        [`https://${'a'.repeat(63)}.example.org`]: `${'a'.repeat(63)}.example.org`,
+        'https://xn--mnchen-3ya.de': 'xn--mnchen-3ya.de',
+        'https://xn--d1acufc.xn--p1ai': 'xn--d1acufc.xn--p1ai',
+    })) {
+        assert.equal(host(url), h, `view: ${url}`);
+        assert.equal(new URL(phoneOrigin(readerUrl(url))).hostname, h, `readers: ${url}`);
+    }
+});
+
+test('every address the view takes, the readers take, at the same host (20,000 made-up addresses)', () => {
+    const host = addressRule();
+    // mulberry32: the same addresses on every run.
+    let seed = 0x5133;
+    const rand = () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const pick = (xs) => xs[Math.floor(rand() * xs.length)];
+    // Punycode is the one thing the view's pattern cannot check (its header says why): no `xn--` here.
+    // Mostly good parts, so that many of the addresses are ones the view takes, and one bad part spoils the rest.
+    const label = () => pick(['a', 'mullum', 'B9', 'a-b', 'ab--cd', '9', 'x'.repeat(63), 'mullum', 'a', 'B9',
+        '-a', 'a-', '', 'a_b', 'x'.repeat(64), 'é']);
+    const tld = () => pick(['org', 'ORG', 'io', 'a1', 'o-g', 'x'.repeat(63), 'org', 'io', 'a-', '1a', '9', 'x'.repeat(64), '']);
+    let taken = 0;
+    for (let i = 0; i < 20_000; i++) {
+        const labels = Array.from({ length: Math.floor(rand() * 3) + (rand() < 0.9 ? 1 : 0) }, label);
+        const url = pick(['https://', 'HTTPS://', '', 'https://', '', 'http://', 'https:', 'https:///', ' https://', 'u:p@'])
+            + [...labels, tld()].join('.') + pick(['', '', '', '.', '..'])
+            + pick(['', '', '', ':', ':0', ':1', ':443', ':8443', ':65535', ':65536', ':99999', ':00443', ':123456'])
+            + pick(['', '', '/', '/path', '/a/b?c#d', '', '?q', '#f', '//', '@x.org', ' ', '\t', `/${'p'.repeat(280)}`]);
+        const h = host(url);
+        if (h === null) continue;
+        taken++;
+        const g = readerUrl(url);
+        assert.ok(g !== null, `global and the website take what the view takes: ${JSON.stringify(url)}`);
+        assert.ok(phoneOrigin(g) !== null, `and so does the phone: ${JSON.stringify(url)}`);
+        assert.equal(new URL(g).hostname, h, `at the host the view names: ${JSON.stringify(url)}`);
+    }
+    assert.ok(taken > 300, `the view took ${taken} of them (465 when written): enough to say something`);
 });
 
 test('what a reader sees, row by row (the view in JS, from its own pattern)', () => {

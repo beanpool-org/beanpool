@@ -63,13 +63,15 @@ const POSTS = [
     { id: 'held', title: 'Fix the garden gate', type: 'need', status: 'pending', author_pubkey: ME, accepted_by: 'n1', credits: 12, photos: '[]', created_at: at },
     { id: 'action', title: 'Sourdough loaves', type: 'offer', status: 'active', author_pubkey: ME, credits: 8, photos: '[]', created_at: at },
     { id: 'await', title: 'Help moving a couch', type: 'offer', status: 'active', author_pubkey: 'n2', credits: 20, photos: '[]', created_at: at },
+    { id: 'paused', title: 'Old bicycle pump', type: 'offer', status: 'paused', author_pubkey: ME, credits: 5, photos: '[]', created_at: at },
 ];
 const TXS = [
-    { id: 't-action', postId: 'action', status: 'requested', buyerPublicKey: 'n3', sellerPublicKey: ME, credits: 8, createdAt: at },
-    { id: 't-await', postId: 'await', status: 'requested', buyerPublicKey: ME, sellerPublicKey: 'n2', credits: 20, createdAt: at },
+    { id: 't-held', postId: 'held', postTitle: 'Fix the garden gate', status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Me', sellerPublicKey: 'n1', sellerCallsign: 'Robin', postAuthorPublicKey: ME, postType: 'need', credits: 12, createdAt: at },
+    { id: 't-action', postId: 'action', postTitle: 'Sourdough loaves', status: 'requested', buyerPublicKey: 'n3', buyerCallsign: 'Alex', sellerPublicKey: ME, sellerCallsign: 'Me', postAuthorPublicKey: ME, postType: 'offer', credits: 8, createdAt: at },
+    { id: 't-await', postId: 'await', postTitle: 'Help moving a couch', status: 'requested', buyerPublicKey: ME, buyerCallsign: 'Me', sellerPublicKey: 'n2', sellerCallsign: 'Sam', postAuthorPublicKey: 'n2', postType: 'offer', credits: 20, createdAt: at },
 ];
 vi.mock('../db', () => ({
-    getPosts: async () => POSTS, getMyPosts: async () => [], getMarketplaceTransactions: async () => TXS,
+    getPosts: async () => POSTS, getMyPosts: async () => POSTS.filter(p => p.author_pubkey === ME), getMarketplaceTransactions: async () => TXS,
 }));
 
 import { MyDealsSheet } from '../../components/MyDealsSheet';
@@ -106,29 +108,42 @@ function groundOf(text: Element, card: Element, sheet: RGBA): RGBA {
     return ground;
 }
 
-const render = async () => {
-    await act(async () => { root.render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: ME }, onClose() {}, initialTab: 'pending' }) as any); });
+const render = async (initialTab: 'pending' | 'active' | 'history' = 'pending') => {
+    await act(async () => { root.render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: ME }, onClose() {}, initialTab }) as any); });
     for (let i = 0; i < 4; i++) await act(async () => {});
 };
 const card = (id: string) => host.querySelector(`[data-testid="deal-card-${id}"]`);
 
 describe("My Deals' held and pending cards", () => {
-    it('draws the three kinds of card on the Pending tab', async () => {
+    it('In Progress lists DEALS (transactions) with title row and one-line states', async () => {
         theme.dark = false;
-        await render();
-        expect(card('held')?.textContent).toContain('Held in Trust');
-        expect(card('action')?.textContent).toContain('Action Required');
-        expect(card('await')?.textContent).toContain('Awaiting Approval');
+        await render('pending');
+        // Sheet title row: 3 under way · 2 need you
+        expect(host.textContent).toContain('3 under way · 2 need you');
+        // In Progress renders transactions, not listings
+        expect(card('t-held')?.textContent).toContain('Fix the garden gate');
+        expect(card('t-held')?.textContent).toContain('Waiting on you: release');
+        expect(card('t-action')?.textContent).toContain('Sourdough loaves');
+        expect(card('t-action')?.textContent).toContain('Waiting on you: answer');
+        expect(card('t-await')?.textContent).toContain('Help moving a couch');
+        expect(card('t-await')?.textContent).toContain('You asked · waiting on Sam');
     });
 
-    it('in dark: every text on each card reads at 4.5:1 or more against what it is drawn on, on no light tint', async () => {
+    it('My Posts lists listings with status chips (Held in Trust, Action Required, PAUSED)', async () => {
+        theme.dark = false;
+        await render('active');
+        expect(card('held')?.textContent).toContain('Held in Trust');
+        expect(card('action')?.textContent).toContain('Action Required');
+        expect(card('paused')?.textContent).toContain('PAUSED');
+    });
+
+    it('in dark: every text on each deal card reads at 4.5:1 or more against what it is drawn on', async () => {
         theme.dark = true;
-        await render();
+        await render('pending');
         const sheet = parse(darkColors.surface.card);
         const measured: string[] = [];
-        for (const id of ['held', 'action', 'await']) {
+        for (const id of ['t-held', 't-action', 't-await']) {
             const c = card(id)!;
-            // The card itself is a dark ground: no light tint left over from the light scheme.
             expect(contrast(parse(styleOf(c).backgroundColor), parse('#ffffff')), `${id} card ground`).toBeGreaterThan(8);
             for (const span of Array.from(c.querySelectorAll('span'))) {
                 const color = styleOf(span).color;
@@ -139,21 +154,17 @@ describe("My Deals' held and pending cards", () => {
                 expect(ratio, `${id}: "${words}" ${color}`).toBeGreaterThanOrEqual(4.5);
             }
         }
-        // Each card's title and its status line were measured.
-        expect(measured.join('\n')).toMatch(/held "Fix the garden gate"[\s\S]*held "Held in Trust"/);
-        expect(measured.join('\n')).toMatch(/action "Action Required"/);
-        expect(measured.join('\n')).toMatch(/await "Awaiting Approval"/);
+        expect(measured.join('\n')).toMatch(/t-held "Fix the garden gate"/);
+        expect(measured.join('\n')).toMatch(/t-action "Waiting on you: answer"/);
     });
 
-    it('in light: the cards keep their tints, and Action Required its amber', async () => {
+    it('in light: My Posts cards keep their tints, and Action Required its amber', async () => {
         theme.dark = false;
-        await render();
+        await render('active');
         expect(styleOf(card('held'))).toMatchObject({ backgroundColor: palette.green50, borderColor: palette.green200 });
         expect(styleOf(card('action'))).toMatchObject({ backgroundColor: palette.amber50, borderColor: palette.yellow300 });
         const action = Array.from(card('action')!.querySelectorAll('span')).find(s => s.textContent?.includes('Action Required'))!;
         const { lightColors } = await import('../../constants/colors');
-        // The brand pass (docs/brand-colours.md, core ink.warning): amber-800, 6.84:1 on the card's amber-50; amber-600
-        // was 3.07 there.
         expect(styleOf(action).color).toBe(lightColors.feedback.warning.fg);
         expect(styleOf(action).color).toBe(palette.amber800);
         const held = Array.from(card('held')!.querySelectorAll('span')).find(s => s.textContent?.includes('Held in Trust'))!;

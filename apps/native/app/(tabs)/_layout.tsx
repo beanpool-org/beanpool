@@ -7,14 +7,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
 import { HelpSheet } from '../../components/HelpSheet';
 import { OPEN_HELP_EVENT, closeTour, helpContext, moveTour, startTour, useTour } from '../../utils/tour-store';
 import { useGuide } from '../../utils/use-guide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
+import { getGlobalUnreadCount, syncMessages, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
 import { useNodeStatus } from '../NodeStatusContext';
@@ -221,14 +221,8 @@ export default function TabLayout() {
 
                 // Count active deals — mirror usePendingDealsCount in MyDealsSheet so
                 // the bottom-tab Market badge matches the in-app My Deals pill.
-                const [allPosts, myTxns] = await Promise.all([
-                    getPosts({ allScopes: true }),
-                    getMarketplaceTransactions(identity.publicKey),
-                ]);
-                const active = allPosts.filter((p: any) => {
-                    if (p.status === 'pending' && (p.author_pubkey === identity.publicKey || p.accepted_by === identity.publicKey)) return true;
-                    return myTxns.some((t: any) => t.postId === p.id && (t.status === 'pending' || t.status === 'requested'));
-                }).length;
+                const myTxns = await getMarketplaceTransactions(identity.publicKey);
+                const active = dealsNeedingMe(myTxns, identity.publicKey).length;
                 setDealsCount(active);
             } catch (e) {}
         };

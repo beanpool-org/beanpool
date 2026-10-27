@@ -70,6 +70,30 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('handles transition from visible=false to visible=true without hook order violation', () => {
+        const { rerender } = render(
+            <MyDealsModal
+                visible={false}
+                identity={mockIdentity}
+                onClose={vi.fn()}
+                posts={mockPosts}
+                transactions={mockTransactions}
+            />
+        );
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        rerender(
+            <MyDealsModal
+                visible={true}
+                identity={mockIdentity}
+                onClose={vi.fn()}
+                posts={mockPosts}
+                transactions={mockTransactions}
+            />
+        );
+        expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+    });
+
     it('renders with role="dialog", aria-modal="true", and accessible title', () => {
         render(
             <MyDealsModal
@@ -335,29 +359,40 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
                 />
             );
 
-            // Badge for In Progress equals cards listed (2 pending txs; never listing + deal)
+            // Title row indicates deals under way and deals needing the user
+            expect(screen.getByText('5 under way · 3 need you')).toBeInTheDocument();
+
+            // Badge for In Progress equals cards listed (5 open deals: pending + requested)
             const inProgressTab = screen.getByRole('button', { name: /In Progress/ });
-            expect(inProgressTab).toHaveTextContent('2');
+            expect(inProgressTab).toHaveTextContent('5');
 
-            // In Progress shows exactly the 2 pending transactions: Bike tune-up and Weed the veggie patch
+            // In Progress shows all 5 open transactions
+            expect(screen.getByText('Help moving a couch')).toBeInTheDocument();
             expect(screen.getByText('Bike tune-up')).toBeInTheDocument();
+            expect(screen.getByText('Mending jackets')).toBeInTheDocument();
             expect(screen.getByText('Weed the veggie patch')).toBeInTheDocument();
-            // Requested deals do not show on In Progress
-            expect(screen.queryByText('Help moving a couch')).not.toBeInTheDocument();
+            expect(screen.getByText('Rye bread')).toBeInTheDocument();
 
-            // Status chip says raw "pending" (not Action Required or Held in Trust), in the warn colours
-            const chips = screen.getAllByText('pending');
-            expect(chips.length).toBe(2);
-            for (const chip of chips) expect(chip).toHaveClass('bg-bp-chip-warn-tint', 'text-bp-chip-warn-ink');
+            // One-line deal states are rendered on deal cards
+            expect(screen.getAllByText('Waiting on you: answer').length).toBe(2);
+            expect(screen.getByText('Waiting on you: release')).toBeInTheDocument();
+            expect(screen.getByText('Waiting on Tama to release')).toBeInTheDocument();
+            expect(screen.getByText('You asked · waiting on Mere')).toBeInTheDocument();
+
+            // Only a deal with beans held looks held (emerald), as on the phone; a request holds nothing yet.
+            const cardOf = (title: string) => screen.getByText(title).closest('.rounded-2xl') as HTMLElement;
+            expect(cardOf('Bike tune-up').className).toContain('bg-emerald-50/10');
+            expect(cardOf('Help moving a couch').className).not.toContain('bg-emerald-50/10');
+
             // The buyer's amount is red, the seller's emerald
             expect(screen.getByText('- 20')).toHaveClass('text-red-500', 'dark:text-red-300');
             expect(screen.getByText('+ 10')).toHaveClass('text-emerald-500', 'dark:text-emerald-400');
 
             // Partner line is present on In Progress with bold callsign
-            expect(screen.getByText(/Bought from/)).toBeInTheDocument();
-            expect(screen.getByText('Kofi')).toHaveClass('font-bold');
-            expect(screen.getByText(/Sold to/)).toBeInTheDocument();
-            expect(screen.getByText('Tama')).toHaveClass('font-bold');
+            expect(screen.getAllByText(/Bought from/).length).toBeGreaterThanOrEqual(1);
+            expect(screen.getAllByText('Kofi')[0]).toHaveClass('font-bold');
+            expect(screen.getAllByText(/Sold to/).length).toBeGreaterThanOrEqual(1);
+            expect(screen.getAllByText('Tama')[0]).toHaveClass('font-bold');
 
             // Switch to My Posts tab
             fireEvent.click(screen.getByRole('button', { name: /My Posts/ }));
@@ -366,10 +401,8 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(screen.getByText('Mending jackets')).toBeInTheDocument();
             // Does NOT show Rye bread (Ana only requested it)
             expect(screen.queryByText('Rye bread')).not.toBeInTheDocument();
-            // Shows 🟢 Active, never Action Required or Awaiting Approval
-            expect(screen.getAllByText('🟢 Active')).toHaveLength(2);
-            expect(screen.queryByText(/Action Required/)).not.toBeInTheDocument();
-            expect(screen.queryByText(/Awaiting Approval/)).not.toBeInTheDocument();
+            // Shows phone status chips: Action Required because both have requested deals awaiting Ana's approval
+            expect(screen.getAllByText('⚠️ Action Required')).toHaveLength(2);
 
             // Switch to History tab
             fireEvent.click(screen.getByRole('button', { name: /History/ }));

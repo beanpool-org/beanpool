@@ -160,8 +160,10 @@ run_check() {
     "$@" > "$LOGDIR/$name.log" 2>&1
     CHECK_RC=$?
     CHECK_END=$(date +%s)
-    echo "$((CHECK_START - RUN_START)) $((CHECK_END - CHECK_START))" > "$LOGDIR/$name.dur"
-    echo "$CHECK_RC" > "$LOGDIR/$name.rc"
+    if [ ! -f "$LOGDIR/stopped" ]; then
+      echo "$((CHECK_START - RUN_START)) $((CHECK_END - CHECK_START))" > "$LOGDIR/$name.dur"
+      echo "$CHECK_RC" > "$LOGDIR/$name.rc"
+    fi
     exit $CHECK_RC
   ) &
   PIDS+=($!)

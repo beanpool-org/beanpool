@@ -14,7 +14,7 @@ import { decisionsOn, openPauseVotes } from '../decisions-engine.js';
 import { standbyIncidentOpen } from '../services/standby-health.js';
 import { serverAlertCount } from '../services/alerts.js';
 import { suggestionCountFor } from '../agent/suggestions.js';
-import { openKnockCount } from './knocks.js';
+import { actionableKnockCount } from './knocks.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -124,7 +124,7 @@ export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean
         },
         {
             kind: 'knocks',
-            count: openKnockCount(),
+            count: actionableKnockCount(),
             label: 'Requests to join',
             section: 'home',
         },

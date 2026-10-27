@@ -89,7 +89,7 @@ import { cleanLabel } from '../config/clean-label.js';
 import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
-import { openKnocksWaitingDays } from '../engine/knocks.js';
+import { actionableKnocksWaitingDays } from '../engine/knocks.js';
 import { dispatchPushNotification, readWatchdogStatus, resolvePublicNodeUrl } from '../state-engine.js';
 import { getOffboxStatus } from './offbox-backups.js';
 import { backupLockState } from './sealed-backup.js';
@@ -1692,7 +1692,7 @@ function tlsConditions(at: number): Condition[] {
 }
 
 function knockConditions(t: number): Condition[] {
-    const hasWaiting = openKnocksWaitingDays(7, t) > 0;
+    const hasWaiting = actionableKnocksWaitingDays(7, t) > 0;
     return hasWaiting
         ? [{ key: 'knock.waiting', active: true, detail: 'A request to join has waited 7 days.' }]
         : [{ key: 'knock.waiting', active: false, detail: 'No requests to join have waited 7 days.' }];

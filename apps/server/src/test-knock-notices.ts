@@ -37,7 +37,7 @@ import { getAdminQueue } from './engine/admin-queue.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
-import { checkServerAlerts } from './services/alerts.js';
+import { checkServerAlerts, getAlertsStatus } from './services/alerts.js';
 import { measureKnockAnswers, knockAnswersForDirectory } from './engine/knocks.js';
 import { listingFields } from './engine/directory-promise.js';
 import { listCommunities, insertDirectoryRowForTesting, clearDirectoryForTesting } from './engine/directory-cache.js';
@@ -314,6 +314,32 @@ async function main() {
         `a member's Home, once a request has waited 3 days: "1 person asked to join", landing on People → Invites (${JSON.stringify(memberLines)})`);
     assert(!needsOf(await call(memberDefault, 'GET', OLD_APP)).some(i => i.target?.to === 'people'),
         "...never to an app that can't open People → Invites from Home");
+
+    // ── 4b. Requests to join switched off: nobody can list or answer them, so nothing counts them (#2523 review) ──
+    const shapeAs = async (knocks: boolean) => {
+        const res = await fetch(`${BASE}/api/local/admin/community-shape`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...ownerSessionHeaders(owner.pk) }, body: JSON.stringify({ changes: { knocks } }),
+        });
+        return res.status;
+    };
+    assert(await shapeAs(false) === 200, 'the owner switches requests to join off, with one waiting 7 days');
+    const listOff = await call(admin, 'GET', '/api/join/knocks');
+    assert(listOff.status === 404 && listOff.body?.code === 'feature_off', `the list can't be read (${listOff.status} ${listOff.body?.code})`);
+    assert(!getAdminQueue({ forOwner: true }).items.some(i => i.kind === 'knocks'), 'so the admin queue has no Requests to join item');
+    assert(!needsOf(await call(owner, 'GET', NEW_APP)).some(i => i.kind === 'knock' || /asked to join/.test(i.label)),
+        "...the owner's Home no 'asked to join' line");
+    assert(!needsOf(await call(memberDefault, 'GET', NEW_APP)).some(i => i.kind === 'knock'), "...a member's Home none either");
+    const managerOff = await managerData(ownerSessionHeaders(owner.pk));
+    assert(managerOff.status === 200 && managerOff.body?.knockCount === 0, `...the manager counts 0 (${managerOff.body?.knockCount})`);
+    const knockAlertActive = () => getAlertsStatus().active.some(a => a.key === 'knock.waiting');
+    assert(knockAlertActive(), 'the 7-day alert is still up just before the next check');
+    await checkServerAlerts();
+    await new Promise(r => setTimeout(r, 50));
+    assert(!knockAlertActive(), 'and the 7-day alert clears, so no daily push the owner can\'t act on');
+    const settingsOff = await fetch(`${BASE}/api/local/admin/knocks`, { headers: ownerSessionHeaders(owner.pk) }).then(r => r.json()).catch(() => null) as any;
+    assert(settingsOff?.open === 1, `the owner's Settings still shows the count beside the switch (${settingsOff?.open})`);
+    assert(await shapeAs(true) === 200 && getAdminQueue({ forOwner: true }).items.find(i => i.kind === 'knocks')?.count === 1,
+        'switched back on, the queue counts it again');
 
     // Clean up old knock
     db.prepare(`DELETE FROM join_requests WHERE id = ?`).run(oldKnockId);

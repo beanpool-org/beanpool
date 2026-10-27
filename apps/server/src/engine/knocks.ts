@@ -126,6 +126,7 @@ import { addEntry, assertNamesAdmin, reconcileHolders } from './names-list.js';
 import { mayInviteHere, getDoor } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { dispatchPushNotification } from '../state-engine.js';
@@ -405,9 +406,23 @@ export function listOpenKnocks(limit: number, offset: number, now = Date.now()):
     };
 }
 
-/** How many knocks are open, for the operator's Settings. */
+/** How many knocks are open, for the operator's Settings (shown beside the switch, on or off). */
 export function openKnockCount(now = Date.now()): number {
     return listOpenKnocks(0, 0, now).total;
+}
+
+/**
+ * The open knocks someone can act on: none while the `knocks` switch is off, when every /api/join/knock route answers
+ * 404 feature_off and no screen can list or answer them. The admin queue, Home's line, the manager's count and the
+ * 7-day alert count these; only the operator's Settings, beside the switch, counts every open one (#2523 review).
+ */
+export function actionableKnockCount(now = Date.now()): number {
+    return getProfileSwitches().knocks ? openKnockCount(now) : 0;
+}
+
+/** openKnocksWaitingDays, for the same callers: none while the `knocks` switch is off (see actionableKnockCount). */
+export function actionableKnocksWaitingDays(minDays: number, now = Date.now()): number {
+    return getProfileSwitches().knocks ? openKnocksWaitingDays(minDays, now) : 0;
 }
 
 /**

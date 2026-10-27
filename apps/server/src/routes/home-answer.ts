@@ -79,7 +79,7 @@ import { getDoor, type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
-import { openKnockCount, openKnocksWaitingDays } from '../engine/knocks.js';
+import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -568,8 +568,8 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     if (active && knocksApart) {
         // Owners and admins: every open request, on any door. Any other member, where any member may answer (a members
         // door): those that have waited 3 days, so a community whose admins are away still lets people in (design §5.7).
-        const waiting = role === 'owner' || role === 'admin' ? openKnockCount()
-            : getDoor() === 'members' ? openKnocksWaitingDays(3) : 0;
+        const waiting = role === 'owner' || role === 'admin' ? actionableKnockCount()
+            : getDoor() === 'members' ? actionableKnocksWaitingDays(3) : 0;
         if (waiting > 0) {
             items.push({
                 kind: 'knock', count: waiting, accent: true,

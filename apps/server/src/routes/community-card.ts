@@ -114,13 +114,23 @@ function androidCardLink(host: string, fallback: string | null): string {
         + (fallback ? `S.browser_fallback_url=${encodeURIComponent(fallback)};` : '') + 'end';
 }
 
+/**
+ * The web app's own page and card grounds, from core's list of them (WEB_INK_GROUNDS, which every ink role is checked
+ * against): light lists the card first (#ffffff, then the page), dark the page first (#1d231d, then the card).
+ */
+const GROUNDS = {
+    light: { page: WEB_INK_GROUNDS.light[1], card: WEB_INK_GROUNDS.light[0] },
+    dark: { page: WEB_INK_GROUNDS.dark[0], card: WEB_INK_GROUNDS.dark[1] },
+} as const;
+
 /** The page's colours: the brand roles it uses, from core's one library (brand-colours.ts), in each theme. */
 function cardStyle(): string {
     const roles = ['--bp-commit-fill', '--bp-commit-hover', '--bp-commit-on', '--bp-ink-brand', '--bp-ink-accent', '--bp-ink-info', '--bp-chip-ok-tint', '--bp-chip-ok-ink'];
     const vars = (theme: 'light' | 'dark') => {
         const map = brandCssVariableMap(theme);
-        const [card, page] = WEB_INK_GROUNDS[theme];
-        const ink = WEB_INK_GROUNDS[theme === 'light' ? 'dark' : 'light'][0];
+        const { page, card } = GROUNDS[theme];
+        // Words in one theme are drawn in the other's page colour: near-black on light, near-white on dark.
+        const ink = theme === 'light' ? GROUNDS.dark.page : GROUNDS.light.card;
         return [`--page:${page}`, `--card:${card}`, `--ink:${ink}`, ...roles.map(r => `${r}:${map[r]}`)].join(';');
     };
     return `

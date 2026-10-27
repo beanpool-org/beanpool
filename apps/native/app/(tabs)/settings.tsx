@@ -70,7 +70,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
-import { fetchMyNodeRole } from '../../utils/node-admin';
+import { askNodeRole } from '../../utils/node-admin';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { ChatMemoryCard } from '../../components/ChatMemoryCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
@@ -614,7 +614,8 @@ export default function SettingsScreen() {
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifKnocks, setNotifKnocks] = useState(false);
     // "Requests to join" only where it changes something (core knockSwitchShown): not for an owner or admin, who is always
-    // told, nor on a Known community, whose members are never told. Asked as the screen opens.
+    // told, nor on a Known community, whose members are never told. Asked as the screen opens; a node that gave no answer
+    // (offline, a timeout, a 5xx) is a role not known yet, so the switch waits (askNodeRole, never fetchMyNodeRole's "no role").
     const [knockSwitch, setKnockSwitch] = useState(false);
     const [notifLoading, setNotifLoading] = useState(false);
     // How long before an event starts this member wants to be told. The day before until they say otherwise
@@ -2047,7 +2048,7 @@ export default function SettingsScreen() {
                                     setNotifEscrow(prefs.notify_escrow !== 'false');
                                     setNotifKnocks(prefs.notify_knocks === 'true');
                                 }
-                                if (identity.privateKey) setKnockSwitch(knockSwitchShown(nodeProfile?.features, (await fetchMyNodeRole(url, identity)).role));
+                                if (identity.privateKey) setKnockSwitch(knockSwitchShown(nodeProfile?.features, (await askNodeRole(url, identity))?.role));
                             }
                         } catch (e) { console.warn('[Prefs] Failed to fetch preferences:', e); }
                         setNotifLoading(false);

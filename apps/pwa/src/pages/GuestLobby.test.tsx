@@ -319,6 +319,10 @@ describe('a visitor with no key on the global node', () => {
         await openLobby();
         const list = await screen.findByTestId('visitor-list');
         expect(list.className).toMatch(/\bsm:grid-cols-2\b/);
+        // One column below sm: the lobby's cards are rows (thumb + text), so two to a row at 320 px leaves the text ~20 px.
+        const listClasses = list.className.split(/\s+/);
+        expect(listClasses).toContain('grid-cols-1');
+        expect(listClasses).not.toContain('grid-cols-2');
         const note = within(list).getByTestId('visitor-list-note');
         // Still one line, under the first card in the one-column list at 320 px (the order the test above holds).
         expect(within(list).getAllByTestId('visitor-list-note')).toHaveLength(1);

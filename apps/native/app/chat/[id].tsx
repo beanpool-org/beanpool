@@ -861,7 +861,7 @@ function ChatScreen({ id }: { id: string }) {
 
     const pickAndSendImage = async () => {
         if (!identity?.publicKey || sendingRef.current) return;
-        if (!requestTakesPhoto(requestMode)) return;
+        if (!requestTakesPhoto(requestMode) || requestLineId) return;
         // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
         // the image-picker Activity are separate windows — hide the keyboard first.
         await KeyboardController.dismiss();
@@ -1717,7 +1717,8 @@ function ChatScreen({ id }: { id: string }) {
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
-                        disabled={keyChangePending || requestMode === 'mine-loading' || !!requestLineId}
+                        disabled={keyChangePending}
+                        busy={requestMode === 'mine-loading' || !!requestLineId}
                         notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : (requestMode === 'mine-unsent' && !requestLineId ? t('Your first message goes to {name} as a request. You can write more once they accept.', { name: peerName }) : requestMode === 'mine-loading' ? t('Loading the chat') : null)}
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}

@@ -59,9 +59,9 @@ The button next to **My Deals** changes how the list looks: a list, a grid, or c
 - **RECURRING** if it stays open after each deal;
 - **CASH TOO** if the person also needs some cash, for fuel or materials;
 - a lock and a group name if only that group can see it;
-- who posted it, with their trust badge and stars. A member who has not traded yet shows **FOUNDING**.
+- who posted it, with their trust badge and stars. A member who has not traded yet shows 🌱 on their author line.
 
-Tap a post to open it.
+Tap a post to open it. There is no separate VIEW button; tapping anywhere on the card opens it.
 
 ## On a post
 

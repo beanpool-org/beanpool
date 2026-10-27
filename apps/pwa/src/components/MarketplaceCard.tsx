@@ -478,4 +478,3 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         </div>
     );
 }
-}

@@ -28,7 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { markNoticeShown, postNoticesFromSync, KNOCK_ROLE_RECHECK_MS, SYNC_NOTICE_MAX_AGE_MS, type LocalNotice } from '../sync-notices';
-import { PUSH_REGISTERED_AT_STORE_KEY } from '../storage-keys';
+import { PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY } from '../storage-keys';
 import { pushNoticeWords } from '@beanpool/core';
 import { checkTap, checkWhileOpen, LOCAL_NOTICE_DATA } from '../push-notice-check';
 import { boundSignatureValid } from './server-signature-check';
@@ -294,6 +294,35 @@ describe('requests to join, from the background sync', () => {
         expect(await admin()).toBe(0);
         open = 5;
         expect(await admin()).toBe(1);
+    });
+
+    it('a registration that never landed (on the record, still due: refused, or no answer) is no push: the floor tells the owner', async () => {
+        adminRoutes();
+        // The community goes on the record before the request goes out, and the registration stays due until it lands
+        // (push-registrations.ts): until then the node holds no token for this phone.
+        mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([MULLUM]));
+        const due = (community: string, publicKey = kim.publicKey) => ({ publicKey: publicKey.toLowerCase(), community, refusals: 3, retryAt: Date.now() + 60 * 60 * 1000 });
+        mem.async.set(PUSH_REGISTRATIONS_DUE_STORE_KEY, JSON.stringify([due(MULLUM)]));
+        open = 1;
+        expect(await admin()).toBe(0);
+        open = 2;
+        expect(await admin()).toBe(1);
+        expect({ title: posted[0].title, body: posted[0].body }).toEqual(pushNoticeWords('community.knock'));
+
+        // Due at another community only, or for another key: this one's registration landed, and the push tells it.
+        posted = [];
+        requests = [];
+        mem.async.set(PUSH_REGISTRATIONS_DUE_STORE_KEY, JSON.stringify([due('https://castlemaine.beanpool.org'), due(MULLUM, account().publicKey)]));
+        open = 3;
+        expect(await admin()).toBe(0);
+        expect(posted).toEqual([]);
+        expect(requests).toEqual([]);
+
+        // It lands: nothing due. The push alone, as above.
+        mem.async.delete(PUSH_REGISTRATIONS_DUE_STORE_KEY);
+        open = 4;
+        expect(await admin()).toBe(0);
+        expect(posted).toEqual([]);
     });
 
     it("a member's sync never reads the admin-only queue: it asks its role once a day, any member's read", async () => {

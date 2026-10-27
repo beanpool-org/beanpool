@@ -24,7 +24,9 @@ import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { LOCAL_NOTICE_DATA } from './push-notice-check';
 import { communityAddress } from './push-pins';
-import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY } from './storage-keys';
+import {
+    ADMIN_KNOCKS_COUNT_STORE_KEY, KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
+} from './storage-keys';
 import { knockStillAnswerable } from './knock';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
@@ -209,13 +211,10 @@ export async function postNoticesFromSync(deps: SyncNoticeDeps): Promise<number>
 
 // ── Requests to join (front doors S1, design §5.2 and §5.5) ────────────────────────────────────────────────────
 
-/**
- * What this phone last saw of its community's open requests to join, for the account on it (`{ community, publicKey,
- * count }`). A notice is posted only when the count rose since; the first look only writes it down.
- */
-export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
-/** The account's role on that community as `GET /api/node-admin/me` last said it, and when (`{ community, publicKey, role, at }`). */
-export const KNOCK_ROLE_STORE_KEY = 'beanpool_knock_role_checked';
+// What this phone last saw of its community's open requests to join, for the account on it (`{ community, publicKey,
+// count }`): a notice is posted only when the count rose since; the first look only writes it down. And the account's
+// role there as `GET /api/node-admin/me` last said it, and when. Both live in storage-keys.ts
+// (ADMIN_KNOCKS_COUNT_STORE_KEY, KNOCK_ROLE_STORE_KEY) so Sign Out wipes them without loading this module.
 /** How long that answer stands before it is asked again: a member made an admin is told from the next day at the latest. */
 export const KNOCK_ROLE_RECHECK_MS = 24 * 60 * 60 * 1000;
 
@@ -271,11 +270,23 @@ export async function postKnockStatusNoticesFromSync(deps: SyncNoticeDeps): Prom
     }
 }
 
-/** Whether this phone sent its push token to `community` for the account on it (utils/push-registrations.ts). */
-async function pushRegisteredWith(storage: Storage, community: string): Promise<boolean> {
+/**
+ * Whether `community` holds this phone's push token for `publicKey` (utils/push-registrations.ts): it is on the record
+ * AND its registration is not still due for that key. The record alone is not enough: a community goes on it before the
+ * request goes out and stays there when the request is refused or unanswered, and until a retry lands the node has no
+ * token for this phone, so a knock sends it no push and this floor must tell it (#2523 review 4383895745). Read here,
+ * not through push-registrations.ts, so the background task doesn't load the key store and the token's own modules.
+ */
+async function pushLandedAt(storage: Storage, community: string, publicKey: string): Promise<boolean> {
     try {
         const list = JSON.parse((await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY)) ?? '[]');
-        return Array.isArray(list) && list.some((c) => communityAddress(c) === community);
+        if (!Array.isArray(list) || !list.some((c) => communityAddress(c) === community)) return false;
+        const due = JSON.parse((await storage.getItem(PUSH_REGISTRATIONS_DUE_STORE_KEY)) ?? '[]');
+        const key = publicKey.toLowerCase();
+        // A due list that can't be read can't show the registration landed: the floor tells this phone.
+        if (!Array.isArray(due)) return false;
+        return !due.some((d) => !!d && typeof d === 'object' && typeof d.publicKey === 'string'
+            && d.publicKey.toLowerCase() === key && communityAddress(d.community) === community);
     } catch {
         return false;
     }
@@ -310,7 +321,7 @@ export async function postAdminKnockNoticesFromSync(deps: SyncNoticeDeps): Promi
     try {
         const community = communityAddress(await deps.storage.getItem(ANCHOR_STORE_KEY));
         if (!community) return 0;
-        if (await pushRegisteredWith(deps.storage, community)) {
+        if (await pushLandedAt(deps.storage, community, account.publicKey)) {
             // The push tells this phone. What was last seen is dropped, so a phone that loses its push starts afresh.
             await deps.storage.setItem(ADMIN_KNOCKS_COUNT_STORE_KEY, '');
             return 0;

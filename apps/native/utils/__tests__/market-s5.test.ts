@@ -27,6 +27,12 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(marketSrc).not.toContain('width: 96, height: \'100%\', minHeight: 96');
     });
 
+    it('EventCard list thumbnail is 80 dp (not 96 dp)', () => {
+        const eventCardSrc = source('components/EventCard.tsx');
+        expect(eventCardSrc).toMatch(/photo:\s*\{[\s\S]*?width:\s*80,[\s\S]*?height:\s*80/);
+        expect(eventCardSrc).not.toMatch(/photo:\s*\{[\s\S]*?width:\s*96,[\s\S]*?height:\s*96/);
+    });
+
     it('truly empty Market (feed branch) shows the words "Nothing here yet. Be the first:" and four CategoryTiles at thumb size', () => {
         // Must be in emptyState.kind === 'feed'
         const feedBranch = marketSrc.split("emptyState.kind === 'feed'")[1]?.split(/:\s*\(/)[0] || '';

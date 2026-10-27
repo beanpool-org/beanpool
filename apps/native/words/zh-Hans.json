@@ -5874,5 +5874,9 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}”已发布，但不在你的店铺里。若要放进去，请打开它，点按“编辑帖子”并勾选“把这个放进你的店铺”。",
   "✓ Friend": "✓ 好友",
   "✓ nonce issued": "✓ 已签发随机数",
-  "Failed to load": "加载失败"
+  "Failed to load": "加载失败",
+  "Turn on": "开启",
+  "Turn on notifications?": "开启通知？",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手机设置中已关闭 BeanPool 的通知。打开设置即可开启。"
 }

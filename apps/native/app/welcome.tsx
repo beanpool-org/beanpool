@@ -73,6 +73,10 @@ import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
+import {
+    declineNotifications, readNotificationPermissionRecord, readOsNotificationPermission,
+    shouldShowNotificationCard, turnOnNotifications,
+} from '../utils/notification-permission';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -179,6 +183,24 @@ export default function WelcomeScreen() {
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
+    const [notifVisible, setNotifVisible] = useState(false);
+    const [notifBusy, setNotifBusy] = useState(false);
+    useEffect(() => {
+        if (mode !== 'onboardingGuide') return;
+        let live = true;
+        const check = async () => {
+            const [record, os] = await Promise.all([
+                readNotificationPermissionRecord(),
+                readOsNotificationPermission(),
+            ]);
+            // Where expo-notifications can't load there is nothing to turn on, so no card (as at a first message).
+            if (live) setNotifVisible(os.available && shouldShowNotificationCard(record, os.granted));
+        };
+        void check();
+        // Back from the phone's settings (Turn on when the phone won't ask again): the card goes once they allow it.
+        const sub = AppState?.addEventListener?.('change', (next) => { if (next === 'active') void check(); });
+        return () => { live = false; sub?.remove(); };
+    }, [mode]);
     // Communities this device has joined before. They survive an identity wipe on purpose, so
     // a member recovering on the same phone can tap theirs rather than retype its address.
     const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
@@ -2505,6 +2527,54 @@ export default function WelcomeScreen() {
                                 </Text>
                             )}
                         </View>
+
+                        {notifVisible && (
+                            <View style={guideStyles.card} testID="guide-notification-card">
+                                <Text style={guideStyles.cardTitle} accessibilityRole="header">{t('Turn on notifications?')}</Text>
+                                <Text style={guideStyles.cardText}>
+                                    {t('So you hear when someone answers you, messages you, or asks to join. Nothing else.')}
+                                </Text>
+                                <Pressable
+                                    style={[styles.primaryBtn, { minHeight: 48, marginTop: 12, marginBottom: 8 }, notifBusy && { opacity: 0.6 }]}
+                                    disabled={notifBusy}
+                                    onPress={async () => {
+                                        if (notifBusy) return;
+                                        setNotifBusy(true);
+                                        try {
+                                            const result = await turnOnNotifications(pendingIdentity?.publicKey);
+                                            // 'settings': the phone's settings opened; nothing is answered yet, so the card stays.
+                                            if (result !== 'settings') setNotifVisible(false);
+                                        } finally {
+                                            setNotifBusy(false);
+                                        }
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ busy: notifBusy, disabled: notifBusy }}
+                                    testID="guide-notification-turn-on"
+                                >
+                                    <Text style={styles.primaryBtnText}>{t('Turn on')}</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.secondaryBtn, { minHeight: 48 }, notifBusy && { opacity: 0.6 }]}
+                                    disabled={notifBusy}
+                                    onPress={async () => {
+                                        if (notifBusy) return;
+                                        setNotifBusy(true);
+                                        try {
+                                            await declineNotifications();
+                                            setNotifVisible(false);
+                                        } finally {
+                                            setNotifBusy(false);
+                                        }
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ busy: notifBusy, disabled: notifBusy }}
+                                    testID="guide-notification-not-now"
+                                >
+                                    <Text style={[styles.secondaryBtnText, { color: colors.text.secondary }]}>{t('Not now')}</Text>
+                                </Pressable>
+                            </View>
+                        )}
 
                         {error && <Text style={styles.error}>{error}</Text>}
 

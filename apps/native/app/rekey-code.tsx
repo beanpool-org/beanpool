@@ -68,7 +68,7 @@ function hostOf(community: string | undefined): string {
 }
 
 export default function RekeyCodeScreen() {
-    const params = useLocalSearchParams<{ link?: string }>();
+    const params = useLocalSearchParams<{ link?: string | string[] }>();
     const { setIdentity } = useIdentity();
     const { t, lang } = useWords();
     /** Time left on the code, in words. */
@@ -114,7 +114,8 @@ export default function RekeyCodeScreen() {
         scanHint: { position: 'absolute', left: 16, right: 16, bottom: 48, color: '#fff', fontSize: 15, lineHeight: 21, textAlign: 'center' },
     }));
 
-    const fromLink = useMemo(() => (typeof params.link === 'string' ? parseRekeyLink(params.link) : null), [params.link]);
+    const rawLink = Array.isArray(params.link) ? params.link[0] : params.link;
+    const fromLink = useMemo(() => (typeof rawLink === 'string' ? parseRekeyLink(rawLink) : null), [rawLink]);
     const [community, setCommunity] = useState(fromLink?.community ?? '');
     const [code, setCode] = useState(fromLink?.code ?? '');
     const [phase, setPhase] = useState<Phase>('form');

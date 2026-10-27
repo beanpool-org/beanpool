@@ -28,6 +28,7 @@ import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type 
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
+import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 
 export { ErrorBoundary };
 
@@ -267,6 +268,7 @@ export default function FindCommunityScreen() {
         if (!identity || !c.url) return;
         const problem = knockFormProblem({ callsign, message });
         if (problem) { setFormError(problem); return; }
+        await askNotificationPermissionOnAction('knock', identity.publicKey);
         setSending(true);
         setFormError(null);
         const avatar = await getCanonicalAvatar().catch(() => null);

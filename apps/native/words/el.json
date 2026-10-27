@@ -6116,5 +6116,9 @@
   "Failed to load": "Αποτυχία φόρτωσης",
   "PHOTO *": "ΦΩΤΟΓΡΑΦΙΑ *",
   "Missing Photo": "Λείπει η φωτογραφία",
-  "Add a photo first": "Προσθέστε πρώτα μια φωτογραφία"
+  "Add a photo first": "Προσθέστε πρώτα μια φωτογραφία",
+  "Turn on": "Ενεργοποίηση",
+  "Turn on notifications?": "Ενεργοποίηση ειδοποιήσεων;",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Οι ειδοποιήσεις για το BeanPool είναι απενεργοποιημένες στις ρυθμίσεις του τηλεφώνου σας. Ανοίξτε τις Ρυθμίσεις για να τις ενεργοποιήσετε."
 }

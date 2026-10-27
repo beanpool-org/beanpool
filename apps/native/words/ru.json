@@ -6594,5 +6594,9 @@
   "Failed to load": "Не удалось загрузить",
   "PHOTO *": "ФОТО *",
   "Missing Photo": "Нет фото",
-  "Add a photo first": "Сначала добавьте фото"
+  "Add a photo first": "Сначала добавьте фото",
+  "Turn on": "Включить",
+  "Turn on notifications?": "Включить уведомления?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Чтобы вы знали, когда кто-то ответит вам, напишет сообщение или попросит присоединиться. Больше ни для чего.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Уведомления BeanPool выключены в настройках телефона. Откройте настройки, чтобы включить их."
 }

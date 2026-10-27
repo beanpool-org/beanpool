@@ -119,6 +119,12 @@ vi.mock('../node-claim', () => ({ readClaimStatus: vi.fn(async () => world.claim
 const manage = vi.hoisted(() => ({ outcome: { kind: 'opened' } as any, anchor: 'https://mullum.example' as string | null }));
 vi.mock('../node-admin', async (importOriginal) => ({ ...(await importOriginal<object>()), manageNode: vi.fn(async () => manage.outcome) }));
 vi.mock('../node-post', async (importOriginal) => ({ ...(await importOriginal<object>()), anchorUrl: vi.fn(async () => manage.anchor) }));
+// The first knock asks about notifications before it sends (find-community.tsx, front doors S3; its own suite is
+// notification-permissions-s3): answered at once here, so Send doesn't wait on loading the real expo-notifications.
+vi.mock('../notification-permission', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../notification-permission')>()),
+    askNotificationPermissionOnAction: vi.fn(async () => 'unanswered' as const),
+}));
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider, DrawnInLanguage } from '../../components/LanguageProvider';
@@ -215,7 +221,11 @@ describe('Find a community in the pseudo-locale: every word came through t() (wo
         await type(box, 'I grow tomatoes.');
         world.send = { kind: 'refused', status: 403, code: null, message: 'We only take members from the valley.' };
         await click(buttonReading(xx('Send')), 'Send');
-        expect(host.textContent).toContain('We only take members from the valley.');
+        // The knock's send is a chain of awaits (the ask, the avatar, the request): wait for its answer, not a tick count.
+        await vi.waitFor(async () => {
+            await settle(1);
+            expect(host.textContent).toContain('We only take members from the valley.');
+        }, { timeout: 20_000, interval: 50 });
         expect(bypassing(host, [...WRITTEN, 'I grow tomatoes.'], alerts.said)).toEqual([]);
     });
 

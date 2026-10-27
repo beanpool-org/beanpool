@@ -6116,5 +6116,9 @@
   "Failed to load": "Falha ao carregar",
   "PHOTO *": "FOTO *",
   "Missing Photo": "Foto ausente",
-  "Add a photo first": "Adicione uma foto primeiro"
+  "Add a photo first": "Adicione uma foto primeiro",
+  "Turn on": "Ativar",
+  "Turn on notifications?": "Ativar notificações?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para saber quando alguém responder, enviar uma mensagem ou pedir para entrar. Nada mais.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "As notificações do BeanPool estão desligadas nas definições do seu telefone. Abra as Definições para as ligar."
 }

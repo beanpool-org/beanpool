@@ -22,7 +22,7 @@ import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
 import {
-    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, placeWatchLimitLine, roundPointToArea, t, tn,
+    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, notAnsweringLately, placeWatchLimitLine, roundPointToArea, t, tn,
 } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
@@ -48,6 +48,11 @@ export interface DirectoryCommunity {
     contactPhone: string | null;
     /** Kilometres from the point asked about (0.1 km), or null with no point or no place. */
     distanceKm: number | null;
+    /**
+     * Its last push to the directory (an ISO time), or null when the node didn't say (an older global node). Past 36 h
+     * the row says "Not answering lately" (notAnsweringLine; front doors S13).
+     */
+    lastSeenAt?: string | null;
 }
 
 export interface PlaceWatch { id: string; lat: number; lng: number; radiusKm: number; createdAt: string }
@@ -111,6 +116,7 @@ export function readCommunity(raw: unknown): DirectoryCommunity | null {
         contactEmail: text(r.contactEmail, 200),
         contactPhone: text(r.contactPhone, 60),
         distanceKm: finite(r.distanceKm) && (r.distanceKm as number) >= 0 ? (r.distanceKm as number) : null,
+        lastSeenAt: typeof r.lastSeenAt === 'string' && r.lastSeenAt.length <= 64 && Number.isFinite(Date.parse(r.lastSeenAt)) ? r.lastSeenAt : null,
     };
 }
 
@@ -254,6 +260,15 @@ export async function unwatchPlace(identity: BeanPoolIdentity, id: string, base:
 
 export function communityLabel(c: Pick<DirectoryCommunity, 'name'>): string {
     return c.name ?? t('A community');
+}
+
+/**
+ * "Not answering lately", in the member's language, under a community whose last push to the directory is more than 36 h
+ * ago (core notAnsweringLately), or null. It is still listed, and Ask to join still works: the knock waits until it
+ * answers. The web's find rows say the same (apps/pwa/src/lib/home-cards.ts).
+ */
+export function notAnsweringLine(c: Pick<DirectoryCommunity, 'lastSeenAt'>, now: number = Date.now()): string | null {
+    return notAnsweringLately(c.lastSeenAt, now) ? t(FIND_COMMUNITY_WORDS.notAnswering) : null;
 }
 
 /** A distance of 1 km or more as the lines write it: "3.4", "12", "12,000" (one decimal under 10 km). */

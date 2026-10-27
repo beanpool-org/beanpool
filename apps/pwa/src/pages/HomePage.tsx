@@ -42,7 +42,7 @@ import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, isHomeCardId,
-    joinedLine, monthSummaryLine, nearbyLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
+    joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
     starredFirst, stepLines, tierWords, toggleInterest, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
@@ -1879,9 +1879,16 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         {more.map(cm => {
                             const facts = communityFacts(cm);
                             const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
-                            return cm.url
-                                ? <HomeLine key={cm.key} href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
-                                : <p key={cm.key} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>;
+                            // Gone quiet for more than 36 h: said under the row, which stays a link (front doors S13).
+                            const quiet = notAnsweringLine(cm);
+                            return (
+                                <Fragment key={cm.key}>
+                                    {cm.url
+                                        ? <HomeLine href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
+                                        : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
+                                    {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
+                                </Fragment>
+                            );
                         })}
                         {/* Nothing listed within 250 km, and the list has loaded (findOffersStart): Start leads, as on the
                             phone, and a member can be told when one starts here. Never before the list loads, never while near. */}

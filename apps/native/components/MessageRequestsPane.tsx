@@ -29,15 +29,15 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         let alive = true;
         const loadPreview = async () => {
             try {
-                let msgs = await getMessages(entry.id, 20);
+                let msgs = await getMessages(entry.id, { limit: 20 });
                 if (msgs.length === 0) {
                     await syncSingleConversation(entry.id).catch(() => {});
-                    msgs = await getMessages(entry.id, 20);
+                    msgs = await getMessages(entry.id, { limit: 20 });
                 }
                 if (!alive) return;
                 const last = msgs[msgs.length - 1];
                 if (last) {
-                    const hasPhoto = !!(last.attachment_mime || last.attachment_filename || last.metadata?.attachment);
+                    const hasPhoto = last.type === 'image' || !!(last.attachment_mime || last.attachment_filename || last.metadata?.attachment);
                     setPreview({ text: last.text, photo: hasPhoto, loading: false });
                 } else {
                     setPreview({ loading: false });

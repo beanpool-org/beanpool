@@ -247,7 +247,7 @@ export async function withdrawFromDirectory(reason: WithdrawReason): Promise<Wit
     if (getNodeRole() !== 'primary') return { sent: false, ok: false, reason: 'not a main server' };
     if (!getNodeConfig().lastDirectoryPush) return { sent: false, ok: false, reason: 'never pushed' };
     if (withdrawing) return withdrawing;
-    withdrawing = (async (): Promise<WithdrawResult> => {
+    const run = (async (): Promise<WithdrawResult> => {
         try {
             const p2pNode = getP2PNode();
             const privateKey = getPrivateKey();
@@ -265,11 +265,13 @@ export async function withdrawFromDirectory(reason: WithdrawReason): Promise<Wit
         } catch (err: any) {
             console.warn(`[Directory] ⚠️ Could not take this community off the directory (${reason}): ${err?.message || err}`);
             return { sent: true, ok: false, reason: String(err?.message || err) };
-        } finally {
-            withdrawing = null;
         }
     })();
-    return withdrawing;
+    // Cleared once it settles, from outside it: a run that returns before its first await would otherwise clear the slot
+    // before it was set, and hold it for good.
+    withdrawing = run;
+    void run.finally(() => { if (withdrawing === run) withdrawing = null; });
+    return run;
 }
 
 /** The owners switched Listed off (config/community-shape-write.ts): the row goes now, not in 7 days. Not awaited. */

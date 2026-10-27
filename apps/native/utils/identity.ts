@@ -11,7 +11,7 @@ import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
     ADMIN_KNOCKS_COUNT_STORE_KEY, CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY,
-    KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, NOTIFICATION_PERMISSION_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX,
+    KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, MESSAGE_REQUESTS_STORE_PREFIX, NOTIFICATION_PERMISSION_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX,
     PUSH_REGISTERED_AT_STORE_KEY,
     PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY,
 } from './storage-keys';
@@ -575,7 +575,10 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
         // The profile change waiting to reach each community (pending-profile-sync.ts).
         || k.startsWith(PENDING_PROFILE_STORE_PREFIX)
         // Each tool's settings (tools/store.ts): which reminders are on, which door was taken.
-        || k.startsWith(TOOL_SETTINGS_PREFIX));
+        || k.startsWith(TOOL_SETTINGS_PREFIX)
+        // The message requests each community last listed for it (db.ts saveMessageRequests): each stranger who wrote to
+        // it, their name and picture (PR #2540 review 4394671101).
+        || k.startsWith(MESSAGE_REQUESTS_STORE_PREFIX));
     if (accountKeys.length > 0) {
         await storage.multiRemove(accountKeys);
     }

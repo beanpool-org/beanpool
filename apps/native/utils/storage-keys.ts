@@ -63,14 +63,19 @@ export function communityBlocksStoreKey(publicKey: string): string {
     return `beanpool_community_blocks:${publicKey.toLowerCase()}`;
 }
 
+/** Every {@link messageRequestsStoreKey} key starts with this. */
+export const MESSAGE_REQUESTS_STORE_PREFIX = 'beanpool_message_requests:';
+
 /**
  * The message requests waiting for one account in one community file, as that community's node last listed them (utils/db.ts
  * saveMessageRequests): one value per (account, file), as every other piece of a community's conversations is kept apart,
  * so a switch of community never shows another's strangers, nor sends their ids to this one's node (PR #2540 review
- * 4394120364). `file`: the name db.ts opens the community under.
+ * 4394120364). `file`: the name db.ts opens the community under. A copy the next sync replaces, naming who wrote to the
+ * account: Sign Out and Replace wipe every one by {@link MESSAGE_REQUESTS_STORE_PREFIX} (utils/identity.ts
+ * wipeIdentityScopedStorage; review 4394671101).
  */
 export function messageRequestsStoreKey(publicKey: string, file: string): string {
-    return `beanpool_message_requests:${publicKey.toLowerCase()}:${file}`;
+    return `${MESSAGE_REQUESTS_STORE_PREFIX}${publicKey.toLowerCase()}:${file}`;
 }
 
 /**

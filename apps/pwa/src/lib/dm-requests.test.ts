@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, decisionFailureWords, requestPendingRefusal } from './dm-requests';
+import { type DmRequestCore, requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, decisionFailureWords, requestPendingRefusal } from './dm-requests';
 
 // The rules lib/dm-requests.ts reads from the node's answers (PR #2392 at 7d20c62d; shapes as its routes give them).
 
@@ -73,16 +73,16 @@ describe('requestModeOf', () => {
 });
 
 describe('requestAfterRead', () => {
-    const accepted = { state: 'accepted' as const, from: PEER, at: AT };
+    const accepted: DmRequestCore = { state: 'accepted', from: PEER, at: AT };
     it('takes the node\'s read, and none when it names none (requests off)', () => {
-        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT }, { request: accepted })).toEqual(accepted);
-        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT }, {})).toBeNull();
+        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT } as DmRequestCore, { request: accepted })).toEqual(accepted);
+        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT } as DmRequestCore, {})).toBeNull();
         expect(requestAfterRead(accepted, { request: null })).toBeNull();
     });
     it('an acceptance isn\'t undone by a read of the same request still naming it waiting', () => {
-        expect(requestAfterRead(accepted, { request: { state: 'pending', from: PEER, at: AT } })).toEqual(accepted);
+        expect(requestAfterRead(accepted, { request: { state: 'pending', from: PEER, at: AT } as DmRequestCore })).toEqual(accepted);
         // Another request (another time): the node's.
-        const fresh = { state: 'pending' as const, from: PEER, at: '2026-11-30T00:00:00.000Z' };
+        const fresh: DmRequestCore = { state: 'pending', from: PEER, at: '2026-11-30T00:00:00.000Z' };
         expect(requestAfterRead(accepted, { request: fresh })).toEqual(fresh);
     });
 });

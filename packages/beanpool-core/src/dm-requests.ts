@@ -103,7 +103,7 @@ export function requestAfterOwnLine<T extends DmRequestCore>(r: T | null | undef
  * or it is an ordinary chat). One exception: an acceptance is never undone by a read of the same request that still names
  * it waiting, which was asked before the acceptance landed. The node never takes an acceptance back from either person.
  */
-export function requestAfterRead<T extends DmRequestCore>(prev: T | null | undefined, read: { request?: T | null }): T | null {
+export function requestAfterRead<T extends DmRequestCore, R extends DmRequestCore = T>(prev: T | null | undefined, read: { request?: R | null }): T | R | null {
     const next = read.request ?? null;
     if (prev?.state === 'accepted' && next && next.state !== 'accepted' && next.from === prev.from && next.at === prev.at) return prev;
     return next;

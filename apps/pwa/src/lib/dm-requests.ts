@@ -12,6 +12,7 @@
 import {
     t,
     type RequestMode,
+    type DmRequestCore,
     REQUEST_CARDS_SHOWN,
     IGNORE_ALL_FROM,
     requestModeOf,
@@ -23,6 +24,7 @@ import {
 } from '@beanpool/core';
 export {
     type RequestMode,
+    type DmRequestCore,
     REQUEST_CARDS_SHOWN,
     IGNORE_ALL_FROM,
     requestModeOf,

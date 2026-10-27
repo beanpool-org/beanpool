@@ -3,7 +3,7 @@ import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { t, tn, requestModeOf, requestTakesPhoto } from '@beanpool/core';
+import { t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -733,6 +733,7 @@ function ChatScreen({ id }: { id: string }) {
                 }
                 await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
                 setReplyToMessage(null);
+                setConvRow((prev: any) => prev ? { ...prev, request: requestAfterOwnLine(prev.request, identity.publicKey) } : prev);
                 loadMessages();
             }
             setLockNotice(null);
@@ -849,6 +850,7 @@ function ChatScreen({ id }: { id: string }) {
                 // the timeout keeps a dead network from latching sendingRef forever.
                 await withTimeout(sendImageMessage(id as string, dataUri, '', metadata), 60_000, t('Sending the image is taking too long — please try again.'));
                 setReplyToMessage(null);
+                setConvRow((prev: any) => prev ? { ...prev, request: requestAfterOwnLine(prev.request, identity.publicKey) } : prev);
                 setLockNotice(null);
                 hapticSuccess();
                 loadMessages();

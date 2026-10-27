@@ -117,7 +117,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                         </span>
                     ) : (
                         isFounding && (
-                            <span data-testid="author-founding" className="text-[10px] font-extrabold text-nature-700 dark:text-nature-400 ml-0.5" title={t('Founding')} aria-label={t('Founding')}>🌱</span>
+                            <span data-testid="author-founding" className="text-[10px] font-extrabold text-nature-700 dark:text-nature-400 ml-0.5" title={t('Founding')} aria-label={t('Founding')}>🔑</span>
                         )
                     )}
                 </div>
@@ -158,7 +158,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                 ) : (
                     isFounding && (
                         <span data-testid="author-founding" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold bg-nature-500/10 border-nature-500/20 text-nature-700 dark:text-nature-300 ml-1">
-                            {t('🌱 FOUNDING')}
+                            {t('🔑 FOUNDING')}
                         </span>
                     )
                 )}

@@ -962,7 +962,6 @@
   "by {name} ⛰️ {you}": "از {name} ⛰️ {you}",
   "by {name} {you}": "از {name} {you}",
   "👤 (You)": "👤 (آپ)",
-  "🌱 FOUNDING": "🌱 بانی",
   "Founding": "بانی",
   "B\u0004the Beans sign": "پھلیاں",
   "View enlarged photo: {title}": "بڑی تصویر دیکھیں: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ کارروائی درکار ہے",
   "⏳ Awaiting Approval": "⏳ منظوری کا انتظار ہے",
   "⏸ PAUSED": "⏸ روکا گیا",
-  "Nothing here yet. Be the first:": "یہاں ابھی کچھ نہیں ہے۔ پہلے بنیں:"
+  "Nothing here yet. Be the first:": "یہاں ابھی کچھ نہیں ہے۔ پہلے بنیں:",
+  "🔑 FOUNDING": "🔑 بانی رکن"
 }

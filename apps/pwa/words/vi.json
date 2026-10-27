@@ -942,7 +942,6 @@
   "by {name} ⛰️ {you}": "bởi {name} ⛰️ {you}",
   "by {name} {you}": "bởi {name} {you}",
   "👤 (You)": "👤 (Bạn)",
-  "🌱 FOUNDING": "🌱 SÁNG LẬP",
   "Founding": "Sáng lập",
   "B\u0004the Beans sign": "đậu",
   "View enlarged photo: {title}": "Xem ảnh phóng to: {title}",
@@ -3509,5 +3508,6 @@
   "⚠️ Action Required": "⚠️ Cần xử lý",
   "⏳ Awaiting Approval": "⏳ Chờ chấp thuận",
   "⏸ PAUSED": "⏸ ĐÃ TẠM DỪNG",
-  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:"
+  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:",
+  "🔑 FOUNDING": "🔑 SÁNG LẬP"
 }

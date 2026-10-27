@@ -50,7 +50,7 @@ describe('MarketplaceCard S5 design requirements', () => {
         expect(screen.queryByText(/PENDING/)).toBeNull();
     });
 
-    it('founding shows on the author line (🌱) and not on the photo', () => {
+    it('founding shows on the author line (🔑) and not on the photo', () => {
         const post = {
             ...basePost,
             authorFoundingNeeded: true,
@@ -59,10 +59,23 @@ describe('MarketplaceCard S5 design requirements', () => {
 
         // Photo overlay should not contain FOUNDING TRADE
         expect(screen.queryByText('🌱 FOUNDING TRADE')).toBeNull();
-        // The author line must show the founding mark (🌱)
+        expect(screen.queryByText('🔑 FOUNDING TRADE')).toBeNull();
+        // The author line must show the founding mark (🔑)
         const authorLine = container.querySelector('[data-testid="author-founding"]');
         expect(authorLine).not.toBeNull();
-        expect(authorLine?.textContent).toContain('🌱');
+        expect(authorLine?.textContent).toContain('🔑');
+        expect(authorLine?.textContent).not.toContain('🌱');
+    });
+
+    it('founding shows in list view on the author line as 🔑 FOUNDING', () => {
+        const post = {
+            ...basePost,
+            authorFoundingNeeded: true,
+        };
+        const { container } = render(<MarketplaceCard post={post} viewMode="list" />);
+        const authorLine = container.querySelector('[data-testid="author-founding"]');
+        expect(authorLine).not.toBeNull();
+        expect(authorLine?.textContent).toContain('🔑 FOUNDING');
     });
 
     it('no description line and no VIEW on a non-Pulse grid card', () => {

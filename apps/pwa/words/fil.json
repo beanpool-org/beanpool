@@ -669,7 +669,6 @@
   "by {name} {you}": "ni {name} {you}",
   "👤 (You)": "👤 (Ikaw)",
   "by {name} ⛰️": "ni {name} ⛰️",
-  "🌱 FOUNDING": "🌱 FOUNDING",
   "Founding": "Tagapagtatag",
   "B\u0004the Beans sign": "B",
   "PULSE": "PULSE",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ Kailangang Aksyon",
   "⏳ Awaiting Approval": "⏳ Naghihintay ng Pag-apruba",
   "⏸ PAUSED": "⏸ NAKA-PAUSE",
-  "Nothing here yet. Be the first:": "Wala pa rito. Mauna ka na:"
+  "Nothing here yet. Be the first:": "Wala pa rito. Mauna ka na:",
+  "🔑 FOUNDING": "🔑 TAGAPAGTATAG"
 }

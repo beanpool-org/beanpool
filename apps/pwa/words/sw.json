@@ -962,7 +962,6 @@
   "by {name} ⛰️ {you}": "na {name} ⛰️ {you}",
   "by {name} {you}": "na {name} {you}",
   "👤 (You)": "👤 (Wewe)",
-  "🌱 FOUNDING": "🌱 MWANZILISHI",
   "Founding": "Waanzilishi",
   "B\u0004the Beans sign": "maharagwe",
   "View enlarged photo: {title}": "Tazama picha kubwa: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ Hatua Inahitajika",
   "⏳ Awaiting Approval": "⏳ Inasubiri Uidhinishaji",
   "⏸ PAUSED": "⏸ IMESITISHWA",
-  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:"
+  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:",
+  "🔑 FOUNDING": "🔑 MWANZILISHI"
 }

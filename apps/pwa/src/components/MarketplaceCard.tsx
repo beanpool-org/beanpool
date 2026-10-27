@@ -172,7 +172,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {distanceTag}
                             {foundingChip && (
                                 <span data-testid="author-founding" className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
-                                    {t('🌱 FOUNDING')}
+                                    {t('🔑 FOUNDING')}
                                 </span>
                             )}
                             {groupScopeBadge && (

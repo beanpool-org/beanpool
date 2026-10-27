@@ -962,7 +962,6 @@
   "by {name} ⛰️ {you}": "{name} மூலம் ⛰️ {you}",
   "by {name} {you}": "{name} மூலம் {you}",
   "👤 (You)": "👤 (நீங்கள்)",
-  "🌱 FOUNDING": "🌱 நிறுவன",
   "Founding": "நிறுவனர்கள்",
   "B\u0004the Beans sign": "பயறு",
   "View enlarged photo: {title}": "பெரிதாக்கப்பட்ட புகைப்படத்தைக் காண்க: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ நடவடிக்கை தேவை",
   "⏳ Awaiting Approval": "⏳ ஒப்புதலுக்காகக் காத்திருக்கிறது",
   "⏸ PAUSED": "⏸ இடைநிறுத்தப்பட்டது",
-  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:"
+  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:",
+  "🔑 FOUNDING": "🔑 நிறுவன உறுப்பினர்"
 }

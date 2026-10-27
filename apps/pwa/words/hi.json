@@ -669,7 +669,6 @@
   "by {name} {you}": "{name} द्वारा {you}",
   "👤 (You)": "👤 (आप)",
   "by {name} ⛰️": "{name} द्वारा ⛰️",
-  "🌱 FOUNDING": "🌱 संस्थापक",
   "Founding": "संस्थापक",
   "B\u0004the Beans sign": "B",
   "PULSE": "पल्स",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ कार्रवाई आवश्यक",
   "⏳ Awaiting Approval": "⏳ स्वीकृति की प्रतीक्षा",
   "⏸ PAUSED": "⏸ रोका गया",
-  "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:"
+  "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:",
+  "🔑 FOUNDING": "🔑 संस्थापक"
 }

@@ -670,7 +670,6 @@
   "by {name} {you}": "por {name} {you}",
   "👤 (You)": "👤 (Tú)",
   "by {name} ⛰️": "de {name} ⛰️",
-  "🌱 FOUNDING": "🌱 FUNDADOR",
   "Founding": "Fundadores",
   "B\u0004the Beans sign": "B",
   "PULSE": "PULSO",
@@ -3635,5 +3634,6 @@
   "⚠️ Action Required": "⚠️ Acción requerida",
   "⏳ Awaiting Approval": "⏳ Esperando aprobación",
   "⏸ PAUSED": "⏸ PAUSADO",
-  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:"
+  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
+  "🔑 FOUNDING": "🔑 FUNDADOR"
 }

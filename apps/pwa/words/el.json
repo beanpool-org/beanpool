@@ -981,7 +981,6 @@
   "by {name} ⛰️ {you}": "από {name} ⛰️ {you}",
   "by {name} {you}": "από {name} {you}",
   "👤 (You)": "👤 (Εσείς)",
-  "🌱 FOUNDING": "🌱 ΙΔΡΥΤΙΚΟ",
   "Founding": "Ιδρυτικά μέλη",
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "Προβολή σε μεγέθυνση: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ Απαιτείται ενέργεια",
   "⏳ Awaiting Approval": "⏳ Αναμονή έγκρισης",
   "⏸ PAUSED": "⏸ ΣΕ ΠΑΥΣΗ",
-  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:"
+  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:",
+  "🔑 FOUNDING": "🔑 ΙΔΡΥΤΙΚΟ"
 }

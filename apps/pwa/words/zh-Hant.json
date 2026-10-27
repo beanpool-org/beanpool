@@ -942,7 +942,6 @@
   "by {name} ⛰️ {you}": "來自 {name} ⛰️ {you}",
   "by {name} {you}": "來自 {name} {you}",
   "👤 (You)": "👤（你）",
-  "🌱 FOUNDING": "🌱 創始",
   "Founding": "創始成員",
   "B\u0004the Beans sign": "豆子",
   "View enlarged photo: {title}": "查看放大照片：{title}",
@@ -3509,5 +3508,6 @@
   "⚠️ Action Required": "⚠️ 需要處理",
   "⏳ Awaiting Approval": "⏳ 等待核准",
   "⏸ PAUSED": "⏸ 已暫停",
-  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者："
+  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者：",
+  "🔑 FOUNDING": "🔑 創始成員"
 }

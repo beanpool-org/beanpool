@@ -14,7 +14,7 @@ import { MARKETPLACE_CATEGORIES, type MarketplacePost } from '../lib/marketplace
 vi.mock('./PostAuthorTrust', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./PostAuthorTrust')>()),
     PostAuthorTrust: ({ callsign, isFounding }: { callsign: string; isFounding?: boolean }) => (
-        <span data-testid="author">{callsign}{isFounding ? ' 🌱' : ''}</span>
+        <span data-testid="author">{callsign}{isFounding ? ' 🔑' : ''}</span>
     ),
 }));
 
@@ -91,7 +91,7 @@ describe('a Market card in the pseudo-locale', () => {
         );
         expect(bracketed()).toBe(0);
         expect(screen.getByText('👤 (You)').parentElement!.textContent).toMatch(/^by Kofi ⛰️ 👤 \(You\)/);
-        expect(screen.getAllByText(/🌱/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/🔑/).length).toBeGreaterThan(0);
         expect(screen.getAllByText('🔒 Only Garden club can see this').length).toBeGreaterThan(0);
         expect(screen.getByText('💸 CASH TOO')).toHaveAttribute('title', 'Cash also needed for fuel or materials — agreed in chat');
         expect(screen.getByText('⏳ PENDING')).toBeInTheDocument();

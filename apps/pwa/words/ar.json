@@ -1061,7 +1061,6 @@
   "by {name} ⛰️ {you}": "بواسطة {name} ⛰️ {you}",
   "by {name} {you}": "بواسطة {name} {you}",
   "👤 (You)": "👤 (أنت)",
-  "🌱 FOUNDING": "🌱 تأسيسي",
   "Founding": "تأسيسي",
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "عرض الصورة المكبرة: {title}",
@@ -4134,5 +4133,6 @@
   "⚠️ Action Required": "⚠️ إجراء مطلوب",
   "⏳ Awaiting Approval": "⏳ بانتظار الموافقة",
   "⏸ PAUSED": "⏸ متوقف مؤقتًا",
-  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:"
+  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:",
+  "🔑 FOUNDING": "🔑 تأسيسي"
 }

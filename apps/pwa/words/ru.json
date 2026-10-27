@@ -691,7 +691,6 @@
   "by {name} {you}": "автор: {name} {you}",
   "👤 (You)": "👤 (Вы)",
   "by {name} ⛰️": "от {name} ⛰️",
-  "🌱 FOUNDING": "🌱 ОСНОВАТЕЛЬ",
   "Founding": "Основатели",
   "B\u0004the Beans sign": "B",
   "PULSE": "ПУЛЬС",
@@ -3884,5 +3883,6 @@
   "⚠️ Action Required": "⚠️ Требуется действие",
   "⏳ Awaiting Approval": "⏳ Ожидает подтверждения",
   "⏸ PAUSED": "⏸ ПРИОСТАНОВЛЕНО",
-  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:"
+  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:",
+  "🔑 FOUNDING": "🔑 ОСНОВАТЕЛЬ"
 }

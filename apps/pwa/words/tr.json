@@ -962,7 +962,6 @@
   "by {name} ⛰️ {you}": "{name} tarafından ⛰️ {you}",
   "by {name} {you}": "{name} tarafından {you}",
   "👤 (You)": "👤 (Sen)",
-  "🌱 FOUNDING": "🌱 KURUCU",
   "Founding": "Kurucu",
   "B\u0004the Beans sign": "fasulye",
   "View enlarged photo: {title}": "Büyütülmüş fotoğrafı gör: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ Eylem Gerekli",
   "⏳ Awaiting Approval": "⏳ Onay Bekleniyor",
   "⏸ PAUSED": "⏸ DURAKLATILDI",
-  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:"
+  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:",
+  "🔑 FOUNDING": "🔑 KURUCU"
 }

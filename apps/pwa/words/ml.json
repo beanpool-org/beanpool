@@ -962,7 +962,6 @@
   "by {name} ⛰️ {you}": "{name} വഴി ⛰️ {you}",
   "by {name} {you}": "{name} വഴി {you}",
   "👤 (You)": "👤 (നിങ്ങൾ)",
-  "🌱 FOUNDING": "🌱 സ്ഥാപക",
   "Founding": "ഫൗണ്ടിംഗ്",
   "B\u0004the Beans sign": "പയർ",
   "View enlarged photo: {title}": "വലുതാക്കിയ ഫോട്ടോ കാണുക: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ നടപടി ആവശ്യമാണ്",
   "⏳ Awaiting Approval": "⏳ അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു",
   "⏸ PAUSED": "⏸ താൽക്കാലികമായി നിർത്തി",
-  "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:"
+  "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:",
+  "🔑 FOUNDING": "🔑 ഫൗണ്ടിംഗ്"
 }

@@ -1002,7 +1002,6 @@
   "by {name} ⛰️ {you}": "від {name} ⛰️ {you}",
   "by {name} {you}": "від {name} {you}",
   "👤 (You)": "👤 (Ви)",
-  "🌱 FOUNDING": "🌱 ЗАСНОВНИЦЬКИЙ",
   "Founding": "Засновники",
   "B\u0004the Beans sign": "боби",
   "View enlarged photo: {title}": "Збільшити фото: {title}",
@@ -3884,5 +3883,6 @@
   "⚠️ Action Required": "⚠️ Потрібна дія",
   "⏳ Awaiting Approval": "⏳ Очікує на схвалення",
   "⏸ PAUSED": "⏸ ПРИЗУПИНЕНО",
-  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:"
+  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:",
+  "🔑 FOUNDING": "🔑 ЗАСНОВНИК"
 }

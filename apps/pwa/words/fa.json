@@ -981,7 +981,6 @@
   "by {name} ⛰️ {you}": "توسط {name} ⛰️ {you}",
   "by {name} {you}": "توسط {name} {you}",
   "👤 (You)": "👤 (شما)",
-  "🌱 FOUNDING": "🌱 بنیان‌گذار",
   "Founding": "بنیان‌گذار",
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "مشاهده تصویر بزرگ: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ اقدام لازم است",
   "⏳ Awaiting Approval": "⏳ در انتظار تأیید",
   "⏸ PAUSED": "⏸ متوقف",
-  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:"
+  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:",
+  "🔑 FOUNDING": "🔑 بنیان‌گذار"
 }

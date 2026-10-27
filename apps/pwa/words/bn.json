@@ -981,7 +981,6 @@
   "by {name} ⛰️ {you}": "{name} দ্বারা ⛰️ {you}",
   "by {name} {you}": "{name} দ্বারা {you}",
   "👤 (You)": "👤 (আপনি)",
-  "🌱 FOUNDING": "🌱 প্রতিষ্ঠাতাকালীন",
   "Founding": "প্রতিষ্ঠাতা",
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "বড় ছবি দেখুন: {title}",
@@ -3634,5 +3633,6 @@
   "⚠️ Action Required": "⚠️ করণীয় প্রয়োজন",
   "⏳ Awaiting Approval": "⏳ অনুমোদনের অপেক্ষায়",
   "⏸ PAUSED": "⏸ স্থগিত",
-  "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:"
+  "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:",
+  "🔑 FOUNDING": "🔑 প্রতিষ্ঠাতা"
 }

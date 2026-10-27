@@ -942,7 +942,6 @@
   "by {name} ⛰️ {you}": "작성자: {name} ⛰️ {you}",
   "by {name} {you}": "작성자: {name} {you}",
   "👤 (You)": "👤 (나)",
-  "🌱 FOUNDING": "🌱 설립",
   "Founding": "창립 멤버",
   "B\u0004the Beans sign": "콩",
   "View enlarged photo: {title}": "사진 확대 보기: {title}",
@@ -3509,5 +3508,6 @@
   "⚠️ Action Required": "⚠️ 필요 작업 있음",
   "⏳ Awaiting Approval": "⏳ 승인 대기 중",
   "⏸ PAUSED": "⏸ 일시중지됨",
-  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:"
+  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:",
+  "🔑 FOUNDING": "🔑 창립 멤버"
 }

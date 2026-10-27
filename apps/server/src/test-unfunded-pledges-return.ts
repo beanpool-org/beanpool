@@ -25,8 +25,14 @@
  *     escrow (those are the stranded-pledges boot step's). A project with no end date: nothing.
  *  8. On a standby nothing moves and nobody is told; the same project goes back once the server is the main one again,
  *     through the wrapper the main server's minute tick calls.
- *  9. A backer who can't be paid here (pruned): the whole project is left exactly as it is, for the operator, tick after
- *     tick.
+ *  9. A backer whose account is closed (Marty, board, 27 Oct 2026: "To the Commons"). The measured case: Dan 40, Eve 25,
+ *     Zed 0.01, and Zed deletes his account (purgeMemberSelf); 8 days after the end date the tick pays Dan 40 and Eve 25,
+ *     the Commons gains Zed's 0.01 in a row naming the project and nobody, the escrow is 0, the audit 0 drift, nothing is
+ *     left for the operator, and the page says the Beans went back. The paid backers and the leader are told as before
+ *     (the leader's notice counts 2 backers, 65 Beans); nobody is told of the closed account. A wound-up enterprise as a
+ *     backer goes the same way. A backer who still can't be paid here (a live visitor's row) leaves the whole project
+ *     exactly as it is, for the operator, tick after tick. (Until this rule, a pruned backer was that case: part 9 changed
+ *     with the rule.)
  * 10. A node killed in the middle of a return (separate processes on one data dir of their own): nothing of it was kept;
  *     at its next boot the main server's own minute tick returns every pledge exactly once, and a third boot moves nothing.
  * 11. After the return, the date moved and a new pledge: the leader's cancel pays nobody twice.
@@ -51,7 +57,7 @@ import { initTls } from './services/tls.js';
 import * as stateEngine from './state-engine.js';
 import {
     initStateEngine, payFromCommons, transfer, conservingTransaction, broadcast, dispatchPushNotification, runLedgerAudit,
-    reconcileLedgerFromDb,
+    reconcileLedgerFromDb, moveToCommons, purgeMemberSelf, getCommonsBalanceExact,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, createCrowdfundProject, getCrowdfundProject, pledgeToProject } from './db/db.js';
@@ -167,6 +173,7 @@ function watchedHooks() {
     const hooks = {
         transfer,
         conservingTransaction,
+        moveToCommons: (from: string, amount: number, memo: string) => moveToCommons(from, amount, memo),
         broadcast: (event: any, to?: string[]) => { live.push({ event, to }); return broadcast(event, to); },
         dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: any, kind: any) => {
             pushes.push({ targets: [...targets], actor, title, body, data, category, kind });
@@ -480,25 +487,100 @@ async function main(): Promise<void> {
     assert(keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'pledges_returned' && n.body.includes('"Hall Kitchen"')).length === 1,
         'and Ann is told, through the node\'s own notices');
 
-    // ── 9. A backer who can't be paid here: the whole project is left for the operator ───────────────────────────────────
-    console.log('── 9. A backer pruned ──');
-    const dee = makeMember('Dee');
-    payFromCommons(dee.pubKeyHex, 50, 'Beans to pledge', { allowDeficit: true });
-    const bench = crypto.randomUUID();
-    createCrowdfundProject(bench, max.pubKeyHex, 'Park Bench', 'A bench by the creek', [], 40, new Date(Date.now() + 10 * DAY).toISOString());
-    pledgeToProject(crypto.randomUUID(), bench, ann.pubKeyHex, 5, 'Project Pledge');
-    pledgeToProject(crypto.randomUUID(), bench, dee.pubKeyHex, 7, 'Project Pledge');
-    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(dee.pubKeyHex);
-    const annBeforeBench = balanceOf(ann.pubKeyHex);
-    const benchCounts = { kept: keptFor(ann.pubKeyHex).length, live: watched.live.length };
+    // ── 9. A backer whose account is closed: their share goes to the Commons, and everyone else is paid ─────────────────
+    // Review of #2525 (discussion_r4382922607), measured: a 0.01 pledge, then its backer deleting his account, stopped the
+    // return for every other backer of the project, for good. Marty, board, 27 Oct 2026: "To the Commons".
+    console.log('── 9. A backer who closed their account ──');
+    const dan = makeMember('Dan'), eve = makeMember('Eve'), zed = makeMember('Zed');
+    for (const m of [dan, eve, zed]) payFromCommons(m.pubKeyHex, 100, 'Beans to pledge', { allowDeficit: true });
+    const bench = await makeProject(max, 'Park Bench', 200, new Date(Date.now() + 10 * DAY).toISOString());
+    await pledge(dan, bench, 40, 'treasury');
+    await pledge(eve, bench, 25, 'crowdfund');
+    await pledge(zed, bench, 0.01, 'treasury');
+    assert(near(escrowOf(bench), 65.01), `the bench's escrow holds the 65.01 pledged (${escrowOf(bench)})`);
+    const purged = purgeMemberSelf(zed.pubKeyHex);
+    const zedRow = db.prepare('SELECT status FROM members WHERE public_key = ?').get(zed.pubKeyHex) as { status: string } | undefined;
+    assert(purged.ok === true && zedRow?.status === 'pruned', `Zed deletes his account (${JSON.stringify(purged)}, ${zedRow?.status})`);
+    const benchBefore = {
+        dan: balanceOf(dan.pubKeyHex), eve: balanceOf(eve.pubKeyHex), commons: getCommonsBalanceExact(), sum: sumBalances(),
+        zedKept: keptFor(zed.pubKeyHex).length, live: watched.live.length, pushes: watched.pushes.length,
+    };
+    // Its end date 8 days gone: due. Set and returned with nothing awaited between, so this process's own tick can't take it.
     setDeadline(bench, new Date(Date.now() - 8 * DAY).toISOString());
-    const pruned = tick(watched.hooks);
-    const prunedAgain = tick(watched.hooks);
-    assert(pruned.returned === 0 && pruned.left === 1 && prunedAgain.left === 1,
-        `the project is left for the operator, tick after tick (${JSON.stringify(pruned)} ${JSON.stringify(prunedAgain)})`);
-    assert(near(escrowOf(bench), 12) && near(balanceOf(ann.pubKeyHex), annBeforeBench) && rowsOutOf(bench).length === 0,
-        `exactly as it was: Ann is not paid her part alone (escrow ${escrowOf(bench)})`);
-    assert(keptFor(ann.pubKeyHex).length === benchCounts.kept && watched.live.length === benchCounts.live, 'and nobody is told');
+    const closedTick = tick(watched.hooks);
+    assert(closedTick.returned === 1 && closedTick.left === 0, `the tick returns the project, and leaves nothing for the operator (${JSON.stringify(closedTick)})`);
+    assert(near(balanceOf(dan.pubKeyHex), benchBefore.dan + 40), `Dan gets back exactly his 40 (${balanceOf(dan.pubKeyHex) - benchBefore.dan})`);
+    assert(near(balanceOf(eve.pubKeyHex), benchBefore.eve + 25), `Eve gets back exactly her 25 (${balanceOf(eve.pubKeyHex) - benchBefore.eve})`);
+    assert(near(getCommonsBalanceExact(), benchBefore.commons + 0.01), `the Commons gains Zed's 0.01 (${getCommonsBalanceExact() - benchBefore.commons})`);
+    assert(escrowOf(bench) <= DUST && near(raisedOf(bench), 0), `the bench's escrow is 0 (${escrowOf(bench)}), raised 0 (${raisedOf(bench)})`);
+    assert(near(sumBalances(), benchBefore.sum), `the node's total is unchanged (${sumBalances()} vs ${benchBefore.sum})`);
+    const closedAudit = runLedgerAudit();
+    assert(closedAudit.ok && Math.abs(closedAudit.drift) < 0.0001, `the ledger audit holds with 0 drift (ok ${closedAudit.ok}, drift ${closedAudit.drift})`);
+    const benchRows = rowsOutOf(bench);
+    const toCommonsRows = benchRows.filter((r) => r.to_pubkey === 'COMMONS_POOL');
+    assert(benchRows.length === 3 && toCommonsRows.length === 1 && near(toCommonsRows[0]?.amount ?? 0, 0.01) && !toCommonsRows[0]?.tax_fee
+        && benchRows.every((r) => r.project_id === bench) && !benchRows.some((r) => r.to_pubkey === zed.pubKeyHex),
+        `one row each to Dan and Eve, and one of 0.01 to the Commons, each naming the project (${JSON.stringify(benchRows.map((r) => [r.to_pubkey.slice(0, 8), r.amount, r.project_id === bench]))})`);
+    assert(toCommonsRows[0]?.memo === 'Pledge from a closed account, returned to the Commons',
+        `the Commons row says what it is, in plain words ("${toCommonsRows[0]?.memo}")`);
+    assert(!!toCommonsRows[0] && !/Zed|Deleted Member/.test(toCommonsRows[0].memo) && !toCommonsRows[0].memo.includes(zed.pubKeyHex.slice(0, 8)),
+        'and names nobody');
+    assert(near(sumBalances(), benchBefore.sum) && tick(watched.hooks).left === 0, 'a second tick leaves nothing for the operator either');
+    const benchPage = await readPage(dan, bench);
+    const benchReturnedAt = benchRows.map((r) => r.timestamp).sort().at(-1);
+    assert(benchPage?.pledgesReturnedAt === benchReturnedAt && benchPage?.currentAmount === 0,
+        `the page, which both apps read, says the Beans went back (${benchPage?.pledgesReturnedAt} = ${benchReturnedAt}), and 0 raised (${benchPage?.currentAmount})`);
+    for (const who of [dan, eve]) {
+        const kept = keptFor(who.pubKeyHex).filter((n) => kindOf(n) === 'pledges_returned' && n.body.includes('"Park Bench"'));
+        assert(kept.length === 1 && /went back to you/.test(kept[0].body), `${who.callsign} is told their pledge went back, as before ("${kept[0]?.body}")`);
+    }
+    const maxBench = keptFor(max.pubKeyHex).filter((n) => kindOf(n) === 'pledges_returned' && n.body.includes('"Park Bench"'));
+    assert(maxBench.length === 1 && /2 backers/.test(maxBench[0].body) && /65 Beans/.test(maxBench[0].body),
+        `the leader's notice counts the 2 backers paid and their 65 Beans ("${maxBench[0]?.body}")`);
+    assert(!!maxBench[0] && !/closed|Commons|Zed|Deleted Member/.test(maxBench[0].body), "and says nothing of the closed account");
+    assert(keptFor(zed.pubKeyHex).length === benchBefore.zedKept
+        && !watched.live.slice(benchBefore.live).some((l) => l.to?.includes(zed.pubKeyHex))
+        && !watched.pushes.slice(benchBefore.pushes).some((p) => p.targets.includes(zed.pubKeyHex)),
+        'nobody tells the closed account anything: no notice kept, live or pushed');
+    assert(!watched.live.slice(benchBefore.live).some((l) => JSON.stringify(l.event ?? {}).match(/closed account|Zed/))
+        && !watched.pushes.slice(benchBefore.pushes).some((p) => /closed account|Zed/.test(`${p.title} ${p.body}`)),
+        'and nobody is told of it');
+
+    // A wound-up enterprise as a backer: its account closed when it wound up, and what it had went to the Commons. So does its
+    // pledge, and the other backer is paid.
+    const kit = makeMember('Kit Co-op');
+    payFromCommons(kit.pubKeyHex, 20, 'Beans to pledge', { allowDeficit: true });
+    const swing = crypto.randomUUID();
+    createCrowdfundProject(swing, max.pubKeyHex, 'Creek Swing', 'A swing by the creek', [], 40, new Date(Date.now() + 10 * DAY).toISOString());
+    pledgeToProject(crypto.randomUUID(), swing, ann.pubKeyHex, 5, 'Project Pledge');
+    pledgeToProject(crypto.randomUUID(), swing, kit.pubKeyHex, 3, 'Project Pledge');
+    db.prepare("UPDATE members SET status = 'completed' WHERE public_key = ?").run(kit.pubKeyHex);
+    const swingBefore = { ann: balanceOf(ann.pubKeyHex), kit: balanceOf(kit.pubKeyHex), commons: getCommonsBalanceExact() };
+    setDeadline(swing, new Date(Date.now() - 8 * DAY).toISOString());
+    const woundUp = tick(watched.hooks);
+    assert(woundUp.returned === 1 && woundUp.left === 0 && escrowOf(swing) <= DUST && near(balanceOf(ann.pubKeyHex), swingBefore.ann + 5)
+        && near(balanceOf(kit.pubKeyHex), swingBefore.kit) && near(getCommonsBalanceExact(), swingBefore.commons + 3),
+        `a wound-up enterprise's pledge goes to the Commons, and Ann is paid (${JSON.stringify(woundUp)}, Ann +${balanceOf(ann.pubKeyHex) - swingBefore.ann}, Commons +${getCommonsBalanceExact() - swingBefore.commons})`);
+
+    // A backer who still can't be paid here, a live visitor's row: the whole project is left for the operator.
+    const vic = makeMember('Vic');
+    payFromCommons(vic.pubKeyHex, 50, 'Beans to pledge', { allowDeficit: true });
+    const shade = crypto.randomUUID();
+    createCrowdfundProject(shade, max.pubKeyHex, 'Shade Sail', 'Shade for the playground', [], 40, new Date(Date.now() + 10 * DAY).toISOString());
+    pledgeToProject(crypto.randomUUID(), shade, ann.pubKeyHex, 5, 'Project Pledge');
+    pledgeToProject(crypto.randomUUID(), shade, vic.pubKeyHex, 7, 'Project Pledge');
+    db.prepare('UPDATE members SET is_visitor = 1 WHERE public_key = ?').run(vic.pubKeyHex);
+    const annBeforeShade = balanceOf(ann.pubKeyHex);
+    const shadeCounts = { kept: keptFor(ann.pubKeyHex).length, live: watched.live.length, commons: getCommonsBalanceExact() };
+    setDeadline(shade, new Date(Date.now() - 8 * DAY).toISOString());
+    const visitor = tick(watched.hooks);
+    const visitorAgain = tick(watched.hooks);
+    assert(visitor.returned === 0 && visitor.left === 1 && visitorAgain.left === 1,
+        `the project is left for the operator, tick after tick (${JSON.stringify(visitor)} ${JSON.stringify(visitorAgain)})`);
+    assert(near(escrowOf(shade), 12) && near(balanceOf(ann.pubKeyHex), annBeforeShade) && rowsOutOf(shade).length === 0
+        && near(getCommonsBalanceExact(), shadeCounts.commons),
+        `exactly as it was: Ann is not paid her part alone, and nothing goes to the Commons (escrow ${escrowOf(shade)})`);
+    assert(keptFor(ann.pubKeyHex).length === shadeCounts.kept && watched.live.length === shadeCounts.live, 'and nobody is told');
     const finalAudit = runLedgerAudit();
     assert(Math.abs(finalAudit.drift) < 0.0001, `the ledger audit still holds with 0 drift (${finalAudit.drift})`);
 

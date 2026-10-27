@@ -502,7 +502,7 @@ export default function ForceUpdateBlock() {
                 <Pressable
                     onPress={openStore}
                     accessibilityRole="button"
-                    accessibilityLabel={ios ? t('Update BeanPool in the App Store') : t('Update BeanPool in Google Play')}
+                    accessibilityLabel={ios ? t('Update BeanPool in the App Store') : t('Update', undefined, 'the app')}
                     style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.fill : colors.brand.fill }]}
                 >
                     <Text style={[styles.buttonText, { color: colors.text.inverse }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Update', undefined, 'the app')}</Text>

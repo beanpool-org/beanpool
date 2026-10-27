@@ -63,7 +63,10 @@ export function requestModeOf(
 ): RequestMode {
     const r = conv?.type === 'dm' ? conv.request : null;
     if (!r || r.state === 'accepted') return 'none';
-    if (r.from !== me) return 'to-me';
+    if (r.from !== me) {
+        if (!lines) return 'none';
+        return openerLinesSince(conv!, lines) > 0 ? 'to-me' : 'none';
+    }
     if (r.state === 'expired') return 'mine-unsent';
     if (!lines) return 'mine-loading';
     // The node's count, not the page's (PR #2404 review 4356625513): a line kept for the opener while they were blocked is

@@ -18,8 +18,11 @@ describe('requestModeOf', () => {
         expect(requestModeOf(null, ME, [])).toBe('none');
     });
 
-    it('someone else\'s request is the reader\'s to decide, whatever state it names', () => {
-        for (const state of ['pending', 'ignored', 'expired']) expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [])).toBe('to-me');
+    it('someone else\'s request is the reader\'s to decide once the opener has written', () => {
+        for (const state of ['pending', 'ignored', 'expired']) {
+            expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [lineBy(PEER, AT)])).toBe('to-me');
+            expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [])).toBe('none');
+        }
     });
 
     it('the reader\'s own: waiting once their line is in it, at or after the request was made', () => {
@@ -43,7 +46,8 @@ describe('requestModeOf', () => {
         // Not known until this chat's lines are read, as before; and the rest never depend on it.
         expect(requestModeOf(lifted, ME, null)).toBe('mine-loading');
         expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT, nextLineIsRequest: true }), ME, [])).toBe('none');
-        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [])).toBe('to-me');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [lineBy(PEER, AT)])).toBe('to-me');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [])).toBe('none');
     });
 
     it('30 days on (expired), the reader\'s next line is a new request', () => {
@@ -54,7 +58,8 @@ describe('requestModeOf', () => {
         expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT }), ME, null)).toBe('mine-loading');
         // The rest never depend on the lines.
         expect(requestModeOf(dm({ state: 'expired', from: ME, at: AT }), ME, null)).toBe('mine-unsent');
-        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, null)).toBe('to-me');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, null)).toBe('none');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, [lineBy(PEER, AT)])).toBe('to-me');
         expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT }), ME, null)).toBe('none');
         expect(requestModeOf(dm(null), ME, null)).toBe('none');
     });

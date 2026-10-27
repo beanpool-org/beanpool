@@ -4762,6 +4762,16 @@ export async function syncSingleConversation(conversationId: string) {
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return;
 
+        let deletedStaleMessages = 0;
+        if (messages.length === 0) {
+            const req = msgData?.conversation?.request;
+            if (req && req.state === 'pending') {
+                const db = await getDb();
+                const res = await db.runAsync('DELETE FROM messages WHERE conversation_id = ?', [conversationId]);
+                deletedStaleMessages = res?.changes ?? 0;
+            }
+        }
+
         const database = await getDb();
 
         // This runs every 3s while a chat is open (plus on every WS nudge), so the
@@ -4820,7 +4830,7 @@ export async function syncSingleConversation(conversationId: string) {
         }
 
         if (changed.length === 0 && cursorAdvances.length === 0) {
-            if (blanked > 0) {
+            if (blanked > 0 || deletedStaleMessages > 0) {
                 const { DeviceEventEmitter } = require('react-native');
                 DeviceEventEmitter.emit('sync_data_updated');
             }
@@ -6202,6 +6212,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         return {
             id: row.id,
             senderId: row.author_pubkey,
+            authorPubkey: row.author_pubkey,
             text: displayTxt,
             type: row.type || 'text',
             systemType: row.system_type,

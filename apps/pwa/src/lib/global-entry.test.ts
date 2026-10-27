@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    APP_GLOBAL_HOST, APP_GLOBAL_LINK, IOS_GLOBAL_DOOR_FROM, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isPhoneBrowser, lobbyJoinWays,
+    APP_GLOBAL_HOST, APP_GLOBAL_LINK, IOS_GLOBAL_DOOR_FROM, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isIOS, isPhoneBrowser, lobbyJoinWays,
     phoneLaterLines,
 } from './global-entry';
 
@@ -35,6 +35,41 @@ describe('isPhoneBrowser: a touch screen as the main pointer, narrower than the 
         expect(isPhoneBrowser({})).toBe(false);
         expect(isPhoneBrowser({ matchMedia: () => { throw new Error('no media queries'); } })).toBe(false);
         expect(isPhoneBrowser({ matchMedia: () => undefined as unknown as MediaQueryList })).toBe(false);
+    });
+});
+
+describe('isIOS: iPhone, iPad, iPod detection', () => {
+    it('detects iPhone, iPad, iPod from user agent', () => {
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(true);
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(true);
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (iPod touch; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(true);
+    });
+
+    it('detects iPadOS Safari desktop user agent with touch support', () => {
+        const originalTouch = 'ontouchend' in document;
+        try {
+            (document as any).ontouchend = () => {};
+            expect(isIOS({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15' })).toBe(true);
+        } finally {
+            if (!originalTouch) delete (document as any).ontouchend;
+        }
+    });
+
+    it('does not falsely detect desktop Chrome/Chromium on macOS with touch emulation as iOS', () => {
+        const originalTouch = 'ontouchend' in document;
+        try {
+            (document as any).ontouchend = () => {};
+            expect(isIOS({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' })).toBe(false);
+            expect(isIOS({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chromium/120.0.0.0 Safari/537.36' })).toBe(false);
+        } finally {
+            if (!originalTouch) delete (document as any).ontouchend;
+        }
+    });
+
+    it('returns false for Android and desktop platforms', () => {
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' })).toBe(false);
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' })).toBe(false);
+        expect(isIOS(undefined)).toBe(false);
     });
 });
 

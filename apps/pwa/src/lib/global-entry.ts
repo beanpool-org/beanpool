@@ -72,7 +72,7 @@ export function isAppsGlobal(info: Pick<CommunityInfo, 'addresses' | 'primaryAdd
 export function isIOS(nav: Pick<Navigator, 'userAgent'> | undefined = typeof navigator !== 'undefined' ? navigator : undefined): boolean {
     if (!nav?.userAgent) return false;
     const ua = nav.userAgent;
-    return (/iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document)) && !(typeof window !== 'undefined' && 'MSStream' in window);
+    return (/iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && !/Chrome|Chromium/.test(ua) && typeof document !== 'undefined' && 'ontouchend' in document)) && !(typeof window !== 'undefined' && 'MSStream' in window);
 }
 
 /** One way in on the lobby's Join card: the app (the smart link), the browser join, or "Already have BeanPool?". */

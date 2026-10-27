@@ -389,8 +389,9 @@ async function main() {
     void initTunnelConnector();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
-        // DIRECTORY_UNLISTED set on a server that pushed before (front doors S13): its row leaves the directory now, once.
-        // Nothing is sent by a server that never pushed. Not awaited.
+        // DIRECTORY_UNLISTED set, or Listed off, on a server that pushed before (front doors S13): its row leaves the
+        // directory now, once (a Listed-off withdraw that failed is sent again here). Nothing is sent by a server that never
+        // pushed. Not awaited.
         void withdrawIfUnlistedAtBoot();
         // Step 10.5: the public-address agent. Every 5 min it refreshes a tunnel address this server holds (the tunnel
         // above runs the answer), and with PUBLIC_ADDRESS_* set it also claims <name>.beanpool.org from the registrar.

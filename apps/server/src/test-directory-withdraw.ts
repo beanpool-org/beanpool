@@ -19,6 +19,11 @@
  *      cleared, the community is listed again
  *   6. a push from one of our own test servers is refused with the 403 sentence, which the node's answer carries; its
  *      withdraw is still taken
+ *   7. a Listed-off withdraw the registry never took (down, 503) is sent again at the next boot while Listed is off, once;
+ *      a boot while Listed is on sends none
+ *   8. a push still out when Listed goes off: once it lands (and puts the row back) the node withdraws again, both when
+ *      the first withdraw was answered before the push landed and when its answer was still out
+ *   (7 and 8: the deciding pass on #2541, finding 5: either way the row stayed up to 7 days.)
  *
  * Contacts no registry: DIRECTORY_REGISTRY_URL is the fixture on 127.0.0.1.
  *
@@ -105,13 +110,35 @@ function answerRegistry(raw: string, headers: http.IncomingHttpHeaders): { statu
     return { status: 200, answer: { success: true }, verified, body };
 }
 
+// Sections 7 and 8: the registry down (503 to everything), a push held before it is written (so a withdraw can overtake
+// it), and a withdraw written at once with its answer held (so a push can land while it is still out).
+let down = false;
+let holdPush: Promise<void> | null = null;
+let holdUnlistAnswer: Promise<void> | null = null;
+let pushesHeld = 0, unlistAnswersHeld = 0;
+function gate(): { wait: Promise<void>; open: () => void } {
+    let open = () => { /* set below */ };
+    const wait = new Promise<void>((resolve) => { open = resolve; });
+    return { wait, open };
+}
+
 const registry = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
-    req.on('end', () => {
+    req.on('end', async () => {
         if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+        let unlist = false;
+        try { unlist = JSON.parse(raw)?.unlist === true; } catch { /* answerRegistry says so */ }
+        if (down) {
+            requests.push({ raw, body: JSON.parse(raw), status: 503, answer: { error: 'Service Unavailable' }, verified: false });
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Service Unavailable' }));
+            return;
+        }
+        if (!unlist && holdPush) { pushesHeld++; await holdPush; }
         const r = answerRegistry(raw, req.headers);
         requests.push({ raw, body: r.body, status: r.status, answer: r.answer, verified: r.verified });
+        if (unlist && holdUnlistAnswer) { unlistAnswersHeld++; await holdUnlistAnswer; }
         res.writeHead(r.status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(r.answer));
     });
@@ -147,6 +174,14 @@ async function settled(from: number, ms = 1500): Promise<Request[]> {
     return requests.slice(from);
 }
 const unlists = (rs: Request[]) => rs.filter((r) => r.body?.unlist === true);
+/** Waits (up to 10 s) for `cond`, which the registry fixture or the node makes true. */
+async function until(cond: () => boolean, what: string): Promise<void> {
+    const end = Date.now() + 10_000;
+    while (!cond()) {
+        if (Date.now() > end) throw new Error(`timed out waiting: ${what}`);
+        await sleep(50);
+    }
+}
 const DAY_MS = 86_400_000;
 const day = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY_MS).toISOString().slice(0, 10);
 
@@ -289,6 +324,89 @@ async function main() {
     after = await settled(from);
     assert(unlists(after).length === 1 && after[0].status === 200 && !table.has(nodeId),
         `its withdraw is taken (${after.map((r) => `${r.status} ${JSON.stringify(r.answer)}`).join(' | ')})`);
+    updateNodeConfig({ publicAddress: { name: 'riverbend', hostname: 'riverbend.example.org', status: 'live' } as any });
+
+    // ── 7. A Listed-off withdraw that failed ────────────────────────────────────────────────────────────────────────
+    console.log('\n── 7. a Listed-off withdraw the registry never took is sent again at the next boot ──');
+    await listed(true);
+    await pushNow();
+    assert(table.has(nodeId) && !!getNodeConfig().lastDirectoryPush, 'listed');
+    down = true;
+    from = requests.length;
+    await listed(false);
+    after = await settled(from);
+    down = false;
+    assert(after.length === 1 && after[0].body?.unlist === true && after[0].status === 503 && table.has(nodeId) && !!getNodeConfig().lastDirectoryPush,
+        `the registry is down: the withdraw fails, and the row and the record stay (${after.map((r) => `${r.status} ${r.raw}`).join(' | ')})`);
+    from = requests.length;
+    const boot4 = await publisher.withdrawIfUnlistedAtBoot();
+    after = await settled(from);
+    assert(boot4?.sent === true && boot4?.ok === true && after.length === 1 && unlists(after).length === 1 && after[0].verified,
+        `the next boot, with Listed still off, sends it again: one signed withdraw (${JSON.stringify(boot4)}, ${after.length} requests)`);
+    assert(!table.has(nodeId) && !getNodeConfig().lastDirectoryPush, 'the row is gone and the record cleared');
+    from = requests.length;
+    const boot5 = await publisher.withdrawIfUnlistedAtBoot();
+    assert(boot5 === null && (await settled(from)).length === 0, `the boot after sends none (${JSON.stringify(boot5)})`);
+    await listed(true);
+    await pushNow();
+    from = requests.length;
+    const boot6 = await publisher.withdrawIfUnlistedAtBoot();
+    assert(boot6 === null && (await settled(from)).length === 0 && table.has(nodeId),
+        `a boot while Listed is on sends none, and the row stays (${JSON.stringify(boot6)})`);
+
+    // ── 8. A push still out when Listed goes off ────────────────────────────────────────────────────────────────────
+    console.log('\n── 8. a push still out when Listed goes off: the row goes once it lands ──');
+    // a. The withdraw overtakes the push and is answered before the push lands.
+    let pushGate = gate();
+    holdPush = pushGate.wait;
+    pushesHeld = 0;
+    const late = pushNow();
+    await until(() => pushesHeld === 1, 'the push reaches the registry');
+    from = requests.length;
+    await listed(false);
+    after = await settled(from);
+    assert(unlists(after).length === 1 && after[0].status === 200 && !table.has(nodeId) && !getNodeConfig().lastDirectoryPush,
+        `a. Listed off: the withdraw is taken first; the row is gone and the record cleared (${after.map((r) => r.raw).join(' | ')})`);
+    from = requests.length;
+    holdPush = null;
+    pushGate.open();
+    const lateAnswer = await late;
+    after = await settled(from);
+    assert(after.length === 2 && !after[0].body?.unlist && after[0].status === 200 && unlists(after.slice(1)).length === 1 && after[1].verified,
+        `a. the push lands (the row is back), then one more signed withdraw (${after.map((r) => `${r.status} ${r.raw.slice(0, 70)}`).join(' | ')})`);
+    assert(!table.has(nodeId) && !getNodeConfig().lastDirectoryPush, 'a. the row is gone and the record cleared');
+    assert(lateAnswer.status === 409 && lateAnswer.json?.error === publisher.NOT_LISTED_MESSAGE && lateAnswer.json?.withdrawn === true,
+        `a. the push answers that the community is not listed, and was taken off (${lateAnswer.status} ${JSON.stringify(lateAnswer.json)})`);
+
+    // b. The withdraw is written first, but its answer is still out when the push lands.
+    await listed(true);
+    await pushNow();
+    assert(table.has(nodeId), 'b. listed again');
+    pushGate = gate();
+    const answerGate = gate();
+    holdPush = pushGate.wait;
+    holdUnlistAnswer = answerGate.wait;
+    pushesHeld = 0;
+    unlistAnswersHeld = 0;
+    const recordBefore = getNodeConfig().lastDirectoryPush;
+    const later = pushNow();
+    await until(() => pushesHeld === 1, 'the push reaches the registry');
+    from = requests.length;
+    await listed(false);
+    await until(() => unlistAnswersHeld === 1, 'the withdraw is written');
+    assert(!table.has(nodeId), 'b. Listed off: the withdraw is written first, its answer held');
+    holdPush = null;
+    pushGate.open();
+    await until(() => getNodeConfig().lastDirectoryPush !== recordBefore, 'the node records the push that landed');
+    assert(table.has(nodeId), 'b. the push lands while the withdraw\'s answer is out: the row is back');
+    holdUnlistAnswer = null;
+    answerGate.open();
+    const laterAnswer = await later;
+    after = await settled(from);
+    assert(unlists(after).length === 2 && unlists(after).every((r) => r.status === 200 && r.verified) && after[after.length - 1].body?.unlist === true,
+        `b. the first withdraw is answered, then one more after the push (${after.map((r) => `${r.status} ${r.raw.slice(0, 70)}`).join(' | ')})`);
+    assert(!table.has(nodeId) && !getNodeConfig().lastDirectoryPush, 'b. the row is gone and the record cleared');
+    assert(laterAnswer.status === 409 && laterAnswer.json?.withdrawn === true, `b. the push says so (${laterAnswer.status} ${JSON.stringify(laterAnswer.json)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     await p2p.stop();

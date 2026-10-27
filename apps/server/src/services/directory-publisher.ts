@@ -240,8 +240,9 @@ let withdrawing: Promise<WithdrawResult> | null = null;
  *
  * Only a main server, and only one that has pushed (`lastDirectoryPush` recorded): a node that was never listed sends
  * nothing, so no node needs our servers for anything here. A withdraw the registry took clears `lastDirectoryPush`, so
- * each way out sends one and never repeats; one that failed keeps it (the boot's and the closing day's are tried again at
- * the next boot or timed push; the directory drops a row unpushed for 7 days in any case). Never throws.
+ * each way out sends one and never repeats; one that failed keeps it (Listed off's and the boot's are tried again at the
+ * next boot, the closing day's at the next timed push; the directory drops a row unpushed for 7 days in any case).
+ * Never throws.
  */
 export async function withdrawFromDirectory(reason: WithdrawReason): Promise<WithdrawResult> {
     if (getNodeRole() !== 'primary') return { sent: false, ok: false, reason: 'not a main server' };
@@ -280,12 +281,15 @@ export function listedSwitchedOff(): void {
 }
 
 /**
- * At boot (index.ts, a main server): DIRECTORY_UNLISTED is set and this node pushed before, so its row is still out
- * there; it goes now, once (the withdraw clears the record). Null when there is nothing to do.
+ * At boot (index.ts, a main server): DIRECTORY_UNLISTED is set, or Listed is off, and this node pushed before, so its row
+ * may still be out there: the withdraw at Listed off failed (the registry down, the node offline), or the server stopped
+ * before it was sent. It goes now, once (the withdraw clears the record). Null when there is nothing to do: a listed
+ * community, or one that never pushed (the global profile, which is never listed, among them).
  */
 export async function withdrawIfUnlistedAtBoot(): Promise<WithdrawResult | null> {
-    if (!directoryUnlistedByEnv() || getNodeRole() !== 'primary' || !getNodeConfig().lastDirectoryPush) return null;
-    return withdrawFromDirectory('unlisted_at_boot');
+    const unlistedByEnv = directoryUnlistedByEnv();
+    if ((!unlistedByEnv && getProfileSwitches().publishToDirectory) || getNodeRole() !== 'primary' || !getNodeConfig().lastDirectoryPush) return null;
+    return withdrawFromDirectory(unlistedByEnv ? 'unlisted_at_boot' : 'listed_off');
 }
 
 export async function pushDirectoryNow() {
@@ -369,8 +373,20 @@ export async function pushDirectoryNow() {
         }
         
         // Update lastDirectoryPush
-        updateNodeConfig({ lastDirectoryPush: new Date().toISOString() });
-        
+        const pushedAt = new Date().toISOString();
+        updateNodeConfig({ lastDirectoryPush: pushedAt });
+
+        // Listed went off while this push was out (the boot's, the timer's, a rename's): the withdraw sent then may have
+        // reached the registry first, and this push has put the row back. So it is withdrawn again now, once any withdraw
+        // still out has settled (it may clear the record, and a second call would only wait on it), with this push
+        // recorded so that the withdraw is sent.
+        if (!getProfileSwitches().publishToDirectory) {
+            await withdrawing;
+            updateNodeConfig({ lastDirectoryPush: pushedAt });
+            const withdrawn = await withdrawFromDirectory('listed_off');
+            return { success: false, error: NOT_LISTED_MESSAGE, withdrawn: withdrawn.sent && withdrawn.ok };
+        }
+
         console.log(`[Directory] ✅ Successfully published to directory registry`);
         return {
             success: true, timestamp: new Date().toISOString(),

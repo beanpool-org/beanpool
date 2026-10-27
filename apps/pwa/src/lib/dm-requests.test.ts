@@ -65,7 +65,7 @@ describe('requestModeOf', () => {
         expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT }), ME, null)).toBe('mine-loading');
         // The rest never depend on the lines.
         expect(requestModeOf(dm({ state: 'expired', from: ME, at: AT }), ME, null)).toBe('mine-unsent');
-        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, null)).toBe('none');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, null)).toBe('to-me');
         expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, [lineBy(PEER, AT)])).toBe('to-me');
         expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT }), ME, null)).toBe('none');
         expect(requestModeOf(dm(null), ME, null)).toBe('none');

@@ -689,7 +689,7 @@ function ChatScreen({ id }: { id: string }) {
         await loadMessages(true).catch(() => {});
     };
 
-    const requestMode = requestModeOf(convRow ? { ...convRow, id: String(id) } : null, identity?.publicKey ?? '', messages);
+    const requestMode = requestModeOf(convRow ? { ...convRow, id: String(id) } : null, identity?.publicKey ?? '', firstLoadDone ? messages : null);
 
     const handleCancelRequest = async () => {
         if (cancellingRequest) return;
@@ -713,11 +713,11 @@ function ChatScreen({ id }: { id: string }) {
     };
 
     // Asked before the composer empties the box, so a refused send keeps what was typed.
-    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && requestMode !== 'mine-waiting' && requestMode !== 'to-me';
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && requestMode !== 'mine-waiting' && requestMode !== 'to-me' && requestMode !== 'mine-loading';
 
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
-        if (!currentDraft || !canSendNow() || !identity?.publicKey || requestMode === 'mine-waiting' || requestMode === 'to-me') return;
+        if (!currentDraft || !canSendNow() || !identity?.publicKey || requestMode === 'mine-waiting' || requestMode === 'to-me' || requestMode === 'mine-loading') return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
@@ -1683,7 +1683,7 @@ function ChatScreen({ id }: { id: string }) {
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
-                        disabled={keyChangePending}
+                        disabled={keyChangePending || requestMode === 'mine-loading'}
                         notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : (requestMode === 'mine-unsent' ? t('Your first message goes to {name} as a request. You can write more once they accept.', { name: peerName }) : null)}
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}

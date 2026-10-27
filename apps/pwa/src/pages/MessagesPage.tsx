@@ -1170,7 +1170,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     async function handleSend() {
-        if (!draft.trim() || !activeConv) return;
+        if (!draft.trim() || !activeConv || requestMode === 'mine-loading') return;
         setSending(true);
 
         const wasEditing = editingMessage;
@@ -1248,7 +1248,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * knows whether to clear it. `clientId`: the id a waiting group photo keeps.
      */
     async function handleSendImage(file: File, caption = '', clientId?: string): Promise<boolean> {
-        if (!activeConv) return false;
+        if (!activeConv || requestMode === 'mine-loading') return false;
         // A group's chat, and a group seen locked here whatever the node now calls it (lib/group-hold.ts): sealed as the
         // group's photo under its keyring's epoch or not sent, never DM-sealed to whoever the node lists. An unreadable lock
         // store sends none to a conversation this browser doesn't know as a DM.
@@ -3035,7 +3035,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }
                             }}
                             placeholder={editingMessage ? t('Edit message...') : t('Message...')}
-                            disabled={sending}
+                            disabled={sending || requestMode === 'mine-loading'}
                             rows={1}
                             style={{
                                 ...inputStyle,
@@ -3051,7 +3051,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <button
                             type="button"
                             onClick={handleSend}
-                            disabled={sending || !draft.trim()}
+                            disabled={sending || !draft.trim() || requestMode === 'mine-loading'}
                             title={editingMessage ? t('Save edit') : t('Send message')}
                             style={{
                                 height: '40px',

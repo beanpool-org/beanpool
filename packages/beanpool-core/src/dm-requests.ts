@@ -68,7 +68,7 @@ export function requestModeOf(
     const r = conv?.type === 'dm' ? conv.request : null;
     if (!r || r.state === 'accepted') return 'none';
     if (r.from !== me) {
-        if (!lines) return 'none';
+        if (!lines) return 'to-me';
         return openerLinesSince(conv!, lines) > 0 ? 'to-me' : 'none';
     }
     if (r.state === 'expired') return 'mine-unsent';

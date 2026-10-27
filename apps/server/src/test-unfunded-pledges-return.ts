@@ -507,6 +507,15 @@ async function main(): Promise<void> {
     // holds. The ones that went back a week after the end date are not held any more: refunding them again would pay the
     // backers twice and leave the escrow below 0.
     console.log('── 11. The date moved after the return, a new pledge, then the leader cancels ──');
+    // Review of #2525: first to the return's own UTC day, what a date picker sends for "today". The project takes pledges
+    // until that day is over, so its page must not say its Beans went back: that return was for the old end date.
+    const returnDay = new Date();
+    returnDay.setUTCHours(0, 0, 0, 0);
+    const toReturnDay = await signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount: 100, deadlineAt: returnDay.toISOString() }, lea);
+    assert(toReturnDay.status === 200, `the leader moves the roof's end date to the return's own day (${toReturnDay.status} ${toReturnDay.body?.error ?? ''})`);
+    const returnDayPage = await readPage(ann, roof);
+    assert(returnDayPage?.pledgesReturnedAt === null, `its page no longer says they went back: the return was for the old end date (${returnDayPage?.pledgesReturnedAt})`);
     const reopened = await signedFetch('POST', '/api/crowdfund/projects/update',
         { id: roof, creatorPubkey: lea.pubKeyHex, title: 'Village Hall Roof', description: 'Village Hall Roof, for the valley', goalAmount: 100, deadlineAt: new Date(Date.now() + 10 * DAY).toISOString() }, lea);
     assert(reopened.status === 200, `the leader moves the roof's end date after its pledges went back (${reopened.status} ${reopened.body?.error ?? ''})`);

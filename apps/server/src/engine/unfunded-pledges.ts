@@ -40,7 +40,7 @@
 // name the project; the leader's counts the backers and the Beans and names nobody. The leader's end date moved in that week
 // (POST /api/crowdfund/projects/update) tells the backers too (noticeEndDateMoved), each once a day at most.
 
-import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, wordsFor, type PushNoticeKind } from '@beanpool/core';
+import { DUST_THRESHOLD, isPastDeadline, isPledgeReturnDue, pledgeReturnAt, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, getCrowdfundProject } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -314,9 +314,11 @@ export function noticeEndDateMoved(
 
 /**
  * When the node gave a project's backers their Beans back for its present end date, for its page (GET /api/treasury/:id):
- * the latest row out of its escrow to anyone but its enterprise, at or after that end date. Only this return writes such a
- * row for a project still ACTIVE (one that reached its goal is FUNDED, and the leader's cancel deletes the project). Null
- * when it hasn't, and again once its end date moves on past a return, until the new one has its own.
+ * the latest row out of its escrow to anyone but its enterprise, at or after that end date's return (pledgeReturnAt: the end
+ * date + 7 days, when this return first runs for it). Only this return writes such a row for a project still ACTIVE (one
+ * that reached its goal is FUNDED, and the leader's cancel deletes the project). Null when it hasn't, and again once its end
+ * date moves, even to the return's own day, until the new one has its own (review of #2525: against the end date itself, a
+ * move to that day kept "went back" on a page taking pledges again).
  */
 export function pledgesReturnedAt(projectId: string): string | null {
     const p = db.prepare(`${PROJECT_SQL} WHERE p.id = ?`).get(projectId) as ProjectRow | undefined;
@@ -325,6 +327,6 @@ export function pledgesReturnedAt(projectId: string): string | null {
         .get(`escrow_${projectId}`, projectId, p.enterprise) as { at: string | null } | undefined)?.at ?? null;
     if (!at) return null;
     const atMs = Date.parse(at);
-    const deadlineMs = Date.parse(p.deadline);
-    return Number.isFinite(atMs) && Number.isFinite(deadlineMs) && atMs >= deadlineMs ? at : null;
+    const dueMs = pledgeReturnAt(p.deadline);
+    return Number.isFinite(atMs) && Number.isFinite(dueMs) && atMs >= dueMs ? at : null;
 }

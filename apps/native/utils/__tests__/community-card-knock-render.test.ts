@@ -1,0 +1,235 @@
+// @vitest-environment jsdom
+/**
+ * A community's card screen (app/community-card.tsx, front doors S15) for a member of another community who has asked
+ * this one to join: rendered for real, with the real knock memory and status read (utils/knock.ts), so each state is
+ * reached the way a phone reaches it: by what the phone remembers and what the community answers. The card says what Find
+ * a community says (app/find-community.tsx stateFor, utils/knock.ts knockCardState):
+ *   - pending: waiting, and no Ask to join;
+ *   - approved: invited, and Join with the invite it sent;
+ *   - none (it lapsed, or a no, which a community answers the same way): no answer came, and Ask to join again;
+ *   - cancelled within the day: said so, and no Ask to join until it may be asked again;
+ *   - unreachable: said so, and Check again.
+ * Before PR #2551's review, the screen showed "waiting" for any remembered request, whatever the community answered, and
+ * read no cancel: the approved, none and cancelled tests here fail there.
+ *
+ * Nothing is contacted: fetch plays the one community (its card, and this key's knock status).
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Module from 'node:module';
+import { act, createElement } from 'react';
+import * as ReactAll from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+
+(Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+(globalThis as any).__DEV__ = false;
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+// The screen doesn't import React (Metro's automatic JSX runtime); this runner compiles JSX the classic way.
+(globalThis as any).React = ReactAll;
+
+vi.mock('react-native', () => {
+    const el = (tag: string) => (props: Record<string, any>) => {
+        const { children, onPress, disabled, testID, accessibilityRole, value, onChangeText } = props;
+        const attrs: Record<string, unknown> = {};
+        if (testID) attrs['data-testid'] = testID;
+        if (onPress && !disabled) attrs.onClick = () => onPress();
+        if (disabled) attrs['data-disabled'] = 'true';
+        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (accessibilityRole === 'button') attrs.role = 'button';
+        return createElement(tag, attrs, children);
+    };
+    return {
+        Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
+        View: el('div'), Text: el('span'), Pressable: el('button'), TextInput: el('input'), ActivityIndicator: el('progress'),
+        StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
+        Alert: { alert: (...a: unknown[]) => alerts.push(a) },
+        Linking: { openURL: async () => {} },
+    };
+});
+const alerts = vi.hoisted(() => [] as unknown[][]);
+vi.mock('react-native-safe-area-context', () => ({
+    useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
+    SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+}));
+vi.mock('react-native-keyboard-controller', () => ({
+    KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+}));
+const ORIGIN = 'https://riverside.example';
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[], replaced: [] as unknown[] }));
+vi.mock('expo-router', () => ({
+    router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.replaced.push(to), back() {}, canGoBack: () => true },
+    useLocalSearchParams: () => ({ node: 'https://riverside.example' }),
+    ErrorBoundary: () => null,
+}));
+vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
+vi.mock('../../app/ThemeContext', async () => {
+    const { lightColors } = await import('../../constants/colors');
+    return { useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }) };
+});
+const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: {
+        getItem: vi.fn(async (k: string) => store.map.get(k) ?? null),
+        setItem: vi.fn(async (k: string, v: string) => { store.map.set(k, v); }),
+        removeItem: vi.fn(async (k: string) => { store.map.delete(k); }),
+    },
+}));
+const KEY = 'c'.repeat(64);
+vi.mock('../../app/IdentityContext', () => ({
+    useIdentity: () => ({ identity: { publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(64), callsign: 'Damo' } }),
+}));
+vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({ 'X-Test-Signed': '1' }) }));
+vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null }));
+vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: async () => {} }));
+// The join itself (utils/join-another-community.ts) is Find a community's; here, only that the card hands it the invite.
+const joins = vi.hoisted(() => [] as Array<{ targetUrl: string; code: string; knownName?: string | null }>);
+vi.mock('../join-another-community', () => ({
+    joinAnotherCommunity: async (opts: { targetUrl: string; code: string; knownName?: string | null }) => { joins.push(opts); return { name: 'Riverside' }; },
+    joinedNudge: (name: string) => ({ title: `You're in ${name}`, body: 'b', later: 'Next' }),
+    PROTECT_REDIRECT: '/(tabs)/settings?section=protection',
+    HOME_REDIRECT: '/(tabs)',
+}));
+
+import CommunityCardScreen from '../../app/community-card';
+import { KNOCKS_STORE_KEY } from '../storage-keys';
+import { setLanguage } from '@beanpool/core';
+
+type Answer = { status: 'pending' } | { status: 'none' } | { status: 'approved'; invite: string } | 'offline';
+const scene = { answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0 };
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const CARD = { name: 'Riverside', host: 'riverside.example', members: null, area: null, joining: 'requests', askUrl: null, globalUrl: null };
+
+function remember(knock: { sentAt?: string; cancelledAt?: string } = {}): void {
+    store.map.set(KNOCKS_STORE_KEY, JSON.stringify({
+        pubkey: KEY,
+        knocks: [{ url: ORIGIN, name: 'Riverside', key: null, sentAt: knock.sentAt ?? new Date().toISOString(), ...(knock.cancelledAt ? { cancelledAt: knock.cancelledAt } : {}) }],
+    }));
+}
+
+let host: HTMLDivElement;
+let root: Root;
+beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    store.map.clear();
+    store.map.set('beanpool_anchor_url', 'https://home.example');
+    nav.pushed.length = 0;
+    nav.replaced.length = 0;
+    alerts.length = 0;
+    joins.length = 0;
+    scene.answer = { status: 'pending' };
+    scene.statusReads = 0;
+    scene.knocks = 0;
+    setLanguage('en');
+    globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+        const u = String(input);
+        if (u === `${ORIGIN}/api/community/card`) return json(CARD);
+        if (u === `${ORIGIN}/api/join/knock/status`) {
+            scene.statusReads++;
+            if (scene.answer === 'offline') throw new TypeError('Network request failed');
+            return json(scene.answer);
+        }
+        if (u === `${ORIGIN}/api/join/knock` && init?.method === 'POST') {
+            scene.knocks++;
+            return json({ knock: { status: 'pending' } }, 201);
+        }
+        throw new TypeError(`Network request failed: ${u}`);
+    }) as typeof fetch;
+});
+afterEach(() => { act(() => root.unmount()); host.remove(); });
+
+const settle = async () => { for (let i = 0; i < 12; i++) await act(async () => { await new Promise((r) => setTimeout(r, 1)); }); };
+async function open(): Promise<void> {
+    await act(async () => { root.render(createElement(CommunityCardScreen) as any); });
+    await settle();
+}
+const byTestId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+const asked = () => byTestId('community-card-asked')?.textContent ?? null;
+const buttons = () => Array.from(host.querySelectorAll('button')).map((b) => b.textContent ?? '');
+async function tap(el: HTMLElement | null): Promise<void> {
+    expect(el, 'the button is there').not.toBeNull();
+    await act(async () => { el!.click(); });
+    await settle();
+}
+
+describe("a member's request to join, on the community's card", () => {
+    it('pending: waiting for an answer, and no Ask to join', async () => {
+        remember();
+        await open();
+        expect(byTestId('community-card')).not.toBeNull();
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
+        expect(byTestId('community-card-ask')).toBeNull();
+        expect(byTestId('community-card-join')).toBeNull();
+        expect(scene.statusReads).toBe(1);
+    });
+
+    it('approved: invited, and Join hands the invite it sent to the join (fails before: read "waiting", no Join)', async () => {
+        remember();
+        scene.answer = { status: 'approved', invite: 'BP-RIVR-0001' };
+        await open();
+        expect(asked()).toBe('A member invited you. Join now to become a member.');
+        expect(byTestId('community-card-ask')).toBeNull();
+        expect(byTestId('community-card-join')?.textContent).toBe('Join Riverside');
+        await tap(byTestId('community-card-join'));
+        expect(joins).toEqual([expect.objectContaining({ targetUrl: ORIGIN, code: 'BP-RIVR-0001', knownName: 'Riverside' })]);
+        // The knock is done with: the phone forgets it, and the member is told they're in.
+        expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks).toEqual([]);
+        expect(alerts[0]?.[0]).toBe("You're in Riverside");
+    });
+
+    it('none (it lapsed, or a no): no answer came, and Ask to join again (fails before: read "waiting", no Ask)', async () => {
+        remember();
+        scene.answer = { status: 'none' };
+        await open();
+        expect(asked()).toBe('No answer came. You can ask again.');
+        expect(byTestId('community-card-ask')).not.toBeNull();
+    });
+
+    it('cancelled within the day: said so, no Ask to join, and nothing read from the community (fails before: Ask offered)', async () => {
+        const now = Date.now();
+        remember({ sentAt: new Date(now - 3_600_000).toISOString(), cancelledAt: new Date(now - 60_000).toISOString() });
+        await open();
+        expect(asked()).toBe('You cancelled your request. You can ask again after 24 hours.');
+        expect(byTestId('community-card-ask')).toBeNull();
+        expect(scene.statusReads).toBe(0);
+    });
+
+    it('unreachable: said so, and Check again reads the answer again', async () => {
+        remember();
+        scene.answer = 'offline';
+        await open();
+        expect(asked()).toBe("Couldn't reach this community. Check your connection and try again.");
+        expect(byTestId('community-card-ask')).toBeNull();
+        scene.answer = { status: 'pending' };
+        await tap(byTestId('community-card-check-again'));
+        expect(scene.statusReads).toBe(2);
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
+    });
+
+    it('never asked: Ask to join, and no signed read of its status (a read shows the community who is asking)', async () => {
+        await open();
+        expect(asked()).toBeNull();
+        expect(byTestId('community-card-ask')).not.toBeNull();
+        expect(scene.statusReads).toBe(0);
+    });
+
+    it('asked from the card: the request is remembered and what the community says now is shown', async () => {
+        scene.answer = { status: 'pending' };
+        await open();
+        await tap(byTestId('community-card-ask'));
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'I live by the river and grow tomatoes.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(scene.knocks).toBe(1);
+        expect(scene.statusReads).toBe(1);
+        expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
+        expect(buttons()).not.toContain('Ask to join');
+        expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks.map((k: { url: string }) => k.url)).toEqual([ORIGIN]);
+    });
+});

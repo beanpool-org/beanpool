@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
@@ -14,9 +14,13 @@ import { useIdentity } from './IdentityContext';
 import { communityOrigin } from '../utils/community-origin';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
 import {
-    sendKnock, rememberedKnocks, rememberKnock, knockFormProblem, KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS,
+    sendKnock, rememberedKnocks, cancelledKnocks, rememberKnock, forgetKnock, readKnockStatus, knockCardState, knockFormProblem,
+    KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockCardState, type KnockStatusResult,
 } from '../utils/knock';
+import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
+import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { findLineWords } from '../components/find-community-lines';
+import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
 
 export { ErrorBoundary };
@@ -52,7 +56,8 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  * address or by the card's own Ask to join on an Android phone's browser (utils/community-card-link.ts). Member or not:
  *   - this phone's own community: "You're a member", Open it;
  *   - an account elsewhere: Ask to join, here (the request goes to the community itself, signed with the phone's key, as
- *     from Find a community: utils/knock.ts), and I have an invite (People's Join Another Community, as it is: no route
+ *     from Find a community: utils/knock.ts); once asked, what the community answered (waiting, a yes to join with, or
+ *     ask again), as Find a community shows it; and I have an invite (People's Join Another Community, as it is: no route
  *     fills its server box, so no link can point a member's join at another server: pair-link.test.ts holds it);
  *   - no account yet: the first screen, for an invite (Join with an invite), the ways back (Already a member), or an
  *     account to ask with (Explore BeanPool worldwide).
@@ -100,20 +105,50 @@ export default function CommunityCardScreen() {
         return () => { alive = false; };
     }, [origin, attempt]);
 
-    // This phone's own community, and whether it has asked this one already (utils/knock.ts remembers each knock).
+    // This phone's own community; whether it has asked this one (utils/knock.ts remembers each knock), or cancelled a
+    // request to it within the day; and, where it asked, what the community answered, read signed from the community
+    // itself, as Find a community reads it. `asked` is null until the phone's memory is read.
     const [memberHere, setMemberHere] = useState(false);
-    const [askedNote, setAskedNote] = useState<string | null>(null);
+    const [asked, setAsked] = useState<boolean | null>(null);
+    const [cancelledHere, setCancelledHere] = useState(false);
+    const [memberNote, setMemberNote] = useState<string | null>(null);
     useEffect(() => {
         if (!origin || !identity) return;
         let alive = true;
         AsyncStorage.getItem('beanpool_anchor_url')
             .then(anchor => { if (alive) setMemberHere(communityOrigin(anchor) === origin); })
             .catch(() => {});
-        rememberedKnocks(identity.publicKey)
-            .then(knocks => { if (alive && knocks.some(k => k.url === origin)) setAskedNote(t(KNOCK_MESSAGES.waiting)); })
-            .catch(() => {});
+        // One after the other: each forgets what has aged out of the same store.
+        cancelledKnocks(identity.publicKey)
+            .then(async cancelled => {
+                const knocks = await rememberedKnocks(identity.publicKey);
+                if (!alive) return;
+                setCancelledHere(!!cancelled[origin]);
+                setAsked(knocks.some(k => k.url === origin));
+            })
+            .catch(() => { if (alive) setAsked(false); });
         return () => { alive = false; };
     }, [origin, identity?.publicKey]);
+
+    // The community's answer, only where this key asked it: a signed read shows a community who is asking.
+    const [status, setStatus] = useState<KnockStatusResult | null>(null);
+    const [statusAsk, setStatusAsk] = useState(0);
+    useEffect(() => {
+        if (!origin || !identity || !asked) return;
+        let alive = true;
+        setStatus(null);
+        readKnockStatus(origin, identity)
+            .then(r => { if (alive) setStatus(r); })
+            .catch(() => { if (alive) setStatus({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable }); });
+        return () => { alive = false; };
+    }, [origin, identity?.publicKey, asked, statusAsk]);
+
+    // What this key's request says here, as Find a community decides it (app/find-community.tsx stateFor).
+    const knock: KnockCardState = asked === null
+        ? { kind: 'checking' }
+        : cancelledHere && !asked
+            ? { kind: 'cancelled', note: KNOCK_MESSAGES.cancelled }
+            : knockCardState(true, asked, asked ? status : undefined, memberNote);
 
     // The request to join: as on Find a community, to the community itself, with the phone's own key.
     const [formOpen, setFormOpen] = useState(false);
@@ -135,12 +170,39 @@ export default function CommunityCardScreen() {
             await rememberKnock(identity.publicKey, { url: origin, name: c.name });
             setFormOpen(false);
             setMessage('');
-            setAskedNote(r.kind === 'invited' ? t(KNOCK_MESSAGES.invited) : t(KNOCK_MESSAGES.waiting));
+            // Read what it says now: waiting, or a yes with its invite.
+            setAsked(true);
+            setStatusAsk(n => n + 1);
         } else if (r.kind === 'member') {
             setFormOpen(false);
-            setAskedNote(findLineWords(r.message));
+            setMemberNote(r.message);
         } else {
             setFormError(r.message);
+        }
+    };
+
+    // A yes: join with its invite, as from Find a community (app/find-community.tsx join).
+    const [joining, setJoining] = useState(false);
+    const join = async (c: CommunityCard, invite: string) => {
+        if (!identity || !origin) return;
+        setJoining(true);
+        try {
+            const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            const joined = await joinAnotherCommunity({ targetUrl: origin, code: invite, identity, returnUrl, knownName: c.name });
+            await forgetKnock(identity.publicKey, origin);
+            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
+            Alert.alert(nudge.title, nudge.body, [
+                { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
+            ], { cancelable: false });
+        } catch (e: any) {
+            // The redeem's own words (the community's) as given; the phone's in the member's language.
+            Alert.alert(t("Couldn't join"), e?.message ? welcomeLineWords(e.message) : t('Please try again.'));
+        } finally {
+            setJoining(false);
         }
     };
 
@@ -183,8 +245,29 @@ export default function CommunityCardScreen() {
                     </View>
                 ) : identity ? (
                     <View>
-                        {!!askedNote && <Text style={styles.note} testID="community-card-asked">{askedNote}</Text>}
-                        {card.joining === 'requests' && !askedNote && !formOpen && (
+                        {knock.kind === 'checking' && <ActivityIndicator style={{ marginTop: 12, alignSelf: 'flex-start' }} testID="community-card-checking" />}
+                        {'note' in knock && !!knock.note && (
+                            <Text style={knock.kind === 'refused' || knock.kind === 'unreachable' ? styles.refusal : styles.note} testID="community-card-asked">
+                                {findLineWords(knock.note)}
+                            </Text>
+                        )}
+                        {knock.kind === 'unreachable' && (
+                            <View style={styles.actions}>
+                                <Pressable style={styles.secondary} onPress={() => setStatusAsk(n => n + 1)} accessibilityRole="button" testID="community-card-check-again">
+                                    <Text style={styles.secondaryText}>{t('Check again')}</Text>
+                                </Pressable>
+                            </View>
+                        )}
+                        {knock.kind === 'invited' && (
+                            <View style={styles.actions}>
+                                <Pressable style={[styles.primary, joining && { opacity: 0.6 }]} onPress={() => join(card, knock.invite)} disabled={joining}
+                                    accessibilityRole="button" testID="community-card-join">
+                                    <Text style={styles.primaryText}>{joining ? t('Joining…') : t('Join {name}', { name })}</Text>
+                                </Pressable>
+                            </View>
+                        )}
+                        {/* Ask to join: nothing asked, no answer came, or a refusal that asking again could get past. */}
+                        {card.joining === 'requests' && (knock.kind === 'ask' || (knock.kind === 'refused' && knock.canAsk)) && !formOpen && (
                             <View style={styles.actions}>
                                 <Pressable style={styles.primary} onPress={() => { setFormOpen(true); setFormError(null); }} accessibilityRole="button" testID="community-card-ask">
                                     <Text style={styles.primaryText}>{t(W.ask)}</Text>

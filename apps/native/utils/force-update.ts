@@ -275,12 +275,6 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
     };
 }
 
-/** Where the Update button goes: the store app, then the store's web page if the phone has no store app. */
-export const STORE_URLS = {
-    ios: { app: 'itms-apps://itunes.apple.com/app/id6761870086', web: 'https://apps.apple.com/us/app/bean-pool/id6761870086' },
-    android: { app: 'market://details?id=org.beanpool.pillar', web: 'https://play.google.com/store/apps/details?id=org.beanpool.pillar' },
-} as const;
-
 /** The community's answer, as the gate asks for it: the active community's health, within CHECK_TIMEOUT_MS. */
 export async function checkCommunityForUpdate(opts: {
     anchorUrl: () => Promise<string | null>;

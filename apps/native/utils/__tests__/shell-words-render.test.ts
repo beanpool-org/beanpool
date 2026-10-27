@@ -97,7 +97,6 @@ vi.mock('../community-switch', () => ({ onCommunitySwitched: () => () => {}, com
 vi.mock('../force-update', () => ({
     createForceUpdateGate: ({ show }: { show: (b: { version: string }) => void }) => ({ start: async () => { show({ version: '1.3.0' }); }, appStateChanged: async () => {}, communitySwitched: async () => {} }),
     checkCommunityForUpdate: async () => null,
-    STORE_URLS: { ios: { app: 'itms-apps://x', web: 'https://x' }, android: { app: 'market://x', web: 'https://x' } },
     appVersionHeaderValue: () => '1.2.70',
 }));
 vi.mock('../identity', () => ({ hasMnemonic: () => who.words }));

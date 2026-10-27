@@ -98,7 +98,7 @@ function check(cond: boolean, msg: string): void {
     run++;
     if (cond) console.log(`✓ ${msg}`); else { failed++; console.error(`✗ FAIL: ${msg}`); }
 }
-const refusal = (f: () => void): string | null => { try { f(); return null; } catch (e: any) { return String(e?.message ?? e); } };
+const refusal = (f: () => void): string | null => { try { f(); return null; } catch (e) { return e instanceof Error ? e.message : String(e); } };
 const balanceOf = (key: string): number =>
     (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
 const sumBalances = (): number => (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s;

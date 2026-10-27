@@ -4847,8 +4847,7 @@ export async function syncSingleConversation(conversationId: string) {
 
         if (changed.length === 0 && cursorAdvances.length === 0) {
             if (blanked > 0 || deletedStaleMessages > 0) {
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
+                emitAppEvent('sync_data_updated');
             }
             return;
         }
@@ -4876,8 +4875,7 @@ export async function syncSingleConversation(conversationId: string) {
         if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId], database);
         await holdDmTypes(database);
 
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
+        emitAppEvent('sync_data_updated');
     } catch (err: any) {
         // Background polling — don't alert, but DO leave a trace for USB debugging.
         console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} sync failed: ${err?.message || err}`);

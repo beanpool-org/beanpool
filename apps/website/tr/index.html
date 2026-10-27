@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Ticari Bankalar İçin Değil, Topluluklar İçin Takas</title>
-    <meta name="description" content="BeanPool, bir topluluğun para yerine Fasulye kullanarak yardım, eşya ve beceri takası yapmak için kendi kendine işlettiği ücretsiz bir uygulamadır. Yakınınızdaki bir topluluğu bulun veya başlatın ya da bir davetle katılın; küresel topluluk yakında herkese açılıyor. iPhone, Android ve web.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool, bir topluluğun para yerine Fasulye kullanarak yardım, mal ve beceri takası yapmak için kendi kendine çalıştırdığı ücretsiz bir uygulamadır. Küresel toplulukta deneyin, yakınınızda bir topluluk bulun veya başlatın, ya da bir davetle katılın. iPhone, Android ve web.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -146,7 +145,6 @@
     <section id="hero">
         <div class="hero-bg"></div>
         <div class="container hero-container">
-    <div class="website-stale-banner"><p>Bu sayfa İngilizce olarak daha günceldir. <a href="../index.html">Güncel İngilizce sürümü okuyun →</a></p></div>
             <div class="hero-header">
                 <div class="hero-badge">Telefonda ve web'de ücretsiz</div>
                 <h1>Ticari Bankalar İçin Değil,<br><span class="gradient-text">Topluluklar</span> İçin Takas</h1>
@@ -199,11 +197,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Üç giriş yolu</span>
@@ -212,14 +206,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Şimdi deneyin, dünya çapında</a>
-                            <p>Küresel topluluk yakında herkese davetsiz olarak açılıyor: etrafa bakın, ücretsiz veya takas için bir şeyler paylaşın ve yakınınızda bir topluluk bulun. Bugün özel bir önizlemedir. Açılana kadar, aşağıda halihazırda çalışan toplulukları görün, bir tane başlatın veya bir üyenin size verdiği daveti kullanın.</p>
+                            <a href="global" class="btn btn-primary font-header">Şimdi deneyin, dünya çapında</a>
+                            <p>Davet gerekmez: tarayıcınızda veya uygulamada küresel topluluğa katılın, etrafa göz atın, ücretsiz veya takaslık bir şeyler paylaşın ve yakınınızda bir topluluk bulun.</p>
+                            <p class="door-browser"><a href="https://global.beanpool.org/?lang=tr">veya tarayıcınızda</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Bir topluluk bulun veya başlatın</a>
-                            <p>Halihazırda çalışan toplulukları görün veya boş bir bilgisayarda ya da kiralanmış küçük bir sunucuda bir tane başlatın. Yakınınızdaki bir topluluktan sizi içeri almasını isteme özelliği yakında, küresel topluluk açıldığında geliyor.</p>
+                            <p>Halen çalışan toplulukları görün, yakınınızdaki bir topluluktan sizi kabul etmesini isteyin veya boşta duran bir bilgisayarda ya da küçük bir kiralık sunucuda bir tane başlatın.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Davetiniz var mı?</a>
@@ -242,7 +235,7 @@
                                     </g>
                                 </svg>
                             </a>
-                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Google Play'den Edinin">
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=tr" target="_blank" rel="noopener" class="hero-store-badge" title="Google Play'den Edinin">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
                                     <rect width="135" height="40" rx="7" fill="#000"/>
                                     <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
@@ -357,8 +350,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Üç kapıdan birinden girin</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Bir üyenin size gönderdiği daveti açın; yakında küresel topluluğu davetsiz olarak da deneyebilir ve oradan yakınınızdaki bir topluluktan sizi içeri almasını isteyebilirsiniz. Her iki durumda da insanların sizi tanıyacağı adı seçersiniz.</p>
+                        <p>Davetsiz olarak küresel topluluğu deneyin, yakınınızdaki bir topluluktan sizi kabul etmesini isteyin veya bir üyenin gönderdiği daveti açın. Her iki şekilde de insanların sizi tanıyacağı adı seçersiniz.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -407,8 +399,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Harita</h3>
-                    <p>Yakınınızda neyin sunulduğunu görün. Her iğne sizin yerleştirdiğiniz bir iğnedir: o andaki konumunuzu kullanın veya iğneyi elle bırakın. İzin verdiğinizde, uygulama size en yakın olanı göstermek için konumunuzu da kullanır ve bunu asla arka planda yapmaz. Etkinlik iğneleri ve web uygulamasında ayarlanan girişim iğneleri, noktayı yaklaşık 100&nbsp;m'ye yuvarlayan Yaklaşık olarak ayarlanabilir. İğneler topluluğunuzun üyeleri tarafından görülür. Küresel topluluk herkese açıldığında, oradaki bir ziyaretçi ilanları ve kabaca nerede olduklarını görür, ancak isimleri, profil resimlerini ve kesin konumları görmez. Herkes bir dakika içinde katılabilir, bu nedenle üyeleri de birbirlerinin ilanlarını yaklaşık bir kilometreye kadar görür; kesin konum, buluşmayı ayarladığınızda paylaşmanız içindir.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Yakınınızda neyin sunulduğunu görün. Her iğne sizin yerleştirdiğiniz bir iğnedir: o andaki konumunuzu kullanın veya iğneyi elle bırakın. İzin verdiğinizde, uygulama size en yakın olanı göstermek için konumunuzu da kullanır ve bunu asla arka planda yapmaz. Etkinlik iğneleri ve web uygulamasında ayarlanan girişim iğneleri, noktayı yaklaşık 100&nbsp;m'ye yuvarlayan Yaklaşık olarak ayarlanabilir. İğneler topluluğunuzun üyeleri tarafından görülür. Küresel toplulukta bir ziyaretçi ilanları ve yaklaşık olarak nerede olduklarını görür, ancak isimleri, profil resimlerini ve tam noktaları göremez. Herkes bir dakika içinde katılabilir, bu nedenle üyeleri de birbirlerinin ilanlarını yaklaşık bir kilometreye kadar görür; kesin konum, buluşmayı ayarladığınızda paylaşmanız içindir.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -595,8 +586,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>İlk açılıştan itibaren gizli</h3>
-                    <p>Bir topluluğun ilanları, haritası, mesajları ve bakiyeleri, düğümü başladığı andan itibaren üyeleri içindir; açılacak bir şey yoktur. Adresini hesabı olmadan açan biri, yakında herkese açılacak olan küresel topluluğa yönlendirilir.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Bir topluluğun ilanları, haritası, mesajları ve bakiyeleri, düğümü başladığı andan itibaren üyeleri içindir; açılacak bir şey yoktur. Adresini hesabı olmadan açan biri, küresel topluluğa yönlendirilir; burada yakınlarında ne olduğunu görebilir ve katılma talebinde bulunabilirler.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -610,7 +600,7 @@
                 <p>Bir tarifi takip edebiliyorsanız yaklaşık yarım saat. Önce bilinmesi gereken altı şey:</p>
                 <ul class="run-node-facts">
                     <li><strong>Maliyeti.</strong> Yazılım ücretsizdir. Evde açık kalan yedek bir bilgisayarda (Mini PC, NAS veya 64 bit sistemli Raspberry Pi) ya da ayda birkaç dolara (yaklaşık 6 ABD Doları) kiralanmış küçük bir sunucuda çalışır.</li>
-                    <li><strong>Kim barındırır.</strong> Kendi makinenizde veya kiraladığınız makinede siz barındırırsınız. Asla beanpool.org'a ihtiyaç duymaz: kendi web adresiniz çalışır.</li>
+                    <li><strong>Kim barındırır.</strong> Kendi makinenizde veya kiraladığınız makinede siz barındırırsınız. Asla <a href="https://beanpool.org">beanpool.org</a>'a ihtiyaç duymaz: kendi web adresiniz çalışır.</li>
                     <li><strong>Neleri üstlenirsiniz.</strong> Üyelerinizden gelen bildirimler size gelir. Veri klasörünü bir kurtarma koduyla yedeklemek size aittir. İki sahip bulundurun. Sunucuyu açık ve güncel tutun.</li>
                     <li><strong>Asla görmedikleriniz.</strong> Üyelerinizin doğrudan mesajlarını.</li>
                     <li><strong>Önce Docker.</strong> Aşağıdaki bloktan önce makinede Docker kurulu olmalıdır; yeni kiralanan bir sunucuda hiçbiri yoktur.</li>
@@ -684,13 +674,13 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>
         <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
         <ul>
-            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://global.beanpool.org/?lang=tr">Try it now, worldwide</a> · join in your browser, no invite.</li>
             <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
             <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
         </ul>

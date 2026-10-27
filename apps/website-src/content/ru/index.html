@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: fd8efb317ac86e59 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Обмен для сообществ, а не коммерческих банков</title>
-    <meta name="description" content="BeanPool — бесплатное приложение, которое сообщество запускает для себя, чтобы обмениваться помощью, товарами и навыками за бобы вместо денег. Найдите или создайте сообщество рядом с вами или присоединитесь по приглашению; глобальное сообщество скоро откроется для всех. iPhone, Android и веб.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool — это бесплатное приложение, которым сообщество управляет самостоятельно для обмена помощью, товарами и навыками в бобах вместо денег. Попробуйте в глобальном сообществе, найдите или создайте сообщество рядом с вами, или присоединитесь по приглашению. iPhone, Android и веб.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Три способа войти</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Попробуйте прямо сейчас по всему миру</a>
-                            <p>Глобальное сообщество скоро откроется для всех без приглашений: осмотритесь, предложите что-то бесплатно или для обмена и найдите сообщество поблизости. Сегодня это закрытый предварительный просмотр. Пока оно не открылось, посмотрите на уже работающие сообщества ниже, создайте свое или используйте приглашение от участника.</p>
+                            <a href="global" class="btn btn-primary font-header">Попробуйте прямо сейчас по всему миру</a>
+                            <p>Приглашение не требуется: присоединяйтесь к глобальному сообществу в браузере или приложении, осматривайтесь, делитесь вещами даром или для обмена и находите сообщество рядом с вами.</p>
+                            <p class="door-browser"><a href="https://global.beanpool.org/?lang=ru">или в браузере</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Найти или создать сообщество</a>
-                            <p>Посмотрите на уже работающие сообщества или запустите свое на свободном компьютере или небольшом арендованном сервере. Возможность попросить принять вас появится скоро, когда откроется глобальное сообщество.</p>
+                            <p>Посмотрите уже действующие сообщества, попросите принять вас в сообщество поблизости или запустите собственное на свободном компьютере или небольшом арендованном сервере.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Есть приглашение?</a>
@@ -156,7 +150,7 @@
                                     </g>
                                 </svg>
                             </a>
-                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Доступно в Google Play">
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=ru" target="_blank" rel="noopener" class="hero-store-badge" title="Доступно в Google Play">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
                                     <rect width="135" height="40" rx="7" fill="#000"/>
                                     <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Войдите через одну из трех дверей</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Откройте приглашение, отправленное участником; скоро вы также сможете опробовать глобальное сообщество без приглашения и уже оттуда попросить принять вас в сообщество поблизости. В любом случае вы выбираете имя, под которым вас будут знать.</p>
+                        <p>Попробуйте глобальное сообщество без приглашения, попросите сообщество рядом с вами принять вас или откройте приглашение, отправленное участником. В любом случае вы выбираете имя, под которым вас узнают.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Карта</h3>
-                    <p>Смотрите, что предлагают рядом с вами. Каждую метку ставите вы сами: используйте свое текущее местоположение или укажите точку вручную. Если вы разрешите, приложение также использует ваше местоположение, чтобы показать ближайшие предложения, и никогда не делает этого в фоновом режиме. Метки событий и предприятий, настроенные в веб-приложении, можно сделать примерными, что округляет точку примерно до 100&nbsp;м. Метки видны участникам вашего сообщества. Когда глобальное сообщество откроется для всех, посетители будут видеть объявления и их примерное расположение, но без имен, фотографий профиля и точных мест. Присоединиться к нему может любой желающий за минуту, поэтому его участники также видят объявления друг друга с точностью примерно до километра; точное место вы сообщаете сами при договоренности о встрече.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Смотрите, что предлагают рядом с вами. Каждую метку ставите вы сами: используйте свое текущее местоположение или укажите точку вручную. Если вы разрешите, приложение также использует ваше местоположение, чтобы показать ближайшие предложения, и никогда не делает этого в фоновом режиме. Метки событий и предприятий, настроенные в веб-приложении, можно сделать примерными, что округляет точку примерно до 100&nbsp;м. Метки видны участникам вашего сообщества. В глобальном сообществе посетитель видит предложения и их примерное расположение, но без имён, фотографий профиля и точных координат. Присоединиться к нему может любой желающий за минуту, поэтому его участники также видят объявления друг друга с точностью примерно до километра; точное место вы сообщаете сами при договоренности о встрече.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Конфиденциальность с первого запуска</h3>
-                    <p>Объявления, карта, сообщения и балансы сообщества доступны только его участникам с момента первого запуска узла; ничего дополнительно включать не нужно. Тот, кто откроет его адрес без аккаунта, перенаправляется в глобальное сообщество, которое скоро откроется для всех.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Объявления, карта, сообщения и балансы сообщества доступны только его участникам с момента первого запуска узла; ничего дополнительно включать не нужно. Тот, кто откроет его адрес без аккаунта, перенаправляется в глобальное сообщество, где они могут посмотреть, что есть поблизости, и попросить присоединиться.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>Примерно полчаса, если следовать инструкции. Шесть вещей, о которых нужно знать заранее:</p>
                 <ul class="run-node-facts">
                     <li><strong>Сколько это стоит.</strong> Программное обеспечение бесплатно. Оно работает на свободном домашнем компьютере, который постоянно включен (мини-ПК, NAS или Raspberry Pi с 64-битной системой), либо на небольшом арендованном сервере за несколько долларов в месяц (около $6 США).</li>
-                    <li><strong>Кто его размещает.</strong> Вы сами, на своем компьютере или на арендованном сервере. Ему не требуется beanpool.org: работает ваш собственный веб-адрес.</li>
+                    <li><strong>Кто его размещает.</strong> Вы сами, на своем компьютере или на арендованном сервере. Ему не требуется <a href="https://beanpool.org">beanpool.org</a>: работает ваш собственный веб-адрес.</li>
                     <li><strong>За что вы отвечаете.</strong> Жалобы от участников поступают вам. Папку с данными вы копируете сами с помощью кода восстановления. Держите двух владельцев. Следите за работой и обновлениями сервера.</li>
                     <li><strong>Чего вы никогда не видите.</strong> Личные сообщения участников.</li>
                     <li><strong>Сначала Docker.</strong> На машине должен быть установлен Docker перед выполнением команды ниже; на только что арендованном сервере его нет.</li>
@@ -598,13 +589,13 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>
         <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
         <ul>
-            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://global.beanpool.org/?lang=ru">Try it now, worldwide</a> · join in your browser, no invite.</li>
             <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
             <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
         </ul>

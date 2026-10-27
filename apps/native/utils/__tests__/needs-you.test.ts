@@ -54,6 +54,12 @@ describe('What needs you: which kinds show', () => {
         // Need request waits on buyer (author), not helper (seller)
         expect(only([{ ...tx('a', 'requested', 'other', ME), postType: 'need' }])[0]?.count).toBe(1);
         expect(only([{ ...tx('a', 'requested', ME, 'other'), postType: 'need' }])).toEqual([]);
+        // A request waits on the listing's author: explicit postAuthorPublicKey
+        expect(only([{ ...tx('a', 'requested', 'other', ME), postAuthorPublicKey: ME }])[0]?.count).toBe(1);
+        expect(only([{ ...tx('a', 'requested', ME, 'other'), postAuthorPublicKey: 'someone-else' }])).toEqual([]);
+        // Lendable offer (loan): borrower is buyer, lender is seller and author; lender is badged, borrower is not
+        expect(only([{ ...tx('a', 'requested', ME, 'borrower'), postAuthorPublicKey: ME, postLendable: true }])[0]?.count).toBe(1);
+        expect(only([{ ...tx('a', 'requested', 'lender', ME), postAuthorPublicKey: 'lender', postLendable: true }])).toEqual([]);
     });
 
     it('votes: only open, not yet cast, and ones you can cast', () => {

@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: fd8efb317ac86e59 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool —— 面向社区的互助交易，而非商业银行</title>
-    <meta name="description" content="BeanPool 是一款由社区自主运营的免费应用，使用豆子代替金钱来交易互助、物品和技能。寻找或建立你身边的社区，或者通过邀请加入；全球社区很快向所有人开放。支持 iPhone、Android 和网页端。">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="BeanPool 是一款由社区自主运营的免费应用，使用 Bean 代替金钱来交易互助、物品和技能。体验全球社区，寻找或发起您身边的社区，或者通过邀请加入。支持 iPhone、Android 和网页端。">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">三种加入方式</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">立即体验，连接全球</a>
-                            <p>全球社区很快将向所有人开放，无需邀请：随处看看、发布免费赠送或交换的物品，并找到你身边的社区。目前它处于内部预览阶段。在正式开放之前，你可以查看下方已经在运行的社区、建立一个社区，或者使用成员给你的邀请。</p>
+                            <a href="global" class="btn btn-primary font-header">立即体验，连接全球</a>
+                            <p>无需邀请：在浏览器或应用中加入全球社区，随心浏览，发布免费赠送或换物需求，并找到您身边的社区。</p>
+                            <p class="door-browser"><a href="https://global.beanpool.org/?lang=zh-Hans">或在浏览器中打开</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">寻找或建立社区</a>
-                            <p>查看已经在运行的社区，或者在一台闲置电脑或小型租用服务器上建立一个社区。待全球社区开放时，很快就可以申请加入你身边的社区。</p>
+                            <p>查看当前已运行的社区，向身边的社区申请加入，或者在闲置电脑或小型租用服务器上建立新社区。</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">收到邀请了？</a>
@@ -156,7 +150,7 @@
                                     </g>
                                 </svg>
                             </a>
-                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="在 Google Play 获取">
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=zh-Hans" target="_blank" rel="noopener" class="hero-store-badge" title="在 Google Play 获取">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
                                     <rect width="135" height="40" rx="7" fill="#000"/>
                                     <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. 通过三扇大门之一进入</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>打开成员发给你的邀请；不久后你也可以无需邀请直接体验全球社区，并从那里申请加入你身边的社区。无论哪种方式，你都可以选择一个让大家认识你的名称。</p>
+                        <p>无需邀请即可体验全球社区，向您身边的社区申请加入，或者打开成员发送给您的邀请。无论哪种方式，您都可以自主选择展示给其他人的昵称。</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>地图</h3>
-                    <p>查看你附近提供的事物。每一个图钉都由你亲自放置：可以使用你当时的定位，也可以手动放置图钉。当你允许时，应用还会根据你的位置展示距离你最近的内容，且绝不会在后台定位。活动图钉以及在网页端设置的企业图钉可以设为“大致”，将地点模糊到约 100&nbsp;米。图钉仅对你所在社区的成员可见。当全球社区向所有人开放时，那里的访客可以看到刊登内容及其大致范围，但看不到姓名、个人资料头像以及精确地点。任何人都能在一分钟内加入，因此其成员看到的彼此刊登位置也会模糊到大约一公里范围；精确地点则由你在约定见面时自行告知对方。</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>查看你附近提供的事物。每一个图钉都由你亲自放置：可以使用你当时的定位，也可以手动放置图钉。当你允许时，应用还会根据你的位置展示距离你最近的内容，且绝不会在后台定位。活动图钉以及在网页端设置的企业图钉可以设为“大致”，将地点模糊到约 100&nbsp;米。图钉仅对你所在社区的成员可见。在全球社区中，访客可以看到各种发布的内容及其大致位置，但看不到姓名、个人资料照片和确切地点。任何人都能在一分钟内加入，因此其成员看到的彼此刊登位置也会模糊到大约一公里范围；精确地点则由你在约定见面时自行告知对方。</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>从首次启动起便保持私密</h3>
-                    <p>从节点启动的那一刻起，社区的刊登信息、地图、消息与余额仅对其成员开放；无需进行任何额外设置。没有账户的人打开其地址会被引导至全球社区，全球社区很快向所有人开放。</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>从节点启动的那一刻起，社区的刊登信息、地图、消息与余额仅对其成员开放；无需进行任何额外设置。没有账户的人打开其地址会被引导至全球社区，在那里他们可以看到附近的内容并申请加入。</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>按照指南操作大约需要半小时。请先了解以下六件事：</p>
                 <ul class="run-node-facts">
                     <li><strong>费用成本。</strong>软件是免费的。它可以运行在家里保持开机的闲置电脑上（迷你主机、NAS 或安装了 64 位系统的树莓派），也可以运行在每月花费数美元（约 6 美元）的小型租用服务器上。</li>
-                    <li><strong>由谁托管。</strong>由你自行托管，在你自己的机器或你租用的服务器上。它从不需要依赖 beanpool.org：你自己的网络地址即可正常使用。</li>
+                    <li><strong>由谁托管。</strong>由你自行托管，在你自己的机器或你租用的服务器上。它从不需要依赖 <a href="https://beanpool.org">beanpool.org</a>：你自己的网络地址即可正常使用。</li>
                     <li><strong>你的职责承担。</strong>成员的举报会发送给你。数据文件夹由你使用恢复代码进行备份。请保持两位所有者。保持服务器开机运行并及时更新。</li>
                     <li><strong>你绝不会看到的内容。</strong>你成员之间的私信。</li>
                     <li><strong>先准备 Docker。</strong>在执行下方命令块之前，机器上需要安装 Docker；全新租用的服务器通常未安装。</li>
@@ -598,13 +589,13 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>
         <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
         <ul>
-            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://global.beanpool.org/?lang=zh-Hans">Try it now, worldwide</a> · join in your browser, no invite.</li>
             <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
             <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
         </ul>

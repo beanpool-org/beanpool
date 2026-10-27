@@ -344,16 +344,17 @@ for (const scheme of ['light', 'dark'] as const) {
             const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
             const held = SAMPLE_COMMUNITY.deals.find(d => d.status === 'held')!;
             const done = SAMPLE_COMMUNITY.deals.find(d => d.status === 'done')!;
-            // In Progress: the deal waiting on you (requested: Action Required) and the one whose Beans are held, amounts drawn.
-            expect(text()).toContain(waiting.what);
-            expect(text()).toContain('Action Required');
-            expect(text()).toContain(String(waiting.amount));
-            expect(text()).toContain(held.what);
-            expect(text()).toContain('Held in Trust');
-            expect(text()).toContain(String(held.amount));
-            const cardText = (id: string) => host.querySelector(`[data-testid="deal-card-${id}-post"]`)?.textContent ?? '';
-            expect(cardText(waiting.id)).toContain('Action Required');
-            expect(cardText(held.id)).toContain('Held in Trust');
+            // In Progress (Deals S3b): one card per deal with core's state words, the request waiting on the member to answer
+            // and the deal whose Beans are held waiting on the member to release them, amounts drawn; the title row counts both.
+            expect(text()).toContain('2 under way · 2 need you');
+            const cardText = (id: string) => host.querySelector(`[data-testid="deal-card-${id}"]`)?.textContent ?? '';
+            expect(cardText(waiting.id)).toContain(waiting.what);
+            expect(cardText(waiting.id)).toContain('Waiting on you: answer');
+            expect(cardText(waiting.id)).toContain(String(waiting.amount));
+            expect(cardText(held.id)).toContain(held.what);
+            expect(cardText(held.id)).toContain('Waiting on you: release');
+            expect(cardText(held.id)).toContain(String(held.amount));
+            expect(text()).not.toContain(done.what);
             expect(text()).not.toMatch(/Ʀ|🔒/);
             const card = Array.from(host.querySelectorAll('button')).filter(b => b.textContent?.includes(waiting.what)).pop()!;
             await press(card);

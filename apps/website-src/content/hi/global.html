@@ -1,4 +1,4 @@
-<!-- source-hash: fc09bef8b43ec9bb -->
+<!-- source-hash: f7c812a815d0f741 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,6 +25,21 @@
         .global-door .global-browser { text-align: center; margin: 0.6rem 0 0; }
         /* the browser line is a link people tap on a phone: a 48px row, underlined so it reads as one */
         .global-door .global-browser a { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+        .global-door.ios-open-pending { display: flex; flex-direction: column; }
+        .global-door.ios-open-pending .hero-doors { order: 2; }
+        .global-door.ios-open-pending .global-browser { order: 1; margin: 0.5rem 0 1rem; }
+        .global-door.ios-open-pending .global-browser a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 0.85rem 1.5rem;
+            border-radius: var(--radius-md);
+            text-decoration: none;
+            background: var(--primary);
+            color: white;
+            font-weight: 700;
+        }
         @media (max-width: 768px) {
             .global-door { margin: 100px 16px 40px; padding: 1.75rem 1.25rem; }
         }
@@ -42,7 +57,7 @@
         </div>
     </nav>
 
-    <main class="global-door glass-panel">
+    <main class="global-door glass-panel" id="global-door-main">
         <h1>वैश्विक समुदाय</h1>
         <p class="lede">हर जगह के लोग, एक BeanPool समुदाय में।</p>
 
@@ -61,15 +76,11 @@
             </div>
             <div class="hero-door" id="door-ios">
                 <a class="btn btn-ghost" id="app-store" href="https://apps.apple.com/app/id6761870086">App Store पर BeanPool पाएँ</a>
-                <p>iPhone और iPad के लिए।</p>
+                <p id="ios-note" data-ios-note="iPhone ऐप अपने अगले अपडेट से वैश्विक समुदाय से जुड़ सकेगा।">iPhone और iPad के लिए।</p>
             </div>
         </div>
-
-        <!-- OPEN-GLOBAL: add <p class="global-note">New to the app? On its first screen, tap <strong>Explore BeanPool worldwide</strong>.</p>
-             here (its style is already in the page). Not before: the app shows that button only once global.beanpool.org
-             answers that its door is open (apps/native/utils/global-door-offer.ts), so during the private preview a new
-             member would look for a button that is not there. -->
-        <p class="global-browser"><a id="browser" href="https://global.beanpool.org">या अपने ब्राउज़र में वैश्विक समुदाय खोलें</a></p>
+        <p class="global-note" id="global-first-screen">ऐप में नए हैं? इसकी पहली स्क्रीन पर, <strong>पूरी दुनिया में BeanPool देखें</strong> पर टैप करें।</p>
+        <p class="global-browser"><a id="browser" data-ios-text="अपने ब्राउज़र में वैश्विक समुदाय खोलें" href="https://global.beanpool.org">या अपने ब्राउज़र में वैश्विक समुदाय खोलें</a></p>
         <!-- What the global community is, in members' words (the global mothership design §2.5, pick 1, which Marty accepted). -->
         <p class="global-note">वैश्विक समुदाय कई समुदायों में से एक समुदाय है। आपका अपना समुदाय अपने स्वयं के सर्वर पर चलता है और उसे कभी भी इसकी आवश्यकता नहीं होती है।</p>
     </main>
@@ -79,6 +90,10 @@
     (function () {
         function byId(id) { return document.getElementById(id); }
         function swap(el, from, to) { el.classList.remove(from); el.classList.add(to); }
+
+        // S14 flips IOS_OPEN_DOOR_LIVE to true once the iOS app has the global door (App Store version >= 1.2.56).
+        // While false: browser line first, App Store second with "The iPhone app's open door comes in its next update", no redirect.
+        var IOS_OPEN_DOOR_LIVE = false;
 
         var ua = navigator.userAgent || '';
         var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
@@ -117,8 +132,22 @@
             if (live && arrived) location.href = play;
         } else if (isIOS) {
             byId('door-play').hidden = true;
-            swap(byId('app-store'), 'btn-ghost', 'btn-primary');
-            if (live && arrived) location.href = appStore;
+            if (IOS_OPEN_DOOR_LIVE) {
+                swap(byId('app-store'), 'btn-ghost', 'btn-primary');
+                if (live && arrived) location.href = appStore;
+            } else {
+                var iosNote = byId('ios-note');
+                if (iosNote) iosNote.textContent = iosNote.getAttribute('data-ios-note');
+                var firstScreen = byId('global-first-screen');
+                if (firstScreen) firstScreen.hidden = true;
+                var browserLink = byId('browser');
+                if (browserLink) {
+                    browserLink.textContent = browserLink.getAttribute('data-ios-text');
+                    browserLink.classList.add('btn-primary');
+                }
+                var main = byId('global-door-main');
+                if (main && main.classList) main.classList.add('ios-open-pending');
+            }
         } else if (live) {
             // A computer: the global community in the browser, with this page out of the history so Back goes home.
             location.replace(browser);

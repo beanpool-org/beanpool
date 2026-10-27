@@ -670,12 +670,9 @@ export default function MarketScreen() {
     const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
     const [myTransactions, setMyTransactions] = useState<any[]>([]);
-    // Every listing I could have a deal on, whatever its audience or the feed's filters: the pill counts what the
-    // My Deals sheet it opens lists, as the tab badge does (_layout.tsx).
-    const [dealPosts, setDealPosts] = useState<any[]>([]);
 
     // In preview the pill counts none of the reader's own deals, even one read before the switch that lands after it.
-    const pendingCount = usePendingDealsCount(dealsPreview ? null : identity, dealPosts, myTransactions);
+    const pendingCount = usePendingDealsCount(dealsPreview ? null : identity, myTransactions);
 
     useEffect(() => {
         let cancelled = false;
@@ -945,13 +942,10 @@ export default function MarketScreen() {
             // after a switch to preview is dropped.
             if (identity && readsOwnDeals()) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
-                const all = await getPosts({ allScopes: true });
                 if (!readsOwnDeals()) return;
                 setMyTransactions(txs);
-                setDealPosts(all);
             } else {
                 setMyTransactions([]);
-                setDealPosts([]);
             }
         };
         try {

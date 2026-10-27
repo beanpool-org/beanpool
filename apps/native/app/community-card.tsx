@@ -36,14 +36,23 @@ const CARD_SCREEN_WORDS = {
 
 const TIMEOUT_MS = 15_000;
 
-/** A community's public card, read unsigned from the community itself (GET /api/community/card): nothing to sign for. */
+/**
+ * A community's public card, read unsigned from the community itself (GET /api/community/card): nothing to sign for.
+ * A link may name any server, and the card's name and host are only that server's claim: the host is always the one it
+ * was read from (shown under the name), and a card that names another host loses its name, so no server reads as
+ * another community, and a request to join is never sent to a server that looks like one it isn't.
+ */
 async function readCard(origin: string): Promise<CommunityCard | 'unreachable' | 'unreadable'> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
     try {
         const res = await fetch(`${origin}/api/community/card`, { signal: ctl.signal, headers: { Accept: 'application/json' } });
         if (!res.ok) return 'unreadable';
-        return readCommunityCard(await res.json()) ?? 'unreadable';
+        const card = readCommunityCard(await res.json());
+        if (!card) return 'unreadable';
+        const host = origin.replace(/^https:\/\//, '');
+        const claimed = card.host?.replace(/:443$/, '') ?? null;
+        return { ...card, name: claimed && claimed !== host ? null : card.name, host };
     } catch {
         return 'unreachable';
     } finally {
@@ -78,6 +87,7 @@ export default function CommunityCardScreen() {
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 16 },
         kicker: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, marginBottom: 4 },
         name: { fontSize: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 8 },
+        host: { fontSize: 14, color: colors.text.secondary, marginTop: -6, marginBottom: 8 },
         fact: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
         chip: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.surface.subtle },
         chipText: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
@@ -229,7 +239,9 @@ export default function CommunityCardScreen() {
         return (
             <View style={styles.card} testID="community-card">
                 <Text style={styles.kicker}>{t(W.kicker)}</Text>
-                <Text style={styles.name} accessibilityRole="header">{name}</Text>
+                <Text style={styles.name} accessibilityRole="header" testID="community-card-name">{name}</Text>
+                {/* The address it was read from, never the card's own word for it: the name is a claim. */}
+                {!!card.host && name !== card.host && <Text style={styles.host} testID="community-card-host">{card.host}</Text>}
                 {!!facts.members && <Text style={styles.fact} testID="community-card-members">{facts.members}</Text>}
                 {!!facts.area && <Text style={styles.fact} testID="community-card-area">{facts.area}</Text>}
                 <View style={styles.chip}><Text style={styles.chipText} testID="community-card-joining">{facts.joining}</Text></View>

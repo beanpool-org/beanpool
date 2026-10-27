@@ -12,6 +12,10 @@
  * Before PR #2551's review, the screen showed "waiting" for any remembered request, whatever the community answered, and
  * read no cancel: the approved, none and cancelled tests here fail there.
  *
+ * And the card is a claim (PR #2551's second review): a link may name any server, which may say it is any community. The
+ * screen shows the host it read the card from, and a card that names another host loses its name: the "names another
+ * host" tests fail before (the server's chosen name, no host shown).
+ *
  * Nothing is contacted: fetch plays the one community (its card, and this key's knock status).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,7 +99,7 @@ import { KNOCKS_STORE_KEY } from '../storage-keys';
 import { setLanguage } from '@beanpool/core';
 
 type Answer = { status: 'pending' } | { status: 'none' } | { status: 'approved'; invite: string } | 'offline';
-const scene = { answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0 };
+const scene = { answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0, card: null as Record<string, unknown> | null };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CARD = { name: 'Riverside', host: 'riverside.example', members: null, area: null, joining: 'requests', askUrl: null, globalUrl: null };
@@ -122,10 +126,11 @@ beforeEach(() => {
     scene.answer = { status: 'pending' };
     scene.statusReads = 0;
     scene.knocks = 0;
+    scene.card = null;
     setLanguage('en');
     globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
         const u = String(input);
-        if (u === `${ORIGIN}/api/community/card`) return json(CARD);
+        if (u === `${ORIGIN}/api/community/card`) return json(scene.card ?? CARD);
         if (u === `${ORIGIN}/api/join/knock/status`) {
             scene.statusReads++;
             if (scene.answer === 'offline') throw new TypeError('Network request failed');
@@ -231,5 +236,72 @@ describe("a member's request to join, on the community's card", () => {
         expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
         expect(buttons()).not.toContain('Ask to join');
         expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks.map((k: { url: string }) => k.url)).toEqual([ORIGIN]);
+    });
+});
+
+describe('the card is what the server it was read from claims', () => {
+    const name = () => byTestId('community-card-name')?.textContent ?? null;
+    const shownHost = () => byTestId('community-card-host')?.textContent ?? null;
+    // A link names riverside.example, whose card says it is another community.
+    const POSING = { ...CARD, name: 'Mullum Community', host: 'mullum.beanpool.org' };
+
+    it("its own host: the community's name, and under it the host the card was read from", async () => {
+        await open();
+        expect(name()).toBe('Riverside');
+        expect(shownHost()).toBe('riverside.example');
+    });
+
+    it("its own host, no name of its own: the host is the name, said once", async () => {
+        scene.card = { ...CARD, name: null };
+        await open();
+        expect(name()).toBe('riverside.example');
+        expect(shownHost()).toBeNull();
+    });
+
+    it("names another host: its name is dropped and the host it was read from is the name (fails before: 'Mullum Community', no host)", async () => {
+        scene.card = POSING;
+        await open();
+        expect(name()).toBe('riverside.example');
+        expect(host.textContent).not.toContain('Mullum');
+        expect(host.textContent).not.toContain('mullum.beanpool.org');
+    });
+
+    it('names no host: its name, with the host it was read from under it', async () => {
+        scene.card = { ...CARD, name: 'Mullum Community', host: null };
+        await open();
+        expect(name()).toBe('Mullum Community');
+        expect(shownHost()).toBe('riverside.example');
+    });
+
+    it('names another host: a request to it is remembered by its host, never by the name it claimed', async () => {
+        scene.card = POSING;
+        await open();
+        await tap(byTestId('community-card-ask'));
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'I live by the river and grow tomatoes.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(scene.knocks).toBe(1);
+        expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks).toEqual([expect.objectContaining({ url: ORIGIN, name: null })]);
+    });
+
+    it("names another host: Join says the host, and the join is told no name of the card's", async () => {
+        remember();
+        scene.card = POSING;
+        scene.answer = { status: 'approved', invite: 'BP-RIVR-0001' };
+        await open();
+        expect(byTestId('community-card-join')?.textContent).toBe('Join riverside.example');
+        await tap(byTestId('community-card-join'));
+        expect(joins).toEqual([expect.objectContaining({ targetUrl: ORIGIN, code: 'BP-RIVR-0001', knownName: null })]);
+    });
+
+    it('the host is matched as the phone reads one: case and a :443 make no other host', async () => {
+        scene.card = { ...CARD, host: 'Riverside.Example:443' };
+        await open();
+        expect(name()).toBe('Riverside');
+        expect(shownHost()).toBe('riverside.example');
     });
 });

@@ -6,10 +6,15 @@
 // Run: node --import tsx --test scripts/directory-register-rules.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
+// rules.ts has no package.json of its own that says "module" (and must not: the Edge Function deploys from that folder),
+// so tsx loads it as CommonJS and its exports arrive on the default import.
+import * as loaded from '../supabase/functions/directory-register/rules.ts';
+
+const rules = loaded.default?.checkBeforeSignature ? loaded.default : loaded;
+const {
     DENIED_HOST_MESSAGE, DEFAULT_DENY_HOSTS, TIMESTAMP_WINDOW_MS, checkBeforeSignature, decideAfterSignature, hostDenied,
     hostOfPublicUrl, isUnlistPayload, parseDenyHosts, requiredFields,
-} from '../supabase/functions/directory-register/rules.ts';
+} = rules;
 
 const NOW = Date.UTC(2026, 9, 27, 8, 0, 0);
 // The list the director sets at deploy (DIRECTORY_DENY_HOSTS), and the one used when the secret is not set.

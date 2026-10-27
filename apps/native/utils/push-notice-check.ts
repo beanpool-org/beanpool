@@ -493,6 +493,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites' | '/find-community'
+    | '/(tabs)/chats?filter=requests'
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
@@ -518,6 +519,7 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
  */
 export function noticeRoute(kind: PushNoticeKind | null, details: unknown): NoticeRoute {
     const d = asObject(details) ?? {};
+    if (d.screen === 'requests') return '/(tabs)/chats?filter=requests';
     if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) return `/post/${d.postId}`;
     if (d.screen === 'chat' && typeof d.conversationId === 'string' && NODE_ID.test(d.conversationId)) return `/chat/${d.conversationId}`;
     if (d.screen === 'enterprise' && typeof d.publicKey === 'string' && ENTERPRISE_KEY.test(d.publicKey)) return `/treasury-manage?publicKey=${d.publicKey}`;

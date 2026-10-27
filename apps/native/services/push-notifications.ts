@@ -204,13 +204,18 @@ async function followNotificationTap(response: NotificationResponse, options: No
         // A tool's own reminder (tools/reminders.ts), which only this app posts: it opens the tool.
         const activeAnchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
         const { communityKey } = await import('../tools/community');
-        const toolRoute = toolReminderRoute(incoming(response.notification), communityKey(activeAnchor));
+        const inc = incoming(response.notification);
+        const toolRoute = toolReminderRoute(inc, communityKey(activeAnchor));
         if (toolRoute) {
             router.push(toolRoute as never);
             return;
         }
+        if (inc.data?.screen === 'requests' || (typeof inc.body === 'string' && inc.body.includes('wants to message you'))) {
+            router.push('/(tabs)/chats?filter=requests' as never);
+            return;
+        }
         const account = await loadIdentity().catch(() => null);
-        await followTap(incoming(response.notification), {
+        await followTap(inc, {
             storage: AsyncStorage,
             account,
             openIn: async (community, id, route) => {

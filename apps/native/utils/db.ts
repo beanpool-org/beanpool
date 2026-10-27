@@ -518,7 +518,8 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_title TEXT,
             post_status TEXT,
             post_photo TEXT,
-            post_credits REAL
+            post_credits REAL,
+            request TEXT
         );
 
         CREATE TABLE IF NOT EXISTS conversation_participants (
@@ -639,6 +640,7 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_status TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_photo TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_credits REAL;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN request TEXT;`); } catch (e) {}
 
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
@@ -1231,7 +1233,7 @@ function formatSystemMessage(
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT c.id, c.name, c.post_id, c.type as convType,
+        SELECT c.id, c.name, c.post_id, c.type as convType, c.request as request,
                COALESCE(p.title, c.post_title) as postTitle,
                COALESCE(
                    (SELECT mt2.status FROM marketplace_transactions mt2
@@ -1363,6 +1365,11 @@ export async function getConversations(myPubkey: string) {
         const isPayer = row.txBuyerPubkey === myPubkey;
         const isPayee = row.txSellerPubkey === myPubkey;
 
+        let parsedRequest = undefined;
+        if (row.request) {
+            try { parsedRequest = typeof row.request === 'string' ? JSON.parse(row.request) : row.request; } catch {}
+        }
+
         // Extract first photo from post photos JSON
         let postPhoto: string | null = null;
         if (row.postPhotos) {
@@ -1407,6 +1414,7 @@ export async function getConversations(myPubkey: string) {
             pendingTxId: row.pendingTxId || null,
             hasRated: row.hasRated > 0,
             dealCount: row.dealCount || 0,
+            request: parsedRequest,
         };
     });
 }
@@ -4469,6 +4477,9 @@ export async function syncMessages(publicKey: string) {
         // into its rows, so the chat names the person it is sealed to, and no reader has to put the rows back (each pass
         // writing the offered key in and each read taking it out again: #1872 ultrareview, U7).
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
+        if (myIdentity?.publicKey && convData.requests !== undefined) {
+            await saveMessageRequests(myIdentity.publicKey, convData.requests);
+        }
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
             // writing. This loop runs on every full message-sync (badge backstop,
@@ -4482,12 +4493,13 @@ export async function syncMessages(publicKey: string) {
             // The node's read cursor is its listed peer's: kept only for the key this phone pinned.
             const cursorPeer = pinned ? (pinKeyOf(listedPeer) === pinned.peer ? pinned.peer : null) : listedPeer;
             const postPhotoString = conv.postPhoto ? JSON.stringify([conv.postPhoto]) : null;
+            const requestJson = conv.request ? JSON.stringify(conv.request) : null;
             // The chat's ⋮ menu reads this to show Mute or Unmute without a request of its own.
             if ('mute' in conv) rememberChatMute(conv.id, conv.mute ?? null);
             let needsConvWrite = false;
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, type, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, post_credits, request FROM conversations WHERE id = ?', [conv.id]);
                 // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
                 if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
                     console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
@@ -4498,7 +4510,8 @@ export async function syncMessages(publicKey: string) {
                     (localConv.post_title ?? null) !== (conv.postTitle ?? null) ||
                     (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
                     (localConv.post_photo ?? null) !== postPhotoString ||
-                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null)
+                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null) ||
+                    (localConv.request ?? null) !== requestJson
                 ) {
                     needsConvWrite = true;
                 } else if (people) {
@@ -4540,7 +4553,7 @@ export async function syncMessages(publicKey: string) {
                     const localConv = await txn.getFirstAsync<any>('SELECT id FROM conversations WHERE id = ?', [conv.id]);
                     if (!localConv) {
                         await txn.runAsync(
-                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits, request) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                             [
                                 conv.id,
                                 heldType,
@@ -4551,17 +4564,19 @@ export async function syncMessages(publicKey: string) {
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
-                                conv.postCredits || null
+                                conv.postCredits || null,
+                                requestJson
                             ]
                         );
                     } else {
                         await txn.runAsync(
-                            'UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ? WHERE id = ?',
+                            'UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, request = ? WHERE id = ?',
                             [
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
                                 conv.postCredits || null,
+                                requestJson,
                                 conv.id
                             ]
                         );
@@ -4720,6 +4735,15 @@ export async function syncSingleConversation(conversationId: string) {
         if (msgData?.conversation && 'mute' in msgData.conversation) {
             rememberChatMute(conversationId, msgData.conversation.mute ?? null);
         }
+        if (msgData?.conversation && 'request' in msgData.conversation) {
+            try {
+                const reqJson = msgData.conversation.request ? JSON.stringify(msgData.conversation.request) : null;
+                const db = await getDb();
+                await db.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [reqJson, conversationId]);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not update conversation request: ${e?.message || e}`);
+            }
+        }
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return;
 
@@ -4823,9 +4847,10 @@ export async function syncSingleConversation(conversationId: string) {
 
 export async function getConversation(id: string, myPubkey?: string) {
     const database = await getDb();
+    let res: any;
     if (myPubkey) {
-        return await database.getFirstAsync<any>(`
-            SELECT c.name, c.type as type, c.post_id as postId, p.title as postTitle,
+        res = await database.getFirstAsync<any>(`
+            SELECT c.name, c.type as type, c.post_id as postId, c.request as request, p.title as postTitle,
             COALESCE(
                 (SELECT mt2.status FROM marketplace_transactions mt2
                  WHERE mt2.post_id = c.post_id
@@ -4854,8 +4879,13 @@ export async function getConversation(id: string, myPubkey?: string) {
                 AND (mt.buyer_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
                      AND mt.seller_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id))
             WHERE c.id = ?`, [myPubkey, myPubkey, myPubkey, id]);
+    } else {
+        res = await database.getFirstAsync<any>('SELECT name, post_id as postId, request FROM conversations WHERE id = ?', [id]);
     }
-    return await database.getFirstAsync<any>('SELECT name, post_id as postId FROM conversations WHERE id = ?', [id]);
+    if (res?.request && typeof res.request === 'string') {
+        try { res.request = JSON.parse(res.request); } catch {}
+    }
+    return res;
 }
 
 /**
@@ -6306,6 +6336,7 @@ async function _deliverPendingMessage(
                 try { meta = JSON.parse(row.metadata) || {}; } catch {}
             }
             meta.__sendState = 'failed';
+            if (deliverErr?.message) meta.__sendError = deliverErr.message;
             await database.runAsync('UPDATE messages SET metadata=? WHERE id=?', [JSON.stringify(meta), tempId]);
         } catch {}
     } finally {
@@ -7085,6 +7116,33 @@ async function _signedRequest(endpoint: string, payload: any) {
 // through here.
 export async function signedRequest(endpoint: string, payload: any) {
     return _signedRequest(endpoint, payload);
+}
+
+export async function getMessageRequests(myPubkey: string): Promise<{ count: number; conversations: any[] } | null> {
+    try {
+        const raw = await AsyncStorage.getItem(`beanpool_message_requests_${myPubkey}`);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+export async function saveMessageRequests(myPubkey: string, requests: { count: number; conversations: any[] } | null): Promise<void> {
+    try {
+        if (requests) {
+            await AsyncStorage.setItem(`beanpool_message_requests_${myPubkey}`, JSON.stringify(requests));
+        } else {
+            await AsyncStorage.removeItem(`beanpool_message_requests_${myPubkey}`);
+        }
+    } catch {}
+}
+
+export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel'): Promise<{ success: boolean; request?: any }> {
+    return _signedRequest('/api/messages/request', { conversationId, decision });
+}
+
+export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {
+    return _signedRequest('/api/messages/request/ignore-all', {});
 }
 
 /**

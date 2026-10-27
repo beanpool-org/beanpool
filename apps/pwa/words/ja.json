@@ -3510,5 +3510,6 @@
   "Add a photo first": "先に写真を追加してください",
   "⚠️ Action Required": "⚠️ アクションが必要",
   "⏳ Awaiting Approval": "⏳ 承認待ち",
-  "⏸ PAUSED": "⏸ 一時停止"
+  "⏸ PAUSED": "⏸ 一時停止",
+  "Cancel request": "リクエストをキャンセル"
 }

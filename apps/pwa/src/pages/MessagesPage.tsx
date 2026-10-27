@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, type CSSProperties } from 'react';
 import {
-    getConversations, getConversationMessages, createConversationApi,
+    getConversations, getConversationMessages, createConversationApi, decideMessageRequest,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
@@ -2944,8 +2944,34 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     <div role="status" data-testid="request-waiting" style={{
                         padding: '0.75rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
                         fontSize: '0.85rem', color: 'var(--text-secondary)', overflowWrap: 'anywhere',
+                        display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem',
                     }}>
-                        {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
+                        <span style={{ flex: '1 1 14rem' }}>
+                            {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
+                        </span>
+                        <button
+                            type="button"
+                            data-testid="request-cancel"
+                            onClick={async () => {
+                                try {
+                                    const answer = await decideMessageRequest(activeConv.id, 'cancel');
+                                    const nextRequest = answer.request ?? { ...activeConv.request, nextLineIsRequest: true };
+                                    setActiveConv(prev => (prev && prev.id === activeConv.id ? { ...prev, request: nextRequest } : prev));
+                                    setMessages([]);
+                                    void loadConversations();
+                                } catch (e) {
+                                    alert((e as Error | null)?.message || t('That did not go through. Please try again.'));
+                                }
+                            }}
+                            style={{
+                                minHeight: '44px', padding: '0.4rem 0.85rem', borderRadius: '10px',
+                                border: '1px solid var(--border-primary)', background: 'var(--bg-card)',
+                                color: 'var(--text-primary)', font: 'inherit', fontSize: '0.85rem', fontWeight: 600,
+                                cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {t('Cancel request')}
+                        </button>
                     </div>
                 ) : (
                     <>

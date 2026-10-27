@@ -6120,5 +6120,6 @@
   "Turn on": "Aç",
   "Turn on notifications?": "Bildirimleri aç?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "BeanPool bildirimleri telefonunuzun ayarlarında kapalı. Açmak için Ayarlar'ı açın."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "BeanPool bildirimleri telefonunuzun ayarlarında kapalı. Açmak için Ayarlar'ı açın.",
+  "Cancel request": "İsteği iptal et"
 }

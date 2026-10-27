@@ -1010,10 +1010,10 @@ export async function getConversations(publicKey: string): Promise<Conversations
 }
 
 /**
- * Accept or ignore a message request waiting for the signer (POST /api/messages/request): the request as they now read
- * it. Only the person it was sent to may; ignoring tells the opener nothing.
+ * Accept or ignore a message request waiting for the signer, or cancel the signer's own pending request
+ * (POST /api/messages/request): the request as they now read it.
  */
-export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore'): Promise<{ success: boolean; request: DmRequest }> {
+export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel'): Promise<{ success: boolean; request: DmRequest }> {
     return request('POST', '/api/messages/request', { conversationId, decision });
 }
 

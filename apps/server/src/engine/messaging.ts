@@ -599,7 +599,7 @@ export function sendMessage(
                     authorPubkey,
                     '💬 New Message',
                     requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
-                    { screen: 'chat', conversationId: withheldConvId },
+                    requestLine ? { screen: 'requests', conversationId: withheldConvId } : { screen: 'chat', conversationId: withheldConvId },
                     'chat',
                     'chat.message'
                 );
@@ -680,7 +680,7 @@ export function sendMessage(
                     authorPubkey,
                     '💬 New Message',
                     requestLine ? requestPushBody(senderName) : `${senderName} sent you a message`,
-                    { screen: 'chat', conversationId: pushConvId },
+                    requestLine ? { screen: 'requests', conversationId: pushConvId } : { screen: 'chat', conversationId: pushConvId },
                     'chat',
                     'chat.message'
                 );

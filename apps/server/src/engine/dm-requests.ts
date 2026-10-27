@@ -612,8 +612,29 @@ export class RequestDecisionError extends Error {
  * as it was: Accept accepts it again, and Ignore makes it read to them as ignored (`state_before`) while it stays accepted
  * for its opener, who reads nothing new (the header's "A block the person it is for made").
  */
-export function decideRequest(conversationId: string, actor: string, decision: 'accept' | 'ignore', now: number = Date.now()): RequestView {
+export function decideRequest(conversationId: string, actor: string, decision: 'accept' | 'ignore' | 'cancel', now: number = Date.now()): RequestView {
     const row = typeof conversationId === 'string' && requestsOn() ? rowOf(conversationId) : undefined;
+    if (decision === 'cancel') {
+        if (row && row.to_pubkey === actor) {
+            throw new RequestDecisionError(403, 'not_request_opener', word('Only the person who sent a message request can cancel it.'));
+        }
+        const real = !!row && !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(row.conversation_id, actor);
+        if (!row || row.from_pubkey !== actor || !real) {
+            throw new RequestDecisionError(404, 'request_not_found', word('There is no message request for you in this chat.'));
+        }
+        const hidden = acceptanceHiddenFrom(row, actor);
+        const asked = (row.state === 'accepted' && !hidden)
+            || !!db.prepare(`SELECT 1 FROM dm_requests r WHERE r.conversation_id = ? AND ${OPENER_WROTE}`).get(row.conversation_id);
+        if (row.state !== 'pending' || !asked) {
+            throw new RequestDecisionError(409, 'request_not_pending', word('Only a pending message request can be cancelled.'));
+        }
+        assertPlainTablesWritable();
+        db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(row.conversation_id);
+        db.prepare('DELETE FROM withheld_lines WHERE conversation_id = ?').run(row.conversation_id);
+        const updatedView = viewOf(row, actor, now);
+        ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: updatedView }, [actor, row.to_pubkey]);
+        return updatedView;
+    }
     if (row && row.from_pubkey === actor) {
         throw new RequestDecisionError(403, 'not_request_recipient', word('Only the person a message request was sent to can accept or ignore it.'));
     }
@@ -719,7 +740,7 @@ export function tickRequestPushFolds(dispatch: PushFn, now: number = Date.now())
         s.lastAt = now;
         s.folded.clear();
         try {
-            dispatch([to], 'SYSTEM', '💬 New Message', t('Someone new wants to message you'), {}, 'chat', 'chat.message');
+            dispatch([to], 'SYSTEM', '💬 New Message', t('Someone new wants to message you'), { screen: 'requests' }, 'chat', 'chat.message');
         } catch (e: any) {
             console.warn('[Push] A folded request push failed:', e?.message ?? e);
         }

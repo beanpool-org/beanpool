@@ -460,6 +460,7 @@ export const SUITES = [
     'test-shop-banner',
     'test-blocks-on-messaging',
     'test-dm-requests',
+    'test-dm-request-cancel',
     'test-messaging-idor',
     'test-probation',
     'test-withheld-lines',

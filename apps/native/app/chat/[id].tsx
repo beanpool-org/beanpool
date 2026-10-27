@@ -3,7 +3,7 @@ import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { t, tn } from '@beanpool/core';
+import { t, tn, requestModeOf, requestTakesPhoto } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
@@ -233,6 +233,9 @@ function ChatScreen({ id }: { id: string }) {
     // (screen squeezed into the top half). So: fully dismiss the keyboard BEFORE any
     // modal is allowed to mount.
     const [reviewModalReady, setReviewModalReady] = useState(false);
+    const [convRow, setConvRow] = useState<any>(null);
+    const [cancellingRequest, setCancellingRequest] = useState(false);
+    const [decidingRequest, setDecidingRequest] = useState(false);
     useEffect(() => {
         if (promptReviewForTx) {
             KeyboardController.dismiss().then(() => setReviewModalReady(true));
@@ -294,6 +297,98 @@ function ChatScreen({ id }: { id: string }) {
         inlineActionCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 },
         blockedNotice: { padding: 14, alignItems: 'center', marginHorizontal: 12, borderRadius: 12, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
         blockedNoticeText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' },
+        waitingContainer: {
+            padding: 12,
+            marginHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray50,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+        },
+        waitingText: {
+            flex: 1,
+            minWidth: 160,
+            fontSize: 13,
+            color: colors.text.secondary,
+            lineHeight: 18,
+        },
+        cancelRequestBtn: {
+            minHeight: 44,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.card,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        cancelRequestBtnText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
+        toMeContainer: {
+            padding: 12,
+            marginHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: colors.surface.card,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            gap: 6,
+        },
+        toMeTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text.body,
+        },
+        toMeSubtitle: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginBottom: 4,
+        },
+        toMeButtons: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        toMeAcceptBtn: {
+            flex: 1,
+            minWidth: 100,
+            minHeight: 44,
+            backgroundColor: colors.brand.fill,
+            borderRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+        },
+        toMeAcceptBtnText: {
+            color: colors.text.inverse,
+            fontWeight: '800',
+            fontSize: 13,
+        },
+        toMeIgnoreBtn: {
+            flex: 1,
+            minWidth: 100,
+            minHeight: 44,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray100,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+        },
+        toMeIgnoreBtnText: {
+            color: colors.text.body,
+            fontWeight: '700',
+            fontSize: 13,
+        },
     }));
 
     const promptedRef = useRef(false);
@@ -357,6 +452,7 @@ function ChatScreen({ id }: { id: string }) {
         if (id && identity?.publicKey) {
             const res = await getConversation(id as string, identity.publicKey);
             if (res) {
+                setConvRow(res);
                 setPeerName(res.name || res.otherCallsign || String(id).slice(0, 8));
                 if (res.otherPubkey) setPeerPubkey(res.otherPubkey);
                 setIsEncrypted(res.type === 'dm' && !!res.otherPubkey);
@@ -593,12 +689,35 @@ function ChatScreen({ id }: { id: string }) {
         await loadMessages(true).catch(() => {});
     };
 
+    const requestMode = requestModeOf(convRow ? { ...convRow, id: String(id) } : null, identity?.publicKey ?? '', messages);
+
+    const handleCancelRequest = async () => {
+        if (cancellingRequest) return;
+        setCancellingRequest(true);
+        try {
+            const answer = await decideMessageRequest(String(id), 'cancel');
+            const nextRequest = answer.request ?? { ...convRow?.request, nextLineIsRequest: true };
+            setConvRow((prev: any) => prev ? { ...prev, request: nextRequest } : prev);
+            if (messages.length > 0) {
+                for (const m of messages) {
+                    await deleteLocalMessage(m.id).catch(() => {});
+                }
+            }
+            await loadMessages(true);
+            void syncSingleConversation(String(id));
+        } catch (e: any) {
+            Alert.alert(t('Could not cancel request'), e.message ? chatLineWords(e.message) : t('That did not go through. Please try again.'));
+        } finally {
+            setCancellingRequest(false);
+        }
+    };
+
     // Asked before the composer empties the box, so a refused send keeps what was typed.
-    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current;
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && requestMode !== 'mine-waiting' && requestMode !== 'to-me';
 
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
-        if (!currentDraft || !canSendNow() || !identity?.publicKey) return;
+        if (!currentDraft || !canSendNow() || !identity?.publicKey || requestMode === 'mine-waiting' || requestMode === 'to-me') return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
@@ -678,7 +797,10 @@ function ChatScreen({ id }: { id: string }) {
     // A failed optimistic send renders a red "!" — tapping the bubble lands here.
     const handleFailedMessagePress = async (item: any) => {
         await KeyboardController.dismiss(); // Alert = separate window; see phantom-keyboard note above
-        Alert.alert(t('Message not delivered'), t('This message could not be sent.'), [
+        const errorText = (typeof item.metadata?.__sendError === 'string' && item.metadata.__sendError.trim())
+            ? item.metadata.__sendError
+            : t('This message could not be sent.');
+        Alert.alert(t('Message not delivered'), errorText, [
             { text: t('Discard'), style: 'destructive', onPress: async () => {
                 await deleteLocalMessage(item.id).catch(() => {});
                 loadMessages(true);
@@ -687,6 +809,7 @@ function ChatScreen({ id }: { id: string }) {
                 if (!identity?.publicKey) return;
                 const meta = { ...(item.metadata || {}) };
                 delete meta.__sendState;
+                delete meta.__sendError;
                 const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : undefined;
                 try {
                     // Reuse the failed row's id: if the original POST actually landed
@@ -709,6 +832,7 @@ function ChatScreen({ id }: { id: string }) {
 
     const pickAndSendImage = async () => {
         if (!identity?.publicKey || sendingRef.current) return;
+        if (!requestTakesPhoto(requestMode)) return;
         // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
         // the image-picker Activity are separate windows — hide the keyboard first.
         await KeyboardController.dismiss();
@@ -1469,7 +1593,83 @@ function ChatScreen({ id }: { id: string }) {
                 })()}
 
                 <View onLayout={measured('composer')}>
-                {isPeerBlocked ? (
+                {requestMode === 'to-me' ? (
+                    <View
+                        accessibilityRole="region"
+                        accessibilityLabel={t('{name} wants to message you', { name: peerName })}
+                        style={[styles.toMeContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
+                    >
+                        <Text style={styles.toMeTitle}>
+                            {t('{name} wants to message you', { name: peerName })}
+                        </Text>
+                        <Text style={styles.toMeSubtitle}>
+                            {t('Accept to reply. If you ignore it, they are not told.')}
+                        </Text>
+                        <View style={styles.toMeButtons}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Accept', undefined, 'button: accept a message request')}
+                                style={[styles.toMeAcceptBtn, decidingRequest && { opacity: 0.7 }]}
+                                disabled={decidingRequest}
+                                onPress={async () => {
+                                    if (decidingRequest) return;
+                                    setDecidingRequest(true);
+                                    try {
+                                        const answer = await decideMessageRequest(String(id), 'accept');
+                                        setConvRow((prev: any) => prev ? { ...prev, request: answer.request } : prev);
+                                        void syncSingleConversation(String(id));
+                                    } catch (e: any) {
+                                        Alert.alert(t('That did not go through. Please try again.'));
+                                    } finally {
+                                        setDecidingRequest(false);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.toMeAcceptBtnText}>{t('Accept', undefined, 'button: accept a message request')}</Text>
+                            </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Ignore', undefined, 'button: ignore a message request')}
+                                style={[styles.toMeIgnoreBtn, decidingRequest && { opacity: 0.7 }]}
+                                disabled={decidingRequest}
+                                onPress={async () => {
+                                    if (decidingRequest) return;
+                                    setDecidingRequest(true);
+                                    try {
+                                        await decideMessageRequest(String(id), 'ignore');
+                                        router.navigate('/(tabs)/chats');
+                                    } catch (e: any) {
+                                        Alert.alert(t('That did not go through. Please try again.'));
+                                    } finally {
+                                        setDecidingRequest(false);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.toMeIgnoreBtnText}>{t('Ignore', undefined, 'button: ignore a message request')}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                ) : requestMode === 'mine-waiting' && !editingMessage ? (
+                    <View
+                        accessibilityRole="status"
+                        data-testid="request-waiting"
+                        style={[styles.waitingContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
+                    >
+                        <Text style={styles.waitingText}>
+                            {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: peerName })}
+                        </Text>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Cancel request')}
+                            testID="request-cancel"
+                            style={[styles.cancelRequestBtn, cancellingRequest && { opacity: 0.7 }]}
+                            disabled={cancellingRequest}
+                            onPress={handleCancelRequest}
+                        >
+                            <Text style={styles.cancelRequestBtnText}>{t('Cancel request')}</Text>
+                        </Pressable>
+                    </View>
+                ) : isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
                         <Text style={styles.blockedNoticeText}>
                             <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>{t('You have blocked this user. Messaging is disabled.')}
@@ -1482,7 +1682,7 @@ function ChatScreen({ id }: { id: string }) {
                         onSend={handleSend}
                         canSend={canSendNow}
                         disabled={keyChangePending}
-                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : null}
+                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : (requestMode === 'mine-unsent' ? t('Your first message goes to {name} as a request. You can write more once they accept.', { name: peerName }) : null)}
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

@@ -7076,5 +7076,6 @@
   "Turn on": "تشغيل",
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها.",
+  "Cancel request": "إلغاء الطلب"
 }

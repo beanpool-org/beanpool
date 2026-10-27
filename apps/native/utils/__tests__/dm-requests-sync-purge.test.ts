@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // A Cancel request on the recipient's phone (PR #2540 review 4393642158): syncSingleConversation drops the opener's lines
 // the node no longer has, whatever the request's state and however many lines the node still holds, and never a line of
-// the reader's. The phone's local lines are stood in for: the purge's own read of them answers `local` below.
-const local = vi.hoisted(() => ({ lines: [] as { id: string; author: string }[] }));
+// the reader's. On the opener's own phone, their delivered lines the node withdrew go, never one still sending or failed
+// (review 4394119880). The phone's local lines are stood in for: each purge's own read of them answers `local` below.
+const local = vi.hoisted(() => ({ lines: [] as { id: string; author: string; metadata?: string }[] }));
 const mockRunAsync = vi.fn().mockResolvedValue({ changes: 1 });
 const mockGetAllAsync = vi.fn().mockResolvedValue([]);
 const mockGetFirstAsync = vi.fn().mockResolvedValue(null);
@@ -54,11 +55,16 @@ function reply(status: number, body: any) {
     return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) };
 }
 
-/** The purge's read of the phone's lines: those of the named author in the conversation, less the ids named after them. */
-function answerLocalLines(sql: string, params: unknown[]): { id: string }[] | undefined {
-    if (typeof sql !== 'string' || !sql.startsWith('SELECT id FROM messages WHERE conversation_id = ? AND author_pubkey = ?')) return undefined;
+/**
+ * The purges' read of the phone's lines: those of the named author in the conversation, less the ids named after them. The
+ * recipient's purge reads their ids, the opener's their ids and metadata (its send state).
+ */
+function answerLocalLines(sql: string, params: unknown[]): { id: string; metadata?: string | null }[] | undefined {
+    if (typeof sql !== 'string') return undefined;
+    const withMetadata = sql.startsWith('SELECT id, metadata FROM messages WHERE conversation_id = ? AND author_pubkey = ?');
+    if (!withMetadata && !sql.startsWith('SELECT id FROM messages WHERE conversation_id = ? AND author_pubkey = ?')) return undefined;
     const [, author, ...notIn] = params as string[];
-    return local.lines.filter(l => l.author === author && !notIn.includes(l.id)).map(l => ({ id: l.id }));
+    return local.lines.filter(l => l.author === author && !notIn.includes(l.id)).map(l => (withMetadata ? { id: l.id, metadata: l.metadata ?? null } : { id: l.id }));
 }
 const deletes = () => mockRunAsync.mock.calls.filter(([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM messages'));
 
@@ -80,9 +86,32 @@ describe('syncSingleConversation request purge', () => {
         local.lines = [];
     });
 
-    it('never deletes the opener\'s own lines during poll on empty/pending request', async () => {
+    // On the opener's phone, an empty page of their pending request: their lines still sending or failed aren't on the node
+    // yet and stay (review 4390653768); one the node took and no longer has was withdrawn (Cancel request from the web app),
+    // and goes by its id (review 4394119880). This pinned the opposite until its stand-in answered the opener's read (review
+    // 4394827501).
+    it('the opener\'s unsent lines stay on an empty pending page, and their withdrawn delivered line goes', async () => {
         currentIdentity = { publicKey: 'opener-pub', privateKey: 'aa', callsign: 'Opener' };
-        local.lines = [{ id: 'mine-1', author: 'opener-pub' }];
+        local.lines = [
+            { id: 'mine-sending', author: 'opener-pub', metadata: JSON.stringify({ __sendState: 'sending' }) },
+            { id: 'mine-failed', author: 'opener-pub', metadata: JSON.stringify({ __sendState: 'failed', __sendError: 'offline' }) },
+            { id: 'mine-withdrawn', author: 'opener-pub' },
+        ];
+        nodeAnswers('conv-opener', { state: 'pending', from: 'opener-pub', at: '2026-10-27T00:00:00Z' }, []);
+
+        await syncSingleConversation('conv-opener');
+
+        expect(deletes()).toHaveLength(1);
+        expect(deletes()[0][0]).toContain('WHERE id = ? AND conversation_id = ?');
+        expect(deletes()[0][1]).toEqual(['mine-withdrawn', 'conv-opener']);
+    });
+
+    it('the opener\'s unsent lines alone on an empty pending page: nothing deleted', async () => {
+        currentIdentity = { publicKey: 'opener-pub', privateKey: 'aa', callsign: 'Opener' };
+        local.lines = [
+            { id: 'mine-sending', author: 'opener-pub', metadata: JSON.stringify({ __sendState: 'sending' }) },
+            { id: 'mine-failed', author: 'opener-pub', metadata: JSON.stringify({ __sendState: 'failed' }) },
+        ];
         nodeAnswers('conv-opener', { state: 'pending', from: 'opener-pub', at: '2026-10-27T00:00:00Z' }, []);
 
         await syncSingleConversation('conv-opener');

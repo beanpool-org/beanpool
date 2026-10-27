@@ -3631,5 +3631,8 @@
   "Close photo": "Cerrar foto",
   "It will read \"This message was deleted\" for both of you.": "Aparecerá como \"Este mensaje fue eliminado\" para ambos.",
   "🌱 Daily Reflection": "🌱 Reflexión diaria",
-  "Loading": "Cargando"
+  "Loading": "Cargando",
+  "⚠️ Action Required": "⚠️ Acción requerida",
+  "⏳ Awaiting Approval": "⏳ Esperando aprobación",
+  "⏸ PAUSED": "⏸ PAUSADO"
 }

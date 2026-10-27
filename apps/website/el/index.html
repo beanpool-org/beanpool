@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Συναλλαγές για κοινότητες, όχι για εμπορικές τράπεζες</title>
-    <meta name="description" content="Το BeanPool είναι μια δωρεάν εφαρμογή που μια κοινότητα διαχειρίζεται μόνη της για να ανταλλάσσει βοήθεια, αγαθά και δεξιότητες σε Φασόλια αντί για χρήματα. Βρείτε ή ξεκινήστε μια κοινότητα κοντά σας, ή μπείτε με μια πρόσκληση· η παγκόσμια κοινότητα ανοίγει σύντομα για όλους. iPhone, Android και διαδίκτυο.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="Το BeanPool είναι μια δωρεάν εφαρμογή που διαχειρίζεται μια κοινότητα από μόνη της για να ανταλλάσσει βοήθεια, αγαθά και δεξιότητες σε Beans αντί για χρήματα. Δοκιμάστε το στην παγκόσμια κοινότητα, βρείτε ή ξεκινήστε μια κοινότητα κοντά σας ή εγγραφείτε με πρόσκληση. iPhone, Android και διαδίκτυο.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -146,7 +145,6 @@
     <section id="hero">
         <div class="hero-bg"></div>
         <div class="container hero-container">
-    <div class="website-stale-banner"><p>Αυτή η σελίδα είναι νεότερη στα αγγλικά. <a href="../index.html">Διαβάστε την τρέχουσα αγγλική έκδοση →</a></p></div>
             <div class="hero-header">
                 <div class="hero-badge">Δωρεάν σε κινητό και διαδίκτυο</div>
                 <h1>Ανταλλαγές για <span class="gradient-text">Κοινότητες</span>,<br>Όχι Εμπορικές Τράπεζες</h1>
@@ -199,11 +197,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Τρεις τρόποι εισόδου</span>
@@ -212,14 +206,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Δοκιμάστε το τώρα, παγκοσμίως</a>
-                            <p>Η παγκόσμια κοινότητα ανοίγει σύντομα για όλους, χωρίς πρόσκληση: περιηγηθείτε, δημοσιεύστε κάτι δωρεάν ή για ανταλλαγή και βρείτε μια κοινότητα κοντά σας. Σήμερα είναι σε ιδιωτική προεπισκόπηση. Μέχρι να ανοίξει, δείτε τις κοινότητες που λειτουργούν ήδη παρακάτω, ξεκινήστε μία ή χρησιμοποιήστε μια πρόσκληση που σας έδωσε ένα μέλος.</p>
+                            <a href="global" class="btn btn-primary font-header">Δοκιμάστε το τώρα, παγκοσμίως</a>
+                            <p>Δεν απαιτείται πρόσκληση: εγγραφείτε στην παγκόσμια κοινότητα στο πρόγραμμα περιήγησής σας ή στην εφαρμογή, περιηγηθείτε, δημοσιεύστε κάτι δωρεάν ή για ανταλλαγή και βρείτε μια κοινότητα κοντά σας.</p>
+                            <p class="door-browser"><a href="https://global.beanpool.org/?lang=el">ή στο πρόγραμμα περιήγησής σας</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Βρείτε ή ξεκινήστε μια κοινότητα</a>
-                            <p>Δείτε τις κοινότητες που λειτουργούν ήδη, ή ξεκινήστε μία σε έναν εφεδρικό υπολογιστή ή έναν μικρό ενοικιαζόμενο διακομιστή. Το αίτημα εισόδου σε μια κοινότητα κοντά σας έρχεται σύντομα, όταν ανοίξει η παγκόσμια κοινότητα.</p>
+                            <p>Δείτε τις κοινότητες που λειτουργούν ήδη, ζητήστε από μία κοντά σας να σας δεχτεί ή ξεκινήστε μία σε έναν εφεδρικό υπολογιστή ή έναν μικρό νοικιασμένο διακομιστή.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">Έχετε πρόσκληση;</a>
@@ -242,7 +235,7 @@
                                     </g>
                                 </svg>
                             </a>
-                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Αποκτήστε το στο Google Play">
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=el" target="_blank" rel="noopener" class="hero-store-badge" title="Αποκτήστε το στο Google Play">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
                                     <rect width="135" height="40" rx="7" fill="#000"/>
                                     <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
@@ -258,7 +251,7 @@
                                 </svg>
                             </a>
                         </div>
-                        <p class="hero-web-note">Δεν έχετε κατάστημα εφαρμογών; Τόσο η παγκόσμια κοινότητα όσο και η δική σας κοινότητα ανοίγουν στο πρόγραμμα περιήγησης του τηλεφώνου σας· προσθέστε τις στην αρχική σας οθόνη.</p>
+                        <p class="hero-web-note">Δεν έχετε κατάστημα εφαρμογών; Τόσο η παγκόσμια κοινότητα όσο και η δική σας κοινότητα ανοίγουν στο πρόγραμμα περιήγησης του τηлеφώνου σας· προσθέστε τις στην αρχική σας οθόνη.</p>
                     </div>
                     <!-- Where to find us: small round links, same destinations as the menu -->
                     <div class="hero-social-row">
@@ -357,8 +350,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Μπείτε από μία από τις τρεις πόρτες</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Ανοίξτε την πρόσκληση που σας έστειλε ένα μέλος· σύντομα μπορείτε επίσης να δοκιμάσετε την παγκόσμια κοινότητα χωρίς πρόσκληση και, από εκεί, να ζητήσετε από μια κοινότητα κοντά σας να σας δεχτεί. Σε κάθε περίπτωση, επιλέγετε το όνομα με το οποίο θα σας γνωρίζουν οι άλλοι.</p>
+                        <p>Δοκιμάστε την παγκόσμια κοινότητα χωρίς πρόσκληση, ζητήστε από μια κοινότητα κοντά σας να σας δεχτεί ή ανοίξτε την πρόσκληση που σας έστειλε ένα μέλος. Όπως και να έχει, επιλέγετε το όνομα με το οποίο θα σας γνωρίζουν.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -407,8 +399,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Χάρτης</h3>
-                    <p>Δείτε τι προσφέρεται κοντά σας. Κάθε πινέζα είναι μια πινέζα που τοποθετείτε εσείς: χρησιμοποιήστε την τοποθεσία σας εκείνη τη στιγμή, ή τοποθετήστε την πινέζα χειροκίνητα. Όταν το επιτρέπετε, η εφαρμογή χρησιμοποιεί επίσης την τοποθεσία σας για να δείξει τι είναι πιο κοντά σας, και ποτέ στο παρασκήνιο. Οι πινέζες εκδηλώσεων, καθώς και οι πινέζες εγχειρημάτων που ορίζονται στην εφαρμογή ιστού, μπορούν να ρυθμιστούν σε Κατά προσέγγιση, κάτι που στρογγυλοποιεί το σημείο σε περίπου 100&nbsp;m. Οι πινέζες είναι ορατές από τα μέλη της κοινότητάς σας. Όταν η παγκόσμια κοινότητα ανοίξει για όλους, ένας επισκέπτης εκεί βλέπει τις καταχωρήσεις και κατά προσέγγιση πού βρίσκονται, αλλά χωρίς ονόματα, χωρίς φωτογραφίες προφίλ και χωρίς ακριβή σημεία. Οποιοσδήποτε μπορεί να γίνει μέλος σε ένα λεπτό, οπότε τα μέλη της βλέπουν επίσης τις καταχωρήσεις των άλλων με ακρίβεια περίπου ενός χιλιομέτρου· το ακριβές σημείο είναι δικό σας να το μοιραστείτε όταν κανονίσετε να συναντηθείτε.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Δείτε τι προσφέρεται κοντά σας. Κάθε πινέζα είναι μια πινέζα που τοποθετείτε εσείς: χρησιμοποιήστε την τοποθεσία σας εκείνη τη στιγμή, ή τοποθετήστε την πινέζα χειροκίνητα. Όταν το επιτρέπετε, η εφαρμογή χρησιμοποιεί επίσης την τοποθεσία σας για να δείξει τι είναι πιο κοντά σας, και ποτέ στο παρασκήνιο. Οι πινέζες εκδηλώσεων, καθώς και οι πινέζες εγχειρημάτων που ορίζονται στην εφαρμογή ιστού, μπορούν να ρυθμιστούν σε Κατά προσέγγιση, κάτι που στρογγυλοποιεί το σημείο σε περίπου 100&nbsp;m. Οι πινέζες είναι ορατές από τα μέλη της κοινότητάς σας. Στην παγκόσμια κοινότητα ένας επισκέπτης βλέπει καταχωρίσεις και κατά προσέγγιση πού βρίσκονται, αλλά χωρίς ονόματα, φωτογραφίες προφίλ και ακριβή σημεία. Οποιοσδήποτε μπορεί να γίνει μέλος σε ένα λεπτό, οπότε τα μέλη της βλέπουν επίσης τις καταχωρήσεις των άλλων με ακρίβεια περίπου ενός χιλιομέτρου· το ακριβές σημείο είναι δικό σας να το μοιραστείτε όταν κανονίσετε να συναντηθείτε.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -595,8 +586,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Ιδιωτικό από την πρώτη εκκίνηση</h3>
-                    <p>Οι καταχωρήσεις, ο χάρτης, τα μηνύματα και τα υπόλοιπα μιας κοινότητας είναι για τα μέλη της από τη στιγμή που ξεκινά ο κόμβος της· δεν υπάρχει τίποτα να ενεργοποιήσετε. Κάποιος που ανοίγει τη διεύθυνσή του χωρίς λογαριασμό παραπέμπεται στην παγκόσμια κοινότητα, η οποία ανοίγει σύντομα για όλους.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Οι καταχωρήσεις, ο χάρτης, τα μηνύματα και τα υπόλοιπα μιας κοινότητας είναι για τα μέλη της από τη στιγμή που ξεκινά ο κόμβος της· δεν υπάρχει τίποτα να ενεργοποιήσετε. Κάποιος που ανοίγει τη διεύθυνσή του χωρίς λογαριασμό παραπέμπεται στην παγκόσμια κοινότητα, όπου μπορούν να δουν τι υπάρχει κοντά τους και να ζητήσουν να εγγραφούν.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -610,7 +600,7 @@
                 <p>Περίπου μισή ώρα, αν μπορείτε να ακολουθήσετε μια συνταγή. Έξι πράγματα που πρέπει να γνωρίζετε πρώτα:</p>
                 <ul class="run-node-facts">
                     <li><strong>Το κόστος.</strong> Το λογισμικό είναι δωρεάν. Εκτελείται σε έναν εφεδρικό υπολογιστή που παραμένει ανοιχτός στο σπίτι (ένα Mini PC, ένα NAS ή ένα Raspberry Pi με σύστημα 64-bit), ή σε έναν μικρό ενοικιαζόμενο διακομιστή για λίγα δολάρια τον μήνα (περίπου 6 δολάρια ΗΠΑ).</li>
-                    <li><strong>Ποιος το φιλοξενεί.</strong> Εσείς, στο δικό σας μηχάνημα ή σε αυτό που νοικιάζετε. Δεν χρειάζεται ποτέ το beanpool.org: η δική σας διεύθυνση ιστού λειτουργεί.</li>
+                    <li><strong>Ποιος το φιλοξενεί.</strong> Εσείς, στο δικό σας μηχάνημα ή σε αυτό που νοικιάζετε. Δεν χρειάζεται ποτέ το <a href="https://beanpool.org">beanpool.org</a>: η δική σας διεύθυνση ιστού λειτουργεί.</li>
                     <li><strong>Τι αναλαμβάνετε.</strong> Οι αναφορές από τα μέλη σας έρχονται σε εσάς. Ο φάκελος δεδομένων είναι δικός σας για να κρατάτε αντίγραφα ασφαλείας, με έναν κωδικό ανάκτησης. Διατηρείτε δύο ιδιοκτήτες. Κρατάτε τον διακομιστή ανοιχτό και ενημερωμένο.</li>
                     <li><strong>Τι δεν βλέπετε ποτέ.</strong> Τα άμεσα μηνύματα των μελών σας.</li>
                     <li><strong>Docker πρώτα.</strong> Το μηχάνημα χρειάζεται εγκατεστημένο το Docker πριν από το παρακάτω μπλοκ· ένας πρόσφατα ενοικιασμένος διακομιστής δεν έχει κανένα.</li>
@@ -684,13 +674,13 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>
         <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
         <ul>
-            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://global.beanpool.org/?lang=el">Try it now, worldwide</a> · join in your browser, no invite.</li>
             <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
             <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
         </ul>

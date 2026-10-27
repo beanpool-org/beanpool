@@ -4130,5 +4130,8 @@
   "Close photo": "إغلاق الصورة",
   "It will read \"This message was deleted\" for both of you.": "ستظهر عبارة \"تم حذف هذه الرسالة\" لكليكما.",
   "🌱 Daily Reflection": "🌱 تأمل يومي",
-  "Loading": "جارٍ التحميل"
+  "Loading": "جارٍ التحميل",
+  "⚠️ Action Required": "⚠️ إجراء مطلوب",
+  "⏳ Awaiting Approval": "⏳ بانتظار الموافقة",
+  "⏸ PAUSED": "⏸ متوقف مؤقتًا"
 }

@@ -3630,5 +3630,8 @@
   "Close photo": "بستن عکس",
   "It will read \"This message was deleted\" for both of you.": "برای هر دوی شما عبارت «این پیام حذف شد» نمایش داده خواهد شد.",
   "🌱 Daily Reflection": "🌱 تأمل روزانه",
-  "Loading": "در حال بارگذاری"
+  "Loading": "در حال بارگذاری",
+  "⚠️ Action Required": "⚠️ اقدام لازم است",
+  "⏳ Awaiting Approval": "⏳ در انتظار تأیید",
+  "⏸ PAUSED": "⏸ متوقف"
 }

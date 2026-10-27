@@ -3880,5 +3880,8 @@
   "Close photo": "Закрыть фото",
   "It will read \"This message was deleted\" for both of you.": "У обоих отобразится «Это сообщение удалено».",
   "🌱 Daily Reflection": "🌱 Мысль дня",
-  "Loading": "Загрузка"
+  "Loading": "Загрузка",
+  "⚠️ Action Required": "⚠️ Требуется действие",
+  "⏳ Awaiting Approval": "⏳ Ожидает подтверждения",
+  "⏸ PAUSED": "⏸ ПРИОСТАНОВЛЕНО"
 }

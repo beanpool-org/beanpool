@@ -22,6 +22,7 @@ import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCom
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
+    dealsNeedingMe,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -671,7 +672,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [activeTab, setActiveTab] = useState<'feed' | 'deals'>('feed');
     // Transactions consumed from App.tsx (single poller owner)
     const myTransactions = externalTransactions ?? [];
-    const globalRequests = myTransactions.filter(t => t.buyerPublicKey === identity?.publicKey && t.status === 'requested');
     const [blocklistVersion, setBlocklistVersion] = useState(0);
 
     useEffect(() => {
@@ -721,7 +721,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
 
-    const pendingDealsCount = globalRequests.length + myTransactions.filter(t => t.status === 'pending').length;
+    const pendingDealsCount = dealsNeedingMe(myTransactions, identity?.publicKey || '').length;
 
     // Author ratings cache for tiles — cached by author in ref to prevent fan-out on every 15s poll
     const RATINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL ensures ratings updates eventually appear

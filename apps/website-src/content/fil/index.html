@@ -1,12 +1,11 @@
-<!-- source-hash: 5c4a962db9481e5e -->
+<!-- source-hash: fd8efb317ac86e59 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool — Palitan para sa mga Komunidad, Hindi para sa mga Komersyal na Bangko</title>
-    <meta name="description" content="Ang BeanPool ay isang libreng app na pinapatakbo ng komunidad para sa sarili nito upang makipagpalitan ng tulong, mga gamit at kasanayan gamit ang Munggo sa halip na pera. Maghanap o magsimula ng komunidad na malapit sa iyo, o sumali gamit ang isang imbitasyon; magbubukas sa lahat ang pandaigdigang komunidad sa lalong madaling panahon. iPhone, Android at web.">
-    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <meta name="description" content="Ang BeanPool ay isang libreng app na pinapatakbo ng komunidad para sa sarili nito upang magpalitan ng tulong, mga gamit, at kasanayan gamit ang Beans sa halip na pera. Subukan ito sa pandaigdigang komunidad, maghanap o magsimula ng komunidad na malapit sa iyo, o sumali gamit ang imbitasyon. iPhone, Android, at web.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -113,11 +112,7 @@
                     </div>
                 </div>
 
-                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
-                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
-                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
-                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
-                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <!-- Right: three ways in. Door 1 opens the global community itself: anyone joins it, no invite. -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
                         <span class="hero-cta-tag">Tatlong paraan sa pagpasok</span>
@@ -126,14 +121,13 @@
 
                     <div class="hero-doors">
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
-                            <a href="getting-started.html#global" class="btn btn-primary font-header">Subukan ito ngayon, sa buong mundo</a>
-                            <p>Magbubukas sa lahat ang pandaigdigang komunidad sa lalong madaling panahon, nang walang imbitasyon: maglibot, mag-post ng libre o pampalit, at maghanap ng komunidad na malapit sa iyo. Isa itong pribadong preview ngayon. Hanggang sa magbukas ito, tingnan ang mga komunidad na tumatakbo na sa ibaba, magsimula ng isa, o gamitin ang imbitasyong ibinigay sa iyo ng isang miyembro.</p>
+                            <a href="global" class="btn btn-primary font-header">Subukan ito ngayon, sa buong mundo</a>
+                            <p>Walang imbitasyon na kailangan: sumali sa pandaigdigang komunidad sa iyong browser o sa app, maglibot, mag-post ng libre o pampalit, at maghanap ng komunidad na malapit sa iyo.</p>
+                            <p class="door-browser"><a href="https://global.beanpool.org/?lang=fil">o sa iyong browser</a></p>
                         </div>
                         <div class="hero-door">
-                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
                             <a href="#find-or-start" class="btn btn-ghost">Maghanap o magsimula ng komunidad</a>
-                            <p>Tingnan ang mga komunidad na tumatakbo na, o magsimula sa isang ekstrang kompyuter o maliit na inupahang server. Ang paghiling sa malapit na komunidad na papasukin ka ay darating sa lalong madaling panahon, kapag nagbukas na ang pandaigdigang komunidad.</p>
+                            <p>Tingnan ang mga komunidad na tumatakbo na, humiling sa isa na malapit sa iyo na papasukin ka, o magsimula ng isa sa isang bakanteng computer o maliit na inupahang server.</p>
                         </div>
                         <div class="hero-door">
                             <a href="getting-started.html#invite" class="btn btn-ghost">May imbitasyon ka ba?</a>
@@ -156,7 +150,7 @@
                                     </g>
                                 </svg>
                             </a>
-                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Kunin sa Google Play">
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=fil" target="_blank" rel="noopener" class="hero-store-badge" title="Kunin sa Google Play">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
                                     <rect width="135" height="40" rx="7" fill="#000"/>
                                     <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
@@ -271,8 +265,7 @@
                     <div class="step-number" aria-hidden="true">01</div>
                     <div>
                         <h3>1. Pumasok sa isa sa tatlong pintuan</h3>
-                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
-                        <p>Buksan ang imbitasyong ipinadala sa iyo ng isang miyembro; sa lalong madaling panahon maaari mo ring subukan ang pandaigdigang komunidad nang walang imbitasyon at, mula roon, humiling sa isang malapit na komunidad na papasukin ka. Sa alinmang paraan pipiliin mo ang pangalan kung saan ka makikilala ng mga tao.</p>
+                        <p>Subukan ang pandaigdigang komunidad nang walang imbitasyon, humiling sa isang komunidad na malapit sa iyo na papasukin ka, o buksan ang imbitasyong ipinadala ng isang miyembro. Alinmang paraan, pipiliin mo ang pangalan kung saan ka makikilala ng mga tao.</p>
                     </div>
                 </div>
                 <div class="step-card glass-panel">
@@ -321,8 +314,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🗺️</div>
                     <h3>Mapa</h3>
-                    <p>Tingnan kung ano ang iniaalok na malapit sa iyo. Bawat pin ay ikaw ang naglalagay: gamitin ang iyong lokasyon sa sandaling iyon, o ilagay ang pin nang manu-mano. Kapag pinayagan mo, ginagamit din ng app ang iyong lokasyon upang ipakita ang pinakamalapit sa iyo, at hindi kailanman sa background. Ang mga pin ng event, at mga pin ng negosyo na itinakda sa web app, ay maaaring itakda sa Pagtatantya, na nagru-round sa lugar nang humigit-kumulang 100&nbsp;m. Nakikita ang mga pin ng mga miyembro ng iyong komunidad. Kapag nagbukas sa lahat ang pandaigdigang komunidad, makikita ng isang bisita roon ang mga listing at ang tinatayang kinaroroonan ng mga ito, ngunit walang mga pangalan, walang mga larawan sa profile at walang eksaktong lugar. Maaaring sumali ang sinuman sa loob ng isang minuto, kaya nakikita rin ng mga miyembro nito ang mga listing ng bawat isa sa humigit-kumulang isang kilometro rin; ang eksaktong lugar ay sa iyo upang ibahagi kapag nag-ayos kayong magkita.</p>
-                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                    <p>Tingnan kung ano ang iniaalok na malapit sa iyo. Bawat pin ay ikaw ang naglalagay: gamitin ang iyong lokasyon sa sandaling iyon, o ilagay ang pin nang manu-mano. Kapag pinayagan mo, ginagamit din ng app ang iyong lokasyon upang ipakita ang pinakamalapit sa iyo, at hindi kailanman sa background. Ang mga pin ng event, at mga pin ng negosyo na itinakda sa web app, ay maaaring itakda sa Pagtatantya, na nagru-round sa lugar nang humigit-kumulang 100&nbsp;m. Nakikita ang mga pin ng mga miyembro ng iyong komunidad. Sa pandaigdigang komunidad, makikita ng isang bisita ang mga listahan at humigit-kumulang kung nasaan ang mga ito, ngunit walang mga pangalan, mga larawan sa profile, at eksaktong mga lugar. Maaaring sumali ang sinuman sa loob ng isang minuto, kaya nakikita rin ng mga miyembro nito ang mga listing ng bawat isa sa humigit-kumulang isang kilometro rin; ang eksaktong lugar ay sa iyo upang ibahagi kapag nag-ayos kayong magkita.</p>
                 </div>
 
                 <div class="feature-card glass-panel">
@@ -509,8 +501,7 @@
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔒</div>
                     <h3>Pribado mula sa unang pag-boot</h3>
-                    <p>Ang mga listing, mapa, mensahe at balanse ng komunidad ay para lamang sa mga miyembro nito mula sa sandaling magsimula ang node nito; walang kailangang buksan. Ang isang magbubukas ng address nito nang walang account ay itinuturo sa pandaigdigang komunidad, na magbubukas sa lahat sa lalong madaling panahon.</p>
-                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                    <p>Ang mga listing, mapa, mensahe at balanse ng komunidad ay para lamang sa mga miyembro nito mula sa sandaling magsimula ang node nito; walang kailangang buksan. Ang isang magbubukas ng address nito nang walang account ay itinuturo sa pandaigdigang komunidad, kung saan makikita nila kung ano ang malapit sa kanila at humiling na sumali.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🌐</div>
@@ -524,7 +515,7 @@
                 <p>Humigit-kumulang kalahating oras, kung kaya mong sumunod sa panuto. Anim na bagay na dapat munang malaman:</p>
                 <ul class="run-node-facts">
                     <li><strong>Ang gastos nito.</strong> Libre ang software. Tumatakbo ito sa isang ekstrang kompyuter na nananatiling nakabukas sa bahay (isang Mini PC, NAS, o Raspberry Pi na may 64-bit system), o sa isang maliit na inupahang server sa halagang ilang dolyar kada buwan (mga US$6).</li>
-                    <li><strong>Sino ang nagho-host nito.</strong> Ikaw, sa sarili mong makina o sa inuupahan mo. Hindi nito kailanman kailangan ang beanpool.org: gumagana ang sarili mong web address.</li>
+                    <li><strong>Sino ang nagho-host nito.</strong> Ikaw, sa sarili mong makina o sa inuupahan mo. Hindi nito kailanman kailangan ang <a href="https://beanpool.org">beanpool.org</a>: gumagana ang sarili mong web address.</li>
                     <li><strong>Ang iyong pananagutan.</strong> Dumarating sa iyo ang mga report mula sa iyong mga miyembro. Nasa sa iyo ang pag-backup ng folder ng data, gamit ang isang recovery code. Magpanatili ng dalawang may-ari. Panatilihing nakabukas at updated ang server.</li>
                     <li><strong>Kung ano ang hindi mo kailanman makikita.</strong> Ang mga direct message ng iyong mga miyembro.</li>
                     <li><strong>Docker muna.</strong> Kailangang may naka-install na Docker ang makina bago ang bloke sa ibaba; ang isang bagong inupahang server ay wala nito.</li>
@@ -598,13 +589,13 @@ docker compose exec beanpool-node beanpool claim</code>
     <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
          13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
          first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
-         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+         Its first door links the global community directly; anyone can join it now with no invite, so the block is ready.
 
     <div class="partner-block">
         <h3>The BeanPool Project</h3>
         <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
         <ul>
-            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://global.beanpool.org/?lang=fil">Try it now, worldwide</a> · join in your browser, no invite.</li>
             <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
             <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
         </ul>

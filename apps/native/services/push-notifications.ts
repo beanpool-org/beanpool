@@ -210,10 +210,6 @@ async function followNotificationTap(response: NotificationResponse, options: No
             router.push(toolRoute as never);
             return;
         }
-        if (inc.data?.screen === 'requests' || (typeof inc.body === 'string' && inc.body.includes('wants to message you'))) {
-            router.push('/(tabs)/chats?filter=requests' as never);
-            return;
-        }
         const account = await loadIdentity().catch(() => null);
         await followTap(inc, {
             storage: AsyncStorage,

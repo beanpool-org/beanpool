@@ -1068,6 +1068,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
         if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil, eventEnd, { repeat: eventEdit.before.repeat ?? 'never', firstDate: eventEdit.before.start.slice(0, 10) })) errors.add('event_repeat');
+        if (eventEdit.before.photos && eventEdit.before.photos.length > 0 && newPostPhotos.length === 0) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -1117,6 +1118,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
         if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
         if (eventRepeatProblem(eventStart, eventRepeat, eventRepeatUntil, eventEnd)) errors.add('event_repeat');
+        if (newPostPhotos.length < 1) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -1134,7 +1136,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
                 ...(eventOnline ? { eventOnline: true } : { lat: postLat!, lng: postLng! }),
-                ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
+                photos: newPostPhotos,
                 audienceScope: eventAudienceScope,
                 ...(eventAudienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 ...eventClockBody(eventStart, eventEnd, eventOnline, zone),
@@ -1296,7 +1298,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 reach: audienceScope === 'group' ? 'local' : newPostReach,
                 ...(audienceScope !== 'group' && newPostReach === 'peers' ? { reachPeers: newPostReachPeers } : {}),
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
-                ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
+                photos: newPostPhotos,
                 audienceScope,
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
@@ -1998,9 +2000,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         );
     }
 
+    const eventPhotoMissing = eventEdit ? (eventEdit.before.photos && eventEdit.before.photos.length > 0 && newPostPhotos.length === 0) : newPostPhotos.length === 0;
     const submitDisabled = newPostType === 'event'
         // An online event has no pin (DESIGN-event-times §9).
-        ? (posting || !newPostTitle.trim() || !eventStart || (!eventOnline && postLat == null))
+        ? (posting || !newPostTitle.trim() || !eventStart || (!eventOnline && postLat == null) || eventPhotoMissing)
         : newPostType === 'poll'
             ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
             : offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).disabled;
@@ -2743,7 +2746,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             />
                         </div>
 
-                        {renderPhotoPicker(false)}
+                        {renderPhotoPicker(!eventEdit || Boolean(eventEdit.before.photos && eventEdit.before.photos.length > 0))}
 
                         <div>
                             <label htmlFor="event-note" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Note for people who are going')}</label>
@@ -3171,7 +3174,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     }`}
                 >
                     {posting ? t('Posting...') :
-                     newPostType === 'event' ? (!eventOnline && postLat == null ? t('📍 Map location required') : !newPostTitle.trim() || !eventStart ? t('✏️ Add a title and start time') : eventEdit ? t('Save changes') : t('Create Event')) :
+                     newPostType === 'event' ? (!eventOnline && postLat == null ? t('📍 Map location required') : !newPostTitle.trim() || !eventStart ? t('✏️ Add a title and start time') : eventPhotoMissing ? t('📷 Add a photo') : eventEdit ? t('Save changes') : t('Create Event')) :
                      newPostType === 'poll' ? t('🗳️ Create Poll') :
                      offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).label}
                 </button>

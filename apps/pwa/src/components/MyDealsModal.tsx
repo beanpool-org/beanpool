@@ -13,7 +13,7 @@
 import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
-import { formatDate, formatNumber, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { SampleHeader, sampleDealChip, sampleDeals } from './ShowcasePreviews';
@@ -194,57 +194,78 @@ export function MyDealsModal({
     }, [initialTab, visible]);
 
     // ── Data derivation hooks (placed unconditionally before early return) ──
-    const myPendingTxPostIds = useMemo(() => {
-        const set = new Set<string>();
-        if (!identity) return set;
-        for (const t of transactions) {
-            if (t.status === 'pending' && (t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey)) {
-                set.add(t.postId);
+    const activeTxsByPostId = useMemo(() => {
+        const map = new Map<string, MarketplaceTransaction[]>();
+        const txs = preview ? effectiveTransactions : transactions;
+        for (const t of txs) {
+            if (t.status === 'pending' || t.status === 'requested') {
+                const list = map.get(t.postId);
+                if (list) {
+                    list.push(t);
+                } else {
+                    map.set(t.postId, [t]);
+                }
             }
         }
-        return set;
-    }, [transactions, identity]);
+        return map;
+    }, [preview, effectiveTransactions, transactions]);
+
+    const currentPubkey = (preview ? effectiveIdentity : identity)?.publicKey || '';
+    const rawTxs = preview ? effectiveTransactions : transactions;
+    const postsList = preview ? effectivePosts : posts;
+    const effectiveTxs = useMemo(() => {
+        if (!rawTxs.length || !postsList.length) return rawTxs;
+        const postMap = new Map(postsList.map(p => [p.id, p]));
+        return rawTxs.map(t => {
+            if (t.postAuthorPublicKey && t.postType) return t;
+            const p = postMap.get(t.postId);
+            if (!p) return t;
+            return {
+                ...t,
+                postAuthorPublicKey: t.postAuthorPublicKey ?? p.authorPublicKey ?? (p as any).author_pubkey,
+                postType: t.postType ?? p.type,
+                postRepeatable: t.postRepeatable ?? p.repeatable,
+                postLendable: t.postLendable ?? (p as any).lendable,
+            };
+        });
+    }, [rawTxs, postsList]);
+
+    const underWayCount = openDeals(effectiveTxs, currentPubkey).length;
+    const needingMeCount = dealsNeedingMe(effectiveTxs, currentPubkey).length;
+    const pendingCount = underWayCount;
+
+    const titleRowText = needingMeCount === 1
+        ? t('{n} under way · 1 needs you', { n: underWayCount })
+        : t('{n} under way · {m} need you', { n: underWayCount, m: needingMeCount });
+
+    const openDealsList = useMemo(() => {
+        const list = openDeals(effectiveTxs, currentPubkey);
+        return list.slice().sort((a, b) => {
+            const aStep = dealStep(a, currentPubkey);
+            const bStep = dealStep(b, currentPubkey);
+            if (aStep.needsMe && !bStep.needsMe) return -1;
+            if (!aStep.needsMe && bStep.needsMe) return 1;
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+    }, [effectiveTxs, currentPubkey]);
 
     if (!visible || !effectiveIdentity) return null;
 
-    const myPosts = preview
-        ? effectivePosts.filter(p => p.authorPublicKey === effectiveIdentity.publicKey)
-        : posts.filter(p =>
-            p.authorPublicKey === identity?.publicKey ||
-            p.acceptedBy === identity?.publicKey ||
-            myPendingTxPostIds.has(p.id)
-        ).sort((a, b) => {
-            if (a.status === 'pending' && b.status !== 'pending') return -1;
-            if (b.status === 'pending' && a.status !== 'pending') return 1;
+    const myPosts = (preview ? effectivePosts : posts)
+        .filter(p => (p.status === 'active' || p.status === 'paused' || p.status === 'pending') && (p.authorPublicKey === currentPubkey || (p as any).author_pubkey === currentPubkey))
+        .sort((a, b) => {
             if (a.status === 'active' && b.status !== 'active') return -1;
             if (b.status === 'active' && a.status !== 'active') return 1;
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
 
-    const pendingCount = preview
-        ? effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested').length
-        : transactions.filter(t => t.status === 'pending').length;
-
     const getData = (): any[] => {
-        if (preview) {
-            if (dealsTab === 'active') return myPosts;
-            if (dealsTab === 'pending') {
-                return effectiveTransactions.filter(t => t.status === 'pending' || t.status === 'requested');
-            }
-            let txs = effectiveTransactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
-            if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === effectiveIdentity.publicKey);
-            if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === effectiveIdentity.publicKey);
-            return txs;
-        }
-        if (dealsTab === 'active') return myPosts.filter(p => p.status === 'active');
-        if (dealsTab === 'pending') {
-            // Combine pending posts and pending transactions
-            return transactions.filter(t => t.status === 'pending');
-        }
+        if (dealsTab === 'active') return myPosts;
+        if (dealsTab === 'pending') return openDealsList;
         // History
-        let txs = transactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
-        if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === identity?.publicKey);
-        if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === identity?.publicKey);
+        let txs = effectiveTxs.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
+        if (historyFilter === 'buying') txs = txs.filter(t => t.buyerPublicKey === currentPubkey);
+        if (historyFilter === 'selling') txs = txs.filter(t => t.sellerPublicKey === currentPubkey);
         return txs;
     };
 
@@ -264,7 +285,12 @@ export function MyDealsModal({
 
                     {/* Header */}
                     <div className="flex justify-between items-center px-6 py-4 border-b border-nature-100 dark:border-nature-800 shrink-0">
-                        <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">{t('My Deals')}</h3>
+                        <div>
+                            <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">{t('My Deals')}</h3>
+                            <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
+                                {titleRowText}
+                            </p>
+                        </div>
                         <button
                             ref={closeBtnRef}
                             onClick={onClose}
@@ -367,6 +393,7 @@ export function MyDealsModal({
                                     const isCompleted = item.status === 'completed';
                                     const isPending = item.status === 'pending';
                                     const isRequested = item.status === 'requested';
+                                    const isInteractive = isPending || (dealsTab === 'pending' && isRequested);
                                     const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
                                     const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
 
@@ -375,10 +402,10 @@ export function MyDealsModal({
                                             <div
                                                 key={item.id}
                                                 data-testid={`deal-card-${item.id}`}
-                                                role={isPending ? 'button' : undefined}
-                                                tabIndex={isPending ? 0 : undefined}
-                                                aria-label={isPending ? t('View deal: {title}', { title: item.postTitle }) : undefined}
-                                                onKeyDown={isPending ? (e) => {
+                                                role={isInteractive ? 'button' : undefined}
+                                                tabIndex={isInteractive ? 0 : undefined}
+                                                aria-label={isInteractive ? t('View deal: {title}', { title: item.postTitle }) : undefined}
+                                                onKeyDown={isInteractive ? (e) => {
                                                     if (e.key === 'Enter' || e.key === ' ') {
                                                         e.preventDefault();
                                                         if (onNavigateToPost) {
@@ -388,13 +415,14 @@ export function MyDealsModal({
                                                     }
                                                 } : undefined}
                                                 onClick={() => {
-                                                    if (isPending && onNavigateToPost) {
+                                                    if (isInteractive && onNavigateToPost) {
                                                         onClose();
                                                         onNavigateToPost(item.postId, item.id);
                                                     }
                                                 }}
                                                 className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm relative overflow-hidden transition-all ${
-                                                    isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20 cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
+                                                    // The emerald "held" look is for beans in trust only (pending), as on the phone; a request is tappable but holds nothing yet.
+                                                    isInteractive ? `${isPending ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/10 dark:bg-emerald-950/20' : 'border-nature-200 dark:border-nature-800'} cursor-pointer hover:border-emerald-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`
                                                     : isCompleted ? 'border-nature-200 dark:border-nature-800'
                                                     : 'border-nature-200/50 dark:border-nature-800/50 opacity-60 grayscale-[50%]'
                                                 }`}
@@ -423,7 +451,7 @@ export function MyDealsModal({
                                                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                                                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                     isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                                                    : isPending ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
+                                                                    : (isPending || isRequested) ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                                                     : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                                 }`}>
                                                                     {dealStatusWords(item.status)}
@@ -442,6 +470,11 @@ export function MyDealsModal({
                                                         <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
                                                             {item.postTitle}
                                                         </h4>
+                                                        {dealsTab === 'pending' && (
+                                                            <p className="text-xs text-nature-600 dark:text-nature-400 mt-1">
+                                                                {dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex justify-between items-end">
@@ -597,6 +630,10 @@ export function MyDealsModal({
                                 // Active Posts View
                                 if (!preview) {
                                     const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
+                                    const relatedTx = activeTxsByPostId.get(item.id)?.[0];
+                                    const isHeld = item.status === 'pending' || relatedTx?.status === 'pending';
+                                    const isActionRequired = relatedTx?.status === 'requested' && ((item.authorPublicKey ?? (item as any).author_pubkey) === currentPubkey);
+
                                     return (
                                         <div
                                             key={item.id}
@@ -619,8 +656,12 @@ export function MyDealsModal({
                                                     onNavigateToPost(item.id);
                                                 }
                                             }}
-                                            className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-                                                item.status === 'pending' ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : ''
+                                            className={`bg-white dark:bg-nature-900 border rounded-2xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                                                isHeld
+                                                    ? 'bg-emerald-50/10 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                                                    : isActionRequired
+                                                    ? 'bg-amber-50/20 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700'
+                                                    : 'border-nature-200 dark:border-nature-800'
                                             }`}
                                         >
                                             <div className="flex gap-4">
@@ -644,12 +685,19 @@ export function MyDealsModal({
                                                 )}
                                                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                     <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-1 mb-1">
-                                                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                                            item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                                            : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
-                                                        }`}>
-                                                            {postTypeWords(item.type)}
-                                                        </span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                                                item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
+                                                            }`}>
+                                                                {postTypeWords(item.type)}
+                                                            </span>
+                                                            {item.status === 'paused' && (
+                                                                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/35 text-amber-800 dark:text-amber-400">
+                                                                    {t('⏸ PAUSED')}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex items-center">
                                                             <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
                                                                 {beans(item.credits ?? '?')}
@@ -660,8 +708,19 @@ export function MyDealsModal({
                                                     <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
                                                         {item.title}
                                                     </h4>
-                                                    <p className="text-[11px] text-nature-500 dark:text-nature-400 font-bold uppercase tracking-wide">
-                                                        {item.status === 'pending' ? t('🤝 Held in Trust') : t('🟢 Active')}
+                                                    <p className={`text-[11px] font-bold uppercase tracking-wide ${
+                                                        isActionRequired ? 'text-amber-800 dark:text-amber-400' : 'text-nature-500 dark:text-nature-400'
+                                                    }`}>
+                                                        {(() => {
+                                                            if (isHeld) {
+                                                                return t('🤝 Held in Trust');
+                                                            } else if (relatedTx?.status === 'requested') {
+                                                                return isActionRequired ? t('⚠️ Action Required') : t('⏳ Awaiting Approval');
+                                                            } else if (item.status === 'paused') {
+                                                                return t('⏸ PAUSED');
+                                                            }
+                                                            return t('🟢 Active');
+                                                        })()}
                                                     </p>
                                                 </div>
                                             </div>

@@ -135,7 +135,9 @@ function openSocket(url: string): Promise<Sock> {
 async function main() {
     console.log('Privacy by default, on a local node as it ships...\n');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer, PUBLIC_READ_EXACT } = await import('./https-server.js');
     const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
     const { db } = await import('./db/db.js');
@@ -376,7 +378,7 @@ async function main() {
     assert(made.status === 200 && !!offerId, `Alice lists an offer with a photo (got ${made.status} ${made.text.slice(0, 120)})`);
     const photoUrl = made.body?.post?.photos?.[0] as string | undefined;
     const taken = await post('/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Sentinel pumpkins', description: 'Taken by Bob', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
+        type: 'offer', category: 'other', title: 'Sentinel pumpkins', description: 'Taken by Bob', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5, photos: [TINY_PNG],
     }, alice);
     const takenId = taken.body?.post?.id as string;
     db.prepare("UPDATE posts SET status = 'pending', accepted_by = ?, accepted_at = ?, pending_transaction_id = 'mtx-priv' WHERE id = ?")
@@ -538,7 +540,7 @@ async function main() {
                 `${who} reads the pricing guide's eggs, without the listing's photo (${r.status} ${JSON.stringify(eggsItem(r)?.thumbnailUrl)})`);
         }
 
-        const entPost = se.createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', 1, 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
+        const entPost = createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', 1, 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
         assert(!!entPost?.id, 'setup: the enterprise lists a loaf');
         const pageStranger = await get(`/api/treasury/${enterprise}`);
         const pageMember = await get(`/api/treasury/${enterprise}`, carol);
@@ -551,7 +553,7 @@ async function main() {
         const memberSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
         await sleep(200);
         const another = await post('/api/marketplace/posts', {
-            type: 'offer', category: 'other', title: 'Sentinel spade', description: 'Doorbell check', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
+            type: 'offer', category: 'other', title: 'Sentinel spade', description: 'Doorbell check', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5, photos: [TINY_PNG],
         }, alice);
         assert(another.status === 200, 'Alice lists another offer');
         await sleep(400);
@@ -643,7 +645,7 @@ async function main() {
         // A lone listing 0.04° (4.45 km) south of its area's centre, and a point 49.9 km further south: within the card's
         // 50 km of the listing, 54.35 km from its area's centre. A stranger's exact count here would find the listing to
         // the metre by bisection (#1159); the deciding review of #1286 found this count was the one public way left to.
-        const lone = se.createPost('offer', 'other', 'Sentinel lone offer', 'Far from the rest', 0, 'fixed', alice.pk, -35.04, 140.6);
+        const lone = createPost('offer', 'other', 'Sentinel lone offer', 'Far from the rest', 0, 'fixed', alice.pk, -35.04, 140.6);
         assert(!!lone?.id, 'setup: Alice lists a lone offer');
         setSwitchOverride('directoryMirror', true);
         const q = { lat: -35.04 - 49.9 / (6371 * Math.PI / 180), lng: 140.6 };

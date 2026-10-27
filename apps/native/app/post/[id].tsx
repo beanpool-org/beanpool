@@ -5,8 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Picker } from '@react-native-picker/picker';
 import * as Crypto from 'expo-crypto';
 import { 
@@ -23,6 +21,7 @@ import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, acceptNeedsProfileLine } from '../../utils/profile-status';
 import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
+import { askForPostPhoto } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
@@ -246,6 +245,7 @@ export default function PostDetailModal() {
         editPicker: { color: colors.text.body, height: 50 },
         editInput: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, paddingVertical: 12, color: colors.text.body, fontSize: 15, marginBottom: 10 },
         editPhotoLabel: { color: colors.text.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 8 },
+        requiredStar: { color: colors.feedback.danger.fg },
         editPhotosRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
         editPhotoThumb: { width: 60, height: 60, borderRadius: 12, overflow: 'hidden', position: 'relative' },
         editPhotoImg: { width: 60, height: 60, borderRadius: 12 },
@@ -879,6 +879,7 @@ export default function PostDetailModal() {
 
     const handleSave = async () => {
         if (!editTitle.trim()) { Alert.alert(t('Error'), t('Title is required')); return; }
+        if (photos.length > 0 && editPhotos.length === 0) { Alert.alert(t('Error'), t('Add a photo first')); return; }
         // The price in the language's decimal mark (core parseAmount): fr "12,5" is 12.5, never saved as 0. Any decimals, as
         // before; an empty box is 0, as before.
         const price = showsBeans ? parseAmount(editCredits, undefined, ANY_DECIMALS) : null;
@@ -1034,43 +1035,11 @@ export default function PostDetailModal() {
         setAccepting(false);
     };
 
-    const pickEditPhoto = async () => {
+    const pickEditPhoto = () => {
         if (editPhotos.length >= 5) return;
-        Alert.alert(t('Add Photo'), t('Choose a source'), [
-            { text: t('Camera'), onPress: async () => {
-                try {
-                    const perm = await ImagePicker.requestCameraPermissionsAsync();
-                    if (!perm.granted) return;
-                    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
-                    if (!result.canceled && result.assets[0].uri) {
-                        const manipResult = await ImageManipulator.manipulateAsync(
-                            result.assets[0].uri,
-                            [{ resize: { width: 800 } }],
-                            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                        );
-                        if (manipResult.base64) {
-                            setEditPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                        }
-                    }
-                } catch (e: any) {
-                    Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
-                }
-            }},
-            { text: t('Gallery'), onPress: async () => {
-                const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: false });
-                if (!result.canceled && result.assets[0].uri) {
-                    const manipResult = await ImageManipulator.manipulateAsync(
-                        result.assets[0].uri,
-                        [{ resize: { width: 800 } }],
-                        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                    );
-                    if (manipResult.base64) {
-                        setEditPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                    }
-                }
-            }},
-            { text: t('Cancel'), style: 'cancel' },
-        ]);
+        askForPostPhoto((photo) => {
+            setEditPhotos(prev => (prev.length < 5 ? [...prev, photo] : prev));
+        });
     };
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
@@ -1492,7 +1461,10 @@ export default function PostDetailModal() {
                             ) : null}
 
                             {/* Photos */}
-                            <Text style={styles.editPhotoLabel}>{t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}</Text>
+                            <Text style={styles.editPhotoLabel}>
+                                {t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}
+                                {photos.length > 0 ? <Text style={styles.requiredStar}> *</Text> : null}
+                            </Text>
                             <View style={styles.editPhotosRow}>
                                 {editPhotos.map((uri, i) => (
                                     uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
@@ -1516,7 +1488,7 @@ export default function PostDetailModal() {
                                 <Pressable accessibilityRole="button" style={styles.editCancelBtn} onPress={() => setEditMode(false)}>
                                     <Text style={styles.editCancelBtnText}>{t('Cancel')}</Text>
                                 </Pressable>
-                                <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || !editTitle.trim()) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || !editTitle.trim()}>
+                                <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)}>
                                     <Text style={styles.editSaveBtnText}>{saving ? t('Saving...') : t('💾 Save')}</Text>
                                 </Pressable>
                             </View>

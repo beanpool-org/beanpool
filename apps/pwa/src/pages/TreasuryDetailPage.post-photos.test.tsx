@@ -90,13 +90,13 @@ describe("an enterprise's Offer or Need, with photos while posting it, on the we
         expect(post).toHaveBeenCalledWith(ENT, expect.objectContaining({ title: 'Mend the fence', credits: 15, photos: [RESIZED[1]] }));
     });
 
-    it('none picked: no photos are sent', async () => {
+    it('none picked: Submit stays disabled with "📷 Add a photo" until one is picked', async () => {
         const post = vi.spyOn(api, 'treasuryPostOffer').mockResolvedValue({ success: true, post: { id: 'p3' } });
         const form = await openForm('Post Offer');
         fireEvent.change(within(form).getByPlaceholderText('e.g. Dozen fresh eggs'), { target: { value: 'Duck eggs' } });
         fireEvent.change(within(form).getByPlaceholderText('20'), { target: { value: '8' } });
-        await act(async () => { fireEvent.click(within(form).getByRole('button', { name: 'Publish Listing' })); });
-        await waitFor(() => expect(post).toHaveBeenCalled());
-        expect(post.mock.calls[0][1]).not.toHaveProperty('photos');
+        const submitBtn = within(form).getByRole('button', { name: '📷 Add a photo' });
+        expect(submitBtn).toBeDisabled();
+        expect(post).not.toHaveBeenCalled();
     });
 });

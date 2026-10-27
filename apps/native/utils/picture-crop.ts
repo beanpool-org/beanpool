@@ -33,12 +33,20 @@ interface PickedPhoto {
 }
 
 /**
- * A photo from the camera or the library, whole, made the working copy; null when none was chosen. The camera's permission
- * is the caller's to ask (it says why in its own words).
+ * A photo from the camera, the library (Albums tab on Android), or files (document picker in legacy mode, reaching every
+ * folder), whole, made the working copy; null when none was chosen. The camera's permission is the caller's to ask (it says
+ * why in its own words).
  */
-export async function pickPicture(from: 'camera' | 'library'): Promise<WorkingPicture | null> {
+export async function pickPicture(from: 'camera' | 'library' | 'files'): Promise<WorkingPicture | null> {
     const ImagePicker = await import('expo-image-picker');
-    const options: ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: false, quality: 1, base64: false };
+    const options: ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        base64: false,
+        ...(from === 'library' ? { defaultTab: 'albums' } : {}),
+        ...(from === 'files' ? { legacy: true } : {}),
+    };
     const res = from === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
     const photo = !res.canceled ? res.assets?.[0] : undefined;
     return photo?.uri ? workingCopyOf(photo) : null;

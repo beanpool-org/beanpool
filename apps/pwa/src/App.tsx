@@ -43,7 +43,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -628,11 +628,7 @@ export function App() {
             const txs = await getMyMarketplaceTransactions(currentPubkey);
             if (identityPubkeyRef.current !== currentPubkey) return;
             setMyTransactions(txs);
-            const activeDeals = txs.filter(t => t.status === 'pending').length;
-            const pendingRequests = txs.filter(t => 
-                t.buyerPublicKey === currentPubkey && t.status === 'requested'
-            ).length;
-            setPendingDealsCount(activeDeals + pendingRequests);
+            setPendingDealsCount(dealsNeedingMe(txs, currentPubkey).length);
         } catch { /* offline */ }
     }, [identity?.publicKey]);
 
@@ -670,14 +666,7 @@ export function App() {
                     if (txResult.status === 'fulfilled' && txResult.value) {
                         const txs = txResult.value;
                         setMyTransactions(txs);
-
-                        const activeDeals = txs.filter(t => t.status === 'pending').length;
-
-                        const pendingRequests = txs.filter(t =>
-                            t.buyerPublicKey === identity.publicKey && t.status === 'requested'
-                        ).length;
-
-                        setPendingDealsCount(activeDeals + pendingRequests);
+                        setPendingDealsCount(dealsNeedingMe(txs, identity.publicKey).length);
                     }
 
                     // Both failing means nothing was refreshed, so this must NOT count as a
@@ -899,7 +888,10 @@ export function App() {
                                     </span>
                                 )}
                                 {tab.id === 'marketplace' && pendingDealsCount > 0 && (
-                                    <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
+                                    <span
+                                        className="text-xs font-black px-2 py-0.5 rounded-full shadow-sm"
+                                        style={{ background: 'var(--danger)', color: 'var(--on-danger, #fff)' }}
+                                    >
                                         {pendingDealsCount}
                                     </span>
                                 )}

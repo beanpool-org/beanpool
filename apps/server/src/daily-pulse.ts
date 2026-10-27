@@ -248,7 +248,7 @@ export function rotateDailyPulse(now: Date = new Date()): { post: any; entry: Da
             false,     // repeatable
             pulseId,   // deterministic id enforces idempotency
             false,     // cashAlsoNeeded
-            { reach: 'local' }
+            { reach: 'local', allowNoPhoto: true }
         );
 
         if (!post) {

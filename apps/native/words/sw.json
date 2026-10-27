@@ -941,6 +941,7 @@
   "Camera Unavailable": "Kamera Haipatikani",
   "Could not launch camera.": "Haikuweza kufungua kamera.",
   "Gallery": "Matunzio",
+  "Browse files": "Vinjari faili",
   "Offer": "Ofa",
   "Need": "Hitaji",
   "● DAILY PULSE": "● MAPIGO YA KILA SIKU",
@@ -6112,5 +6113,12 @@
   "In a month": "Baada ya mwezi",
   "Remove community?": "Ondoa jumuiya?",
   "Remove {name} from your saved list?": "Kumwondoa {name} kwenye orodha yako uliyohifadhi?",
-  "Failed to load": "Imeshindwa kupakia"
+  "Failed to load": "Imeshindwa kupakia",
+  "PHOTO *": "PICHA *",
+  "Missing Photo": "Picha Inakosekana",
+  "Add a photo first": "Ongeza picha kwanza",
+  "Turn on": "Washa",
+  "Turn on notifications?": "Washa arifa?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Arifa za BeanPool zimezimwa katika mipangilio ya simu yako. Fungua Mipangilio ili kuziwasha."
 }

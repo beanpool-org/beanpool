@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { formatDate, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -101,6 +101,18 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             fontSize: 22,
             fontWeight: '900',
             color: colors.text.body,
+        },
+        sheetSubtitle: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.muted,
+            marginTop: 2,
+        },
+        dealStateText: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: theme === 'dark' ? colors.text.secondary : colors.text.muted,
+            marginTop: 2,
         },
         closeBtn: {
             fontSize: 20,
@@ -432,16 +444,44 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
 
-    const pendingDeals = posts.filter(p => {
-        if (!identity) return false;
-        if (p.status === 'pending' && (p.author_pubkey === identity.publicKey || p.accepted_by === identity.publicKey)) return true;
-        return activeTxsByPostId.has(p.id);
-    });
+    const effectiveTxs = useMemo(() => {
+        if (!transactions.length || !posts.length) return transactions;
+        const postMap = new Map(posts.map(p => [p.id, p]));
+        return transactions.map(t => {
+            if (t.postAuthorPublicKey && t.postType) return t;
+            const p = postMap.get(t.postId);
+            if (!p) return t;
+            return {
+                ...t,
+                postAuthorPublicKey: t.postAuthorPublicKey ?? p.author_pubkey ?? p.authorPublicKey,
+                postType: t.postType ?? p.type,
+                postRepeatable: t.postRepeatable ?? p.repeatable,
+                postLendable: t.postLendable ?? p.lendable,
+            };
+        });
+    }, [transactions, posts]);
+
+    const underWayCount = openDeals(effectiveTxs, identity?.publicKey).length;
+    const needingMeCount = dealsNeedingMe(effectiveTxs, identity?.publicKey || '').length;
+    const titleRowText = needingMeCount === 1
+        ? t('{n} under way · 1 needs you', { n: underWayCount })
+        : t('{n} under way · {m} need you', { n: underWayCount, m: needingMeCount });
+
+    const pendingDeals = useMemo(() => {
+        const list = openDeals(effectiveTxs, identity?.publicKey);
+        return list.slice().sort((a, b) => {
+            const aMe = dealStep(a, identity?.publicKey || '').needsMe;
+            const bMe = dealStep(b, identity?.publicKey || '').needsMe;
+            if (aMe && !bMe) return -1;
+            if (!aMe && bMe) return 1;
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+    }, [effectiveTxs, identity?.publicKey]);
 
     const pendingCount = pendingDeals.length;
 
     const getData = () => {
-        if (dealsTab === 'active') return myPosts.filter(p => (p.status === 'active' || p.status === 'paused') && p.author_pubkey === identity?.publicKey);
+        if (dealsTab === 'active') return myPosts.filter(p => (p.status === 'active' || p.status === 'paused' || p.status === 'pending') && p.author_pubkey === identity?.publicKey);
         if (dealsTab === 'pending') return pendingDeals;
         // History
         let txs = transactions.filter(t => t.status === 'completed' || t.status === 'cancelled' || t.status === 'rejected');
@@ -458,6 +498,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const isBuyer = item.buyerPublicKey === identity?.publicKey;
             const isCompleted = item.status === 'completed';
             const isPending = item.status === 'pending';
+            const isRequested = item.status === 'requested';
+            const step = dealStep(item, identity?.publicKey || '');
             const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
             const partnerPubkey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
             // No card held for the partner yet (a community that says `membersOnDemand`): the key's first 8 characters,
@@ -468,7 +510,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const card = (
                 <View testID={`deal-card-${item.id}`} style={[
                     styles.dealCard,
-                    !isCompleted && !isPending && { opacity: 0.5 },
+                    !isCompleted && !isPending && !isRequested && { opacity: 0.5 },
                     isPending && heldTone,
                 ]}>
                     {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
@@ -501,6 +543,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             )}
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle}</Text>
+                        {dealsTab === 'pending' && (
+                            <Text style={styles.dealStateText} numberOfLines={1}>
+                                {dealStateWords(step, partnerCallsign)}
+                            </Text>
+                        )}
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                                 <MemberAvatar avatarUrl={partnerAvatar} pubkey={partnerPubkey || ''} callsign={partnerCallsign || '?'} size={20} />
@@ -532,7 +579,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                 </View>
             );
 
-            if (isPending) {
+            if (isPending || dealsTab === 'pending') {
                 return (
                     <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}>
                         {card}
@@ -622,7 +669,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
 
                     {/* Header */}
                     <View style={styles.sheetHeader}>
-                        <Text style={styles.sheetTitle}>{t('My Deals')}</Text>
+                        <View>
+                            <Text style={styles.sheetTitle}>{t('My Deals')}</Text>
+                            <Text style={styles.sheetSubtitle}>{titleRowText}</Text>
+                        </View>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose}>
                             <Text style={styles.closeBtn}>✕</Text>
                         </Pressable>
@@ -740,17 +790,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
 }
 
 /** Export pending count helper for header badge */
-export function usePendingDealsCount(identity: { publicKey: string } | null, posts: any[], transactions: any[]): number {
+export function usePendingDealsCount(identity: { publicKey: string } | null, postsOrTxs: any[], maybeTransactions?: any[]): number {
     if (!identity) return 0;
-    const activeTxPostIds = new Set(
-        transactions
-            .filter((t: any) => t.status === 'pending' || t.status === 'requested')
-            .map((t: any) => t.postId)
-    );
-    return posts.filter(p => {
-        if (p.status === 'pending' && (p.author_pubkey === identity.publicKey || p.accepted_by === identity.publicKey)) return true;
-        return activeTxPostIds.has(p.id);
-    }).length;
+    const txs = Array.isArray(maybeTransactions) ? maybeTransactions : (Array.isArray(postsOrTxs) ? postsOrTxs : []);
+    return dealsNeedingMe(txs, identity.publicKey).length;
 }
 
 // Empty since stylesheet has been refactored inside the component body

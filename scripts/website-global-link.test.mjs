@@ -55,6 +55,7 @@ function elementsById() {
             classes,
             classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
             text: decode(MARKUP.slice(m.index + m[0].length, end).replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim(),
+            getAttribute: (name) => { const v = attrs.match(new RegExp('\\b' + name + '="([^"]*)"')); return v ? decode(v[1]) : null; },
         });
     }
     return els;
@@ -160,12 +161,21 @@ test('with no script: both stores and the browser line, all plain links; the app
     assert.doesNotMatch(MARKUP.slice(MARKUP.lastIndexOf('<p', at), at), /hidden/);
 });
 
-test('during the private preview the page names no button the app shows only once global is open', () => {
-    // The welcome screen's "Explore BeanPool worldwide" is there only when global.beanpool.org answers that its door is
-    // open (apps/native/welcome.tsx, utils/global-door-offer.ts). The open-day flip (grep OPEN-GLOBAL) brings the line back.
+test('now global is open, the page tells newcomers how to find it on the first screen', () => {
+    // The welcome screen's "Explore BeanPool worldwide" is there now that global.beanpool.org's door is open.
+    // The open-day flip (grep OPEN-GLOBAL) brought the line back and removed the marker comment.
     const words = decode(MARKUP.replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' '));
-    assert.doesNotMatch(words, /Explore BeanPool worldwide/i);
-    assert.match(HTML, /<!-- OPEN-GLOBAL: add <p class="global-note">[^]*?Explore BeanPool worldwide[^]*?-->/);
+    assert.match(words, /Explore BeanPool worldwide/i);
+    assert.doesNotMatch(HTML, /<!-- OPEN-GLOBAL/);
+});
+
+test('while IOS_OPEN_DOOR_LIVE is false, carries no apple-itunes-app meta tag (S14 flips both)', () => {
+    const meta = MARKUP.match(/<meta\s+name="apple-itunes-app"\s+content="([^"]*)"/i);
+    assert.equal(meta, null, 'no apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false');
+});
+
+test('defines IOS_OPEN_DOOR_LIVE = false constant in script', () => {
+    assert.match(SCRIPT, /\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*false\b/);
 });
 
 test('Android: the app by its link, beanpool.org/global, else Google Play with the referrer; once, on arrival at beanpool.org', () => {
@@ -200,15 +210,60 @@ test('Android inside an app\'s web view: Google Play, never an intent link it ma
     assert.ok(els.get('play').classList.contains('btn-primary'));
 });
 
-test('iPhone and iPad: the App Store, once, on arrival at beanpool.org', () => {
+test('iPhone and iPad: while IOS_OPEN_DOOR_LIVE is false, browser line first and no redirect to store', () => {
     for (const who of [{ ua: UA.iphone }, { ua: UA.mac, touch: true }]) {
         const { els, went } = visit(who);
-        assert.deepEqual(went, [['href', APP_STORE]], who.ua);
+        assert.deepEqual(went, [], who.ua + ' must not redirect to App Store while iOS door is not live');
         assert.equal(els.get('door-play').hidden, true);
         assert.equal(els.get('door-ios').hidden, false);
-        assert.ok(els.get('app-store').classList.contains('btn-primary'));
+        assert.ok(!els.get('app-store').classList.contains('btn-primary'), 'App Store is ghost, not primary');
         assert.equal(els.get('browser').hidden, false);
         assert.deepEqual(visit({ ...who, arrival: 'back_forward' }).went, []);
+        assert.equal(els.get('browser').textContent, 'Open the global community in your browser', 'the browser line reads as its own button');
+        assert.match(els.get('ios-note').textContent, /iPhone app can join the global community from its next update/);
+    }
+});
+
+// Each language's page carries its own iPhone wording (no English sentence, no word stripped off by a pattern: the
+// old "or" stripper turned German "oder öffne" into "der öffne").
+test('every language copy of /global has its own iPhone button text and note, read from the page, never stripped', () => {
+    const langs = fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && fs.existsSync(path.join(SITE, d.name, 'global.html'))).map((d) => d.name);
+    assert.ok(langs.length >= 24, 'all 24 language copies: ' + langs.length);
+    const englishNote = MARKUP.match(/data-ios-note="([^"]*)"/)[1];
+    for (const lang of langs) {
+        const page = fs.readFileSync(path.join(SITE, lang, 'global.html'), 'utf8');
+        const text = page.match(/<a id="browser" data-ios-text="([^"]+)"[^>]*>([^<]*)</);
+        const note = page.match(/<p id="ios-note" data-ios-note="([^"]+)"/);
+        assert.ok(text && note, lang + ': both attributes on the page');
+        assert.notEqual(note[1], englishNote, lang + ': the iPhone note is in its own language');
+        assert.ok(text[2].trim().length > text[1].length, lang + ': the button text is the line without its leading "or" word');
+        assert.ok(text[2].includes(text[1].slice(1)), lang + ': the button text is the same words as the line (' + text[1] + ')');
+        assert.doesNotMatch(page, /textContent\.replace\(/, lang + ': no pattern rewrites the words');
+        assert.match(page, /getAttribute\('data-ios-text'\)/, lang);
+    }
+});
+
+// The "or in your browser" line under door 1 sits just above door 2's button: as a bare inline link it is an ~18 px
+// target, an easy mis-tap on a phone. .door-browser makes it 48 px, on the home page and on the 404 page that repeats
+// the three doors, in English and every language (PR #2513 review: 404.html had been left without it).
+test('the browser line under door 1 is a 48 px tap target on every home and 404 page, in every language', () => {
+    const css = fs.readFileSync(path.join(SITE, 'style.css'), 'utf8');
+    assert.match(css, /\.hero-door \.door-browser a \{[^}]*min-height: 48px/, 'style.css gives .door-browser links 48 px');
+    const dirs = ['', ...fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && ['index.html', '404.html'].every((f) => fs.existsSync(path.join(SITE, d.name, f))))
+        .map((d) => d.name)];
+    assert.ok(dirs.length >= 25, 'English and all 24 language copies: ' + dirs.length);
+    for (const dir of dirs) {
+        for (const file of ['index.html', '404.html']) {
+            const page = fs.readFileSync(path.join(SITE, dir, file), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+            const doors = page.slice(page.indexOf('class="hero-doors"'));
+            const lines = [...doors.matchAll(/<p([^>]*)><a href="https:\/\/global\.beanpool\.org[^"]*">/g)];
+            assert.equal(lines.length >= 1, true, (dir || 'en') + '/' + file + ': the browser line under door 1');
+            const first = lines[0];
+            assert.ok(first.index < doors.indexOf('</div>'), (dir || 'en') + '/' + file + ': the browser line is inside door 1');
+            assert.match(first[1], /class="door-browser"/, (dir || 'en') + '/' + file + ': the browser line carries .door-browser');
+        }
     }
 });
 

@@ -3630,5 +3630,10 @@
   "Close photo": "Κλείσιμο φωτογραφίας",
   "It will read \"This message was deleted\" for both of you.": "Θα εμφανίζεται ως «Αυτό το μήνυμα διαγράφηκε» και στους δυο σας.",
   "🌱 Daily Reflection": "🌱 Καθημερινός στοχασμός",
-  "Loading": "Φόρτωση"
+  "Loading": "Φόρτωση",
+  "📷 Add a photo": "📷 Προσθήκη φωτογραφίας",
+  "Add a photo first": "Προσθέστε πρώτα μια φωτογραφία",
+  "⚠️ Action Required": "⚠️ Απαιτείται ενέργεια",
+  "⏳ Awaiting Approval": "⏳ Αναμονή έγκρισης",
+  "⏸ PAUSED": "⏸ ΣΕ ΠΑΥΣΗ"
 }

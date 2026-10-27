@@ -941,6 +941,7 @@
   "Camera Unavailable": "ক্যামেরা অনুপলব্ধ",
   "Could not launch camera.": "ক্যামেরা চালু করা যায়নি।",
   "Gallery": "গ্যালারি",
+  "Browse files": "ফাইল ব্রাউজ করুন",
   "Offer": "প্রস্তাব",
   "Need": "প্রয়োজন",
   "● DAILY PULSE": "● দৈনিক পালস",
@@ -6112,5 +6113,12 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” পোস্ট হয়েছে, কিন্তু আপনার দোকানে নেই। দোকানে রাখতে এটি খুলুন, পোস্ট সম্পাদনা করুন-এ ট্যাপ করুন এবং এটি আপনার দোকানে রাখুন-এ টিক দিন।",
   "✓ Friend": "✓ বন্ধু",
   "✓ nonce issued": "✓ nonce দেওয়া হয়েছে",
-  "Failed to load": "লোড করা যায়নি"
+  "Failed to load": "লোড করা যায়নি",
+  "PHOTO *": "ছবি *",
+  "Missing Photo": "ছবি নেই",
+  "Add a photo first": "আগে একটি ছবি যোগ করুন",
+  "Turn on": "চালু করুন",
+  "Turn on notifications?": "বিজ্ঞপ্তি চালু করবেন?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "যাতে কেউ উত্তর দিলে, বার্তা পাঠালে বা যোগদানের অনুরোধ করলে জানতে পারেন। আর কিছুই নয়।",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "আপনার ফোনের সেটিংসে BeanPool-এর বিজ্ঞপ্তি বন্ধ আছে। চালু করতে সেটিংস খুলুন।"
 }

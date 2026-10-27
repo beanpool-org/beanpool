@@ -5559,6 +5559,8 @@ export function createPost(
         replacementValue?: unknown;
         /** The shop to put it in (engine/shops.ts assertShopForPost). */
         shopId?: unknown;
+        /** Allowed only for system-created internal posts like Daily Pulse. */
+        allowNoPhoto?: boolean;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }

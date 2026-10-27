@@ -3880,5 +3880,10 @@
   "Close photo": "Закрити фото",
   "It will read \"This message was deleted\" for both of you.": "Для вас обох відображатиметься «Це повідомлення було видалено».",
   "🌱 Daily Reflection": "🌱 Щоденні роздуми",
-  "Loading": "Завантаження"
+  "Loading": "Завантаження",
+  "📷 Add a photo": "📷 Додати фото",
+  "Add a photo first": "Спочатку додайте фото",
+  "⚠️ Action Required": "⚠️ Потрібна дія",
+  "⏳ Awaiting Approval": "⏳ Очікує на схвалення",
+  "⏸ PAUSED": "⏸ ПРИЗУПИНЕНО"
 }

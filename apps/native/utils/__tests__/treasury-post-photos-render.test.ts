@@ -189,7 +189,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         expect(device.asked).toEqual([]);
 
         await click(byLabel('Add photo'), 'Add photo');
-        expect(alerts.said.slice(-5)).toEqual(['Add Photo', 'Choose a source', 'Camera', 'Gallery', 'Cancel']);
+        expect(alerts.said.slice(-5)).toEqual(['Add Photo', 'Choose a source', 'Camera', 'Gallery', 'Browse files']); // Android: Cancel is Back or a tap outside
         // Tapping + asks the phone for nothing: the member chooses first.
         expect(device.asked).toEqual([]);
 
@@ -219,7 +219,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         expect(photosShown()).toEqual([TAKEN]);
 
         await click(byLabel('Add photo'), 'Add photo');
-        await choose('Gallery');
+        await choose('Browse files');
         expect(photosShown()).toEqual([TAKEN, PICKED]);
         await click(host.querySelectorAll('[aria-label="Remove photo"]')[0], 'Remove photo');
         expect(photosShown()).toEqual([PICKED]);
@@ -235,7 +235,7 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
         expect(device.asked.filter((a) => a.includes('library'))).toEqual([]);
     });
 
-    it('the camera refused: no photo, and nothing else asked; posted without one, no photos are sent', async () => {
+    it('the camera refused: no photo, and Submit stays disabled with "📷 Add a photo" until one is picked', async () => {
         device.cameraGranted = false;
         await open('offer');
         await click(byLabel('Add photo'), 'Add photo');
@@ -246,8 +246,10 @@ describe("an enterprise's Offer or Need, with photos while posting it", () => {
 
         await type('Title', 'Dozen eggs');
         await type('Price in Beans', '6');
-        await click(button('POST OFFER'), 'POST OFFER');
-        expect(net.args.get('treasuryPostOffer')?.[1]).not.toHaveProperty('photos');
+        const submit = button('📷 Add a photo');
+        expect(submit).not.toBeNull();
+        await click(submit, '📷 Add a photo');
+        expect(net.calls).not.toContain('db.treasuryPostOffer');
     });
 
     it('five at most: the + goes once five are on', async () => {

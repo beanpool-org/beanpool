@@ -840,6 +840,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
@@ -857,6 +858,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, 'Each photo must be a JPEG, PNG or WebP image') }; return; }
@@ -878,6 +880,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // An Offer put in its shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
         const category = b.category || newListingCategory(b.shopId);
         if (!b.title || !category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, word('Each photo must be a JPEG, PNG or WebP image')) }; return; }
@@ -914,6 +917,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
+        if (!Array.isArray(b.photos) || b.photos.length === 0) { ctx.status = 400; ctx.body = { error: word('Add a photo first') }; return; }
         if (Array.isArray(b.photos)) {
             const refusal = routePhotosRefusal(b.photos);
             if (refusal) { ctx.status = 400; ctx.body = { error: photoRefusalText(refusal, word('Each photo must be a JPEG, PNG or WebP image')) }; return; }
@@ -961,6 +965,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
+            if (Array.isArray(b.photos)) assertMayAddPhotos(actor, Math.min(b.photos.length, 5));
             const limit = enterprisePostLimit(treasury, actor);
             const timeOut: EventTimeOut = {};
             const post = createEventFromBody(b, treasury, actor, limit.beforeWrite, timeOut);

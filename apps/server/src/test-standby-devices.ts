@@ -68,6 +68,7 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 import { lockedDm } from './dm-test-payload.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { listingPhotoUrlsIn, withListingPhotoKeysNormalised } from './takeover-parity-compare.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -638,6 +639,7 @@ async function main(): Promise<void> {
         const event = built('Ann hosts an event', await S_(ann, '/api/marketplace/posts', {
             type: 'event', title: 'Street picnic', description: 'Bring a plate', authorPublicKey: ann.pk, lat: -28.55, lng: 153.5,
             eventStartAt: new Date(startMs).toISOString(), eventEndAt: new Date(startMs + 3 * 3600_000).toISOString(), eventPlaceName: 'The park',
+            photos: [TINY_PNG],
         }));
         const eventId = (event.post?.id ?? event.id) as string;
         built('Bo is going', await S_(bo, `/api/marketplace/posts/${eventId}/rsvp`, { status: 'going' }));
@@ -651,6 +653,7 @@ async function main(): Promise<void> {
         // Listings, a deal, and a line from 40 days ago that the hourly prune takes.
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (credit to buy with)', await A('POST', `/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
         await offer(gwen, 'Sourdough loaf', 4);
@@ -1232,9 +1235,20 @@ async function main(): Promise<void> {
         const feedHere = await api(p, 'GET', '/api/activity/feed', { as: bo });
         assert(feedHere.status === 200 && JSON.stringify(feedHere.body) === JSON.stringify(mainFeed.body),
             `the activity list answers as M's did (${feedHere.status}, ${Array.isArray(feedHere.body?.items ?? feedHere.body?.feed ?? feedHere.body) ? 'a list' : JSON.stringify(feedHere.body).slice(0, 80)})`);
+        // But for its listings' photo URLs' keys: made from each server's own photoKeySecret, which a standby never copies, so
+        // a take-over changes every one (engine/photo-keys.ts; test-takeover-parity's note above its KNOWN_GAPS). Each URL
+        // the promoted server hands out must open there, unsigned, as an <img> asks.
         const guideHere = await api(p, 'GET', '/api/pricing-guide', { as: bo });
-        assert(guideHere.status === 200 && JSON.stringify(guideHere.body) === JSON.stringify(mainGuide.body),
-            `the pricing guide answers as M's did: the admin's edit, the pin and the prices M worked out (${guideHere.status})`);
+        assert(guideHere.status === 200 && JSON.stringify(withListingPhotoKeysNormalised(guideHere.body)) === JSON.stringify(withListingPhotoKeysNormalised(mainGuide.body)),
+            `the pricing guide answers as M's did: the admin's edit, the pin and the prices M worked out, its listing photo keys aside (${guideHere.status})`);
+        const guidePhotos = [...new Set(listingPhotoUrlsIn(guideHere.body))];
+        const guidePhotoStatuses = await Promise.all(guidePhotos.map(async (u) => {
+            const r = await fetch(`${p}${u}`);
+            await r.arrayBuffer();
+            return r.status;
+        }));
+        assert(guidePhotos.length === new Set(listingPhotoUrlsIn(mainGuide.body)).size && guidePhotos.length > 0 && guidePhotoStatuses.every((st) => st === 200),
+            `every listing photo URL in the promoted server's pricing guide opens there, unsigned (${guidePhotoStatuses.filter((st) => st === 200).length} of ${guidePhotos.length} answered 200)`);
         await offer2(p, gwen, 'Plum jam', 3);
         const lineHere = await standby.send('last-activity-id');
         assert(typeof mainLastLine === 'number' && lineHere === mainLastLine + 1, `the next activity line is numbered after M's last (${mainLastLine} → ${lineHere})`);
@@ -1267,6 +1281,7 @@ function phone2(base: string, who: Id, t: string, registeredAt: number): Promise
 async function offer2(base: string, who: Id, title: string, credits: number): Promise<void> {
     const r = await api(base, 'POST', '/api/marketplace/posts', { as: who, body: {
         type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        photos: [TINY_PNG],
     } });
     require_(r.status >= 200 && r.status < 300, `the promoted server: ${who.name} offers ${title} (${brief(r)})`);
 }

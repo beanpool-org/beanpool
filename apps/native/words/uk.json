@@ -1039,6 +1039,7 @@
   "Camera Unavailable": "Камера недоступна",
   "Could not launch camera.": "Не вдалося запустити камеру.",
   "Gallery": "Галерея",
+  "Browse files": "Огляд файлів",
   "Offer": "Пропозиція",
   "Need": "Потреба",
   "● DAILY PULSE": "● ДУМКА ДНЯ",
@@ -6590,5 +6591,12 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "«{title}» опубліковано, але не у вашій крамниці. Щоб додати, відкрийте її, торкніться «✏️ Редагувати публікацію» та позначте «Додати до вашої крамниці».",
   "✓ Friend": "✓ Друг",
   "✓ nonce issued": "✓ nonce видано",
-  "Failed to load": "Не вдалося завантажити"
+  "Failed to load": "Не вдалося завантажити",
+  "PHOTO *": "ФОТО *",
+  "Missing Photo": "Немає фото",
+  "Add a photo first": "Спочатку додайте фото",
+  "Turn on": "Увімкнути",
+  "Turn on notifications?": "Увімкнути сповіщення?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Сповіщення BeanPool вимкнено в налаштуваннях телефона. Відкрийте налаштування, щоб увімкнути їх."
 }

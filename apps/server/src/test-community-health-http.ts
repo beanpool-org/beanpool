@@ -32,7 +32,10 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage, createDecision, getCommonsBalance } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, getBalance, injectSystemMessage, createDecision, getCommonsBalance } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';

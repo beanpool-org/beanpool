@@ -14,7 +14,9 @@
  */
 import assert from 'node:assert';
 import crypto from 'node:crypto';
-import { initStateEngine, submitReport, getReports, dismissReport, actionReport, createPost, getPosts, getMember, adminDeletePost } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { initStateEngine, submitReport, getReports, dismissReport, actionReport, createPost as rawCreatePost, getPosts, getMember, adminDeletePost } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 

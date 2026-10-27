@@ -21,7 +21,9 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { ledger } from './engine/ledger.js';
-import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, createPost, updateProfile, purgeMemberSelf, getBalance, getMember, isCallsignAvailable, getCommonsBalance, runLedgerAudit, transfer, payFromCommons } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, createPost as rawCreatePost, updateProfile, purgeMemberSelf, getBalance, getMember, isCallsignAvailable, getCommonsBalance, runLedgerAudit, transfer, payFromCommons } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
 

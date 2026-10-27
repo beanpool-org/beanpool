@@ -29,11 +29,13 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine, createGroup, joinGroup, approveGroupMember, inviteGroupMember, removeGroupMember,
-    setMemberRole, updateGroup, createPost, createTreasury, adminAssignTreasuryOperator, createConversation,
+    setMemberRole, updateGroup, createPost as rawCreatePost, createTreasury, adminAssignTreasuryOperator, createConversation,
     getUnreadCounts, markConversationRead, listYourChats, getGroup,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { rsvpEvent } from './engine/posts.js';
 import {
     postGroupThreadMessage, removeGroupThreadMessage, getGroupThread, detectMentions,

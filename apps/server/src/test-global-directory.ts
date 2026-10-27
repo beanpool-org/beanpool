@@ -110,7 +110,9 @@ let caught = 0;
 
 // Imported only now, so every module reads the fixture's addresses.
 const { initTls } = await import('./services/tls.js');
-const { initStateEngine, seedGenesisMember, createPost, setNodeRole, adminPruneUser } = await import('./state-engine.js');
+const { wrapCreatePost } = await import('./post-test-helper.js');
+const { initStateEngine, seedGenesisMember, createPost: rawCreatePost, setNodeRole, adminPruneUser } = await import('./state-engine.js');
+const createPost = wrapCreatePost(rawCreatePost);
 const { startHttpsServer } = await import('./https-server.js');
 const { db } = await import('./db/db.js');
 const { putPushTokenRow } = await import('./services/push-token-seal.js');

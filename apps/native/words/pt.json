@@ -941,6 +941,7 @@
   "Camera Unavailable": "Câmera indisponível",
   "Could not launch camera.": "Não foi possível abrir a câmera.",
   "Gallery": "Galeria",
+  "Browse files": "Procurar arquivos",
   "Offer": "Oferta",
   "Need": "Pedido",
   "● DAILY PULSE": "● PULSO DIÁRIO",
@@ -6112,5 +6113,12 @@
   "“{title}” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.\u0004after an Offer is posted; Edit Post and Put this in your shop are the names of a button and a checkbox": "“{title}” foi publicada, mas não está na sua loja. Para colocá-la, abra-a, toque em Edit Post e marque Colocar isto na sua loja.",
   "✓ Friend": "✓ Amigo",
   "✓ nonce issued": "✓ nonce emitido",
-  "Failed to load": "Falha ao carregar"
+  "Failed to load": "Falha ao carregar",
+  "PHOTO *": "FOTO *",
+  "Missing Photo": "Foto ausente",
+  "Add a photo first": "Adicione uma foto primeiro",
+  "Turn on": "Ativar",
+  "Turn on notifications?": "Ativar notificações?",
+  "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para saber quando alguém responder, enviar uma mensagem ou pedir para entrar. Nada mais.",
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "As notificações do BeanPool estão desligadas nas definições do seu telefone. Abra as Definições para as ligar."
 }

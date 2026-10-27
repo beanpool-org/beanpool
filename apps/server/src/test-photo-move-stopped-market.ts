@@ -23,6 +23,7 @@ delete process.env.CF_RECORD_NAME;
 process.env.MEMBER_PHOTO_MOVE_BATCH = '1';
 
 import Database from 'better-sqlite3';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { bootInto } from './schema-upgrade-test-harness.js';
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
         return { status: res.status, body: await res.json().catch(() => null) as any };
     };
     const offer = (who: Who, title: string) => signed(who, '/api/marketplace/posts', {
-        type: 'offer', category: 'general', title, description: `${title}, fresh`, credits: 5, priceType: 'fixed', authorPublicKey: who.pk,
+        type: 'offer', category: 'general', title, description: `${title}, fresh`, credits: 5, priceType: 'fixed', authorPublicKey: who.pk, photos: TEST_PHOTOS,
     });
 
     try {

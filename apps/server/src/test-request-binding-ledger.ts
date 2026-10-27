@@ -42,7 +42,9 @@ async function main(): Promise<void> {
     const { ed25519 } = await import('@noble/curves/ed25519.js');
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
     const { addConnector, removeConnector } = await import('./connector-manager.js');
@@ -73,7 +75,7 @@ async function main(): Promise<void> {
     se.seedGenesisMember(founder, 'Founder');
     const mia = member('Mia');
     const xan = member('Xan');
-    const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
+    const offer = (pk: string, title: string) => createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
     offer(mia.pk, 'Mia seedlings');
     se.completePostTransaction(se.acceptPost(offer(xan.pk, 'Xan bread').id, mia.pk).id, mia.pk);
 

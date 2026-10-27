@@ -54,6 +54,7 @@ import { setMemberPhoto, REPEAT_ERRORS } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -130,7 +131,7 @@ async function main(): Promise<void> {
     const gapHost = makeIdentity('GapGil');
     const jumper = makeIdentity('JumperJo');
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
-        type: 'event', title: 'Friday dinner', description: 'Bring a plate', authorPublicKey: who.pubKeyHex, ...SYDNEY, ...body,
+        type: 'event', title: 'Friday dinner', description: 'Bring a plate', authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, ...SYDNEY, ...body,
     }, who);
     const weeklyFri = { freq: 'weekly', interval: 1, byDay: 'FR' };
 

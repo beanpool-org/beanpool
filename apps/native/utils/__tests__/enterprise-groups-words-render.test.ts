@@ -102,6 +102,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
+// The system's photo picker (a listing's Gallery: utils/post-photo.ts) gives a photo; a listing posts only with one.
+vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri: 'file:///roll/loaf.jpg' }] }) }));
+vi.mock('expo-image-manipulator', () => ({ manipulateAsync: async () => ({ base64: '/9j/4AAQSkZJRg' }), SaveFormat: { JPEG: 'jpeg' } }));
 // The console's logo picker (S7), the profile photo's own sheet: drawn only once opened, never here.
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
@@ -514,6 +517,18 @@ describe('posting an enterprise\'s Offer or Need in the pseudo-locale (words S3h
         await renderIn('xx', createElement(TreasuryPostScreen));
         expect(host.textContent).toContain(xx('WHAT ARE YOU OFFERING?'));
         expect(host.textContent).toContain(xx("Posting on behalf of {name}. This lists in the Market like any offer; income from sales lands in the enterprise's balance.").replace('{name}', BAKERY));
+        // No photo yet: the button asks for one, and a tap on it posts nothing and says nothing.
+        expect(buttonWith(xx('POST OFFER'))).toBeNull();
+        await click(buttonWith(xx('📷 Add a photo')), '📷 Add a photo');
+        expect(host.textContent).not.toContain(xx('⚠️ Add a title, category and price'));
+        expect(net.calls.filter((c) => c.startsWith('db.treasuryPost'))).toEqual([]);
+        // A photo from the Gallery: then it is POST OFFER, and it says what else is missing.
+        alerts.said.length = 0;
+        await click(byLabel(xx('Add photo')), 'Add photo');
+        expect(alerts.said).toEqual([xx('Add Photo'), xx('Choose a source'), xx('Camera'), xx('Gallery'), xx('Browse files')]);
+        await pressAlertButton(xx('Gallery'));
+        await settle();
+        expect(byLabel(xx('Post photo')), 'the photo, shown').not.toBeNull();
         await click(buttonWith(xx('POST OFFER')), 'POST OFFER');
         expect(host.textContent).toContain(xx('⚠️ Add a title, category and price'));
         expect(bypassing(), 'offer').toEqual([]);

@@ -1059,49 +1059,329 @@ test('mobile width (320px) desktop-lang-menu on pages without phone menu stays w
     }
 });
 
-test('nav-cta is never clipped and does not wrap where main did not, ☰ panel links are reachable with and without banner, phone header is unchanged, and no-menu controls are >=44px with >=16px padding', { timeout: 240_000 }, async () => {
-    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+// ── Nav sweep: nav-cta never clipped / never newly wrapped, ☰ panel links reachable with and without banner, phone header
+// unchanged, and no-menu controls >= 44px with >= 16px padding ────────────────────────────────────────────────────────────
+// This used to be ONE test that swept every page × 25 languages × 14 widths × three contexts, then the pt-BR banner check,
+// then the no-menu check, in one 240 s budget; it grew with every page and language and timed out on CI once 404.html joined
+// TRANSLATED_PAGES (#2513). It is now split so each test's work is bounded: the English pages, then GUIDE_LANGS in groups
+// of NAV_SWEEP_LANGS_PER_GROUP languages × TRANSLATED_PAGES, then the banner check, then the no-menu check. Same checks,
+// same assertion (every failure count must be 0). The static server and Chromium are started once, on first use, and
+// closed in after().
 
-    const server = http.createServer((req, res) => {
-        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
-        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
-        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
-        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
-        fs.createReadStream(p).pipe(res);
+const NAV_SWEEP_TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+const NAV_SWEEP_WIDTHS = [320, 346, 360, 390, 430, 481, 540, 768, 769, 900, 1024, 1280, 1366, 1440];
+const NAV_SWEEP_MAIN_WRAPPED_LANGS = new Set(['pt', 'ru', 'uk', 'de']);
+const NAV_SWEEP_NUM_WORKERS = 6;
+const NAV_SWEEP_LANGS_PER_GROUP = 6;
+const NAV_SWEEP_TIMEOUT = 240_000;
+
+let navSweepEnvPromise = null;
+
+/** Starts the static server and Chromium once for every nav sweep test; after() closes both. */
+function navSweepEnv() {
+    if (!navSweepEnvPromise) {
+        navSweepEnvPromise = (async () => {
+            const server = http.createServer((req, res) => {
+                let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+                if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+                if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+                res.writeHead(200, { 'content-type': NAV_SWEEP_TYPES[path.extname(p)] || 'application/octet-stream' });
+                fs.createReadStream(p).pipe(res);
+            });
+            await new Promise(r => server.listen(0, '127.0.0.1', r));
+            const port = server.address().port;
+            try {
+                const browser = await chromium.launch({ headless: true });
+                return { server, port, browser };
+            } catch (err) {
+                server.close();
+                throw err;
+            }
+        })();
+    }
+    return navSweepEnvPromise;
+}
+
+after(async () => {
+    if (!navSweepEnvPromise) return;
+    const env = await navSweepEnvPromise.catch(() => null);
+    if (!env) return;
+    await env.browser.close();
+    env.server.close();
+});
+
+/** One worker of the page sweep: three contexts (100% text, 130% text, wide letter-spacing) walk its share of the pages. */
+async function runNavSweepWorker({ browser, port }, items) {
+    const ctx100 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+    const ctx130 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+    const ctxWide = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+    await ctx100.addInitScript(() => {
+        const style = document.createElement('style');
+        style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+        document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+    });
+    await ctx130.addInitScript(() => {
+        const style = document.createElement('style');
+        style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+        document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+        const el = document.documentElement;
+        if (el) el.style.fontSize = '130%';
+        const observer = new MutationObserver(() => {
+            if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                document.documentElement.style.fontSize = '130%';
+            }
+        });
+        observer.observe(document, { childList: true, subtree: true });
+    });
+    await ctxWide.addInitScript(() => {
+        const style = document.createElement('style');
+        style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; } #navbar .nav-inner * { letter-spacing: 0.08em !important; }';
+        document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
     });
 
-    await new Promise(r => server.listen(0, '127.0.0.1', r));
-    const port = server.address().port;
-    let browser;
+    const p100 = await ctx100.newPage();
+    const p130 = await ctx130.newPage();
+    const pWide = await ctxWide.newPage();
 
-    try {
-        browser = await chromium.launch({ headless: true });
-        const allPages = [];
-        for (const pageName of ALL_PAGES) {
-            allPages.push({ url: pageName, lang: 'en', rtl: false });
-        }
-        for (const lang of GUIDE_LANGS) {
-            for (const pageName of TRANSLATED_PAGES) {
-                allPages.push({ url: `${lang}/${pageName}`, lang, rtl: RTL_LANGS.includes(lang) });
+    const clipped = [];
+    const wrapped = [];
+    const phoneHeaderBad = [];
+    const unreachable = [];
+    const wideClipped = [];
+    const wideGlobeClipped = [];
+    const wideSizeBad = [];
+
+    for (const item of items) {
+        // Wide script pass for desktop ☰ row (1024, 1080, 1200, 1280 px, 100% text)
+        await pWide.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+        const hasMenu = await pWide.evaluate(() => !!document.querySelector('.nav-inner.has-menu'));
+        if (hasMenu) {
+            for (const width of [1024, 1080, 1200, 1280]) {
+                await pWide.setViewportSize({ width, height: 800 });
+                const res = await pWide.evaluate(({ isRtl }) => {
+                    const cta = document.querySelector('.nav-cta');
+                    const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
+                    if (!cta || !globe) return null;
+                    const ctaR = cta.getBoundingClientRect();
+                    const globeR = globe.getBoundingClientRect();
+                    const ctaOff = isRtl
+                        ? (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5)
+                        : (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5);
+                    const globeOff = isRtl
+                        ? (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5)
+                        : (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5);
+                    return {
+                        ctaOff,
+                        globeOff,
+                        ctaRight: ctaR.right,
+                        ctaLeft: ctaR.left,
+                        ctaHeight: ctaR.height,
+                        globeRight: globeR.right,
+                        globeLeft: globeR.left,
+                        globeHeight: globeR.height
+                    };
+                }, { isRtl: item.rtl });
+
+                if (res) {
+                    if (res.ctaOff) {
+                        wideClipped.push({ page: item.url, width, right: res.ctaRight, left: res.ctaLeft });
+                    }
+                    if (res.globeOff) {
+                        wideGlobeClipped.push({ page: item.url, width, right: res.globeRight, left: res.globeLeft });
+                    }
+                    if (width >= 1280 && res.ctaHeight < 43.5) {
+                        wideSizeBad.push({ page: item.url, width, target: 'cta', h: res.ctaHeight });
+                    }
+                }
             }
         }
 
-        const WIDTHS = [320, 346, 360, 390, 430, 481, 540, 768, 769, 900, 1024, 1280, 1366, 1440];
-        const MAIN_WRAPPED_LANGS = new Set(['pt', 'ru', 'uk', 'de']);
+        for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
+            await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
 
-        const runWorker = async (items) => {
-            const ctx100 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
-            const ctx130 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
-            const ctxWide = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
-            await ctx100.addInitScript(() => {
-                const style = document.createElement('style');
-                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
-                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-            });
-            await ctx130.addInitScript(() => {
-                const style = document.createElement('style');
-                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
-                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            for (const width of NAV_SWEEP_WIDTHS) {
+                await page.setViewportSize({ width, height: 800 });
+                const res = await page.evaluate(({ isRtl, sc }) => {
+                    const cta = document.querySelector('.nav-cta');
+                    if (!cta) return null;
+                    const rect = cta.getBoundingClientRect();
+                    const range = document.createRange();
+                    range.selectNodeContents(cta);
+                    const rects = range.getClientRects();
+                    const isClipped = isRtl
+                        ? (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
+                        : (rect.right > window.innerWidth + 0.5);
+                    const isWrapped = rects.length > 1 || (sc === 1.3 ? rect.height > 75 : rect.height > 50);
+                    return {
+                        isClipped,
+                        isWrapped,
+                        left: rect.left,
+                        right: rect.right,
+                        height: rect.height,
+                        lineCount: rects.length
+                    };
+                }, { isRtl: item.rtl, sc: scale });
+
+                if (res) {
+                    if (res.isClipped && (scale === 1.0 || width <= 480)) {
+                        clipped.push({ page: item.url, width, scale, right: res.right, left: res.left });
+                    }
+                    const isNewWrap = width > 480 ? res.isWrapped : (scale === 1.0 && !NAV_SWEEP_MAIN_WRAPPED_LANGS.has(item.lang) && res.isWrapped);
+                    if (isNewWrap) {
+                        wrapped.push({ page: item.url, width, scale, height: res.height, lineCount: res.lineCount });
+                    }
+                }
+
+                // Check phone header at <= 1023px
+                if (width <= 1023) {
+                    const hCheck = await page.evaluate((sc) => {
+                        const nav = document.querySelector('.nav-inner.has-menu');
+                        const img = document.querySelector('.nav-inner.has-menu .logo img');
+                        if (!nav || !img) return null;
+                        const navStyle = window.getComputedStyle(nav);
+                        const imgStyle = window.getComputedStyle(img);
+                        const padL = parseFloat(navStyle.paddingLeft);
+                        const padR = parseFloat(navStyle.paddingRight);
+                        const beanW = parseFloat(imgStyle.width);
+                        const expectedPad = sc === 1.3 ? 20.8 : 16.0;
+                        const expectedBean = 40.0;
+                        if (Math.abs(padL - expectedPad) > 0.5 || Math.abs(padR - expectedPad) > 0.5 || Math.abs(beanW - expectedBean) > 0.5) {
+                            return { padL, padR, expectedPad, beanW, expectedBean };
+                        }
+                        return null;
+                    }, scale);
+                    if (hCheck) phoneHeaderBad.push({ page: item.url, width, scale, ...hCheck });
+                }
+            }
+
+            // Reachability at 320x568 and 360x640 (locale en-US, no banner)
+            for (const vp of [{ width: 320, height: 568 }, { width: 360, height: 640 }]) {
+                await page.setViewportSize(vp);
+                const hasNavMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                if (hasNavMenu) {
+                    const summary = page.locator('.nav-menu > summary');
+                    await summary.click();
+                    await page.waitForTimeout(10);
+                    const unreach = await page.evaluate(() => {
+                        const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                        const bad = [];
+                        for (const link of links) {
+                            link.scrollIntoView();
+                            const r = link.getBoundingClientRect();
+                            if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                            }
+                        }
+                        return bad;
+                    });
+                    if (unreach.length > 0) unreachable.push({ page: item.url, viewport: `${vp.width}x${vp.height}`, scale, banner: false, badLinks: unreach });
+                    await summary.click();
+                }
+            }
+        }
+    }
+
+    await ctx100.close();
+    await ctx130.close();
+    await ctxWide.close();
+    return { clipped, wrapped, phoneHeaderBad, unreachable, wideClipped, wideGlobeClipped, wideSizeBad };
+}
+
+/** Sweeps `pages` across NAV_SWEEP_NUM_WORKERS workers and returns every failure list, merged. */
+async function sweepNavPages(pages) {
+    const env = await navSweepEnv();
+    const chunks = Array.from({ length: NAV_SWEEP_NUM_WORKERS }, () => []);
+    pages.forEach((p, i) => chunks[i % NAV_SWEEP_NUM_WORKERS].push(p));
+    const results = await Promise.all(chunks.filter(c => c.length > 0).map(c => runNavSweepWorker(env, c)));
+    return {
+        allClipped: results.flatMap(r => r.clipped),
+        allWrapped: results.flatMap(r => r.wrapped),
+        allPhoneHeaderBad: results.flatMap(r => r.phoneHeaderBad),
+        allUnreachable: results.flatMap(r => r.unreachable),
+        allWideClipped: results.flatMap(r => r.wideClipped),
+        allWideGlobeClipped: results.flatMap(r => r.wideGlobeClipped),
+        allWideSizeBad: results.flatMap(r => r.wideSizeBad)
+    };
+}
+
+/** The sweep's one assertion: every failure count is 0. Lists a test does not check are empty. */
+function assertNoNavSweepFailures({
+    allClipped = [], allWrapped = [], allPhoneHeaderBad = [], allUnreachable = [], bannerUnreachable = [],
+    noMenuCtaSizeBad = [], noMenuGlobeSizeBad = [], noMenuPaddingBad = [], noMenuClipped = [], noMenuWrapped = [],
+    noMenuLinkGapBad = [], allWideClipped = [], allWideGlobeClipped = [], allWideSizeBad = []
+}) {
+    const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
+        + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length
+        + noMenuLinkGapBad.length + allWideClipped.length + allWideGlobeClipped.length + allWideSizeBad.length;
+    assert.equal(totalFailures, 0,
+        `Failing counts:\n` +
+        `  - Clipped CTAs: ${allClipped.length}\n` +
+        `  - Wrapped CTAs: ${allWrapped.length}\n` +
+        `  - Wide-text desktop ☰ clipped CTAs: ${allWideClipped.length}\n` +
+        `  - Wide-text desktop ☰ clipped 🌐 buttons: ${allWideGlobeClipped.length}\n` +
+        `  - Wide-text desktop ☰ controls < 44px: ${allWideSizeBad.length}\n` +
+        `  - Phone header mismatches: ${allPhoneHeaderBad.length}\n` +
+        `  - Unreachable panel links without banner: ${allUnreachable.length}\n` +
+        `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n` +
+        `  - No-menu CTA size (<44px): ${noMenuCtaSizeBad.length}\n` +
+        `  - No-menu 🌐 size (<44px): ${noMenuGlobeSizeBad.length}\n` +
+        `  - No-menu side padding (<16px): ${noMenuPaddingBad.length}\n` +
+        `  - No-menu clipped CTAs: ${noMenuClipped.length}\n` +
+        `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n` +
+        `  - No-menu text links closer than 12px: ${noMenuLinkGapBad.length}` +
+        (noMenuLinkGapBad.length ? ` (e.g. ${noMenuLinkGapBad.slice(0, 3).map(g => `${g.page} @ ${g.width}px ${g.scale * 100}%: ${g.gap.toFixed(1)}px`).join('; ')})` : '') + `\n\n` +
+        (allWideClipped.length ? `Wide-text desktop ☰ clipped CTA samples:\n  ` + allWideClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right.toFixed(1)}, left: ${c.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+        (allWideGlobeClipped.length ? `Wide-text desktop ☰ clipped 🌐 samples:\n  ` + allWideGlobeClipped.slice(0, 10).map(g => `${g.page} @ ${g.width}px (right: ${g.right.toFixed(1)}, left: ${g.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+        (allWideSizeBad.length ? `Wide-text desktop ☰ size bad samples:\n  ` + allWideSizeBad.slice(0, 5).map(s => `${s.page} @ ${s.width}px: ${s.target} height ${s.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+        (noMenuCtaSizeBad.length ? `No-menu CTA size bad samples:\n  ` + noMenuCtaSizeBad.slice(0, 5).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text): ${c.w.toFixed(1)}x${c.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+        (noMenuGlobeSizeBad.length ? `No-menu 🌐 size bad samples:\n  ` + noMenuGlobeSizeBad.slice(0, 5).map(g => `${g.page} @ ${g.width}px (${g.scale * 100}% text): ${g.w.toFixed(1)}x${g.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+        (noMenuPaddingBad.length ? `No-menu padding bad samples:\n  ` + noMenuPaddingBad.slice(0, 5).map(p => `${p.page} @ ${p.width}px (${p.scale * 100}% text): L=${p.padL.toFixed(1)}px R=${p.padR.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+        (allClipped.length ? `Clipped samples:\n  ` + allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text, right: ${c.right})`).join('\n  ') + '\n\n' : '') +
+        (allWrapped.length ? `Wrapped samples:\n  ` + allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px (${w.scale * 100}% text)`).join('\n  ') + '\n\n' : '') +
+        (allPhoneHeaderBad.length ? `Phone header samples:\n  ` + allPhoneHeaderBad.slice(0, 5).map(h => `${h.page} @ ${h.width}px (${h.scale * 100}%): pad=${h.padL}px (exp ${h.expectedPad}px), bean=${h.beanW}px (exp ${h.expectedBean}px)`).join('\n  ') + '\n\n' : '') +
+        (allUnreachable.length ? `Unreachable without banner samples:\n  ` + allUnreachable.slice(0, 5).map(u => `${u.page} @ ${u.viewport} (${u.scale * 100}%): ${u.badLinks.map(l => l.text).join(', ')}`).join('\n  ') + '\n\n' : '') +
+        (bannerUnreachable.length ? `Banner unreachable samples:\n  ` + bannerUnreachable.slice(0, 5).map(b => `${b.page} @ ${b.viewport} (${b.scale * 100}%, open:${b.langMenuOpen}): ${b.badLinks.map(l => l.text).join(', ')}`).join('\n  ') : '')
+    );
+}
+
+const NAV_SWEEP_PAGE_CHECKS = 'nav-cta is never clipped and does not wrap where main did not, ☰ panel links are reachable without banner, and phone header is unchanged';
+
+test(`nav sweep, English pages: ${NAV_SWEEP_PAGE_CHECKS} (all ${ALL_PAGES.length} English pages)`, { timeout: NAV_SWEEP_TIMEOUT }, async () => {
+    const pages = ALL_PAGES.map(pageName => ({ url: pageName, lang: 'en', rtl: false }));
+    assertNoNavSweepFailures(await sweepNavPages(pages));
+});
+
+for (let i = 0; i < GUIDE_LANGS.length; i += NAV_SWEEP_LANGS_PER_GROUP) {
+    const langs = GUIDE_LANGS.slice(i, i + NAV_SWEEP_LANGS_PER_GROUP);
+    test(`nav sweep, ${langs.join(', ')}: ${NAV_SWEEP_PAGE_CHECKS} (${langs.length} languages × ${TRANSLATED_PAGES.length} translated pages)`, { timeout: NAV_SWEEP_TIMEOUT }, async () => {
+        const pages = [];
+        for (const lang of langs) {
+            for (const pageName of TRANSLATED_PAGES) {
+                pages.push({ url: `${lang}/${pageName}`, lang, rtl: RTL_LANGS.includes(lang) });
+            }
+        }
+        assertNoNavSweepFailures(await sweepNavPages(pages));
+    });
+}
+
+test('nav sweep, the language groups above cover every GUIDE_LANGS language exactly once', () => {
+    const covered = [];
+    for (let i = 0; i < GUIDE_LANGS.length; i += NAV_SWEEP_LANGS_PER_GROUP) covered.push(...GUIDE_LANGS.slice(i, i + NAV_SWEEP_LANGS_PER_GROUP));
+    assert.deepEqual(covered, [...GUIDE_LANGS]);
+});
+
+test('nav sweep, banner: ☰ panel links are reachable with the pt-BR language banner, with the language menu closed and open, at 100% and 130% text', { timeout: NAV_SWEEP_TIMEOUT }, async () => {
+    const { browser, port } = await navSweepEnv();
+
+    // Banner reachability check with pt-BR locale
+    const bannerUnreachable = [];
+    for (const scale of [1.0, 1.3]) {
+        const ctxPt = await browser.newContext({ viewport: { width: 360, height: 640 }, locale: 'pt-BR' });
+        await ctxPt.addInitScript((s) => {
+            const style = document.createElement('style');
+            style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+            document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            if (s === 1.3) {
                 const el = document.documentElement;
                 if (el) el.style.fontSize = '130%';
                 const observer = new MutationObserver(() => {
@@ -1110,206 +1390,42 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                     }
                 });
                 observer.observe(document, { childList: true, subtree: true });
-            });
-            await ctxWide.addInitScript(() => {
-                const style = document.createElement('style');
-                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; } #navbar .nav-inner * { letter-spacing: 0.08em !important; }';
-                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-            });
-
-            const p100 = await ctx100.newPage();
-            const p130 = await ctx130.newPage();
-            const pWide = await ctxWide.newPage();
-
-            const clipped = [];
-            const wrapped = [];
-            const phoneHeaderBad = [];
-            const unreachable = [];
-            const wideClipped = [];
-            const wideGlobeClipped = [];
-            const wideSizeBad = [];
-
-            for (const item of items) {
-                // Wide script pass for desktop ☰ row (1024, 1080, 1200, 1280 px, 100% text)
-                await pWide.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
-                const hasMenu = await pWide.evaluate(() => !!document.querySelector('.nav-inner.has-menu'));
-                if (hasMenu) {
-                    for (const width of [1024, 1080, 1200, 1280]) {
-                        await pWide.setViewportSize({ width, height: 800 });
-                        const res = await pWide.evaluate(({ isRtl }) => {
-                            const cta = document.querySelector('.nav-cta');
-                            const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
-                            if (!cta || !globe) return null;
-                            const ctaR = cta.getBoundingClientRect();
-                            const globeR = globe.getBoundingClientRect();
-                            const ctaOff = isRtl
-                                ? (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5)
-                                : (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5);
-                            const globeOff = isRtl
-                                ? (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5)
-                                : (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5);
-                            return {
-                                ctaOff,
-                                globeOff,
-                                ctaRight: ctaR.right,
-                                ctaLeft: ctaR.left,
-                                ctaHeight: ctaR.height,
-                                globeRight: globeR.right,
-                                globeLeft: globeR.left,
-                                globeHeight: globeR.height
-                            };
-                        }, { isRtl: item.rtl });
-
-                        if (res) {
-                            if (res.ctaOff) {
-                                wideClipped.push({ page: item.url, width, right: res.ctaRight, left: res.ctaLeft });
-                            }
-                            if (res.globeOff) {
-                                wideGlobeClipped.push({ page: item.url, width, right: res.globeRight, left: res.globeLeft });
-                            }
-                            if (width >= 1280 && res.ctaHeight < 43.5) {
-                                wideSizeBad.push({ page: item.url, width, target: 'cta', h: res.ctaHeight });
-                            }
-                        }
-                    }
-                }
-
-                for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
-                    await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
-
-                    for (const width of WIDTHS) {
-                        await page.setViewportSize({ width, height: 800 });
-                        const res = await page.evaluate(({ isRtl, sc }) => {
-                            const cta = document.querySelector('.nav-cta');
-                            if (!cta) return null;
-                            const rect = cta.getBoundingClientRect();
-                            const range = document.createRange();
-                            range.selectNodeContents(cta);
-                            const rects = range.getClientRects();
-                            const isClipped = isRtl
-                                ? (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
-                                : (rect.right > window.innerWidth + 0.5);
-                            const isWrapped = rects.length > 1 || (sc === 1.3 ? rect.height > 75 : rect.height > 50);
-                            return {
-                                isClipped,
-                                isWrapped,
-                                left: rect.left,
-                                right: rect.right,
-                                height: rect.height,
-                                lineCount: rects.length
-                            };
-                        }, { isRtl: item.rtl, sc: scale });
-
-                        if (res) {
-                            if (res.isClipped && (scale === 1.0 || width <= 480)) {
-                                clipped.push({ page: item.url, width, scale, right: res.right, left: res.left });
-                            }
-                            const isNewWrap = width > 480 ? res.isWrapped : (scale === 1.0 && !MAIN_WRAPPED_LANGS.has(item.lang) && res.isWrapped);
-                            if (isNewWrap) {
-                                wrapped.push({ page: item.url, width, scale, height: res.height, lineCount: res.lineCount });
-                            }
-                        }
-
-                        // Check phone header at <= 1023px
-                        if (width <= 1023) {
-                            const hCheck = await page.evaluate((sc) => {
-                                const nav = document.querySelector('.nav-inner.has-menu');
-                                const img = document.querySelector('.nav-inner.has-menu .logo img');
-                                if (!nav || !img) return null;
-                                const navStyle = window.getComputedStyle(nav);
-                                const imgStyle = window.getComputedStyle(img);
-                                const padL = parseFloat(navStyle.paddingLeft);
-                                const padR = parseFloat(navStyle.paddingRight);
-                                const beanW = parseFloat(imgStyle.width);
-                                const expectedPad = sc === 1.3 ? 20.8 : 16.0;
-                                const expectedBean = 40.0;
-                                if (Math.abs(padL - expectedPad) > 0.5 || Math.abs(padR - expectedPad) > 0.5 || Math.abs(beanW - expectedBean) > 0.5) {
-                                    return { padL, padR, expectedPad, beanW, expectedBean };
-                                }
-                                return null;
-                            }, scale);
-                            if (hCheck) phoneHeaderBad.push({ page: item.url, width, scale, ...hCheck });
-                        }
-                    }
-
-                    // Reachability at 320x568 and 360x640 (locale en-US, no banner)
-                    for (const vp of [{ width: 320, height: 568 }, { width: 360, height: 640 }]) {
-                        await page.setViewportSize(vp);
-                        const hasNavMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
-                        if (hasNavMenu) {
-                            const summary = page.locator('.nav-menu > summary');
-                            await summary.click();
-                            await page.waitForTimeout(10);
-                            const unreach = await page.evaluate(() => {
-                                const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
-                                const bad = [];
-                                for (const link of links) {
-                                    link.scrollIntoView();
-                                    const r = link.getBoundingClientRect();
-                                    if (r.bottom > window.innerHeight + 1 || r.top < -1) {
-                                        bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
-                                    }
-                                }
-                                return bad;
-                            });
-                            if (unreach.length > 0) unreachable.push({ page: item.url, viewport: `${vp.width}x${vp.height}`, scale, banner: false, badLinks: unreach });
-                            await summary.click();
-                        }
-                    }
-                }
             }
+        }, scale);
 
-            await ctx100.close();
-            await ctx130.close();
-            await ctxWide.close();
-            return { clipped, wrapped, phoneHeaderBad, unreachable, wideClipped, wideGlobeClipped, wideSizeBad };
-        };
-
-        const NUM_WORKERS = 6;
-        const chunks = Array.from({ length: NUM_WORKERS }, () => []);
-        allPages.forEach((p, i) => chunks[i % NUM_WORKERS].push(p));
-
-        const results = await Promise.all(chunks.map(runWorker));
-        const allClipped = results.flatMap(r => r.clipped);
-        const allWrapped = results.flatMap(r => r.wrapped);
-        const allPhoneHeaderBad = results.flatMap(r => r.phoneHeaderBad);
-        const allUnreachable = results.flatMap(r => r.unreachable);
-        const allWideClipped = results.flatMap(r => r.wideClipped);
-        const allWideGlobeClipped = results.flatMap(r => r.wideGlobeClipped);
-        const allWideSizeBad = results.flatMap(r => r.wideSizeBad);
-
-        // Banner reachability check with pt-BR locale
-        const bannerUnreachable = [];
-        for (const scale of [1.0, 1.3]) {
-            const ctxPt = await browser.newContext({ viewport: { width: 360, height: 640 }, locale: 'pt-BR' });
-            await ctxPt.addInitScript((s) => {
-                const style = document.createElement('style');
-                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
-                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-                if (s === 1.3) {
-                    const el = document.documentElement;
-                    if (el) el.style.fontSize = '130%';
-                    const observer = new MutationObserver(() => {
-                        if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
-                            document.documentElement.style.fontSize = '130%';
-                        }
-                    });
-                    observer.observe(document, { childList: true, subtree: true });
-                }
-            }, scale);
-
-            const page = await ctxPt.newPage();
-            for (const enPage of ['index.html', 'help.html', 'rules.html', 'safety.html']) {
-                await page.goto(`http://127.0.0.1:${port}/${enPage}`, { waitUntil: 'load' });
-                for (const vp of [{ width: 360, height: 640 }, { width: 320, height: 568 }]) {
-                    await page.setViewportSize(vp);
+        const page = await ctxPt.newPage();
+        for (const enPage of ['index.html', 'help.html', 'rules.html', 'safety.html']) {
+            await page.goto(`http://127.0.0.1:${port}/${enPage}`, { waitUntil: 'load' });
+            for (const vp of [{ width: 360, height: 640 }, { width: 320, height: 568 }]) {
+                await page.setViewportSize(vp);
+                await page.waitForTimeout(20);
+                const hasMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                if (hasMenu) {
+                    await page.locator('.nav-menu > summary').click();
                     await page.waitForTimeout(20);
-                    const hasMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
-                    if (hasMenu) {
-                        await page.locator('.nav-menu > summary').click();
+                    // 1. check with lang menu closed
+                    let unreach = await page.evaluate(() => {
+                        const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                        const bad = [];
+                        for (const link of links) {
+                            link.scrollIntoView();
+                            const r = link.getBoundingClientRect();
+                            if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                            }
+                        }
+                        return bad;
+                    });
+                    if (unreach.length > 0) {
+                        bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: false, badLinks: unreach });
+                    }
+
+                    // 2. check with lang menu open
+                    const hasPhoneLang = await page.evaluate(() => !!document.querySelector('.phone-lang-menu > summary'));
+                    if (hasPhoneLang) {
+                        await page.locator('.phone-lang-menu > summary').click();
                         await page.waitForTimeout(20);
-                        // 1. check with lang menu closed
-                        let unreach = await page.evaluate(() => {
+                        unreach = await page.evaluate(() => {
                             const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
                             const bad = [];
                             for (const link of links) {
@@ -1322,190 +1438,141 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                             return bad;
                         });
                         if (unreach.length > 0) {
-                            bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: false, badLinks: unreach });
+                            bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: true, badLinks: unreach });
                         }
-
-                        // 2. check with lang menu open
-                        const hasPhoneLang = await page.evaluate(() => !!document.querySelector('.phone-lang-menu > summary'));
-                        if (hasPhoneLang) {
-                            await page.locator('.phone-lang-menu > summary').click();
-                            await page.waitForTimeout(20);
-                            unreach = await page.evaluate(() => {
-                                const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
-                                const bad = [];
-                                for (const link of links) {
-                                    link.scrollIntoView();
-                                    const r = link.getBoundingClientRect();
-                                    if (r.bottom > window.innerHeight + 1 || r.top < -1) {
-                                        bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
-                                    }
-                                }
-                                return bad;
-                            });
-                            if (unreach.length > 0) {
-                                bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: true, badLinks: unreach });
-                            }
-                            await page.locator('.phone-lang-menu > summary').click();
-                        }
-                        await page.locator('.nav-menu > summary').click();
+                        await page.locator('.phone-lang-menu > summary').click();
                     }
+                    await page.locator('.nav-menu > summary').click();
                 }
             }
-            await ctxPt.close();
         }
-
-        // Check pages without ☰ at 320, 360, 412, 480, 600, 768, 1024 px across 100% and 130% text (en, pt, ta, ar)
-        const NO_MENU_CHECK_PAGES = [
-            { url: 'privacy.html', lang: 'en', rtl: false },
-            { url: 'data-deletion.html', lang: 'en', rtl: false },
-            { url: 'global.html', lang: 'en', rtl: false },
-            { url: 'status.html', lang: 'en', rtl: false },
-            { url: 'pt/global.html', lang: 'pt', rtl: false },
-            { url: 'pt/status.html', lang: 'pt', rtl: false },
-            { url: 'ta/global.html', lang: 'ta', rtl: false },
-            { url: 'ta/status.html', lang: 'ta', rtl: false },
-            { url: 'ar/global.html', lang: 'ar', rtl: true },
-            { url: 'ar/status.html', lang: 'ar', rtl: true }
-        ];
-        const NO_MENU_WIDTHS = [320, 360, 412, 480, 600, 768, 800, 1024, 1080];
-        const noMenuLinkGapBad = [];
-        const noMenuCtaSizeBad = [];
-        const noMenuGlobeSizeBad = [];
-        const noMenuPaddingBad = [];
-        const noMenuClipped = [];
-        const noMenuWrapped = [];
-
-        {
-            const ctx100NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
-            const ctx130NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
-            await ctx100NoMenu.addInitScript(() => {
-                const style = document.createElement('style');
-                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
-                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-            });
-            await ctx130NoMenu.addInitScript(() => {
-                const style = document.createElement('style');
-                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
-                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
-                const el = document.documentElement;
-                if (el) el.style.fontSize = '130%';
-                const observer = new MutationObserver(() => {
-                    if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
-                        document.documentElement.style.fontSize = '130%';
-                    }
-                });
-                observer.observe(document, { childList: true, subtree: true });
-            });
-
-            const p100 = await ctx100NoMenu.newPage();
-            const p130 = await ctx130NoMenu.newPage();
-
-            for (const item of NO_MENU_CHECK_PAGES) {
-                for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
-                    await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
-                    for (const width of NO_MENU_WIDTHS) {
-                        await page.setViewportSize({ width, height: 800 });
-                        const res = await page.evaluate(({ isRtl, sc }) => {
-                            const cta = document.querySelector('.nav-cta');
-                            const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
-                            const nav = document.querySelector('#navbar .nav-inner') || document.querySelector('.nav-inner');
-                            if (!cta || !globe || !nav) return null;
-
-                            const ctaRect = cta.getBoundingClientRect();
-                            const globeRect = globe.getBoundingClientRect();
-                            const navStyle = window.getComputedStyle(nav);
-
-                            const range = document.createRange();
-                            range.selectNodeContents(cta);
-                            const rects = range.getClientRects();
-
-                            const isClipped = isRtl
-                                ? (ctaRect.left < -0.5 || ctaRect.right > window.innerWidth + 0.5)
-                                : (ctaRect.right > window.innerWidth + 0.5);
-                            const isWrapped = rects.length > 1 || (sc === 1.3 ? ctaRect.height > 75 : ctaRect.height > 50);
-
-                            // the narrowest space between two text links that show (they must read as separate links)
-                            const links = [...document.querySelectorAll('.nav-links > a, .nav-links > li > a')]
-                                .map((a) => a.getBoundingClientRect())
-                                .filter((r) => r.width > 0 && r.height > 0)
-                                .sort((a, b) => a.left - b.left);
-                            let minLinkGap = Infinity;
-                            for (let i = 1; i < links.length; i++) minLinkGap = Math.min(minLinkGap, links[i].left - links[i - 1].right);
-
-                            return {
-                                minLinkGap,
-                                ctaW: ctaRect.width,
-                                ctaH: ctaRect.height,
-                                globeW: globeRect.width,
-                                globeH: globeRect.height,
-                                padL: parseFloat(navStyle.paddingLeft),
-                                padR: parseFloat(navStyle.paddingRight),
-                                isClipped,
-                                isWrapped
-                            };
-                        }, { isRtl: item.rtl, sc: scale });
-
-                        if (!res) continue;
-
-                        if (res.ctaW < 43.5 || res.ctaH < 43.5) {
-                            noMenuCtaSizeBad.push({ page: item.url, width, scale, w: res.ctaW, h: res.ctaH });
-                        }
-                        if (res.globeW < 43.5 || res.globeH < 43.5) {
-                            noMenuGlobeSizeBad.push({ page: item.url, width, scale, w: res.globeW, h: res.globeH });
-                        }
-                        if (res.padL < 15.5 || res.padR < 15.5) {
-                            noMenuPaddingBad.push({ page: item.url, width, scale, padL: res.padL, padR: res.padR });
-                        }
-                        if (res.isClipped) {
-                            noMenuClipped.push({ page: item.url, width, scale });
-                        }
-                        if (res.isWrapped) {
-                            noMenuWrapped.push({ page: item.url, width, scale });
-                        }
-                        if (res.minLinkGap < 12) {
-                            noMenuLinkGapBad.push({ page: item.url, width, scale, gap: res.minLinkGap });
-                        }
-                    }
-                }
-            }
-
-            await ctx100NoMenu.close();
-            await ctx130NoMenu.close();
-        }
-
-        const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
-            + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length
-            + noMenuLinkGapBad.length + allWideClipped.length + allWideGlobeClipped.length + allWideSizeBad.length;
-        assert.equal(totalFailures, 0,
-            `Failing counts:\n` +
-            `  - Clipped CTAs: ${allClipped.length}\n` +
-            `  - Wrapped CTAs: ${allWrapped.length}\n` +
-            `  - Wide-text desktop ☰ clipped CTAs: ${allWideClipped.length}\n` +
-            `  - Wide-text desktop ☰ clipped 🌐 buttons: ${allWideGlobeClipped.length}\n` +
-            `  - Wide-text desktop ☰ controls < 44px: ${allWideSizeBad.length}\n` +
-            `  - Phone header mismatches: ${allPhoneHeaderBad.length}\n` +
-            `  - Unreachable panel links without banner: ${allUnreachable.length}\n` +
-            `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n` +
-            `  - No-menu CTA size (<44px): ${noMenuCtaSizeBad.length}\n` +
-            `  - No-menu 🌐 size (<44px): ${noMenuGlobeSizeBad.length}\n` +
-            `  - No-menu side padding (<16px): ${noMenuPaddingBad.length}\n` +
-            `  - No-menu clipped CTAs: ${noMenuClipped.length}\n` +
-            `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n` +
-            `  - No-menu text links closer than 12px: ${noMenuLinkGapBad.length}` +
-            (noMenuLinkGapBad.length ? ` (e.g. ${noMenuLinkGapBad.slice(0, 3).map(g => `${g.page} @ ${g.width}px ${g.scale * 100}%: ${g.gap.toFixed(1)}px`).join('; ')})` : '') + `\n\n` +
-            (allWideClipped.length ? `Wide-text desktop ☰ clipped CTA samples:\n  ` + allWideClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right.toFixed(1)}, left: ${c.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
-            (allWideGlobeClipped.length ? `Wide-text desktop ☰ clipped 🌐 samples:\n  ` + allWideGlobeClipped.slice(0, 10).map(g => `${g.page} @ ${g.width}px (right: ${g.right.toFixed(1)}, left: ${g.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
-            (allWideSizeBad.length ? `Wide-text desktop ☰ size bad samples:\n  ` + allWideSizeBad.slice(0, 5).map(s => `${s.page} @ ${s.width}px: ${s.target} height ${s.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
-            (noMenuCtaSizeBad.length ? `No-menu CTA size bad samples:\n  ` + noMenuCtaSizeBad.slice(0, 5).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text): ${c.w.toFixed(1)}x${c.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
-            (noMenuGlobeSizeBad.length ? `No-menu 🌐 size bad samples:\n  ` + noMenuGlobeSizeBad.slice(0, 5).map(g => `${g.page} @ ${g.width}px (${g.scale * 100}% text): ${g.w.toFixed(1)}x${g.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
-            (noMenuPaddingBad.length ? `No-menu padding bad samples:\n  ` + noMenuPaddingBad.slice(0, 5).map(p => `${p.page} @ ${p.width}px (${p.scale * 100}% text): L=${p.padL.toFixed(1)}px R=${p.padR.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
-            (allClipped.length ? `Clipped samples:\n  ` + allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text, right: ${c.right})`).join('\n  ') + '\n\n' : '') +
-            (allWrapped.length ? `Wrapped samples:\n  ` + allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px (${w.scale * 100}% text)`).join('\n  ') + '\n\n' : '') +
-            (allPhoneHeaderBad.length ? `Phone header samples:\n  ` + allPhoneHeaderBad.slice(0, 5).map(h => `${h.page} @ ${h.width}px (${h.scale * 100}%): pad=${h.padL}px (exp ${h.expectedPad}px), bean=${h.beanW}px (exp ${h.expectedBean}px)`).join('\n  ') + '\n\n' : '') +
-            (bannerUnreachable.length ? `Banner unreachable samples:\n  ` + bannerUnreachable.slice(0, 5).map(b => `${b.page} @ ${b.viewport} (${b.scale * 100}%, open:${b.langMenuOpen}): ${b.badLinks.map(l => l.text).join(', ')}`).join('\n  ') : '')
-        );
-    } finally {
-        if (browser) await browser.close();
-        server.close();
+        await ctxPt.close();
     }
+
+    assertNoNavSweepFailures({ bannerUnreachable });
+});
+
+test('nav sweep, no-menu pages: controls are >=44px with >=16px padding, the CTA is never clipped or wrapped, and text links stay >=12px apart', { timeout: NAV_SWEEP_TIMEOUT }, async () => {
+    const { browser, port } = await navSweepEnv();
+
+    // Check pages without ☰ at 320, 360, 412, 480, 600, 768, 1024 px across 100% and 130% text (en, pt, ta, ar)
+    const NO_MENU_CHECK_PAGES = [
+        { url: 'privacy.html', lang: 'en', rtl: false },
+        { url: 'data-deletion.html', lang: 'en', rtl: false },
+        { url: 'global.html', lang: 'en', rtl: false },
+        { url: 'status.html', lang: 'en', rtl: false },
+        { url: 'pt/global.html', lang: 'pt', rtl: false },
+        { url: 'pt/status.html', lang: 'pt', rtl: false },
+        { url: 'ta/global.html', lang: 'ta', rtl: false },
+        { url: 'ta/status.html', lang: 'ta', rtl: false },
+        { url: 'ar/global.html', lang: 'ar', rtl: true },
+        { url: 'ar/status.html', lang: 'ar', rtl: true }
+    ];
+    const NO_MENU_WIDTHS = [320, 360, 412, 480, 600, 768, 800, 1024, 1080];
+    const noMenuLinkGapBad = [];
+    const noMenuCtaSizeBad = [];
+    const noMenuGlobeSizeBad = [];
+    const noMenuPaddingBad = [];
+    const noMenuClipped = [];
+    const noMenuWrapped = [];
+
+    {
+        const ctx100NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+        const ctx130NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+        await ctx100NoMenu.addInitScript(() => {
+            const style = document.createElement('style');
+            style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+            document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+        });
+        await ctx130NoMenu.addInitScript(() => {
+            const style = document.createElement('style');
+            style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+            document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            const el = document.documentElement;
+            if (el) el.style.fontSize = '130%';
+            const observer = new MutationObserver(() => {
+                if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                    document.documentElement.style.fontSize = '130%';
+                }
+            });
+            observer.observe(document, { childList: true, subtree: true });
+        });
+
+        const p100 = await ctx100NoMenu.newPage();
+        const p130 = await ctx130NoMenu.newPage();
+
+        for (const item of NO_MENU_CHECK_PAGES) {
+            for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
+                await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+                for (const width of NO_MENU_WIDTHS) {
+                    await page.setViewportSize({ width, height: 800 });
+                    const res = await page.evaluate(({ isRtl, sc }) => {
+                        const cta = document.querySelector('.nav-cta');
+                        const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
+                        const nav = document.querySelector('#navbar .nav-inner') || document.querySelector('.nav-inner');
+                        if (!cta || !globe || !nav) return null;
+
+                        const ctaRect = cta.getBoundingClientRect();
+                        const globeRect = globe.getBoundingClientRect();
+                        const navStyle = window.getComputedStyle(nav);
+
+                        const range = document.createRange();
+                        range.selectNodeContents(cta);
+                        const rects = range.getClientRects();
+
+                        const isClipped = isRtl
+                            ? (ctaRect.left < -0.5 || ctaRect.right > window.innerWidth + 0.5)
+                            : (ctaRect.right > window.innerWidth + 0.5);
+                        const isWrapped = rects.length > 1 || (sc === 1.3 ? ctaRect.height > 75 : ctaRect.height > 50);
+
+                        // the narrowest space between two text links that show (they must read as separate links)
+                        const links = [...document.querySelectorAll('.nav-links > a, .nav-links > li > a')]
+                            .map((a) => a.getBoundingClientRect())
+                            .filter((r) => r.width > 0 && r.height > 0)
+                            .sort((a, b) => a.left - b.left);
+                        let minLinkGap = Infinity;
+                        for (let i = 1; i < links.length; i++) minLinkGap = Math.min(minLinkGap, links[i].left - links[i - 1].right);
+
+                        return {
+                            minLinkGap,
+                            ctaW: ctaRect.width,
+                            ctaH: ctaRect.height,
+                            globeW: globeRect.width,
+                            globeH: globeRect.height,
+                            padL: parseFloat(navStyle.paddingLeft),
+                            padR: parseFloat(navStyle.paddingRight),
+                            isClipped,
+                            isWrapped
+                        };
+                    }, { isRtl: item.rtl, sc: scale });
+
+                    if (!res) continue;
+
+                    if (res.ctaW < 43.5 || res.ctaH < 43.5) {
+                        noMenuCtaSizeBad.push({ page: item.url, width, scale, w: res.ctaW, h: res.ctaH });
+                    }
+                    if (res.globeW < 43.5 || res.globeH < 43.5) {
+                        noMenuGlobeSizeBad.push({ page: item.url, width, scale, w: res.globeW, h: res.globeH });
+                    }
+                    if (res.padL < 15.5 || res.padR < 15.5) {
+                        noMenuPaddingBad.push({ page: item.url, width, scale, padL: res.padL, padR: res.padR });
+                    }
+                    if (res.isClipped) {
+                        noMenuClipped.push({ page: item.url, width, scale });
+                    }
+                    if (res.isWrapped) {
+                        noMenuWrapped.push({ page: item.url, width, scale });
+                    }
+                    if (res.minLinkGap < 12) {
+                        noMenuLinkGapBad.push({ page: item.url, width, scale, gap: res.minLinkGap });
+                    }
+                }
+            }
+        }
+
+        await ctx100NoMenu.close();
+        await ctx130NoMenu.close();
+    }
+
+    assertNoNavSweepFailures({ noMenuCtaSizeBad, noMenuGlobeSizeBad, noMenuPaddingBad, noMenuClipped, noMenuWrapped, noMenuLinkGapBad });
 });

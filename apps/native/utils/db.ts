@@ -3412,6 +3412,10 @@ export async function updatePost(id: string, updates: any) {
     // A post's id is its event chat's id: a known DM's id refuses first, as updateEvent does (#1938 confirmation 8).
     await refuseReadableIntoDm(id);
 
+    const photos = updates.photos !== undefined
+        ? (Array.isArray(updates.photos) ? updates.photos : (typeof updates.photos === 'string' && updates.photos ? JSON.parse(updates.photos) : []))
+        : undefined;
+
     // 1. Broadcast UPDATE to remote network
     await _signedRequest('/api/marketplace/posts/update', { 
         id, 
@@ -3423,17 +3427,25 @@ export async function updatePost(id: string, updates: any) {
         credits: updates.credits,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
-        photos: updates.photos ? JSON.parse(updates.photos) : undefined,
+        photos,
         // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
         ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });
 
     // 2. Erase from local SQLite Cache (or gracefully update it)
     const database = await getDb();
-    await database.runAsync(
-        `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ? WHERE id = ?`,
-        [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, updates.photos || null, id]
-    );
+    if (photos !== undefined) {
+        const photosJson = photos && photos.length > 0 ? JSON.stringify(photos) : null;
+        await database.runAsync(
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ? WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, id]
+        );
+    } else {
+        await database.runAsync(
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ? WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, id]
+        );
+    }
 }
 
 /** Pause an Offer (owner-only): drops it from the live feed and stops it counting toward the
@@ -6490,6 +6502,16 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
+    // Front doors S3 (#2524): every way a DM starts (New message, Message on a listing, a profile, People, a shop, a
+    // project's keeper, a deal's approve or decline) comes through here, so the first message's notification ask is made
+    // here once, not in each screen. It asks only while unanswered or declined, once, and never when the phone already
+    // allows notifications (utils/notification-permission.ts). Loaded lazily, and an ask that fails never stops the chat.
+    try {
+        const { askNotificationPermissionOnAction } = await import('./notification-permission');
+        await askNotificationPermissionOnAction('message', identity.publicKey);
+    } catch (e) {
+        console.warn('[Push] The first-message notification ask failed; the chat goes on:', e);
+    }
     // The pins before the node's answer is written, through the handle it is written with (see refreshConversationFromNode):
     // its rows are never the update's seed. With the pins unread, nothing is asked or written (§3.4 amendment 5's gate).
     const database = await getDb();

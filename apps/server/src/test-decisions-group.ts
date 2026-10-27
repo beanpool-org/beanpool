@@ -23,10 +23,13 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost, requestPost, setMemberRole, GROUP_CLOSED,
+    initStateEngine, tickDecisions, removeGroupMember, joinGroup, postGroupThreadMessage, createPost as rawCreatePost, requestPost, setMemberRole, GROUP_CLOSED,
     setUserStatusRow, registerPushToken, purgeMemberSelf,
     GROUP_LEAD_CANDIDATE_HELD, setGroupRoleByVote, replaceGroupLeadByVote, removeGroupMemberByVote,
 } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { GROUP_CLOSED_TO_POSTS } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -300,7 +303,7 @@ async function main(): Promise<void> {
         assert(!made && err === GROUP_CLOSED_TO_POSTS, `a closed group takes no new ${type} (got ${made ? 'created' : err})`);
     }
     const httpPost = await signedFetch('POST', '/api/marketplace/posts', { type: 'offer', category: 'general', title: 'Offer after close',
-        description: 'An offer posted after the close.', credits: 3, priceType: 'fixed', authorPublicKey: r.pubKeyHex, audienceScope: 'group', targetGroupId: g3 }, r);
+        description: 'An offer posted after the close.', credits: 3, priceType: 'fixed', authorPublicKey: r.pubKeyHex, audienceScope: 'group', targetGroupId: g3, photos: TEST_PHOTOS }, r);
     assert(httpPost.status === 400 && httpPost.body?.error === GROUP_CLOSED_TO_POSTS,
         `nor over HTTP (got ${httpPost.status} ${JSON.stringify(httpPost.body)})`);
     assert(!(db.prepare("SELECT 1 FROM posts WHERE target_group_id = ? AND active = 1").get(g3)), 'the closed guild has no live post');

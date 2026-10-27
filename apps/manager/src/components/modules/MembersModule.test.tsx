@@ -1,6 +1,11 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import * as nodeClient from '../../lib/node-client';
+import { PICKED_PHOTO, pickOfferPhoto } from '../common/__tests__/offer-photo-helpers';
+
+// jsdom decodes no pictures: a picked photo comes back as PICKED_PHOTO (offer-photo-helpers).
+vi.mock('../../lib/photo-resize', () => ({ resizePhotoFile: vi.fn(async () => 'data:image/jpeg;base64,cmVzaXplZA==') }));
 import {
     MembersModule,
     getMemberDisplayName,
@@ -204,5 +209,52 @@ describe('MembersModule Component', () => {
         expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Grant Moderator/i)).not.toBeInTheDocument();
+    });
+});
+
+describe('MembersModule seed offer', () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('says "📷 Add a photo" and posts nothing until a photo is chosen, then sends the Offer with it (the node refuses an Offer with none)', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([
+            { publicKey: 'pk-eggs', name: 'Community Eggs', balance: 0, creditLine: 200, liveOffers: 0 },
+        ]);
+        vi.spyOn(nodeClient, 'fetchKnownFloorMarks').mockResolvedValue({});
+        const seed = vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({ success: true, post: {} });
+
+        await act(async () => {
+            render(
+                <MembersModule
+                    nodeData={{ members: [], profiles: [], posts: [], health: { healthScore: 98, flags: [] }, reports: [] }}
+                    nodeDataLoading={false}
+                    onRefresh={vi.fn()}
+                    activeNodeUrl="https://node.example.com"
+                    adminPassword="admin-pw"
+                />
+            );
+        });
+        await act(async () => {
+            fireEvent.click(await screen.findByRole('button', { name: '+ Post Offer' }));
+        });
+
+        const addPhotoBtn = screen.getByRole('button', { name: '📷 Add a photo' });
+        expect(addPhotoBtn).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /Post Offer to Market/ })).not.toBeInTheDocument();
+        await act(async () => { fireEvent.click(addPhotoBtn); });
+        expect(seed).not.toHaveBeenCalled();
+
+        await pickOfferPhoto();
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Post Offer to Market/ }));
+        });
+
+        expect(seed).toHaveBeenCalledTimes(1);
+        expect(seed).toHaveBeenCalledWith(
+            'https://node.example.com',
+            'pk-eggs',
+            expect.objectContaining({ title: 'Dozen free-range eggs', photos: [PICKED_PHOTO], repeatable: true }),
+            'admin-pw',
+            undefined
+        );
     });
 });

@@ -73,7 +73,9 @@ async function child(): Promise<void> {
     delete process.env.CF_ZONE_ID;
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const ms = await import('./engine/member-signature.js');
@@ -87,7 +89,7 @@ async function child(): Promise<void> {
     const port = await startHttpsServer(0);
 
     const offer = (pk: string, title: string) => {
-        const post = se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
+        const post = createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
         if (!post) throw new Error(`could not list ${title}`);
         return post;
     };

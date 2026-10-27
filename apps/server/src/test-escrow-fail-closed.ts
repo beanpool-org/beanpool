@@ -21,9 +21,12 @@ import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator,
-    createPost, requestPost, approvePostRequest, completePostTransaction,
+    createPost as rawCreatePost, requestPost, approvePostRequest, completePostTransaction,
     transfer, getBalance
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 
 let passed = 0;
 let run = 0;

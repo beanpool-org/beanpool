@@ -56,6 +56,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { setMemberPhoto, haversineKm, getNearbySet } from '@beanpool/engine';
 import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -233,6 +234,7 @@ async function main(): Promise<void> {
     clear();
     const made = await call(ana, '/api/marketplace/posts', {
         type: 'offer', category: 'other', title: 'Nearby offer', description: 'A nearby push offer', authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng,
+        photos: TEST_PHOTOS,
     });
     const postId = made.body?.post?.id as string;
     assert(made.status === 200 && !!postId, `Ana posts at the place (got ${made.status} ${JSON.stringify(made.body).slice(0, 120)})`);
@@ -262,6 +264,7 @@ async function main(): Promise<void> {
     clear();
     const made2 = await call(ana, '/api/marketplace/posts', {
         type: 'offer', category: 'other', title: 'Nearby offer two', description: 'A second nearby push offer', authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng,
+        photos: TEST_PHOTOS,
     });
     const post2 = made2.body?.post?.id as string;
     assert(made2.status === 200 && !!post2, `Ana posts a second listing (got ${made2.status})`);
@@ -278,6 +281,7 @@ async function main(): Promise<void> {
     clear();
     const placeless = await call(noel, '/api/marketplace/posts', {
         type: 'offer', category: 'other', title: 'Placeless offer', description: 'An offer with no place', authorPublicKey: noel.pk,
+        photos: TEST_PHOTOS,
     });
     const post3 = placeless.body?.post?.id as string;
     assert(placeless.status === 200 && !!post3, `Noel posts with no place (got ${placeless.status} ${JSON.stringify(placeless.body).slice(0, 120)})`);
@@ -322,7 +326,7 @@ async function main(): Promise<void> {
     await setArea(tia, 'Tia, 400 km away', FAR);
     const tiaSock = await openSocket(`${wsBase}?${signedWsQuery(tia)}`);
     const listAt = async (title: string) => {
-        const r = await call(ana, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, asked for`, authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng });
+        const r = await call(ana, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, asked for`, authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng, photos: TEST_PHOTOS });
         assert(r.status === 200 && !!r.body?.post?.id, `Ana posts "${title}" at the place (got ${r.status})`);
         return r.body?.post?.id as string;
     };
@@ -444,6 +448,7 @@ async function main(): Promise<void> {
         clear();
         const made4 = await call(ana, '/api/marketplace/posts', {
             type: 'offer', category: 'other', title: 'Nearby offer four', description: 'An offer after a re-key', authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng,
+            photos: TEST_PHOTOS,
         });
         const post4 = made4.body?.post?.id as string;
         assert(made4.status === 200 && !!post4, `Ana posts at the place after Rex's re-key (got ${made4.status})`);
@@ -467,7 +472,7 @@ async function main(): Promise<void> {
             assert(r.status === 200 && r.body?.success === true, `${what} over HTTP (got ${r.status} ${JSON.stringify(r.body).slice(0, 100)})`);
         };
         const postNear = async (title: string) => {
-            const r = await call(ana, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, by the place`, authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng });
+            const r = await call(ana, '/api/marketplace/posts', { type: 'offer', category: 'other', title, description: `${title}, by the place`, authorPublicKey: ana.pk, lat: PLACE.lat, lng: PLACE.lng, photos: TEST_PHOTOS });
             const id = r.body?.post?.id as string;
             assert(r.status === 200 && !!id, `Ana posts "${title}" at the place (got ${r.status})`);
             await until(S.ana, 'new_post');

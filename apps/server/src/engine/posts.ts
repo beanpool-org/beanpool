@@ -498,6 +498,8 @@ export function createPost(
         replacementValue?: unknown;
         /** The shop to put it in, as sent: its author's own (engine/shops.ts assertShopForPost). */
         shopId?: unknown;
+        /** Allowed only for system-created internal posts like Daily Pulse. */
+        allowNoPhoto?: boolean;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -701,6 +703,9 @@ export function createPost(
         // Left out by the client (an old or third-party app): the node's default, so no app can post an event on a
         // node anyone can join without the host letting people in (DESIGN-global-member-privacy-fable.md §2.2).
         eventHostLetsIn = hostLetsInOf(options?.eventHostLetsIn) ?? (getProfileSwitches().openMembership ? 1 : 0);
+        if (!options?.allowNoPhoto && (!photos || !Array.isArray(photos) || photos.length === 0)) {
+            throw new Error(word('Add a photo first'));
+        }
         validatePostPhotos(photos);
 
         // What polls force, less the pin and photos an event keeps. Reach is local until the listings pull
@@ -712,6 +717,9 @@ export function createPost(
         cashAlsoNeeded = false;
         options = { ...options, reach: 'local', reachPeers: null };
     } else {
+        if (!options?.allowNoPhoto && (!photos || !Array.isArray(photos) || photos.length === 0)) {
+            throw new Error(word('Add a photo first'));
+        }
         validatePostPhotos(photos);
     }
 
@@ -1365,6 +1373,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     let uploadPhotoBytes: number | undefined;
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
+        if (existingPost.photos && existingPost.photos.length > 0 && updates.photos.length === 0) {
+            throw new Error(word('Add a photo first'));
+        }
         uploadPhotoBytes = incomingPhotosBytes(updates.photos.slice(0, 5));
         // A client that is not changing a photo sends back the URL it was given, and this turns it into the
         // photo again. Once the row is evacuated the bytes come from the store — `photoDataOf` rebuilds the

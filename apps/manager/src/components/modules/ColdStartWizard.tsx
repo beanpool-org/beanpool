@@ -3,6 +3,7 @@ import { HelpLink } from '../manual/Manual';
 import type { NodeProfile } from '../../lib/profiles';
 import type { KeySession } from '../../lib/key-session';
 import { Avatar } from '../common/Avatar';
+import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
 import {
     createNodeTreasury,
@@ -90,7 +91,8 @@ type TfaState = 'checking' | 'unknown' | 'off' | 'starting' | 'awaiting-code' | 
 
 type Step1Outcome = { reachable: boolean; reachError: string | null; saved: boolean; saveError: string | null };
 
-type Step3Errors = { create?: string; keeper?: string; offer?: string };
+// `offerPhoto`: the first offer has no photo yet, so it was not sent (the node refuses a new Offer with none).
+type Step3Errors = { create?: string; keeper?: string; offer?: string; offerPhoto?: boolean };
 
 async function errorFrom(res: Response | null): Promise<string> {
     if (!res) return 'no answer';
@@ -189,6 +191,7 @@ export function ColdStartWizard({
     const [enterprisePurpose, setEnterprisePurpose] = useState(FIRST_ENTERPRISE_PRESETS[0].purpose);
     const [firstOfferTitle, setFirstOfferTitle] = useState(FIRST_ENTERPRISE_PRESETS[0].firstOfferTitle);
     const [firstOfferPrice, setFirstOfferPrice] = useState(String(FIRST_ENTERPRISE_PRESETS[0].firstOfferCredits));
+    const [firstOfferPhotos, setFirstOfferPhotos] = useState<string[]>([]);
     const [creatingEnterprise, setCreatingEnterprise] = useState(false);
     const [createdEnterprisePk, setCreatedEnterprisePk] = useState<string | null>(null);
     const [keeperAssigned, setKeeperAssigned] = useState(false);
@@ -484,7 +487,11 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                 }
             }
 
-            if (treasuryPk && !offerPosted) {
+            // With no photo the offer is not sent: the node would refuse it. The enterprise and its keeper are still made,
+            // and the step says what is missing; Retry, once a photo is chosen, posts only the offer.
+            if (treasuryPk && !offerPosted && firstOfferPhotos.length === 0) {
+                errors.offerPhoto = true;
+            } else if (treasuryPk && !offerPosted) {
                 try {
                     await seedTreasuryOffer(
                         activeNode.url,
@@ -493,6 +500,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             title: firstOfferTitle.trim(),
                             category: selectedPresetId === 'food' ? 'food' : 'tools',
                             credits: Number(firstOfferPrice) || 15,
+                            photos: firstOfferPhotos,
                             description: `First community offer for ${enterpriseName}`,
                         },
                         nodeCredential(activeNode),
@@ -504,7 +512,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                 }
             }
 
-            if (errors.create || errors.keeper || errors.offer) {
+            if (errors.create || errors.keeper || errors.offer || errors.offerPhoto) {
                 setStep3Errors(errors);
             } else {
                 setStep3Errors(null);
@@ -1100,6 +1108,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                     className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
                                 />
                             </div>
+                            <OfferPhotoPicker photos={firstOfferPhotos} onChange={setFirstOfferPhotos} labelClassName="block text-[11px] text-nature-400 mb-1" />
                         </div>
 
                         {step3Errors && (
@@ -1122,6 +1131,11 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 {step3Errors.offer && (
                                     <p className="m-0 break-words">
                                         The first offer was not posted. The node said: <strong>{step3Errors.offer}</strong>
+                                    </p>
+                                )}
+                                {step3Errors.offerPhoto && (
+                                    <p className="m-0 break-words">
+                                        The first offer was not posted: every Offer needs a photo. Add one under First Offer, then Retry.
                                     </p>
                                 )}
                                 <div className="flex flex-wrap gap-3 pt-1">

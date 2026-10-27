@@ -30,14 +30,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, getTreasuries, isRouteMissing, updateEvent } from '../utils/db';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { askForPostPhoto } from '../utils/post-photo';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
@@ -459,19 +458,11 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setApproximate(true);
     };
 
-    const pickPhoto = async () => {
+    const pickPhoto = () => {
         Keyboard.dismiss();
         try {
-            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: false });
-            if (result.canceled || !result.assets[0]?.uri) return;
-            const out = await ImageManipulator.manipulateAsync(
-                result.assets[0].uri,
-                [{ resize: { width: 800 } }],
-                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-            );
-            if (out.base64) setPhoto(`data:image/jpeg;base64,${out.base64}`);
+            askForPostPhoto((photo) => setPhoto(photo));
         } catch (e: any) {
-            // The phone's own words when it gave some.
             Alert.alert(t('Photo not added'), e?.message || t('Could not open your photos.'));
         }
     };
@@ -488,6 +479,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         if (!editOf || !editCheck) return;
         if (!editCheck.ok) {
             Alert.alert(t('Almost there'), editCheck.error);
+            return;
+        }
+        if (editOf?.values?.photo && !photo) {
+            Alert.alert(t('Almost there'), t('Add a photo first'));
             return;
         }
         if (Object.keys(editCheck.patch).length === 0) {
@@ -545,6 +540,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         });
         if (!built.ok) {
             Alert.alert(t('Almost there'), built.error);
+            return;
+        }
+        if (!photo) {
+            Alert.alert(t('Almost there'), t('Add a photo first'));
             return;
         }
         setSubmitting(true);
@@ -632,6 +631,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         </Pressable>
     );
 
+    const photoMissing = editOf ? (Boolean(editOf.values.photo) && !photo) : !photo;
+    const submitDisabled = submitting || photoMissing;
+
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -643,14 +645,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{editOf ? t('Edit Event') : isCopy ? t('Copy Event') : t('New Event')}</Text>
                         <Pressable
                             onPress={editOf ? handleSave : handleCreate}
-                            disabled={submitting}
-                            style={[styles.postBtn, submitting && { opacity: 0.5 }]}
+                            disabled={submitDisabled}
+                            style={[styles.postBtn, submitDisabled && { opacity: 0.5 }]}
                             accessibilityRole="button"
                             accessibilityLabel={editOf ? (submitting ? t('Saving event') : t('Save changes')) : (submitting ? t('Creating event') : t('Create event'))}
                             accessibilityHint={editOf ? t('Saves changes to this event') : isCopy ? t('Creates a copy of this event') : t('Publishes your new event to the Market feed')}
-                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                            accessibilityState={{ disabled: submitDisabled, busy: submitting }}
                         >
-                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{editOf ? t('Save') : t('Create')}</Text>}
+                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{photoMissing ? t('📷 Add a photo') : editOf ? t('Save') : t('Create')}</Text>}
                         </Pressable>
                     </View>
 
@@ -879,7 +881,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>{t('PHOTO (OPTIONAL)')}</Text>
+                            <Text style={styles.label}>{editOf && !editOf.values.photo ? t('PHOTO (OPTIONAL)') : t('PHOTO *')}</Text>
                             <View style={styles.photoRow}>
                                 {photo ? (
                                     <Image source={{ uri: photo }} style={styles.photo} contentFit="cover" accessibilityLabel={t('Event photo')} />

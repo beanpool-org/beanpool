@@ -36,6 +36,7 @@ import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -183,11 +184,11 @@ async function main() {
     const PRIVATE_NOTE = 'gate-code-' + crypto.randomBytes(4).toString('hex');
     const startAt = new Date(Date.now() + 86_400_000).toISOString();
     const eventPost = se.createPost('event', 'social', 'Street picnic', 'Bring a plate', 0, 'fixed', alice.pubKeyHex, -28.55, 153.5,
-        undefined, undefined, undefined, undefined, { eventStartAt: startAt, eventPlaceName: 'The park', eventPrivateNote: PRIVATE_NOTE });
+        TEST_PHOTOS, undefined, undefined, undefined, { eventStartAt: startAt, eventPlaceName: 'The park', eventPrivateNote: PRIVATE_NOTE });
     assert(!!eventPost, 'setup: a public event with a private note is created');
     const DIRECT_TITLE = 'for-carol-only-' + crypto.randomBytes(4).toString('hex');
     const directPost = se.createPost('offer', 'general', DIRECT_TITLE, 'just between us', 0, 'fixed', alice.pubKeyHex,
-        undefined, undefined, undefined, undefined, undefined, undefined, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
+        undefined, undefined, TEST_PHOTOS, undefined, undefined, undefined, { audienceScope: 'direct', targetPubkey: carol.pubKeyHex });
     assert(!!directPost, 'setup: a direct (members-only) post to carol is created');
     assert(!!join(keypair().pubKeyHex, 'newcomer'), 'setup: a newcomer joins');
     await sleep(400);

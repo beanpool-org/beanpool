@@ -45,6 +45,7 @@ function assertThrows(fn: () => unknown, match: RegExp, msg: string): void {
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
+const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const HOUR = 60 * 60 * 1000;
 const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
 
@@ -116,6 +117,7 @@ async function main(): Promise<void> {
         eventStartAt: inHours(24),
         eventPlaceName: 'Park Entrance',
         reach: 'everywhere', // forced to local by engine
+        photos: [PHOTO],
     };
 
     const created = createEventFromBody(validBody, host, undefined, beforeWrite, out);

@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     // ── 4. A Need ───────────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. A Need ──');
     const need = await signedFetch('POST', `/api/treasury/${enterprise}/need`, {
-        category: 'food', title: 'Tend the flock', description: 'Saturday mornings', credits: 10, priceType: 'fixed',
+        category: 'food', title: 'Tend the flock', description: 'Saturday mornings', credits: 10, priceType: 'fixed', photos: [PHOTO],
     }, keeper);
     assert(need.status === 200 && need.body?.success === true, `a keeper posts the enterprise's Need (${show(need)})`);
     const needId: string = need.body?.post?.id;
@@ -205,14 +205,20 @@ async function main(): Promise<void> {
 
     assert(rowOf(offerId)?.title === before && rowOf(needId)?.title === 'Tend the flock (and the garden)', 'no refused edit changed anything');
 
-    // ── 6. The web's edit ───────────────────────────────────────────────────────────────────────
-    console.log("\n── 6. The web's edit ──");
+    // ── 6. An edit cannot remove the last photo ──────────────────────────────────────────────────
+    console.log("\n── 6. An edit cannot remove the last photo ──");
     const web = await signedFetch('POST', '/api/marketplace/posts/update', {
         id: offerId, authorPublicKey: keeper.pubKeyHex, type: 'offer', category: 'food', title: 'Eggs, by the dozen',
         description: 'Laid this week', credits: 6, priceType: 'fixed', repeatable: true, photos: [],
     }, keeper);
-    assert(web.status === 200 && rowOf(offerId)?.title === 'Eggs, by the dozen' && photoCountOf(offerId) === 0,
-        `the web's edit (photos always a list) saves, here taking both photos off (${show(web)})`);
+    assert(web.status === 400 && web.error === 'Add a photo first',
+        `an edit taking a post with photos down to zero is refused 400 (${show(web)})`);
+    const kept = await signedFetch('POST', '/api/marketplace/posts/update', {
+        id: offerId, authorPublicKey: keeper.pubKeyHex, type: 'offer', category: 'food', title: 'Eggs, by the dozen',
+        description: 'Laid this week', credits: 6, priceType: 'fixed', repeatable: true, photos: [PHOTO],
+    }, keeper);
+    assert(kept.status === 200 && rowOf(offerId)?.title === 'Eggs, by the dozen' && photoCountOf(offerId) === 1,
+        `an edit keeping at least one photo saves (${show(kept)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

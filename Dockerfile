@@ -68,7 +68,8 @@ RUN cd apps/server && pnpm run build
 # and put that version and the "Digest:" it prints for the index (the first one, not a per-platform one) here. The
 # `cloudflared --version` below fails the build for a platform whose binary doesn't run. Release notes:
 # https://github.com/cloudflare/cloudflared/releases
-FROM cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c AS cloudflared
+# 2026.10.3 (27 Oct): Cloudflare's notice — versions before 2026.10.2 still trust eight compromised eMudhra intermediates.
+FROM cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39 AS cloudflared
 
 # =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run

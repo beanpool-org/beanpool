@@ -158,6 +158,7 @@ function shopAnswer() {
     return { ...s, counts: { ...COUNTS0, things: live.length, available: live.filter((l) => l.status === 'active').length, out: live.filter((l) => l.status === 'pending' && l.lendable).length } };
 }
 vi.mock('../db', () => ({
+    getMemberProfile: async () => null,
     signedGet: async (p: string) => {
         node.log.push({ method: 'GET', path: p });
         if (node.mode === 'down') throw new TypeError('Network request failed');

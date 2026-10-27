@@ -33,7 +33,7 @@ function refusalOf(e: unknown): ShopSheetRefusal {
 const LIVE = new Set(['active', 'pending', 'paused']);
 
 export interface YourShopPageProps {
-    identity: BeanPoolIdentity;
+    identity: BeanPoolIdentity & { avatar?: string | null };
     onBack: () => void;
     onOpenShop?: (id: string) => void;
     onOpenTools?: () => void;
@@ -51,6 +51,7 @@ export function YourShopPage({
 }: YourShopPageProps) {
     const me = identity?.publicKey ?? '';
     const ownAvatar = useOwnAvatar(identity?.publicKey ?? null);
+    const avatar = identity?.avatar ?? ownAvatar;
     const [read, setRead] = useState<MyShopRead | null>(null);
     const [listings, setListings] = useState<ShopListing[] | null | undefined>(undefined);
     const [editing, setEditing] = useState<ShopTextField | null>(null);
@@ -356,7 +357,7 @@ export function YourShopPage({
                                     ) : (
                                         <DefaultBanner
                                             category={shop.category}
-                                            logoUrl={ownAvatar}
+                                            logoUrl={avatar}
                                             pubkey={identity?.publicKey}
                                         />
                                     )}

@@ -79,6 +79,7 @@ export default function YourShopScreen() {
         }
     }, [identity?.publicKey]);
     const s = homeStyles(colors);
+    const avatar = (identity as any)?.avatar || (identity as any)?.avatar_url || avatarUrl;
     const [read, setRead] = useState<MyShopRead | null>(null);
     /** Its Offers: undefined while read, null when they couldn't be. */
     const [listings, setListings] = useState<ShopListing[] | null | undefined>(undefined);
@@ -275,7 +276,7 @@ export default function YourShopScreen() {
                                     {shop.photoUrl ? (
                                         <Image source={{ uri: bannerUri ?? shop.photoUrl }} style={styles.bannerImage} contentFit="cover" testID="shop-banner-image" />
                                     ) : (
-                                        <DefaultBanner category={shop.category} logoUrl={avatarUrl} pubkey={identity?.publicKey} />
+                                        <DefaultBanner category={shop.category} logoUrl={avatar} pubkey={identity?.publicKey} />
                                     )}
                                 </View>
                                 {!shop.photoUrl ? (

@@ -49,15 +49,15 @@ export const DefaultBanner: React.FC<DefaultBannerProps> = ({
     'data-testid': dataTestId,
 }) => {
     let tileKey = 'general';
-    if (category && GROUP_CATEGORY_MAP[category]) {
+    if (category && Object.prototype.hasOwnProperty.call(GROUP_CATEGORY_MAP, category)) {
         tileKey = GROUP_CATEGORY_MAP[category];
     } else if (category) {
         const normalized = normalizeCategory(category);
         tileKey = KNOWN_TILES.has(normalized) ? normalized : 'general';
     }
 
-    const isBundled = !logoUrl || (typeof logoUrl === 'string' && (isBundledAvatar(logoUrl) || logoUrl.startsWith('/avatars/')));
     const resolvedLogo = resolveAvatarUrl(logoUrl, pubkey) || '/avatars/avatar_bean_green.jpg';
+    const isBundled = isBundledAvatar(logoUrl ?? '') || resolvedLogo.startsWith('/avatars/');
 
     const testIdProp = dataTestId || testID || 'default-banner';
 

@@ -158,8 +158,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                 ) : (
                     isFounding && (
                         <span data-testid="author-founding" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold bg-nature-500/10 border-nature-500/20 text-nature-700 dark:text-nature-300 ml-1">
-                            <span>🌱</span>
-                            <span>{t('FOUNDING')}</span>
+                            {t('🌱 FOUNDING')}
                         </span>
                     )
                 )}

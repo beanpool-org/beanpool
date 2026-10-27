@@ -29,11 +29,10 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
         let alive = true;
         const loadPreview = async () => {
             try {
-                let msgs = await getMessages(entry.id, { limit: 20 });
-                if (msgs.length === 0) {
-                    await syncSingleConversation(entry.id).catch(() => {});
-                    msgs = await getMessages(entry.id, { limit: 20 });
-                }
+                // The node's word first, then the copy here: a line its opener withdrew (Cancel request) never shows from
+                // this phone's copy, and their new one does (PR #2540 review 4393642158). With no answer, the copy here.
+                await syncSingleConversation(entry.id).catch(() => false);
+                const msgs = await getMessages(entry.id, { limit: 20 });
                 if (!alive) return;
                 const last = msgs[msgs.length - 1];
                 if (last) {

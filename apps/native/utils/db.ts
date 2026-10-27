@@ -33,7 +33,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind, t } from '@beanpool/core';
+import { reportKind, t, requestAfterOwnLine } from '@beanpool/core';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -1230,6 +1230,13 @@ function formatSystemMessage(
     return txt;
 }
 
+/** A message request (a row's `request`, as stored or parsed) for `me` that isn't accepted: waiting, ignored or lapsed. */
+function isRequestFor(request: unknown, me: string): boolean {
+    let r: any = request;
+    if (typeof r === 'string') { try { r = JSON.parse(r); } catch { return false; } }
+    return !!r && typeof r === 'object' && typeof r.from === 'string' && r.from !== me && r.state !== 'accepted';
+}
+
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
@@ -1312,7 +1319,9 @@ export async function getConversations(myPubkey: string) {
     let previewPins: DmPeerPins | null = null;
     try { previewPins = previewIdentity?.publicKey ? await dmPins.read(previewIdentity.publicKey, database) : null; } catch { previewPins = null; }
 
-    return rows.map(row => {
+    // A request for this member they haven't accepted is no chat of theirs: the node lists it under Requests, or nowhere
+    // once ignored or lapsed (sortRequestsOut). Its row is here for its card's preview and its own screen only.
+    return rows.filter(row => !isRequestFor(row.request, myPubkey)).map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
         // Whether BeanPool wrote the preview: a stand-in for a line it can't show, a deleted line's fixed text, a system
         // line (a trade's, the node's own: nonce 00000, type system or author SYSTEM). Only then is it translated where
@@ -4703,14 +4712,27 @@ export async function syncMessages(publicKey: string) {
 // 3s AND on every WS nudge; when the node is slow (observed 5-10s responses on the
 // 1cpu test VM under load), stacking overlapping requests onto it makes it slower —
 // each tick must skip, not pile on.
-const _conversationSyncsInFlight = new Set<string>();
+// A caller that asks while one is in flight shares its answer: the chat's first poll then waits for the Requests card's
+// preview fetch instead of returning before the node has answered (PR #2540 review 4393642152).
+const _conversationSyncsInFlight = new Map<string, Promise<boolean>>();
 
-export async function syncSingleConversation(conversationId: string) {
-    if (_conversationSyncsInFlight.has(conversationId)) return;
-    _conversationSyncsInFlight.add(conversationId);
+/**
+ * This conversation's newest lines and its request from the node, written to this phone. True once the node's answer has
+ * been written here (its lines, and a request's people and withdrawn lines); false when there was no answer, or the pins'
+ * gate kept it out, so the chat screen knows whether what it reads is the node's word yet.
+ */
+export function syncSingleConversation(conversationId: string): Promise<boolean> {
+    const running = _conversationSyncsInFlight.get(conversationId);
+    if (running) return running;
+    const run = syncSingleConversationOnce(conversationId).finally(() => _conversationSyncsInFlight.delete(conversationId));
+    _conversationSyncsInFlight.set(conversationId, run);
+    return run;
+}
+
+async function syncSingleConversationOnce(conversationId: string): Promise<boolean> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (!anchorUrl) return;
+        if (!anchorUrl) return false;
 
         // 12s (not 5s) to ride out a slow node: an abort throws the whole response
         // away and the incoming message waits for the NEXT tick to try again — that
@@ -4722,14 +4744,14 @@ export async function syncSingleConversation(conversationId: string) {
             msgRes = await signedGet(`/api/messages/${conversationId}`, { signal: controller.signal });
         } catch (e: any) {
             console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch failed/timed out: ${e?.message || e}`);
-            return;
+            return false;
         } finally {
             clearTimeout(timeout);
         }
 
         if (!msgRes.ok) {
             console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch returned ${msgRes.status}`);
-            return;
+            return false;
         }
 
         const msgData = await msgRes.json();
@@ -4760,33 +4782,7 @@ export async function syncSingleConversation(conversationId: string) {
             }
         }
         const messages = msgData.messages;
-        if (!Array.isArray(messages)) return;
-
-        let deletedStaleMessages = 0;
-        if (messages.length === 0) {
-            const req = msgData?.conversation?.request;
-            if (req && req.state === 'pending') {
-                const myIdentity = await loadIdentity().catch(() => null);
-                const myPubkey = myIdentity?.publicKey ?? null;
-                const db = await getDb();
-                const localConv = await db.getFirstAsync<{ created_by: string | null }>(
-                    'SELECT created_by FROM conversations WHERE id = ?',
-                    [conversationId]
-                ).catch(() => null);
-                const isOpener = !!myPubkey && (
-                    req.from === myPubkey ||
-                    msgData?.conversation?.createdBy === myPubkey ||
-                    msgData?.conversation?.created_by === myPubkey ||
-                    localConv?.created_by === myPubkey
-                );
-                if (!isOpener) {
-                    const res = myPubkey
-                        ? await db.runAsync('DELETE FROM messages WHERE conversation_id = ? AND author_pubkey != ?', [conversationId, myPubkey])
-                        : await db.runAsync('DELETE FROM messages WHERE conversation_id = ?', [conversationId]);
-                    deletedStaleMessages = res?.changes ?? 0;
-                }
-            }
-        }
+        if (!Array.isArray(messages)) return false;
 
         const database = await getDb();
 
@@ -4809,8 +4805,26 @@ export async function syncSingleConversation(conversationId: string) {
             try {
                 await dmPins.read(myIdentity.publicKey, database);
             } catch {
-                if (await isDmHere(database, conversationId, msgData.conversation?.type)) return;
+                if (await isDmHere(database, conversationId, msgData.conversation?.type)) return false;
                 pollPinsUnread = true;
+            }
+        }
+        // A message request for this reader: its people, so its line opens and the chat is named (PR #2540 review
+        // 4393642140), and none of its opener's lines the node no longer has (review 4393642158). None of this while the
+        // pins are unread: the gate above.
+        let withdrawn = 0;
+        const req = msgData.conversation?.request;
+        if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
+            try {
+                const mine = await database.getFirstAsync('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?', [conversationId, myIdentity.publicKey]);
+                if (!mine) await writeConversationFromNode(database, { ...msgData.conversation, id: conversationId });
+            } catch (e: any) {
+                console.warn(`[Sync] Could not write the request's people: ${e?.message || e}`);
+            }
+            try {
+                withdrawn = await dropWithdrawnRequestLines(database, conversationId, req, messages);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not drop the request's withdrawn lines: ${e?.message || e}`);
             }
         }
         const cursors = msgData.conversation?.readCursors;
@@ -4846,10 +4860,10 @@ export async function syncSingleConversation(conversationId: string) {
         }
 
         if (changed.length === 0 && cursorAdvances.length === 0) {
-            if (blanked > 0 || deletedStaleMessages > 0) {
+            if (blanked > 0 || withdrawn > 0) {
                 emitAppEvent('sync_data_updated');
             }
-            return;
+            return true;
         }
 
         const own = pollPinsUnread ? await ownLinesOnly(database, conversationId, changed) : changed;
@@ -4876,20 +4890,46 @@ export async function syncSingleConversation(conversationId: string) {
         await holdDmTypes(database);
 
         emitAppEvent('sync_data_updated');
+        return true;
     } catch (err: any) {
         // Background polling — don't alert, but DO leave a trace for USB debugging.
         console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} sync failed: ${err?.message || err}`);
-    } finally {
-        _conversationSyncsInFlight.delete(conversationId);
+        return false;
     }
 }
+
+/** How many lines the node answers a conversation's read with when the phone names no limit (its clampLimit). */
+const NODE_PAGE_LINES = 50;
+
+/**
+ * A request's lines on the phone of the person it was for that the node no longer has: its opener withdrew them (Cancel
+ * request; PR #2540 review 4393642158), whatever the request's state now and however many lines the node still holds.
+ * While it isn't accepted every line in it is the opener's, one a request, so the newest page holds them all; once
+ * accepted, only the stretch the page covers is judged, as a line older than the page's oldest is still theirs. Only the
+ * opener's lines go, never one of this reader's (their unsent ones neither). Their photos' decrypted copies go with them.
+ */
+async function dropWithdrawnRequestLines(database: SQLite.SQLiteDatabase, conversationId: string, req: { from: string; state?: string }, messages: any[]): Promise<number> {
+    const onNode = messages.map((m: any) => m?.id).filter((id: unknown): id is string => typeof id === 'string');
+    const stamps = messages.map((m: any) => m?.timestamp).filter((t: unknown): t is string => typeof t === 'string').sort();
+    const pageOnly = req.state === 'accepted' && messages.length >= NODE_PAGE_LINES && stamps.length > 0;
+    const where = ['conversation_id = ?', 'author_pubkey = ?'];
+    const args: string[] = [conversationId, req.from];
+    if (onNode.length > 0) { where.push(`id NOT IN (${onNode.map(() => '?').join(', ')})`); args.push(...onNode); }
+    if (pageOnly) { where.push('timestamp > ?'); args.push(stamps[0]); }
+    const gone = await database.getAllAsync<{ id: string }>(`SELECT id FROM messages WHERE ${where.join(' AND ')}`, args);
+    if (gone.length === 0) return 0;
+    await database.runAsync(`DELETE FROM messages WHERE ${where.join(' AND ')}`, args);
+    for (const g of gone) await forgetCachedChatImage(g.id);
+    return gone.length;
+}
+
 
 export async function getConversation(id: string, myPubkey?: string) {
     const database = await getDb();
     let res: any;
     if (myPubkey) {
         res = await database.getFirstAsync<any>(`
-            SELECT c.name, c.type as type, c.post_id as postId, c.request as request, p.title as postTitle,
+            SELECT c.name, c.type as type, c.post_id as postId, c.request as request, c.created_by as createdBy, p.title as postTitle,
             COALESCE(
                 (SELECT mt2.status FROM marketplace_transactions mt2
                  WHERE mt2.post_id = c.post_id
@@ -5641,35 +5681,45 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
         if (!res.ok) return;
         const conv = (await res.json())?.conversation;
         if (!conv?.id || typeof conv.type !== 'string') return;
-        const database = await getDb();
-        // The pins before the node's rows, through the handle they are written with: the account's first read with this file
-        // open seeds it from the rows and lines held before these (dmPins), so the node's answer is only ever a listing,
-        // judged on the lines held then.
-        const identity = await loadIdentity().catch(() => null);
-        const me = identity?.publicKey;
-        const before = me ? await dmPins.read(me, database).catch(() => null) : null;
-        // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written into a DM here. Any other
-        // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
-        if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
-        const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
-        await database.runAsync(
-            'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
-        );
-        // A pinned DM's rows are [me, the pinned key], as the sync writes them; the listing is heard by the pin below.
-        const pinned = me && before ? dmPinFor(before, conv.id) : null;
-        for (const pk of pinned ? [me, pinned.peer] : Array.isArray(conv.participants) ? conv.participants : []) {
-            if (typeof pk === 'string' && pk) {
-                await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
-            }
-        }
-        // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-        if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
+        await writeConversationFromNode(await getDb(), conv);
     } catch {
         // Offline or refused: the lock simply fails, and says so.
     } finally {
         clearTimeout(timeoutId);
     }
+}
+
+/**
+ * The node's answer for one conversation (GET /api/messages/:id's `conversation`) written to this phone: its row, with its
+ * message request when the answer names one, so a request opened from a push or a link is one before its lines arrive
+ * (PR #2540 review 4393642152), and its people, so its lines open and its chat is named (review 4393642140).
+ */
+async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: any): Promise<void> {
+    // The pins before the node's rows, through the handle they are written with: the account's first read with this file
+    // open seeds it from the rows and lines held before these (dmPins), so the node's answer is only ever a listing,
+    // judged on the lines held then.
+    const identity = await loadIdentity().catch(() => null);
+    const me = identity?.publicKey;
+    const before = me ? await dmPins.read(me, database).catch(() => null) : null;
+    // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written into a DM here. Any other
+    // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
+    if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
+    const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
+    const request = 'request' in conv ? (conv.request ? JSON.stringify(conv.request) : null) : undefined;
+    await database.runAsync(
+        'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString(), request ?? null]
+    );
+    if (request !== undefined) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ? AND request IS NOT ?', [request, conv.id, request]);
+    // A pinned DM's rows are [me, the pinned key], as the sync writes them; the listing is heard by the pin below.
+    const pinned = me && before ? dmPinFor(before, conv.id) : null;
+    for (const pk of pinned ? [me, pinned.peer] : Array.isArray(conv.participants) ? conv.participants : []) {
+        if (typeof pk === 'string' && pk) {
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
+        }
+    }
+    // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
+    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
 }
 
 /**
@@ -6319,6 +6369,8 @@ export async function insertMessage(conversationId: string, authorPubkey: string
 
     // Fire-and-forget: the returned promise is intentionally not awaited.
     _deliverPendingMessage(anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata });
+    // The line's id, which the node keeps: the chat follows it to the node's answer (a request's line waits for the 200).
+    return tempId;
 }
 
 /** Background half of the optimistic send: POST to the node, then either adopt the
@@ -6367,6 +6419,7 @@ async function _deliverPendingMessage(
             'UPDATE OR REPLACE messages SET id=?, timestamp=?, metadata=? WHERE id=?',
             [serverMsg.id, serverMsg.timestamp, body.metadata || null, tempId]
         );
+        await requestLineTaken(database, body.conversationId, identity.publicKey);
     } catch (deliverErr: any) {
         console.warn(`[Messaging] Delivery failed for message ${tempId.slice(0, 8)}:`, deliverErr?.message || deliverErr);
         try {
@@ -6382,6 +6435,21 @@ async function _deliverPendingMessage(
     } finally {
         DeviceEventEmitter.emit('sync_data_updated');
     }
+}
+
+/**
+ * The node took a line of `me`'s (200): where it was their message request's line, the chat's request now waits for the
+ * other's answer (core requestAfterOwnLine), here as on the node, so the chat reads as waiting only from the 200 and a
+ * reread of the row keeps it so until the next poll brings the node's word (PR #2540 review 4393642166). Never throws.
+ */
+async function requestLineTaken(database: SQLite.SQLiteDatabase, conversationId: string, me: string): Promise<void> {
+    try {
+        const row = await database.getFirstAsync<{ request: string | null }>('SELECT request FROM conversations WHERE id = ?', [conversationId]);
+        if (!row?.request) return;
+        const was = JSON.parse(row.request);
+        const now = requestAfterOwnLine(was, me);
+        if (now !== was) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [JSON.stringify(now), conversationId]);
+    } catch { /* the next poll brings the node's word */ }
 }
 
 /** Remove a local-only message row (used to discard or resend a failed optimistic send). */
@@ -6503,6 +6571,7 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [serverMsg.id, conversationId, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image', metadata || null, serverMsg.timestamp]
     );
+    await requestLineTaken(database, conversationId, identity.publicKey);
 }
 
 /**

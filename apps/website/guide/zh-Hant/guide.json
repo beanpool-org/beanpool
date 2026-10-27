@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "zh-Hant",
-  "hash": "cb5519b153b7fee64023ef51fee60ff5c7973f15cde8e5f052ce867997214af3",
+  "hash": "c02426c36805f9ab68fdead6b6887c07032dcbad719495419beb1a5bb6d094e9",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "「學習」專區",
       "summary": "關於 BeanPool 的短片以及對應的指南頁面。",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "來自 BeanPool 說明其運作機制的影片；",
-            "**每日心得**，每天早晨更新的一小段思維感悟。它只是一個標題，無需點開任何內容。"
+            "**每日心得**，每天早晨更新的一小段思維感悟。點擊即可開啟當天的感悟。"
           ]
         },
         {

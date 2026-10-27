@@ -22,6 +22,7 @@ import {
 import { type PulseFeedItem, type DailyPulseEntry, getDailyPulse } from '../lib/api';
 import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '../lib/pulse';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 import { ReportModal } from './ReportModal';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
@@ -168,13 +169,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     aria-label={t("View {name}'s public profile", { name: authorName })}
                 >
                     <div className="w-9 h-9 rounded-full overflow-hidden bg-oat-100 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 flex items-center justify-center shrink-0">
-                        {avatarResolved ? (
-                            <img src={avatarResolved} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-sm font-black text-nature-500 dark:text-nature-300">
-                                {authorName.charAt(0).toUpperCase()}
-                            </span>
-                        )}
+                        <MemberAvatar avatarUrl={avatarResolved} pubkey={item.ownerPubkey} callsign={authorName} size={36} alt="" />
                     </div>
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1 leading-tight">

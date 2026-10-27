@@ -5,10 +5,15 @@ import {
     GROUP_JOIN_POLICY_OPTIONS,
     CREATE_GROUP_DEFAULTS,
     START_ENTERPRISE_BRIDGE,
+    bundledGroupEmblem,
+    AVATAR_PICTURE,
     type GroupCategory,
     type JoinPolicy,
 } from '@beanpool/core';
 import { createGroup, type Group } from '../lib/api';
+import { resolveAvatarUrl } from '../lib/avatar';
+import { AvatarPresetPicker } from './AvatarPresetPicker';
+import { usePictureCrop } from './PictureCropDialog';
 
 interface Props {
     isOpen: boolean;
@@ -29,8 +34,12 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState<GroupCategory>(CREATE_GROUP_DEFAULTS.category);
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>(CREATE_GROUP_DEFAULTS.joinPolicy);
+    const [picture, setPicture] = useState<string>(() => bundledGroupEmblem(CREATE_GROUP_DEFAULTS.category));
+    const [userPickedPicture, setUserPickedPicture] = useState(false);
+    const [showPresetPicker, setShowPresetPicker] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const cropper = usePictureCrop();
 
     useEffect(() => {
         if (!isOpen) return;
@@ -42,6 +51,20 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        // Emptied, so the same photo chosen again (after a crop cancelled) opens the crop again.
+        e.target.value = '';
+        if (!file) return;
+        try {
+            const cropped = await cropper.crop(file, AVATAR_PICTURE);
+            if (cropped) {
+                setUserPickedPicture(true);
+                setPicture(cropped);
+            }
+        } catch { /* cancelled */ }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -58,10 +81,16 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                 description: description.trim() || undefined,
                 category,
                 joinPolicy,
+                avatarUrl: picture,
             });
             onCreated(group);
             setName('');
             setDescription('');
+            setCategory(CREATE_GROUP_DEFAULTS.category);
+            setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
+            setPicture(bundledGroupEmblem(CREATE_GROUP_DEFAULTS.category));
+            setUserPickedPicture(false);
+            setShowPresetPicker(false);
             onClose();
         } catch (err: any) {
             setError(err.message || t('Failed to create group'));
@@ -111,6 +140,50 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                     )}
 
                     <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-2">
+                            {t('Picture')}
+                        </label>
+                        <div className="flex items-center gap-3">
+                            <img
+                                src={resolveAvatarUrl(picture) || ''}
+                                alt={t('Group picture')}
+                                className="w-14 h-14 rounded-full object-cover border-2 border-emerald-500 shrink-0"
+                            />
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPresetPicker((p) => !p)}
+                                    className="px-3 py-1.5 text-xs font-bold rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 cursor-pointer"
+                                >
+                                    {t('Choose another')}
+                                </button>
+                                <label className="px-3 py-1.5 text-xs font-bold rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500">
+                                    {t('Choose a photo')}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="sr-only"
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                        {showPresetPicker && (
+                            <div className="mt-3">
+                                <AvatarPresetPicker
+                                    selected={picture}
+                                    onSelect={(uri) => {
+                                        setUserPickedPicture(true);
+                                        setPicture(uri);
+                                        setShowPresetPicker(false);
+                                    }}
+                                />
+                            </div>
+                        )}
+                        {cropper.dialog}
+                    </div>
+
+                    <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-400 mb-1">
                             {t('Group Name *')}
                         </label>
@@ -151,7 +224,12 @@ export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans 
                                         key={cat.key}
                                         type="button"
                                         aria-pressed={active}
-                                        onClick={() => setCategory(cat.key)}
+                                        onClick={() => {
+                                            setCategory(cat.key);
+                                            if (!userPickedPicture) {
+                                                setPicture(bundledGroupEmblem(cat.key));
+                                            }
+                                        }}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                             active
                                                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 dark:border-emerald-500'

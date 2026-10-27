@@ -12,7 +12,7 @@ import { t, tn } from '@beanpool/core';
 import { inviteGroupMember } from '../lib/api';
 import { useMembersOnDemand, useMemberSearch, getMembersWhole, isMembersOnDemandRefusal, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { invitableShown, sendInvitations, type InvitablePerson } from '../lib/group-invite';
-import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 import { useDialogFocus } from './dialog-focus';
 
 interface Props {
@@ -168,7 +168,6 @@ export function InvitePeopleSheet({ groupId, groupName, existing, invited, pendi
                         const isPending = !!pendingSet.has(p.publicKey);
                         const isUnpickable = isActive || isInvited || isPending;
                         const on = isActive || (!isInvited && !isPending && picked.has(p.publicKey));
-                        const avatar = p.avatarUrl ? resolveAvatarUrl(p.avatarUrl) : null;
                         const ariaLabel = isActive
                             ? t('{name}, already in the group', { name: p.callsign })
                             : isInvited
@@ -204,9 +203,7 @@ export function InvitePeopleSheet({ groupId, groupName, existing, invited, pendi
                                             className="w-5 h-5 shrink-0 accent-emerald-600"
                                         />
                                     )}
-                                    {avatar
-                                        ? <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
-                                        : <span aria-hidden="true" className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-800 dark:text-nature-100 flex items-center justify-center text-xs font-bold shrink-0">{(p.callsign || '?').charAt(0).toUpperCase()}</span>}
+                                    <MemberAvatar avatarUrl={p.avatarUrl} pubkey={p.publicKey} callsign={p.callsign} size={32} alt="" />
                                     <span className="flex-1 min-w-0 truncate text-sm font-semibold text-nature-900 dark:text-white">{p.callsign}</span>
                                     {isActive && <span className="shrink-0 text-xs text-nature-600 dark:text-nature-400">{t('In the group')}</span>}
                                     {isInvited && <span className="shrink-0 text-xs text-nature-600 dark:text-nature-400">{t('Invited')}</span>}

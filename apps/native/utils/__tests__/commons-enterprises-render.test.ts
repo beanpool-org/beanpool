@@ -145,7 +145,10 @@ vi.mock('../../components/useYourGroups', () => ({
     yourGroupsStore: { refresh() {} },
 }));
 vi.mock('../../components/GroupDetailModal', () => ({ GroupDetailModal: () => null }));
-vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+vi.mock('../../components/MemberAvatar', () => ({
+    MemberAvatar: ({ pubkey, avatarUrl }: { pubkey: string; avatarUrl?: string | null }) =>
+        createElement('span', { 'data-avatar': 'true', 'data-pubkey': pubkey, 'data-avatar-url': avatarUrl ?? '' }),
+}));
 vi.mock('../../components/showcase/LocalCommunityMark', () => ({
     LocalCommunityMark: () => null,
     ExampleHeader: () => null,
@@ -220,7 +223,14 @@ describe("the Commons tab's enterprises (#2200)", () => {
         for (const name of [EGGS.name, BAKERY.name]) expect(times(host.textContent ?? '', name), name).toBe(1);
         await click(button('🏛️ Enterprises'), 'Enterprises chip');
         for (const name of [EGGS.name, BAKERY.name]) expect(times(host.textContent ?? '', name), name).toBe(1);
-        expect(host.querySelectorAll('[data-testid="category-tile"]').length).toBeGreaterThan(0);
+        // Pictures S4 (Marty: no picture yet → the ready-made picture its key picks): an enterprise with no logo draws
+        // MemberAvatar for its key with no picture, which draws that preset, as the web card does; never the category tile.
+        for (const e of [EGGS, BAKERY]) {
+            const face = host.querySelector(`[data-avatar][data-pubkey="${e.publicKey}"]`);
+            expect(face, e.name).not.toBeNull();
+            expect(face!.getAttribute('data-avatar-url'), e.name).toBe('');
+        }
+        expect(host.querySelectorAll('[data-testid="category-tile"]').length).toBe(0);
         // One list, as on the web: no second panel of the same enterprises over it.
         expect(host.textContent).not.toContain("THE COMMONS' ENTERPRISES");
         expect(node.getTreasuries).toHaveBeenCalledTimes(1);

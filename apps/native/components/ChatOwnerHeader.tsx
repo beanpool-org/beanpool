@@ -12,6 +12,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { ownerHeader, type YourChatKind } from '../utils/your-groups';
+import { MemberAvatar } from './MemberAvatar';
 import { t } from '@beanpool/core';
 
 /** The line under the chat's name: its kind, what the screen adds ("4 members · muted"), and "tap for info", whole per variant. */
@@ -25,6 +26,7 @@ function ownerSubLine(kind: string, detail: string | null | undefined, tapForInf
 interface Props {
     kind: YourChatKind;
     name: string;
+    avatarUrl?: string | null;
     category?: string | null;
     /** An enterprise-kind chat's lifecycle: 'bounded' is a project (§3.1). */
     lifecycle?: string | null;
@@ -35,7 +37,7 @@ interface Props {
     onMenu?: () => void;
 }
 
-export function ChatOwnerHeader({ kind, name, category, lifecycle, detail, onBack, onOpenOwner, onMenu }: Props) {
+export function ChatOwnerHeader({ kind, name, avatarUrl, category, lifecycle, detail, onBack, onOpenOwner, onMenu }: Props) {
     const { colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         header: {
@@ -59,12 +61,17 @@ export function ChatOwnerHeader({ kind, name, category, lifecycle, detail, onBac
                 accessibilityLabel={h.a11y}
                 onPress={onOpenOwner}
                 disabled={!onOpenOwner}
-                style={styles.owner}
+                style={[styles.owner, avatarUrl ? { flexDirection: 'row', alignItems: 'center', gap: 10 } : null]}
             >
-                <Text style={styles.title} numberOfLines={1}>{h.title}</Text>
-                <Text style={styles.sub} numberOfLines={1}>
-                    {ownerSubLine(h.kindWord, detail, !!onOpenOwner)}
-                </Text>
+                {avatarUrl ? (
+                    <MemberAvatar avatarUrl={avatarUrl} pubkey="" callsign={name} size={28} />
+                ) : null}
+                <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                    <Text style={styles.title} numberOfLines={1}>{h.title}</Text>
+                    <Text style={styles.sub} numberOfLines={1}>
+                        {ownerSubLine(h.kindWord, detail, !!onOpenOwner)}
+                    </Text>
+                </View>
             </Pressable>
             {onMenu && (
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Chat menu')} onPress={onMenu} style={styles.iconBtn}>

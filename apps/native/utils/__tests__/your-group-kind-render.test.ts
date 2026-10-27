@@ -7,12 +7,30 @@
  * words), from the `lifecycle` the node sends on each enterprise-kind row; a node too old to send it reads enterprise.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Module from 'node:module';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { YourChat } from '../your-groups';
 
+(Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+    Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
+
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock('expo', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+}));
+vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid', getRandomBytes: (n: number) => new Uint8Array(n) }));
+vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.0.0' } } }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
+}));
 
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
@@ -27,6 +45,9 @@ vi.mock('react-native', () => {
     };
 });
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
+vi.mock('expo-image', () => ({
+    Image: (props: any) => createElement('img', { src: props.source?.uri || 'bundled', 'data-testid': 'group-avatar-img' }),
+}));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     const ctx = { theme: 'light', colors: lightColors };
@@ -85,5 +106,41 @@ describe('Your groups names a project a project (§3.1)', () => {
         draw(createElement(ChatOwnerHeader, { kind: 'enterprise', name: 'Bakery', onBack: () => { }, onOpenOwner: () => { } }));
         expect(container.textContent).toContain('🥖 Bakery');
         expect(container.textContent).toMatch(/enterprise\s+·\s+tap for info/);
+    });
+
+    it('Pictures S4: YourGroupRow draws picture in place of emoji box when avatarUrl is present', () => {
+        draw(createElement(YourGroupRow, {
+            item: row({ kind: 'group', name: 'Garden Crew', avatarUrl: 'bundled://sunflower' }),
+            onPress: () => { },
+        }));
+        const img = container.querySelector('[data-testid="group-avatar-img"]') || container.querySelector('img');
+        expect(img).not.toBeNull();
+    });
+
+    it("Pictures S4: a group with no picture of its own (made before S4) draws its category's emblem, never the emoji box (#2511 review)", () => {
+        draw(createElement(YourGroupRow, {
+            item: row({ kind: 'group', name: 'Street choir', category: 'guild', avatarUrl: null, role: 'member' }),
+            onPress: () => { },
+        }));
+        expect(container.querySelector('[data-testid="group-avatar-img"]')).not.toBeNull();
+        expect(container.textContent).not.toContain('🛡️');
+    });
+
+    it('Pictures S4: an enterprise row with no logo keeps its emoji box', () => {
+        draw(createElement(YourGroupRow, { item: row({ name: 'Bakery', avatarUrl: null }), onPress: () => { } }));
+        expect(container.querySelector('[data-testid="group-avatar-img"]')).toBeNull();
+        expect(container.textContent).toContain('🥖');
+    });
+
+    it('Pictures S4: ChatOwnerHeader draws picture before title when avatarUrl is present', () => {
+        draw(createElement(ChatOwnerHeader, {
+            kind: 'group',
+            name: 'Garden Crew',
+            avatarUrl: 'bundled://sunflower',
+            onBack: () => { },
+            onOpenOwner: () => { },
+        }));
+        const img = container.querySelector('[data-testid="group-avatar-img"]') || container.querySelector('img');
+        expect(img).not.toBeNull();
     });
 });

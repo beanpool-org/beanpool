@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { bundledGroupEmblem } from '@beanpool/core';
 import {
     ENTERPRISE_CHAT_NOTICE,
     ownerHeader, previewLine, rowTime, unreadLabel, isMuted, groupsYouCouldJoin, inviteLandingAction, chatHref,
     threadMessageText, chatEmoji, groupsUnreadTotal, rowBadge, yourGroupsPaneState, markChatRead, showInvitePrompt,
     inviteLandingPhase, inviteLandingFacts, inviteLandingHref, inviteLandingPreviewFromParams,
-    ownerKindWord, chatLifecycleFromRows, rowRoleWord, rowSpokenName,
+    ownerKindWord, chatLifecycleFromRows, rowRoleWord, rowSpokenName, chatPicture,
 } from '../your-groups';
 
 const g = (over: any) => ({
@@ -22,6 +23,24 @@ describe('one chat header for every conversation (decision 9)', () => {
     it('never shows an empty name, and an unknown category still gets an icon', () => {
         expect(ownerHeader('group', '  ').title).toBe('🌻 Group'.replace('🌻', chatEmoji('group', undefined)));
         expect(chatEmoji('group', 'nonsense')).toBe('👥');
+    });
+});
+
+describe("a chat's picture on its row and header (Pictures S4, design §3.1; #2511 review)", () => {
+    it("a group's own picture; a group with none (made before S4), its category's emblem, as Group info and the web draw it", () => {
+        expect(chatPicture('group', 'bundled://leaf', 'guild')).toBe('bundled://leaf');
+        expect(chatPicture('group', '/api/groups/g/picture?v=1', 'social')).toBe('/api/groups/g/picture?v=1');
+        expect(chatPicture('group', null, 'guild')).toBe('bundled://crystal');
+        for (const category of ['social', 'general', 'working_group', 'guild', 'project', 'nonsense', null, undefined]) {
+            expect(chatPicture('group', null, category)).toBe(bundledGroupEmblem(category));
+            expect(chatPicture('group', undefined, category)).toBe(bundledGroupEmblem(category));
+        }
+    });
+
+    it('an enterprise or an event with none has no picture here: its row keeps its emoji box', () => {
+        expect(chatPicture('enterprise', null)).toBeNull();
+        expect(chatPicture('event', null, 'social')).toBeNull();
+        expect(chatPicture('enterprise', 'bundled://bean-green')).toBe('bundled://bean-green');
     });
 });
 

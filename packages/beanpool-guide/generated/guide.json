@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 157,
-  "hash": "5ab304e08bcc3fea04dcc568d3dd41e1bd714f7c03a4dc17c553cdb948e939e9",
+  "version": 159,
+  "hash": "712da7b1de51a4aa00a44c776332851c2b221fcec9d85bd2fdc67eeaa4e45020",
   "sections": [
     {
       "id": "about",
@@ -1055,7 +1055,7 @@
         {
           "type": "ul",
           "items": [
-            "**Needs you:** only while something is waiting for you: a deal waiting on you, unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), an invitation to join a group (tap it to see the invitation and join; in the web app it opens the group, with **Accept invitation**), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone these are the same things the small icons at the top of the screen show. This card stays first and cannot be moved or hidden.",
+            "**Needs you:** only while something is waiting for you: a deal waiting on you (someone asked for your listing, or your Beans are held in trust and waiting for you to release them), unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), an invitation to join a group (tap it to see the invitation and join; in the web app it opens the group, with **Accept invitation**), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone and in the web app these are the same things the small icons at the top of the screen show (the web app has no icon for admin work: it is in this card only). This card stays first and cannot be moved or hidden.",
             "**Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**: under **Account Protection** on the phone, and at the top of Settings, headed **One way back**, in the web app. It does not show where BeanPool's key vault already holds a copy of your key.",
             "**Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see \"Finding a community near you\"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page. If it does not know where you are, tap **or type your town** and pick your town instead of sharing your location, on the phone and in the web app. The web app's card also has **Share my area**. Once you have picked a town, the web app's card says \"Near\" and the town, with **change**. If the web app's card already has a place, **Not here? Type your town** does the same. For your first 30 days on the global community it stays at the top, and it cannot be removed or moved. After that it is a card like any other.",
             "**First steps:** a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on, invite someone. Where only the admins invite, the phone shows that last line only to owners and admins. The web app shows it to every member, and a line not done keeps the card. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.",
@@ -1326,7 +1326,7 @@
             "After an invite, **← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others. On the global community there is no **← Back** here: you have already joined.",
             "**Your Area** (in a web browser on the global community, and in the phone app when you join the global community with an account you already have): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
             "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** (in a web browser, **I've written these words down somewhere safe**) is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in in the phone app, this step shows your sign-in protecting your account, and your words are one tap away under **Rather write down 12 words?**. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
-            "**How it Works:** a short tour. Tap **Let's Begin!** to start."
+            "**How it Works:** a short tour. At the end, a card asks **Turn on notifications?** with **Turn on** or **Not now**, so you hear when someone answers you, messages you, or asks to join. If you skip it, the card stays on **Home** until you answer, or asks once when you send your first message or request to join. Tap **Let's Begin!** to start."
           ]
         },
         {
@@ -2179,7 +2179,19 @@
         },
         {
           "type": "p",
-          "text": "In a web browser the top bar is simpler. It has the connection status on the left, the page's name, and your profile, the **?** and Settings on the right. It has no bean sheet, no \"needs you\" icons and no invite icon: **Invites** is under **People**. The tabs are along the bottom, or down the left side on a wide screen."
+          "text": "In a web browser the top bar is simpler. It has the connection status on the left, the page's name, and your profile, the **?** and Settings on the right. It has no bean sheet and no invite icon: **Invites** is under **People**. The tabs are along the bottom, or down the left side on a wide screen."
+        },
+        {
+          "type": "p",
+          "text": "The web app has the \"needs you\" icons too, where there is room for them:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**On a phone:** in the top bar, between the page's name and your profile. The page's name always comes first. Where there is not room for every icon, the last ones fold into **•••**. Where there is room for less than one icon, a small number shows how many things need you. Where there is no room at all, they don't show. Tap **•••** or the number to see them all.",
+            "**On the Map tab on a phone:** they don't show, so they never cover **BeanPool** at the top.",
+            "**On a wide screen:** at the bottom of the side bar, above the connection status, the **?** and Settings."
+          ]
         },
         {
           "type": "h2",
@@ -2225,12 +2237,12 @@
         {
           "type": "ul",
           "items": [
-            "**A handshake:** a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
+            "**A handshake:** a deal is waiting for you. Someone asked for your listing and is waiting for you to answer, or your Beans are held in trust and waiting for you to release them. It does not show when you are waiting on them. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
             "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. If the first vote is one in a group or a keepers' vote in an enterprise, the tap opens that group or enterprise instead. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
             "**An envelope:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.",
             "**A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.",
             "**A group of people:** new lines in your groups, enterprise chats or event chats. Chats you have muted stay quiet here. The tap opens the chat, or **Talk**, at **Groups**, if there are several.",
-            "**A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too."
+            "**A shield:** only for people who help run your community (on the phone). It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too. On the web, open your community's settings directly."
           ]
         },
         {
@@ -3031,7 +3043,7 @@
         {
           "type": "ul",
           "items": [
-            "a photo, or the category's picture;",
+            "a photo, or a coloured tile with the category's picture and name;",
             "**OFFER** or **NEED**;",
             "the price in beans, with **/Hr** if it is priced by the hour;",
             "**RECURRING** if it stays open after each deal;",
@@ -3115,7 +3127,7 @@
             "**Title:** a few words, up to 50 characters on the phone. \"Sourdough loaf\", \"Lift to town on Fridays\".",
             "**Category:** pick the closest one.",
             "**Description:** what, when, where, anything people should know.",
-            "**Photos:** at least one, up to five. Tap **Camera** or **Gallery**. Where there are no Beans, a Need's photos are optional.",
+            "**Photos:** at least one, up to five. Tap **Camera**, **Gallery** (which opens on **Albums**), or **Browse files** (to choose from any folder on the device). Every Offer and Need needs at least one photo.",
             "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See \"Where your pin goes\".",
             "**Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.",
             "Tap **Post Offer** or **Post Need**."
@@ -3186,7 +3198,7 @@
         },
         {
           "type": "p",
-          "text": "Open **Commons**, then **Groups**, then your group, and tap **Post to** and the group's name. Only that group sees it. On the phone this shorter form has no photos and no location. In the web app it opens the usual form on the Map, set to the group."
+          "text": "Open **Commons**, then **Groups**, then your group, and tap **Post to** and the group's name. Only that group sees it. On the phone this shorter form has no location, and needs at least one photo like any Offer or Need. In the web app it opens the usual form on the Map, set to the group."
         },
         {
           "type": "h2",
@@ -3203,6 +3215,10 @@
             "**Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.",
             "**Delete Post** removes it. Anyone still asking for it sees their request marked declined."
           ]
+        },
+        {
+          "type": "p",
+          "text": "If you keep an enterprise, you can change its Offers and Needs the same way: open one and tap **Edit Post**. It stays the enterprise's. See \"Projects and enterprises\"."
         },
         {
           "type": "p",
@@ -3343,7 +3359,11 @@
         },
         {
           "type": "p",
-          "text": "The web app does not show shops yet."
+          "text": "Both the phone and the web app show shops the same way: you can open your shop, change its name, category, words and banner photo, put Offers in or take them out, visit other members' shops, and close it. Listing from the Tool shed opens the composer with **Put this in your shop** ticked by default if you have a shop."
+        },
+        {
+          "type": "p",
+          "text": "Your private tool lists stay in phone device storage on the phone, and in browser storage in the web app."
         }
       ]
     },
@@ -3367,7 +3387,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress."
+          "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts the deals waiting on you."
         },
         {
           "type": "p",
@@ -3380,14 +3400,10 @@
         {
           "type": "ul",
           "items": [
-            "**In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them).",
+            "**In Progress:** deals under way, and requests waiting for an answer. Each card says whose step is next, for example **Waiting on you: answer** (someone has asked), **Waiting on you: release** (the beans are held and the deal is done) or **You asked · waiting on** the other member. A deal with the beans held safely is marked **Held in Trust**. The number on the tab counts the cards listed underneath.",
             "**My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.",
             "**History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person."
           ]
-        },
-        {
-          "type": "p",
-          "text": "In the web app, **In Progress** lists only deals with beans held, so a request waiting for an answer is not there. **My Posts** shows only your live posts, each marked **Active**: paused posts are not listed."
         },
         {
           "type": "p",
@@ -3496,6 +3512,14 @@
         {
           "type": "p",
           "text": "A Repeatable post goes back up after each deal, and several people can be in a deal on it at once. Any other post is marked finished."
+        },
+        {
+          "type": "p",
+          "text": "If you open a Repeatable Offer that you have already taken up, it shows your own deal instead of the Accept button: the date you took it up, the beans held in trust, and the button to release them once it is done."
+        },
+        {
+          "type": "p",
+          "text": "Each person can be in one deal on a Repeatable post at a time. Taking it up again while yours is under way starts nothing new: the app says **You already have a deal under way on this. Finish or cancel it first.** Once yours is released, cancelled or declined, you can take it up again straight away."
         },
         {
           "type": "h2",
@@ -4039,7 +4063,7 @@
           "type": "ul",
           "items": [
             "Type in **Message...** and tap the send button.",
-            "To send a photo, tap **+**, then **Camera** or **Gallery**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button."
+            "To send a photo, tap **+**, then **Camera**, **Gallery** (opens on **Albums**), or **Browse files**. In the web app, use the **📎** button, or paste or drag a picture straight into the chat — it shows you the picture first, and anything you have already typed goes with it as a caption. In a locked group chat you can send one photo per message, with or without a caption, on the phone and the web; photos there are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. In a chat between two people on the phone, a photo goes on its own, without words. Photos cannot be sent in event chats or enterprise chats: the community's server can read those chats, so they have no photo button."
           ]
         },
         {
@@ -4082,7 +4106,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app, **Reply**, **React** and **Edit** are small words on each message, and there is no **Delete**: delete a message from the phone app."
+          "text": "Both apps have **Reply**, **React**, **Edit** and **Delete** (in the web app they are small words on each message)."
         },
         {
           "type": "p",
@@ -4094,7 +4118,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap the same button and **Unmute** to undo it. The web app cannot mute a chat yet. See \"Muting a chat\"."
+          "text": "Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notifications**: **For 8 hours**, **For a week** or **Always**. Tap the same button and **Unmute** to undo it. Group chats can be muted in both apps; one-to-one chats on the phone only for now. See \"Muting a chat\"."
         },
         {
           "type": "h2",
@@ -4183,7 +4207,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone, the same list is in **Commons**, under **Groups**, as **Your groups**, without the unread numbers. It opens the same chats."
+          "text": "On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterprises and projects you keep first (with a **Manage** button to run them), then the groups you are in, opening the same chats."
         },
         {
           "type": "h2",
@@ -4193,9 +4217,10 @@
           "type": "ul",
           "items": [
             "On the phone, in **Talk**, under **Groups**, tap **New group**. Or tap **+** on **Commons**, then **Start something** and pick **Chat group**. Both open the **Create a Group** form.",
-            "In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.",
+            "In the web app, open **Commons**, then **Groups**, and tap **Start something** and pick **Chat group**. You stay on **Commons** afterwards. To invite people, open the group and tap **Invite people**. You can also open **Chat**, tap **Groups**, then **New group**: that takes you straight into the new group's chat.",
+            "Every group has a picture: the one for its kind is already chosen, and it follows the **Category** until you choose one yourself. To pick another, tap **Choose another**. On the phone it offers your camera, your photos and the ready-made pictures. In the web app it shows the ready-made pictures, and **Choose a photo** picks one of your own.",
             "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
-            "Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.",
+            "Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. **Social Circle** is chosen for you.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
             "Tap **Create Group**. You become its **lead convenor**. On the phone, the app takes you straight into the new group's chat."
           ]
@@ -4206,7 +4231,7 @@
         },
         {
           "type": "p",
-          "text": "With Beans involved? Start a project or an enterprise instead: tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**; on the web **Start a project** or **Start an enterprise**). See \"Projects and enterprises\"."
+          "text": "With Beans involved? Start a project or an enterprise instead: tap **Start something** (on the phone, the round **+** button) on **Commons**, then pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**). See \"Projects and enterprises\"."
         },
         {
           "type": "h2",
@@ -4225,7 +4250,7 @@
         },
         {
           "type": "p",
-          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, \"You were invited to join a group.\", and a line in **Needs you** on their Home (on the phone, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations in **Commons** yet: there, the line in **Needs you** opens the group, and they tap **Accept invitation**. When they join, the chat says so."
+          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. In the web app, a convenor opens the group and taps **Invite people**, ticks the people, and taps the button at the bottom in the same way. Each person you invite is told: an alert on their phone, \"You were invited to join a group.\", and a line in **Needs you** on their Home (on the phone and in the web app, an icon at the top too). No one else gets an alert, not even the group's other members. They also see the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so."
         },
         {
           "type": "p",
@@ -4261,7 +4286,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, search the chat and report someone's message (**Report**, under it). Muting, **Delete** and **Remove** are on the phone only. In the web app, tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see \"Messages\"."
+          "text": "In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes, delete, remove, mute notifications, search the chat and report someone's message (**Report**, under it). Tap the group's name at the top of its chat to open the group; a convenor can invite people from there. An enterprise's chat is not encrypted: see \"Messages\"."
         },
         {
           "type": "h2",
@@ -4292,7 +4317,7 @@
         },
         {
           "type": "p",
-          "text": "In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. On the phone it can be deleted like any message (the author; a convenor can remove it)."
+          "text": "In a locked group chat, you can send one photo per message, with or without a caption, on the phone and the web. Photos are made at most 800 px on their longest side. Tap a photo to open it full screen, on the phone and the web. Photos in a group chat are encrypted like the words: only the group's members can open them, and only for the time they were in the group (a newcomer doesn't see photos from before they joined; a removed member sees none from after). A photo that can't be opened, such as one someone else swapped on the server, reads **🔒 Image unavailable**. A photo message cannot be edited. It can be deleted like any message (the author; a convenor can remove it), on the phone and the web."
         },
         {
           "type": "p",
@@ -4340,7 +4365,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone, in **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. In the web app, **Groups** lists every group you can see, yours marked with your role; **My groups** shows only yours. Each one shows the start of its description. Open a group to read all of it, then:"
+          "text": "In **Commons**, under **Groups**, the groups you are in are first under **Yours**. Below them, the list shows what you could join, with a heading that names what is shown (such as **Groups, projects and enterprises here**, changing with the chips **All**, **Projects**, **Enterprises** and **Chat groups**). Each one shows the start of its description. Open a group to read all of it, then:"
         },
         {
           "type": "ul",
@@ -4375,11 +4400,11 @@
         },
         {
           "type": "p",
-          "text": "When someone invites you to a group, your phone gets an alert, \"You were invited to join a group.\", and **Needs you** shows the invitation, on Home and, on the phone, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off."
+          "text": "When someone invites you to a group, your phone gets an alert, \"You were invited to join a group.\", and **Needs you** shows the invitation, on Home and, on the phone and in the web app, as an icon at the top (an envelope). Tap the alert or the line to open the invitation. It stays in **Needs you** until you join or say no, or the convenor takes it back. The alert comes with your **Direct Messages** alerts (**Chat Messages** in the web app's settings), so it doesn't come if you switch those off."
         },
         {
           "type": "p",
-          "text": "A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:"
+          "text": "A group you are invited to also shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat. On the phone:"
         },
         {
           "type": "ul",
@@ -4393,7 +4418,7 @@
         },
         {
           "type": "p",
-          "text": "The web app does not mark invitations in **Commons** yet. Tap the line in **Needs you** on Home, or open the group in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it."
+          "text": "In the web app, tap the line in **Needs you** on Home, or the group marked **INVITED** in **Commons**, under **Groups**, and tap **Accept invitation**. You join it and stay on the group's page. To say no, tap **Decline invitation** under it."
         },
         {
           "type": "h2",
@@ -4410,6 +4435,10 @@
         {
           "type": "p",
           "text": "A convenor looks after the group. Whoever created it is its **lead convenor**, and the group's card names them, as **Lead convenor: Ali**. In the members list their row is marked **LEAD**."
+        },
+        {
+          "type": "p",
+          "text": "Any convenor can change the group's picture: open the group (on the phone, **Group info** in its chat's **⋮** menu) and tap **Change the picture** (in the web app, also **Choose a photo**). A group always keeps a picture; it can be changed, never removed."
         },
         {
           "type": "p",
@@ -4435,7 +4464,7 @@
         },
         {
           "type": "p",
-          "text": "A convenor removes a post from the post itself, and on the phone a message in the chat. A group's name and description cannot be changed in the app yet."
+          "text": "A convenor removes a post from the post itself, and a message in the chat. A group's name and description cannot be changed in the app yet."
         },
         {
           "type": "p",
@@ -4721,7 +4750,7 @@
         },
         {
           "type": "p",
-          "text": "Muting is in the phone app only for now."
+          "text": "Muting a one-to-one chat is on the phone only for now; group chats can be muted in both apps."
         },
         {
           "type": "h2",
@@ -5075,7 +5104,7 @@
           "type": "ul",
           "items": [
             "videos from BeanPool about how it works;",
-            "the **Daily Reflection**, a short thought that changes every morning. It is just a heading; there is nothing to open."
+            "the **Daily Reflection**, a short thought that changes every morning. Tap it to open the day's reflection."
           ]
         },
         {
@@ -5348,7 +5377,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app the buttons read **+ Propose Decision** (or **+ Propose** at the top of Commons, while **Decide** is open) and **Submit Decision**, and the box is **Description & Rationale**."
+          "text": "In the web app the buttons read **+ Propose Decision** (or **＋ Start something** at the top of Commons, then **Decision**) and **Submit Decision**, and the box is **Description & Rationale**."
         },
         {
           "type": "p",
@@ -5629,7 +5658,7 @@
             "Choose **At a place** or **Online**. For an online event there is no place and no pin: add a **Link to join** instead. Only you and the people going see it (where you let people in, only the people you let in). Its times are in your own time zone, and everyone else sees them in theirs, marked **your time**.",
             "**Place name**, like \"Town hall\".",
             "Put the pin on the map: tap the map, search **Find an address**, or tap **Use my location**. Tap **Approximate (~100 m)** if you do not want the exact spot shown. See \"Where your pin goes\".",
-            "A **Description**, and a photo if you like.",
+            "A **Description**, and at least one **Photo** (every new event needs a photo).",
             "**Note for people who are going:** everyone who taps Going sees it, unless you tick **Only people I let in see the note and chat** (ticked to start with on the global community, where anyone can join in a minute): then only the people you let in see it, and the event chat. A good place for the exact address or a gate code; the place name is for everyone.",
             "**Who can see it:** your whole community, or one group.",
             "If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.",
@@ -5715,7 +5744,7 @@
         {
           "type": "ul",
           "items": [
-            "A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, the pledges go into the project's account and it takes no more. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.",
+            "A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, or once its end date is over, it takes no more pledges. When the goal is met, the pledges go into the project's account. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.",
             "An **enterprise** keeps going and trades: a tool library, the egg flock, a market stall. Its **keepers** run it together and stand behind it. One of them is the **lead keeper**."
           ]
         },
@@ -5729,7 +5758,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each shows its status, purpose and balance. On the phone, the ones you keep are under **Your groups**. Tap one to open it."
+          "text": "Tap **Commons**, then **Groups**, and pick **Projects** or **Enterprises**. Each shows its status, purpose and balance. The ones you keep are first under **Yours** (lead first, each with its role and a **Manage** button to run it). Tap one to open it."
         },
         {
           "type": "h2",
@@ -5771,7 +5800,7 @@
         {
           "type": "ul",
           "items": [
-            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.",
+            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does a project once its end date is over (on the end date itself its page says **Ends today** and it still takes them; from the day after, **Expired**), or an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.",
             "**Trade with it:** its Offers and Needs are in the Market like anyone's.",
             "**Become a keeper:** see \"Keepers\"."
           ]
@@ -5790,7 +5819,8 @@
             "requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See \"Keepers\".",
             "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its category and **How we deal**. Its category is one of the Market's categories, the same ones every listing has. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the category and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, category or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. With a photo, for the logo or the banner, move it and zoom it until the part you want is in the frame (a circle for the logo, a strip three times as wide as it is tall for the banner, as its page shows them), then tap **Done**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
             "**Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.",
-            "**Operator controls:** **Post Offer** and **Post Need** post in its name (a new Offer starts in its shop's category, which you can change before you post), and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.",
+            "**Operator controls:** **Post Offer** and **Post Need** post in its name (a new Offer starts in its shop's category, which you can change before you post). Every new Offer and Need needs at least one photo (up to five), as for your own: tap the photo button, then **Camera**, **Gallery** (opens on **Albums**), or **Browse files** (on the phone), or pick a photo (in the web app). **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.",
+            "**Changing its Offers and Needs:** any keeper can open one of its Offers or Needs and tap **Edit Post**, as for their own: change the words, category, price and photos, then tap **Save**. It is still the enterprise's. See \"Posting an Offer or a Need\".",
             "**Decisions:** its keepers' votes.",
             "Removing a keeper, and stepping down.",
             "**Season & lifecycle controls:** pausing and closing it (below).",
@@ -5820,16 +5850,16 @@
         {
           "type": "ul",
           "items": [
-            "On the web, tap **Commons**, then **+ Create Group**, then **Start a project** or **Start an enterprise**. In the phone app, tap **+** on **Commons**, then **Start something** and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)",
+            "On the web or phone, tap **Commons**, then **Start something** (on the phone, the round **+** button) and pick **Project** or **Enterprise**. (On an empty list of projects or enterprises, the button takes you straight there.)",
             "Give it a **Name** and a **Purpose statement**.",
             "For a project, set a **Funding goal** (**Goal Amount** in the web app) and, if you like, a deadline.",
-            "Add its logo if you like: choose a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Its banner photo, across the top of its page, is chosen later under **Manage**.",
-            "Tap **Start the project 🌱** or **Start the enterprise 🏛️** (**Propose Enterprise** in the web app; it still starts at once)."
+            "Choose its logo: a photo or one of the ready-made pictures (the round picture people see beside its name). With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. For an enterprise, you can add a banner photo next; a project's is chosen later in **Manage**.",
+            "Tap **Start the project 🌱** or **Start the enterprise 🏛️**."
           ]
         },
         {
           "type": "p",
-          "text": "It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one."
+          "text": "It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one. When you start an enterprise, it opens on its own page with **Add a banner photo**: tap it to choose the photo and the part that shows, or **Not now** to leave it for later."
         },
         {
           "type": "p",
@@ -7313,7 +7343,15 @@
         },
         {
           "type": "p",
-          "text": "Check that your phone allows notifications for BeanPool, in your phone's own settings."
+          "text": "BeanPool asks for notification permission only when you tap to turn it on: from the card at the end of How it Works, on **Home** until answered, or when you send your first message or request to join. It never asks at install or when you create your account, and nothing is asked after you restore an account. If your phone already allows notifications for BeanPool, nothing is asked at all."
+        },
+        {
+          "type": "p",
+          "text": "If your phone won't show its own question again (for example after you tapped **Don't Allow** on an iPhone), **Turn on** says notifications are off for BeanPool in your phone's settings, and **Open Settings** takes you there. The card stays on **Home** until your phone allows them or you tap **Not now**."
+        },
+        {
+          "type": "p",
+          "text": "If you tapped **Not now** and want them later, or your phone turned them off, check that your phone allows notifications for BeanPool in your phone's own settings."
         },
         {
           "type": "h2",

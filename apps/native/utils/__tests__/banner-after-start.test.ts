@@ -205,7 +205,10 @@ vi.mock('../node-profile', () => ({
 }));
 vi.mock('../use-reader-features', () => ({ useReaderFeatures: () => ({ known: true, features: { beans: true, enterprises: true } }) }));
 vi.mock('../../components/useModalKeyboardLift', () => ({ useModalKeyboardLift: () => ({ maxHeight: 600, lift: 0 }) }));
-vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
+vi.mock('../../components/AvatarPickerSheet', () => ({
+    AvatarPickerSheet: ({ visible, onSelectImage, onClose }: { visible: boolean; onSelectImage: (uri: string) => void; onClose: () => void }) =>
+        visible ? createElement('button', { 'aria-label': 'Leaf', onClick: () => { onSelectImage('bundled://leaf'); onClose(); } }) : null,
+}));
 vi.mock('../../components/CurrencyDisplay', () => ({ CurrencyDisplay: () => createElement('span', null, 'Beans') }));
 vi.mock('../../components/Sentence', () => ({ Sentence: ({ text }: { text: string }) => createElement('span', null, text) }));
 vi.mock('../../components/signed-request-lines', () => ({ signedRequestWords: (w: string) => w }));
@@ -259,6 +262,18 @@ async function mount(element: any) {
     }
 }
 
+/** The logo Start needs (Pictures S4): Start says "Choose a logo" and is off until one is chosen; then a ready-made one. */
+async function chooseLogo() {
+    const start = host!.querySelector('[aria-label="Choose a logo"][aria-disabled="true"]');
+    expect(start, 'Start is off and says "Choose a logo" before a logo is chosen').toBeTruthy();
+    const choose = Array.from(host!.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Choose a logo' && b.getAttribute('aria-disabled') !== 'true');
+    expect(choose).toBeDefined();
+    await act(async () => { choose!.click(); });
+    const leaf = host!.querySelector('button[aria-label="Leaf"]') as HTMLButtonElement | null;
+    expect(leaf).toBeTruthy();
+    await act(async () => { leaf!.click(); });
+}
+
 const typeInput = async (el: Element | null | undefined, text: string) => {
     expect(el).toBeTruthy();
     const input = el as HTMLInputElement;
@@ -308,6 +323,7 @@ describe('banner-after-start (Native)', () => {
 
         await typeInput(host!.querySelector('input[aria-label="Enterprise name or project title"]'), 'New Bakery');
         await typeInput(host!.querySelector('input[aria-label="Purpose statement"]'), 'Fresh daily bread');
+        await chooseLogo();
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b =>
             /start initiative|start the enterprise/i.test(b.getAttribute('aria-label') || b.textContent || '')
@@ -320,6 +336,7 @@ describe('banner-after-start (Native)', () => {
             lifecycle: 'ongoing',
             name: 'New Bakery',
             purpose: 'Fresh daily bread',
+            avatar: 'bundled://leaf',
         }));
 
         // Lands on its page (/treasury-detail with publicKey)
@@ -344,6 +361,7 @@ describe('banner-after-start (Native)', () => {
         await typeInput(host!.querySelector('input[aria-label="Enterprise name or project title"]'), 'Solar Panel Project');
         await typeInput(host!.querySelector('input[aria-label="Purpose statement"]'), 'Solar on the hall roof');
         await typeInput(host!.querySelector('input[aria-label="Funding goal amount"]'), '1000');
+        await chooseLogo();
 
         const submitBtn = Array.from(host!.querySelectorAll('button')).find(b =>
             /start initiative|start the project|start project/i.test(b.getAttribute('aria-label') || b.textContent || '')
@@ -355,6 +373,7 @@ describe('banner-after-start (Native)', () => {
         expect(net.createEnterpriseApi).toHaveBeenCalledWith(expect.objectContaining({
             lifecycle: 'bounded',
             name: 'Solar Panel Project',
+            avatar: 'bundled://leaf',
         }));
 
         // Alerts "Project started 🌱" and navigates back (not to /treasury-detail)

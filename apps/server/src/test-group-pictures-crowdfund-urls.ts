@@ -252,10 +252,10 @@ async function rulesOnGlobal(): Promise<void> {
         && !(db.prepare(`SELECT 1 FROM pragma_table_info('groups') WHERE name = 'avatar_url'`).get()),
         'the picture is kept in group_pictures, out of the group\'s row (which has no avatar_url)');
 
-    // Every read a member makes: URLs, never the picture.
+    // Every read a member makes: URLs, never the picture. Pictures S4: Plain defaults to category social emblem bundled://sunflower
     const want: Record<string, (u: unknown) => boolean> = {
         [open.id]: (u) => GROUP_URL(open.id).test(String(u)), [ask.id]: (u) => GROUP_URL(ask.id).test(String(u)),
-        [quiet.id]: (u) => GROUP_URL(quiet.id).test(String(u)), [shipped.id]: (u) => u === 'bundled://leaf', [plain.id]: (u) => u === undefined || u === null,
+        [quiet.id]: (u) => GROUP_URL(quiet.id).test(String(u)), [shipped.id]: (u) => u === 'bundled://leaf', [plain.id]: (u) => u === 'bundled://sunflower',
     };
     const list = await call(base, 'GET', '/api/groups', M);
     const listed = (list.body ?? []) as any[];
@@ -331,12 +331,13 @@ async function rulesOnGlobal(): Promise<void> {
     const oldNow = await call(base, 'GET', url, null);
     const newNow = await call(base, 'GET', newUrl, null);
     assert(oldNow.status === 404 && newNow.status === 200 && newNow.bytes.equals(bytesOf(stored(open.id)!)), `the old URL opens nothing (${oldNow.status}); the new one opens the new picture (${newNow.status})`);
+    // Pictures S4: clearing picture to empty is refused ("A group keeps a picture"); group keeps its picture
     const removed = await call(base, 'PATCH', `/api/groups/${open.id}`, C, { avatarUrl: '' });
     const afterRemoval = await call(base, 'GET', newUrl, null);
     const cardNow = await call(base, 'GET', `/api/groups/${open.id}`, M);
-    assert(removed.status === 200 && removed.body?.group?.avatarUrl === undefined && stored(open.id) === null && afterRemoval.status === 404
-        && cardNow.body?.avatarUrl === undefined,
-        `a removed picture: no URL in any read, no row left, and its last URL opens nothing (${afterRemoval.status})`);
+    assert(removed.status === 400 && /keeps a picture/i.test(removed.body?.error ?? '') && afterRemoval.status === 200
+        && cardNow.body?.avatarUrl === newUrl,
+        `a removed picture is refused: 400 A group keeps a picture (${removed.status} ${removed.body?.error}), and picture remains`);
 
     // The cap on the way in: a member's photo cap, 2 MB of image bytes. (Over HTTP the 2 MB body cap comes first.)
     const fits = dataUrl(jpeg(1_000_000, 13));

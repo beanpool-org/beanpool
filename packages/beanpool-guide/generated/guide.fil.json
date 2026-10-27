@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "fil",
-  "hash": "3790244cbfab1689ae867a4d6e769a15f9c3fd4de2242bafc61bfc1822557cbf",
+  "hash": "660a45f08897c24916c5da60ef4a2d98ea66bb8195e5551a675ba6056daae9fc",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "Seksyon ng Alamin",
       "summary": "Maikling mga video tungkol sa BeanPool, at ang mga pahina ng gabay na kasama ng mga ito.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "mga video mula sa BeanPool tungkol sa kung paano ito gumagana;",
-            "ang **Pang-araw-araw na Pagninilay**, isang maikling kaisipan na nagbabago tuwing umaga. Isa lamang itong pamagat; walang mabubuksan."
+            "ang **Pang-araw-araw na Pagninilay**, isang maikling kaisipan na nagbabago tuwing umaga. I-tap ito para buksan ang pagninilay sa araw na ito."
           ]
         },
         {

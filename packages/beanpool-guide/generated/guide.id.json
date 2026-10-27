@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "id",
-  "hash": "b5eef2214e10eb7b9e6a083f526cad085079fa0077be0bae743eec6cbad03533",
+  "hash": "123955b10937810b7a8a33231daaef3c6f4b27b98e926dbc3c1cec3ad1402025",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "Ruang Belajar",
       "summary": "Video pendek tentang BeanPool, dan halaman panduan yang sesuai.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "video dari BeanPool tentang cara kerjanya;",
-            "**Renungan Harian**, pemikiran singkat yang berganti setiap pagi. Ini hanyalah judul; tidak ada yang perlu dibuka."
+            "**Renungan Harian**, pemikiran singkat yang berganti setiap pagi. Ketuk untuk membuka renungan hari ini."
           ]
         },
         {

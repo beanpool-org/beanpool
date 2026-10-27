@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "es",
-  "hash": "91034670a2fbdf21dacc2f44b9702c1f8dc58101a916a4956ac41ab6c3df605f",
+  "hash": "e6dbcaa20d493e7081fa3d6077970e5ec78294ae95ff235e5657925689a87e6d",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "La sección Aprender",
       "summary": "Videos breves sobre BeanPool y las páginas de la guía que los acompañan.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "videos de BeanPool sobre cómo funciona;",
-            "la **Reflexión diaria**, un pensamiento breve que cambia cada mañana. Es solo un encabezado; no hay nada que abrir."
+            "la **Reflexión diaria**, un pensamiento breve que cambia cada mañana. Tócalo para abrir la reflexión del día."
           ]
         },
         {

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "ko",
-  "hash": "f6bb800d3344889bdc9524f20c59533153390e5eacc1e0dc60247119e823b06b",
+  "hash": "649850af3dee34f6be6e384b856e04882d212aaf2efde14923a59d8b0d3ded8a",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "배움 영상",
       "summary": "BeanPool에 관한 짧은 영상과 해당 안내 가이드 페이지예요.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "BeanPool 작동 원리에 관한 BeanPool 공식 영상;",
-            "매일 아침 바뀌는 짧은 생각인 **오늘의 생각**. 제목만 표시되며 따로 열리는 화면은 없어요."
+            "매일 아침 바뀌는 짧은 생각인 **오늘의 생각**. 탭하면 오늘의 생각을 열어볼 수 있어요."
           ]
         },
         {

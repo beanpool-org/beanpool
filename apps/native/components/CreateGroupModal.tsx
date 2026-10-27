@@ -25,8 +25,10 @@ import { GROUP_CATEGORY_OPTIONS, GROUP_JOIN_POLICY_OPTIONS, CREATE_GROUP_DEFAULT
 import { router } from 'expo-router';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn } from '../utils/node-profile';
-import { t } from '@beanpool/core';
+import { t, bundledGroupEmblem } from '@beanpool/core';
 import { signedRequestWords } from './signed-request-lines';
+import { AvatarPickerSheet } from './AvatarPickerSheet';
+import { MemberAvatar } from './MemberAvatar';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
@@ -45,6 +47,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState<GroupCategory>(CREATE_GROUP_DEFAULTS.category);
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>(CREATE_GROUP_DEFAULTS.joinPolicy);
+    const [picture, setPicture] = useState<string>(() => bundledGroupEmblem(CREATE_GROUP_DEFAULTS.category));
+    const [userPickedPicture, setUserPickedPicture] = useState(false);
+    const [pickingPicture, setPickingPicture] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const insets = useSafeAreaInsets();
     // Lifted by the keyboard's height, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
@@ -220,6 +225,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 description: description.trim() || undefined,
                 category,
                 joinPolicy,
+                avatarUrl: picture,
             }),
             onCreated: (group) => {
                 hapticSuccess();
@@ -228,6 +234,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 setDescription('');
                 setCategory(CREATE_GROUP_DEFAULTS.category);
                 setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
+                setPicture(bundledGroupEmblem(CREATE_GROUP_DEFAULTS.category));
+                setUserPickedPicture(false);
                 onClose();
             },
             onInvalidName: () => Alert.alert(t('Invalid Name'), t('Group name must be at least 2 characters long.')),
@@ -271,6 +279,26 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                             </Text>
                         </View>
 
+                        <Text style={styles.fieldLabel}>{t('Picture')}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                            <MemberAvatar avatarUrl={picture} pubkey="" callsign={name || t('Group')} size={56} />
+                            <Pressable
+                                style={{
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 8,
+                                    borderRadius: 10,
+                                    borderWidth: 1,
+                                    borderColor: colors.border.default,
+                                    backgroundColor: colors.surface.subtle,
+                                }}
+                                onPress={() => setPickingPicture(true)}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Choose another picture')}
+                            >
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.heading }}>{t('Choose another')}</Text>
+                            </Pressable>
+                        </View>
+
                         <Text style={styles.fieldLabel}>{t('Group Name *')}</Text>
                         <TextInput
                             style={styles.input}
@@ -306,6 +334,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                         onPress={() => {
                                             hapticTick();
                                             setCategory(cat.key);
+                                            if (!userPickedPicture) {
+                                                setPicture(bundledGroupEmblem(cat.key));
+                                            }
                                         }}
                                     >
                                         <View style={styles.optionIconWrap}>
@@ -394,6 +425,17 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                     </ScrollView>
                 </View>
             </View>
+            <AvatarPickerSheet
+                visible={pickingPicture}
+                title={t('Group Picture')}
+                colors={colors}
+                onClose={() => setPickingPicture(false)}
+                onSelectImage={(uri) => {
+                    setUserPickedPicture(true);
+                    setPicture(uri);
+                    setPickingPicture(false);
+                }}
+            />
         </Modal>
     );
 }

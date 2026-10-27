@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, groupPictureUrlOf } from '@beanpool/core';
 import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
 
 type Db = Database.Database;
@@ -75,6 +75,12 @@ export interface Conversation {
     participants: string[];
     peerCallsign?: string;
     peerAvatar?: string | null;
+    /**
+     * A group chat's (group_thread) own picture, by its URL (groupPictureUrlOf, never the picture), null for a group that
+     * has none; with its category, whose emblem an app draws for none. Absent on every other kind of chat.
+     */
+    avatarUrl?: string | null;
+    category?: string | null;
     peerLastReadAt?: string | null;
     myLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
@@ -105,10 +111,12 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
             p.status,
             CASE WHEN c.post_id IS NOT NULL THEN 'cancelled' ELSE 'active' END
         ) as post_status,
-        m.type as last_msg_type, m.system_type as last_sys_type, m.timestamp as last_msg_time
+        m.type as last_msg_type, m.system_type as last_sys_type, m.timestamp as last_msg_time,
+        g.id as group_row_id, g.avatar_ref as group_avatar_ref, g.category as group_category
         FROM conversations c
         JOIN conversation_participants cp ON c.id = cp.conversation_id
         LEFT JOIN posts p ON c.post_id = p.id
+        LEFT JOIN groups g ON c.type = 'group_thread' AND g.id = c.id
         LEFT JOIN messages m ON m.rowid = (
             SELECT MAX(rowid) FROM messages WHERE conversation_id = c.id
         )
@@ -205,6 +213,10 @@ export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: 
             participants: parts,
             peerCallsign,
             peerAvatar,
+            // A group chat is the group's: its own picture, not one member's face (Pictures S4).
+            ...(r.type === 'group_thread' && r.group_row_id
+                ? { avatarUrl: groupPictureUrlOf(r.group_row_id, r.group_avatar_ref), category: r.group_category ?? null }
+                : {}),
             peerLastReadAt: peerLastReadByConv.get(r.id) || null,
             myLastReadAt: myLastReadByConv.get(r.id) || null,
         };

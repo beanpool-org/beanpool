@@ -489,8 +489,10 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         const startSheet = screen.getByRole('dialog', { name: /Start something/i });
         fireEvent.click(within(startSheet).getByRole('button', { name: /^Enterprise/i }));
         const dialog = screen.getByRole('dialog', { name: /Start an enterprise/i });
-        const picker = within(dialog).getByLabelText('Logo (optional)');
+        // Required since Pictures S4: the label is LOGO, never optional.
+        const picker = within(dialog).getByLabelText('LOGO');
         expect(picker).toHaveAttribute('type', 'file');
+        expect(within(dialog).queryByText('Logo (optional)')).toBeNull();
         expect(within(dialog).getByText('You can add a banner photo next.')).toBeInTheDocument();
         expect(within(dialog).queryByText(/Cover Photo/i)).toBeNull();
     });
@@ -502,7 +504,8 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
         const startSheet = screen.getByRole('dialog', { name: /Start something/i });
         fireEvent.click(within(startSheet).getByRole('button', { name: /^Project/i }));
         const dialog = screen.getByRole('dialog', { name: /Start a project/i });
-        expect(within(dialog).getByLabelText('Logo (optional)')).toHaveAttribute('type', 'file');
+        expect(within(dialog).getByLabelText('LOGO')).toHaveAttribute('type', 'file');
+        expect(within(dialog).queryByText('Logo (optional)')).toBeNull();
         expect(within(dialog).queryByText('You can add a banner photo next.')).toBeNull();
     });
 
@@ -640,6 +643,9 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
 
         expect(await within(dialog).findByText('That photo could not be read. Please choose another one.')).toBeInTheDocument();
         expect(within(dialog).queryByAltText('Preview')).toBeNull();
+        // No logo yet, so Start says so and waits; the form is still there to choose one (Pictures S4).
+        expect(within(dialog).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Select Leaf avatar' }));
         expect(within(dialog).getByRole('button', { name: /Start the enterprise/i })).toBeEnabled();
     });
 });

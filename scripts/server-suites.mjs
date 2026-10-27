@@ -542,6 +542,7 @@ export const SUITES = [
     'test-group-existence-leaks-http',
     'test-groups-patch-http',
     'test-group-description-limit',
+    'test-group-picture-default',
     'test-groups-sync-and-removal',
     'test-groups-chat',
     'test-group-chat-photo',

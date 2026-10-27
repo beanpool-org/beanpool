@@ -25,6 +25,11 @@ describe('the phone photo step with no picture picked', () => {
         expect(noPicture.slice(0, noPicture.indexOf('return;'))).toContain("setMode('seedBackup')");
     });
 
+    it('with no picture picked, the preview is the ready-made picture the key picks, never the first letter (Pictures S4)', () => {
+        expect(step).not.toMatch(/pendingIdentity\.callsign\.charAt\(0\)/);
+        expect(step).toContain('resolveBundledAvatar(bundledAvatarForPubkey(pendingIdentity.publicKey))');
+    });
+
     it('says what the node asks for, by whether Beans are on', () => {
         expect(step).toContain('photoStepNote(joinBeansOn)');
         expect(photoStepNote(true)).toMatch(/before you post/);

@@ -136,6 +136,9 @@ describe('banner-after-start (PWA)', () => {
 
         fireEvent.change(nameInput, { target: { value: 'Mullum Honey' } });
         fireEvent.change(purposeInput, { target: { value: 'Local raw honey' } });
+        // A logo first (Pictures S4): until one is chosen Start says so and is off.
+        expect(within(proposeDialog).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
+        fireEvent.click(within(proposeDialog).getByRole('button', { name: 'Select Leaf avatar' }));
 
         const submitBtn = within(proposeDialog).getByRole('button', { name: /Start the enterprise/i });
         fireEvent.click(submitBtn);
@@ -144,6 +147,7 @@ describe('banner-after-start (PWA)', () => {
             lifecycle: 'ongoing',
             name: 'Mullum Honey',
             purpose: 'Local raw honey',
+            avatar: 'bundled://leaf',
         })));
 
         // Expect to land on the new enterprise's page
@@ -178,6 +182,8 @@ describe('banner-after-start (PWA)', () => {
         fireEvent.change(nameInput, { target: { value: 'Solar Co-op' } });
         fireEvent.change(purposeInput, { target: { value: 'Solar panels' } });
         fireEvent.change(goalInput, { target: { value: '250' } });
+        expect(within(proposeDialog).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
+        fireEvent.click(within(proposeDialog).getByRole('button', { name: 'Select Leaf avatar' }));
 
         const submitBtn = within(proposeDialog).getByRole('button', { name: /Start the project/i });
         fireEvent.click(submitBtn);
@@ -185,6 +191,7 @@ describe('banner-after-start (PWA)', () => {
         await waitFor(() => expect(api.createEnterprise).toHaveBeenCalledWith(expect.objectContaining({
             lifecycle: 'bounded',
             name: 'Solar Co-op',
+            avatar: 'bundled://leaf',
         })));
 
         // Modal closed

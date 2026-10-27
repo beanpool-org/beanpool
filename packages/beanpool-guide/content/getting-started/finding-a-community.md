@@ -38,7 +38,7 @@ While you wait, the community's card says **You asked to join. No answer yet**. 
 
 If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours.
 
-When an admin or member answers, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
+When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
 
 If nobody answers within 30 days, the card says **No answer came. You can ask again.**
 

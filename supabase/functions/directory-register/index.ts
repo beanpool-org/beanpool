@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { keys } from 'npm:@libp2p/crypto@5.1.13';
 import { peerIdFromPublicKey } from 'npm:@libp2p/peer-id@6.0.4';
+// v6 (front doors S13): the decisions with no dependency, shared with the node's tests (rules.ts).
+import { checkBeforeSignature, decideAfterSignature, parseDenyHosts } from './rules.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,19 +44,12 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (!payload.nodeId || !payload.callsign || !payload.timestamp) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 1. Replay Attack Prevention (5 minute window)
-    const now = Date.now();
-    const payloadTime = payload.timestamp;
-    if (Math.abs(now - payloadTime) > 5 * 60 * 1000) {
-      return new Response(JSON.stringify({ error: 'Timestamp Expired' }), {
-        status: 401,
+    // The fields (an unlist needs only nodeId and timestamp; a push also its callsign), then
+    // 1. Replay Attack Prevention (5 minute window): rules.ts checkBeforeSignature, 400 or 401 as before.
+    const early = checkBeforeSignature(payload, Date.now());
+    if (early) {
+      return new Response(JSON.stringify({ error: early.error }), {
+        status: early.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -111,11 +106,32 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Authenticated! Update database.
+    // Authenticated! An unlist, a push from one of our own test servers, or a push (rules.ts decideAfterSignature).
+    const decision = decideAfterSignature(payload, parseDenyHosts(Deno.env.get('DIRECTORY_DENY_HOSTS')));
+    if (decision.action === 'refuse') {
+      return new Response(JSON.stringify({ error: decision.error }), {
+        status: decision.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // The node leaves the directory (Listed off, its closing day, DIRECTORY_UNLISTED at boot): its own row, by the key
+    // that signed this request, and nothing else. A row that is not there is already gone: the same answer.
+    if (decision.action === 'unlist') {
+      const { error: unlistError } = await supabaseClient
+        .from('directory_nodes')
+        .delete()
+        .eq('node_id', payload.nodeId);
+      if (unlistError) throw unlistError;
+      return new Response(JSON.stringify({ success: true, unlisted: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // The listing promise (BeanPool #2142, mothership A2). Always set, null when absent or of the wrong shape, so an older
     // node's push or a lapsed promise clears it; a wrong shape is stored as null, never refused.

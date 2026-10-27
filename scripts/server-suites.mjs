@@ -428,6 +428,7 @@ export const SUITES = [
     'test-directory-publisher',
     'test-directory-hold-back',
     'test-directory-promise',
+    'test-directory-withdraw',
     'test-website-directory-map',
     'test-members-holiday',
     'test-admin-seed-invite',

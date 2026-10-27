@@ -77,7 +77,7 @@ import { startRestoreNoticeWatch } from './services/restore-points.js';
 import { logger } from './logger.js';
 import { bumpMembersVersion } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
-import { initDirectoryPublisher } from './services/directory-publisher.js';
+import { initDirectoryPublisher, withdrawIfUnlistedAtBoot } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initTunnelConnector } from './services/tunnel-connector.js';
@@ -389,6 +389,9 @@ async function main() {
     void initTunnelConnector();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
+        // DIRECTORY_UNLISTED set on a server that pushed before (front doors S13): its row leaves the directory now, once.
+        // Nothing is sent by a server that never pushed. Not awaited.
+        void withdrawIfUnlistedAtBoot();
         // Step 10.5: the public-address agent. Every 5 min it refreshes a tunnel address this server holds (the tunnel
         // above runs the answer), and with PUBLIC_ADDRESS_* set it also claims <name>.beanpool.org from the registrar.
         initPublicAddress();

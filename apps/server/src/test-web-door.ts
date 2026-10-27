@@ -263,9 +263,14 @@ async function main(): Promise<void> {
             `GET ${docPath}: Referrer-Policy strict-origin-when-cross-origin (got ${res.headers.get('referrer-policy')})`);
         assert(res.headers.get('x-frame-options') === 'DENY', `GET ${docPath}: still X-Frame-Options DENY`);
     }
-    const root = await fetch(`${BASE}/`, { redirect: 'manual' });
+    // A browser that keeps an account here is sent on to the web app; a stranger at a local community's bare address reads
+    // its card (front doors S15, routes/community-card.ts), a page with no script: both under the app document's policy.
+    const root = await fetch(`${BASE}/`, { redirect: 'manual', headers: { Cookie: 'bp_account_here=1' } });
     assert(root.status === 302 && root.headers.get('location') === '/app' && root.headers.get('content-security-policy') === APP_DOCUMENT_CSP,
         `GET / (the way into the web app) carries it too (got ${root.status} ${root.headers.get('location')})`);
+    const card = await fetch(`${BASE}/`, { redirect: 'manual' });
+    assert(card.status === 200 && (await card.text()).includes('data-testid="community-card"') && card.headers.get('content-security-policy') === APP_DOCUMENT_CSP,
+        `GET / for a stranger (the community's card) carries it too (got ${card.status} ${card.headers.get('content-security-policy')})`);
 
     const invite = await fetch(`${BASE}/?invite=BP-TEST-0001`);
     const inviteHtml = await invite.text();

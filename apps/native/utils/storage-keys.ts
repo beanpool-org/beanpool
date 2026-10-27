@@ -3,6 +3,9 @@
  * use them without loading React Native.
  */
 
+/** The member's choice on notification permissions (utils/notification-permission.ts). Sign Out and Replace wipe it. */
+export const NOTIFICATION_PERMISSION_STORE_KEY = 'beanpool_notification_permission';
+
 /** The communities this key asked to join (utils/knock.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
 export const KNOCKS_STORE_KEY = 'beanpool_knocks';
 

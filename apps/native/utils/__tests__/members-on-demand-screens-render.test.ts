@@ -182,6 +182,13 @@ vi.mock('../nodes', async (importOriginal) => ({
     addSavedNode: vi.fn(async () => {}),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
+// Every DM start asks about notifications first (createConversationApi, front doors S3; its own suite is
+// notification-permissions-s3): answered at once here, so a DM started from a search doesn't wait on loading the real
+// expo-notifications, which outlasted this suite's presses and left the spinner turning (#2524's full run).
+vi.mock('../notification-permission', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../notification-permission')>()),
+    askNotificationPermissionOnAction: vi.fn(async () => 'unanswered' as const),
+}));
 // One object, as the provider holds one: a fresh identity each render would re-run every screen's focus effect forever.
 const who = vi.hoisted(() => ({ value: { identity: { publicKey: 'e'.repeat(64), callsign: 'Me' } } }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => who.value }));
@@ -651,6 +658,12 @@ for (const scheme of ['light', 'dark'] as const) {
                 // The DM itself is the node's to make: refused here, the card is kept all the same.
                 const row = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Rosa'))!;
                 await press(row);
+                // A DM start first asks about notifications through a lazy import (createConversationApi): a module load
+                // can outlast press()'s few ticks on a busy machine, so wait for the start to finish, not for a tick count.
+                await vi.waitFor(async () => {
+                    await settle();
+                    expect(host.querySelector('[data-spinner]')).toBeNull();
+                }, { timeout: 20_000, interval: 50 });
                 const kept = await (await db.getDb()).getFirstAsync<{ callsign: string; card_fetched_at: string | null }>('SELECT callsign, card_fetched_at FROM members WHERE public_key = ?', [ROSA]);
                 expect(kept?.callsign).toBe('Rosa');
                 expect(kept?.card_fetched_at).toBeTruthy();

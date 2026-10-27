@@ -11,7 +11,8 @@ import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
     ADMIN_KNOCKS_COUNT_STORE_KEY, CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY,
-    KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX, PUSH_REGISTERED_AT_STORE_KEY,
+    KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, NOTIFICATION_PERMISSION_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX,
+    PUSH_REGISTERED_AT_STORE_KEY,
     PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY,
 } from './storage-keys';
 import { forgetNoticeCounts } from './notice-counts';
@@ -549,6 +550,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     // the next account there would get a false "not in your shop" or a shop it never asked for (#2372 review).
     await storage.removeItem('beanpool_offer_shop_choice');
     await storage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
+    await storage.removeItem(NOTIFICATION_PERMISSION_STORE_KEY);
     await storage.removeItem(PUSH_REGISTERED_AT_STORE_KEY);
     await storage.removeItem(PUSH_REGISTRATIONS_DUE_STORE_KEY);
     // How many notices each community sent this account since it was last open (utils/notice-counts.ts), after any count

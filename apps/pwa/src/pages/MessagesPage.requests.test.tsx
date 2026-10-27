@@ -706,7 +706,8 @@ describe('the sender\'s side', () => {
         vi.stubGlobal('alert', alert);
         vi.mocked(sendMessageApi).mockRejectedValue(Object.assign(new Error(WAITING_WORDS), { status: 403, code: 'dm_request_pending' }));
         render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
-        const box = await screen.findByPlaceholderText('Message...');
+        await screen.findByTestId('request-first-line');
+        const box = screen.getByPlaceholderText('Message...');
         fireEvent.change(box, { target: { value: 'Are you there?' } });
         fireEvent.click(screen.getByTitle('Send message'));
         expect(await screen.findByTestId('chat-refusal')).toHaveTextContent(WAITING_WORDS);

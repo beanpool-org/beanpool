@@ -107,6 +107,7 @@ export default function YourShopScreen() {
 
     const shop = read?.state === 'open' ? read.shop : null;
     const bannerUri = useNodeUri(shop?.photoUrl);
+    const [bannerFailed, setBannerFailed] = useState<string | null>(null);
     const refusedAt = (where: Where) => (refusal?.where === where ? refusal : null);
     const openDeals = () => {
         setSheet(null);
@@ -273,8 +274,14 @@ export default function YourShopScreen() {
                             <View style={styles.bannerFieldContainer} testID="shop-field-banner-container">
                                 <Text style={[styles.fieldTitle, { color: colors.text.heading }]}>{t('Banner photo')}</Text>
                                 <View style={[styles.bannerPreview, { borderColor: colors.border.default }]} testID="shop-banner-preview">
-                                    {shop.photoUrl ? (
-                                        <Image source={{ uri: bannerUri ?? shop.photoUrl }} style={styles.bannerImage} contentFit="cover" testID="shop-banner-image" />
+                                    {shop.photoUrl && (bannerUri || !shop.photoUrl.startsWith('/')) && shop.photoUrl !== bannerFailed ? (
+                                        <Image
+                                            source={{ uri: bannerUri ?? shop.photoUrl }}
+                                            style={styles.bannerImage}
+                                            contentFit="cover"
+                                            testID="shop-banner-image"
+                                            onError={() => setBannerFailed(shop.photoUrl)}
+                                        />
                                     ) : (
                                         <DefaultBanner category={shop.category} logoUrl={avatar} pubkey={identity?.publicKey} />
                                     )}

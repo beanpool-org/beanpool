@@ -699,7 +699,7 @@ export function NodeIdentityPanel({
                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"
                     />
                     <p id="area-name-help" className="text-xs text-nature-400 m-0">
-                        Shown on your community's card to people who visit its address, while Share Location &amp; Radius is on. A town, never a street.
+                        Shown on your community's card to people who visit its address, while Share location &amp; radius is on. A town, never a street.
                     </p>
                 </div>
 

@@ -563,7 +563,7 @@ export interface CommunityHealth {
     minAppVersion?: string;
     minAppVersionFrom?: string | null;
     appVersions?: AppStoreVersions;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export async function getCommunityHealth(): Promise<CommunityHealth> {

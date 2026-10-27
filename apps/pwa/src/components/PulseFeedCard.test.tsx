@@ -151,7 +151,8 @@ describe('PulseFeedCard Instagram link card (web)', () => {
     it('a failed image falls back to the same card', () => {
         const { container } = render(<PulseFeedCard item={instagramWithThumb} />);
 
-        const img = container.querySelector('img');
+        // The thumbnail, in its frame: the author's face is a picture too now (Pictures S4: never an initial).
+        const img = container.querySelector('.aspect-video img');
         expect(img).not.toBeNull();
         fireEvent.error(img!);
 
@@ -170,8 +171,8 @@ describe('PulseFeedCard Instagram link card (web)', () => {
     it('an Instagram item with a valid thumbnail shows the thumbnail with platform badge and drops duplicate second link', () => {
         const { container } = render(<PulseFeedCard item={instagramWithThumb} />);
 
-        // Shows thumbnail with badge
-        expect(container.querySelector('img')).toBeInTheDocument();
+        // Shows thumbnail with badge (in its frame: the author's face is a picture too)
+        expect(container.querySelector('.aspect-video img')).toBeInTheDocument();
         expect(screen.getByText('Instagram ↗')).toBeInTheDocument();
 
         // Does NOT render duplicate second link in footer

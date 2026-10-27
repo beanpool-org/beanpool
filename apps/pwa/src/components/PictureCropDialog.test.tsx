@@ -348,7 +348,7 @@ describe("Propose an enterprise: its logo", () => {
         expect(vi.mocked(api.createEnterprise).mock.calls[0][0].avatar).toBe(CROPPED);
     });
 
-    it('a crop cancelled leaves the form as it was, and it can be sent without a logo', async () => {
+    it('a crop cancelled leaves the form as it was: no logo, so Start still says "Choose a logo" and is off (Pictures S4)', async () => {
         render(<ProjectsPage identity={identity} />);
         // Commons S2: ＋ Start something → Enterprise opens the start form on the enterprise kind.
         fireEvent.click(await screen.findByRole('button', { name: /Start something/i }));
@@ -358,7 +358,8 @@ describe("Propose an enterprise: its logo", () => {
         fireEvent.click(within(await cropDialog()).getByRole('button', { name: 'Cancel' }));
         await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull());
         expect(within(form).queryByAltText('Preview')).toBeNull();
-        expect(within(form).getByRole('button', { name: /Start the enterprise/i })).toBeEnabled();
+        expect(within(form).queryByRole('button', { name: /Start the enterprise/i })).toBeNull();
+        expect(within(form).getByRole('button', { name: 'Choose a logo' })).toBeDisabled();
         await act(async () => {});
     });
 });

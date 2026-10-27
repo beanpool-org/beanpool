@@ -356,8 +356,9 @@ async function main(): Promise<void> {
         const reads = AGENT_TOOLS.filter(t => !t.write);
         const argsFor = (name: string): Record<string, unknown> => name === 'report_get' ? { report_id: r1!.id }
             : name === 'reports_list' ? { include_text: true, status: 'all' } : name === 'knocks_list' ? { include_text: true } : {};
-        // Answers that move between two calls on their own: the clock, the process's memory.
-        const VOLATILE = /"(uptimeSeconds|uptime|processMb|systemUsedPercent|heapUsedMb|rssMb|now)":(\d+(\.\d+)?|"[^"]*")/g;
+        // Answers that move between two calls on their own: the clock, the process's memory, the disk (a CI runner's moved
+        // 42 → 41 % between the two reads and failed #2508 and #2511).
+        const VOLATILE = /"(uptimeSeconds|uptime|processMb|systemUsedPercent|diskUsedPercent|heapUsedMb|rssMb|now)":(\d+(\.\d+)?|"[^"]*")/g;
         const differs: string[] = [];
         for (const [who, s, client, grantId] of [['owner', ownerS, ownerClient, ownerGrantId], ['admin', adminS, adminClient, adminGrantId]] as const) {
             for (const t of reads) {

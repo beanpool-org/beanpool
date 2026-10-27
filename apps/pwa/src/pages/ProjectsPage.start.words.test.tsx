@@ -81,6 +81,8 @@ describe('ProjectsPage Start Something in pseudo-locale (words §5 S2)', () => {
 
         let proposeModal = screen.getByRole('dialog');
         expect(within(proposeModal).getByRole('heading', { level: 2 }).textContent).toBe(xx('Start an enterprise'));
+        expect(within(proposeModal).getByRole('button', { name: xx('Choose a logo') })).toBeDisabled();
+        fireEvent.click(within(within(proposeModal).getByRole('region', { name: xx('Or choose an avatar:') })).getAllByRole('button')[0]);
         expect(within(proposeModal).getByRole('button', { name: xx('Start the enterprise 🏛️') })).toBeInTheDocument();
         fireEvent.click(within(proposeModal).getByRole('button', { name: xx('Close dialog') }));
 
@@ -91,6 +93,8 @@ describe('ProjectsPage Start Something in pseudo-locale (words §5 S2)', () => {
 
         proposeModal = screen.getByRole('dialog');
         expect(within(proposeModal).getByRole('heading', { level: 2 }).textContent).toBe(xx('Start a project'));
+        // The form keeps its draft between opens, the logo chosen above with it, so Start reads as the kind's.
+        expect(within(proposeModal).getByRole('button', { name: xx('Remove photo') })).toBeInTheDocument();
         expect(within(proposeModal).getByRole('button', { name: xx('Start the project 🌱') })).toBeInTheDocument();
         fireEvent.click(within(proposeModal).getByRole('button', { name: xx('Close dialog') }));
 

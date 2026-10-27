@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "tr",
-  "hash": "817c0b05b5900d8ce4811cb3cc809135b0b012180e3151b9ccccb576a293c9e4",
+  "hash": "7198de99409b0547c30519904aedc49d06e91b241699516749d71f4e92110fb9",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "Öğren bölümü",
       "summary": "BeanPool hakkında kısa videolar ve bunlara eşlik eden kılavuz sayfaları.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "BeanPool'dan nasıl çalıştığına dair videolar;",
-            "her sabah değişen kısa bir düşünce olan **Günlük Düşünce**. Bu yalnızca bir başlıktır; açılacak bir şey yoktur."
+            "her sabah değişen kısa bir düşünce olan **Günlük Düşünce**. Günün düşüncesini açmak için üzerine dokunun."
           ]
         },
         {

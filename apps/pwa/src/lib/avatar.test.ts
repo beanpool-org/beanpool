@@ -32,4 +32,17 @@ describe('resolveAvatarUrl', () => {
         const inline = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==';
         expect(resolveAvatarUrl(inline)).toBe(inline);
     });
+
+    it('falls back to deterministic ready-made preset when avatar is absent but pubkey is provided', () => {
+        const pkA = '11'.repeat(32);
+        const pkB = '22'.repeat(32);
+        const resA = resolveAvatarUrl(null, pkA);
+        const resB = resolveAvatarUrl(null, pkB);
+        expect(resA).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
+        expect(resB).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
+        // Stability
+        expect(resolveAvatarUrl(null, pkA)).toBe(resA);
+        expect(resolveAvatarUrl('', pkA)).toBe(resA);
+        expect(resolveAvatarUrl(undefined, pkA)).toBe(resA);
+    });
 });

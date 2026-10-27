@@ -6,6 +6,7 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
@@ -272,7 +273,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         }
     };
 
-    const initial = profile?.callsign?.charAt(0).toUpperCase() || '?';
     const avatarResolved = resolveAvatarUrl(profile?.avatar);
 
     if (!isSelf && kindFor !== pubkey) {
@@ -373,7 +373,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <img src={avatarResolved} alt={t('avatar')} className="w-full h-full object-cover" />
                             </button>
                         ) : (
-                            <span className="text-4xl font-bold text-nature-400 dark:text-nature-400">{initial}</span>
+                            <MemberAvatar avatarUrl={null} pubkey={pubkey} callsign={profile?.callsign} size={88} alt={t('avatar')} />
                         )}
                     </div>
                     
@@ -999,13 +999,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 <div key={r.id || i} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-sm">
                                                     <div className="flex justify-between items-start mb-2">
                                                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                            {resolveAvatarUrl(r.target_avatar) ? (
-                                                                <img src={resolveAvatarUrl(r.target_avatar)!} alt={r.target_callsign || t('avatar')} className="w-7 h-7 rounded-full object-cover border" />
-                                                            ) : (
-                                                                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-100 dark:bg-nature-800 border">
-                                                                    {r.target_callsign?.charAt(0).toUpperCase() || '?'}
-                                                                </div>
-                                                            )}
+                                                            <MemberAvatar avatarUrl={r.target_avatar} pubkey={r.targetPubkey} callsign={r.target_callsign} size={28} alt={r.target_callsign || t('avatar')} className="border" />
                                                             <div className="font-bold text-[14px] text-nature-900 dark:text-white truncate">{r.target_callsign || t('Anonymous')}</div>
                                                         </div>
                                                         <div className="text-[10px] font-bold text-nature-400 uppercase">

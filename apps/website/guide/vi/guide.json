@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "vi",
-  "hash": "f288a636c1c599b07254314a45f8ed25bfaab30310d5c502a1cced79212ef7ef",
+  "hash": "b190b257d660eeaeae1deb6b8acb173aaf0abb8d24d1bbb479cae3922345a668",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "Mục Tìm hiểu",
       "summary": "Các video ngắn về BeanPool và các trang hướng dẫn đi kèm.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "các video từ BeanPool về cách thức hoạt động;",
-            "**Chiêm nghiệm mỗi ngày**, một suy nghĩ ngắn thay đổi vào mỗi buổi sáng. Đây chỉ là một tiêu đề; không có gì để mở."
+            "**Chiêm nghiệm mỗi ngày**, một suy nghĩ ngắn thay đổi vào mỗi buổi sáng. Nhấn vào đó để mở chiêm nghiệm trong ngày."
           ]
         },
         {

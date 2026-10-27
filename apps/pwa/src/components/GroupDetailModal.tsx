@@ -14,8 +14,11 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
+import { AvatarPresetPicker } from './AvatarPresetPicker';
+import { usePictureCrop } from './PictureCropDialog';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
 import { GroupDecisions } from './EnterpriseDecisions';
@@ -77,6 +80,37 @@ export function GroupDetailModal({
     // The signer's moderation mute: the node refuses a muted convenor's invitation (assertNotMuted), so the button
     // waits for this answer and never shows on a guess (null: not known).
     const [muted, setMuted] = useState<boolean | null>(null);
+    const [pickingPicture, setPickingPicture] = useState(false);
+    const cropper = usePictureCrop();
+
+    const handleChangePicture = async (newUrl: string) => {
+        if (!groupData) return;
+        setActionLoading(true);
+        setError(null);
+        try {
+            await updateGroup(groupData.id, { avatarUrl: newUrl });
+            await loadDetails();
+            setPickingPicture(false);
+            if (onMembershipChanged) onMembershipChanged();
+        } catch (err: any) {
+            setError(err.message || t('Failed to update group picture'));
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        // Emptied, so the same photo chosen again (after a crop cancelled) opens the crop again.
+        e.target.value = '';
+        if (!file) return;
+        try {
+            const cropped = await cropper.crop(file, AVATAR_PICTURE);
+            if (cropped) {
+                await handleChangePicture(cropped);
+            }
+        } catch { /* cancelled */ }
+    };
 
     const loadCard = useCallback(async () => {
         if (!group?.id) return;
@@ -311,8 +345,12 @@ export function GroupDetailModal({
             >
                 {/* Header */}
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
-                    <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xl" aria-hidden="true">👥</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <img
+                            src={resolveAvatarUrl(groupData.avatarUrl) || resolveAvatarUrl(bundledGroupEmblem(groupData.category)) || ''}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover border border-nature-300 dark:border-nature-700 shrink-0"
+                        />
                         <h2 id="group-detail-title" className="text-lg font-black text-nature-950 dark:text-white truncate">
                             {groupData.name}
                         </h2>
@@ -328,25 +366,57 @@ export function GroupDetailModal({
                 </div>
 
                 <div className="p-4 space-y-4">
-                    {/* Tags */}
-                    <div className="flex flex-wrap gap-2">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🏷️ </span>{categoryPill(groupData.category)}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🚪 </span>{policyWords(groupData.joinPolicy)}
-                        </span>
-                        {closed && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
-                                <span aria-hidden="true">🔒 </span>{t('Closed', undefined, 'a group')}
+                    {/* Tags & Picture actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap gap-2">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
+                                <span aria-hidden="true">🏷️ </span>{categoryPill(groupData.category)}
                             </span>
-                        )}
-                        {isConvenor && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
-                                <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? t('Lead convenor', undefined, 'group role') : t('Convenor', undefined, 'group role')}
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
+                                <span aria-hidden="true">🚪 </span>{policyWords(groupData.joinPolicy)}
                             </span>
+                            {closed && (
+                                <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
+                                    <span aria-hidden="true">🔒 </span>{t('Closed', undefined, 'a group')}
+                                </span>
+                            )}
+                            {isConvenor && (
+                                <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
+                                    <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? t('Lead convenor', undefined, 'group role') : t('Convenor', undefined, 'group role')}
+                                </span>
+                            )}
+                        </div>
+                        {isConvenor && !closed && (
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setPickingPicture((p) => !p)}
+                                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                >
+                                    {t('Change the picture')}
+                                </button>
+                                <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer">
+                                    {t('Choose a photo')}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handlePhotoUpload}
+                                        className="sr-only"
+                                    />
+                                </label>
+                            </div>
                         )}
                     </div>
+
+                    {pickingPicture && (
+                        <div className="p-3 bg-nature-200/50 dark:bg-nature-900/50 rounded-xl border border-nature-300 dark:border-nature-700">
+                            <AvatarPresetPicker
+                                selected={groupData.avatarUrl}
+                                onSelect={handleChangePicture}
+                            />
+                        </div>
+                    )}
+                    {cropper.dialog}
 
                     {/* Group info names the lead convenor. Never "owner" — that is the owner of a node. */}
                     {roster.leadCallsign && (
@@ -432,19 +502,12 @@ export function GroupDetailModal({
                                     </div>
                                     <div className="space-y-1.5">
                                         {pendingMembers.map((p) => {
-                                            const resolvedAvatar = resolveAvatarUrl(p.avatarUrl);
                                             return (
                                                 // The name keeps close to half the row (at 320 px it was cut even in English); Approve and
                                                 // Decline in a longer language drop below it rather than squeezing it away.
                                                 <div key={p.memberPubkey} className="flex flex-wrap items-center justify-between gap-2 p-2 bg-white dark:bg-nature-900 rounded-xl border border-nature-200 dark:border-nature-800">
                                                     <div className="flex items-center gap-2 min-w-0 flex-1 basis-[45%]">
-                                                        {resolvedAvatar ? (
-                                                            <img src={resolvedAvatar} alt="" className="w-6 h-6 shrink-0 rounded-full object-cover" />
-                                                        ) : (
-                                                            <div className="w-6 h-6 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-[10px] font-bold">
-                                                                {(p.callsign || '?').charAt(0).toUpperCase()}
-                                                            </div>
-                                                        )}
+                                                        <MemberAvatar avatarUrl={p.avatarUrl} pubkey={p.memberPubkey} callsign={p.callsign} size={24} alt="" />
                                                         <span className="text-xs font-bold text-nature-900 dark:text-white truncate">
                                                             {p.callsign || p.memberPubkey.slice(0, 10)}
                                                         </span>
@@ -517,20 +580,13 @@ export function GroupDetailModal({
                             <div className="divide-y divide-nature-200 dark:divide-nature-800/80 border border-nature-200 dark:border-nature-800 rounded-xl overflow-hidden">
                                 {roster.rows.map((row) => {
                                     const m = row.member;
-                                    const resolvedAvatar = resolveAvatarUrl(m.avatarUrl);
                                     const highlight = row.isLead || m.role === 'convenor';
                                     return (
                                         // flex-wrap and gap-y so the row stacks rather than overflowing at 320px
                                         // with 1.3× text.
                                         <div key={m.memberPubkey} className="flex flex-wrap items-center justify-between gap-y-2 p-3 bg-white dark:bg-nature-950">
                                             <div className="flex items-center gap-3 min-w-0">
-                                                {resolvedAvatar ? (
-                                                    <img src={resolvedAvatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
-                                                ) : (
-                                                    <div className="w-8 h-8 shrink-0 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center text-xs font-bold">
-                                                        {(m.callsign || '?').charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
+                                                <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign} size={32} alt="" />
                                                 <div className="min-w-0">
                                                     <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
                                                         {m.callsign || m.memberPubkey.slice(0, 10)} {row.isYou && <span className="text-xs text-nature-400">{t('(You)', undefined, 'roster: the viewer')}</span>}

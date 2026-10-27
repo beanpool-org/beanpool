@@ -877,6 +877,12 @@ export interface Conversation {
     unreadCount?: number;
     peerCallsign?: string;
     peerAvatar?: string | null;
+    /**
+     * A group chat's own picture (the node sends it on a group_thread, Pictures S4): its URL, or null for a group that has
+     * none, whose `category` gives the emblem drawn instead. Never another member's face.
+     */
+    avatarUrl?: string | null;
+    category?: string | null;
     peerLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
     /** The member's mute on this chat (set on the phone), null when not muted. */

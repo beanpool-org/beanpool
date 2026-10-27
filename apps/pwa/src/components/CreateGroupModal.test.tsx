@@ -1,6 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { CreateGroupModal } from './CreateGroupModal';
+import { createGroup } from '../lib/api';
+import * as pictureCrop from '../lib/picture-crop';
+
+vi.mock('../lib/api', () => ({
+    createGroup: vi.fn(async (params) => ({ id: 'g1', ...params })),
+}));
 
 describe('CreateGroupModal Accessibility', () => {
     it('renders with dialog title linking and aria attributes when open', () => {
@@ -57,5 +63,78 @@ describe('CreateGroupModal Accessibility', () => {
 
         const submitBtn = screen.getByRole('button', { name: /Create Group/i });
         expect(submitBtn.className).toContain('focus-visible:ring-2');
+    });
+});
+
+describe('CreateGroupModal Picture (Pictures S4, §4.3)', () => {
+    it('has first row Picture with category emblem following category until custom choice, and sends avatarUrl', async () => {
+        const onCreated = vi.fn();
+        render(<CreateGroupModal isOpen={true} onClose={vi.fn()} onCreated={onCreated} />);
+
+        // Label Picture is present
+        expect(screen.getByText(/^Picture$/i)).toBeInTheDocument();
+
+        // Default category is social -> emblem is bundled://sunflower
+        const previewImg = screen.getByAltText(/Group picture/i) as HTMLImageElement;
+        expect(previewImg).toBeInTheDocument();
+        expect(previewImg.src).toContain('avatar_sunflower');
+
+        // Changing category to General updates emblem to bundled://bean-green
+        const generalBtn = screen.getByRole('button', { name: /General/i });
+        fireEvent.click(generalBtn);
+        expect(previewImg.src).toContain('avatar_bean_green');
+
+        // Changing category to Working Group updates emblem to bundled://solartree
+        const workingBtn = screen.getByRole('button', { name: /Working Group/i });
+        fireEvent.click(workingBtn);
+        expect(previewImg.src).toContain('avatar_solartree');
+
+        // Changing category to Guild updates emblem to bundled://crystal
+        const guildBtn = screen.getByRole('button', { name: /Guild/i });
+        fireEvent.click(guildBtn);
+        expect(previewImg.src).toContain('avatar_crystal');
+
+        // Convenor chooses a custom preset ("Choose another")
+        const chooseAnotherBtn = screen.getByRole('button', { name: /Choose another/i });
+        fireEvent.click(chooseAnotherBtn);
+
+        const leafPreset = screen.getByRole('button', { name: /Select Leaf avatar/i });
+        fireEvent.click(leafPreset);
+
+        expect(previewImg.src).toContain('avatar_leaf');
+
+        // Changing category now does NOT change the picture because convenor chose one
+        fireEvent.click(generalBtn);
+        expect(previewImg.src).toContain('avatar_leaf');
+
+        // Fill name and submit
+        const nameInput = screen.getByPlaceholderText(/e\.g\. Bindarrabi/i);
+        fireEvent.change(nameInput, { target: { value: 'Herbalists' } });
+        fireEvent.click(screen.getByRole('button', { name: /Create Group/i }));
+
+        await waitFor(() => {
+            expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
+                name: 'Herbalists',
+                category: 'general',
+                avatarUrl: 'bundled://leaf',
+            }));
+        });
+    });
+
+    it('a photo picked empties the file input, so the same photo picked again after a cancelled crop opens the crop again', async () => {
+        vi.spyOn(pictureCrop, 'readPictureFile').mockResolvedValue({ src: 'data:image/jpeg;base64,UkFX', width: 1600, height: 1200, image: {} as HTMLImageElement });
+        render(<CreateGroupModal isOpen={true} onClose={vi.fn()} onCreated={vi.fn()} />);
+        // The Picture row's "Choose a photo" is the form's one file input.
+        const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+        const emptied = vi.spyOn(input, 'value', 'set');
+        const photo = () => new File(['x'], 'garden.jpg', { type: 'image/jpeg' });
+        for (const round of [1, 2]) {
+            fireEvent.change(input, { target: { files: [photo()] } });
+            expect(emptied, `pick ${round}: the input is emptied`).toHaveBeenCalledTimes(round);
+            expect(emptied).toHaveBeenLastCalledWith('');
+            fireEvent.click(within(await screen.findByRole('dialog', { name: 'Choose the part that shows' })).getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose the part that shows' })).toBeNull());
+        }
+        vi.restoreAllMocks();
     });
 });

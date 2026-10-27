@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "sw",
-  "hash": "a6b58e45b642a1748fa99965cb7d5b80003c3b27b5fd30f64cd359d575b5c1b4",
+  "hash": "3d5bb32b9039dbc8a2d164561dc700c628eb565a938a1e330fbaf6ba478d8e6a",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "Sehemu ya Jifunze",
       "summary": "Video fupi kuhusu BeanPool, na kurasa za mwongozo zinazoambatana nazo.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "video kutoka BeanPool kuhusu jinsi inavyofanya kazi;",
-            "**Tafakari ya Kila Siku**, wazo fupi linalobadilika kila asubuhi. Ni kichwa cha habari tu; hakuna cha kufungua."
+            "**Tafakari ya Kila Siku**, wazo fupi linalobadilika kila asubuhi. Iguse ili kufungua tafakari ya siku."
           ]
         },
         {

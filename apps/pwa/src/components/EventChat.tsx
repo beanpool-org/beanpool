@@ -18,7 +18,7 @@ import {
     getEventChat, postEventChatMessage, removeEventChatMessage,
     type EventThreadMessage, type EventThreadView,
 } from '../lib/api';
-import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 import { imageFromTransfer, dragCarriesFile, NODE_READABLE_NO_PHOTOS_TEXT } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
@@ -247,16 +247,9 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                             }
                             const isRemoved = m.type === 'removed';
                             const author = m.authorCallsign || m.authorPubkey?.slice(0, 8) || t('Member');
-                            const avatar = resolveAvatarUrl(m.authorAvatar);
                             return (
                                 <li key={m.id} className="py-3 flex items-start gap-2 min-w-0">
-                                    {avatar ? (
-                                        <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-nature-100 dark:bg-nature-800" />
-                                    ) : (
-                                        <div className="w-8 h-8 rounded-full flex-shrink-0 bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-nature-700 dark:text-nature-200">
-                                            {author.charAt(0).toUpperCase()}
-                                        </div>
-                                    )}
+                                    <MemberAvatar avatarUrl={m.authorAvatar} pubkey={m.authorPubkey} callsign={author} size={32} alt="" className="flex-shrink-0 bg-nature-100 dark:bg-nature-800" />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
                                             <span className="flex-1 min-w-[5rem] truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>

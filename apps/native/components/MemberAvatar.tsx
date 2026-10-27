@@ -18,7 +18,7 @@ import { avatarUri } from '../utils/image-processing';
 import { anchorUrl, getCachedAnchorUrl } from '../utils/node-post';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
 import { colors, palette } from '../constants/colors';
-import { t } from '@beanpool/core';
+import { t, bundledAvatarForPubkey } from '@beanpool/core';
 
 // Consistent color palette for letter-initial fallbacks
 const FALLBACK_COLORS = [
@@ -86,9 +86,13 @@ function MemberAvatarBase({
         bundledSource = resolveBundledAvatar(uri);
         uri = null;
     }
-    const imageSource = bundledSource || (uri ? { uri } : null);
+    let imageSource = bundledSource || (uri ? { uri } : null);
+    if (!imageSource) {
+        const fallbackPreset = bundledAvatarForPubkey(pubkey || callsign);
+        imageSource = resolveBundledAvatar(fallbackPreset);
+    }
 
-    const smallEl = imageSource ? (
+    const smallEl = (
         <Image
             source={imageSource}
             accessibilityLabel={t("{name}'s avatar", { name: callsign })}
@@ -99,19 +103,6 @@ function MemberAvatarBase({
                 { width: size, height: size, borderRadius: radius, overflow: 'hidden', flexShrink: 0 },
             ]}
         />
-    ) : (
-        // Letter-initial fallback with deterministic color
-        (() => {
-            const bgColor = getColorForPubkey(pubkey);
-            const initial = (callsign || '?').charAt(0).toUpperCase();
-            return (
-                <View style={[styles.fallback, { width: size, height: size, borderRadius: radius, backgroundColor: bgColor + '20' }]}>
-                    <Text allowFontScaling={false} numberOfLines={1} style={[styles.fallbackText, { fontSize, color: bgColor }]}>
-                        {initial}
-                    </Text>
-                </View>
-            );
-        })()
     );
 
     if (!enlargeable) return smallEl;

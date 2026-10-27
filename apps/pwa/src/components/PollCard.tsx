@@ -22,9 +22,10 @@ import { type PollOption, type PollVoteRecord } from '../lib/marketplace';
 import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { MemberAvatar } from './MemberAvatar';
 import { marked, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, t, tn, upperCase } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 interface PollCardProps {
@@ -193,17 +194,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     aria-label={t("View {name}'s profile", { name: authorName })}
                     className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                 >
-                    {avatarSrc ? (
-                        <img
-                            src={avatarSrc}
-                            alt={authorName}
-                            className="w-6 h-6 rounded-full object-cover border border-nature-200 dark:border-nature-700"
-                        />
-                    ) : (
-                        <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center text-[10px] font-black">
-                            {upperCase(authorName.charAt(0))}
-                        </div>
-                    )}
+                    <MemberAvatar avatarUrl={avatarSrc} pubkey={livePost.authorPublicKey} callsign={authorName} size={24} className="border border-nature-200 dark:border-nature-700" />
                     <span className="text-xs font-bold text-nature-600 dark:text-nature-300 group-hover:text-nature-900 dark:group-hover:text-white transition-colors">
                         {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">{t('(You)')}</span>}
                     </span>

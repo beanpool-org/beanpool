@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "de",
-  "hash": "68d609c4b9a3ee63c47ec9dec6db91668a6d0d2d51ab5dcb8914a5591e16dfa2",
+  "hash": "25628d1dbc84c64504644461e0daaf9a91d9a47b07064a0ed7301a9690943ba7",
   "sections": [
     {
       "id": "about",
@@ -4943,8 +4943,8 @@
       "slug": "learn",
       "title": "Die Lernspur",
       "summary": "Kurze Videos über BeanPool und die passenden Seiten aus dem Guide.",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4965,7 +4965,7 @@
           "type": "ul",
           "items": [
             "Videos von BeanPool darüber, wie es funktioniert;",
-            "die **Tägliche Reflexion**, ein kurzer Gedanke, der jeden Morgen wechselt. Es ist nur eine Überschrift; es gibt nichts zum Öffnen."
+            "die **Tägliche Reflexion**, ein kurzer Gedanke, der jeden Morgen wechselt. Tippe darauf, um die Tagesreflexion zu öffnen."
           ]
         },
         {

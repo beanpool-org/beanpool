@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 6,
+  "version": 7,
   "language": "zh-Hans",
-  "hash": "797b7dc22da3ca6bfc6ac117a9eff1feb5c7f51665e972765867940c0cad1871",
+  "hash": "54a019147efb031048e0c63241cdadb0543efe1aeea8338a6561f73c26478eb0",
   "sections": [
     {
       "id": "about",
@@ -4953,8 +4953,8 @@
       "slug": "learn",
       "title": "“学习”板块",
       "summary": "关于 BeanPool 的短视频以及对应的指南页面。",
-      "sourceHash": "d668d9d4149309e7",
-      "source-hash": "d668d9d4149309e7",
+      "sourceHash": "166271998bd0833a",
+      "source-hash": "166271998bd0833a",
       "section": "pulse",
       "related": [
         "the-pulse",
@@ -4975,7 +4975,7 @@
           "type": "ul",
           "items": [
             "BeanPool 制作的关于其运作机制的视频；",
-            "**Daily Reflection**，每天早晨更新的一小段简短心得。它仅显示为一个标题，没有可供点开的内容。"
+            "**Daily Reflection**，每天早晨更新的一小段简短心得。点击即可打开当天的感悟。"
           ]
         },
         {

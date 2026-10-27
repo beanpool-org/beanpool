@@ -246,7 +246,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.strictEqual(listGroups(db, {}, 'bob_pub').find(g => g.id === group.id)?.avatarUrl, url);
         assert.ok(!JSON.stringify([getGroup(db, group.id), listGroups(db, {})]).includes('QUJD'), 'no read carries the picture');
 
-        // Its own URL sent back is "unchanged"; a new picture is a new version; '' removes it.
+        // Its own URL sent back is "unchanged"; a new picture is a new version; an edit never removes it (Pictures S4).
         const before = (db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(group.id) as any).updated_at;
         assert.strictEqual(updateGroup(db, group.id, 'alice_pub', { avatarUrl: url }).avatarUrl, url);
         assert.strictEqual(getGroupPicture(db, group.id), picture);
@@ -255,8 +255,18 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         const next = updateGroup(db, group.id, 'alice_pub', { avatarUrl: 'bundled://leaf' });
         assert.strictEqual(next.avatarUrl, 'bundled://leaf', 'a shipped picture is its name');
         assert.strictEqual(getGroupPicture(db, group.id), 'bundled://leaf');
-        assert.strictEqual(updateGroup(db, group.id, 'alice_pub', { avatarUrl: '' }).avatarUrl, undefined);
+        // A group keeps a picture: '', whitespace, null and a member's avatar URL (kept as none) are each refused, and the
+        // picture stays. Only its writer removes one (a move stopped part way, a restore).
+        for (const value of ['', '   ', null, '/api/avatar/alice_pub?size=thumb&v=abcd1234']) {
+            assert.throws(() => updateGroup(db, group.id, 'alice_pub', { avatarUrl: value as any }), /A group keeps a picture/,
+                `${JSON.stringify(value)} is refused`);
+            assert.strictEqual(getGroupPicture(db, group.id), 'bundled://leaf', `${JSON.stringify(value)} leaves the picture as it was`);
+        }
+        assert.strictEqual(setGroupPicture(db, group.id, null), true);
+        assert.strictEqual(getGroup(db, group.id)?.avatarUrl, undefined);
         assert.strictEqual(getGroupPicture(db, group.id), null, 'removed: no row left');
+        // A group holding none (one made before pictures were required) can still be edited without one.
+        assert.strictEqual(updateGroup(db, group.id, 'alice_pub', { name: 'Pictured, renamed', avatarUrl: '' }).name, 'Pictured, renamed');
         assert.deepStrictEqual(db.prepare('SELECT avatar_ref, avatar_bytes FROM groups WHERE id = ?').get(group.id), { avatar_ref: null, avatar_bytes: null });
 
         // Bigger than a member's photo may be: refused, before anything is written.

@@ -13,6 +13,11 @@
  * system lines, an event's notice: slice S4).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import Module from 'node:module';
 import { act, createElement, Fragment, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

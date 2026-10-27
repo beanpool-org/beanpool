@@ -11,7 +11,8 @@
 //     "No Google Play?" line does not lead to this page in the same language;
 //   - drawn in headless Chromium at 320 px with text at 130 %, light and dark, in every language: the page is wider than
 //     the screen, the download button is under 48 px or its words lose the button's own colour, the key and the command
-//     do not read left to right, or /global's line is under 48 px.
+//     do not read left to right, /global's line is under 48 px, or the home page's link here is under 48 px or not
+//     underlined.
 // Every colour is also held to the site's tokens by scripts/website-colours.test.mjs, and the English page's words to
 // 4.5:1 in both themes by scripts/website-contrast.mjs. No network.
 //
@@ -283,6 +284,29 @@ test('/global at 320 px: on an Android phone the "No Google Play?" line is a 48 
         if (m.href !== 'android.html') failures.push(`${url}: it links ${m.href}`);
         if (m.scrollW > m.clientW) failures.push(`${url}: ${m.scrollW} px wide on a ${m.clientW} px screen`);
         await context.close();
+    }
+    assert.deepEqual(failures, []);
+});
+
+test('the home page at 320 px: the web note\'s link to this page is underlined and a 48 px row, in every language', { timeout: 120_000 }, async () => {
+    const e = await env();
+    const failures = [];
+    for (const colorScheme of ['light', 'dark']) {
+        for (const lang of LANGS) {
+            const url = lang === 'en' ? 'index.html' : `${lang}/index.html`;
+            const { page, context } = await open(e, url, colorScheme, ANDROID_UA);
+            const m = await page.evaluate(() => {
+                const a = document.querySelector('.hero-web-note a[href="android.html"]');
+                const r = a.getBoundingClientRect();
+                return { h: r.height, shown: r.width > 0, line: getComputedStyle(a).textDecorationLine, left: r.left, right: r.right, clientW: document.documentElement.clientWidth };
+            });
+            // Its colour is close to the sentence's (1.5:1 light, 1.1:1 dark), so the underline is what marks it as a link.
+            if (!m.shown || m.h < 48) failures.push(`${url} (${colorScheme}): the link is ${m.shown ? m.h + ' px tall' : 'not drawn'}`);
+            if (!m.line.includes('underline')) failures.push(`${url} (${colorScheme}): the link is not underlined (${m.line})`);
+            // A row does not break inside, so it must fit the screen on its own.
+            if (m.left < -0.5 || m.right > m.clientW + 0.5) failures.push(`${url} (${colorScheme}): the link runs ${Math.round(m.left)}–${Math.round(m.right)} px on a ${m.clientW} px screen`);
+            await context.close();
+        }
     }
     assert.deepEqual(failures, []);
 });

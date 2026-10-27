@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    APP_GLOBAL_HOST, APP_GLOBAL_LINK, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isPhoneBrowser, lobbyJoinWays,
+    APP_GLOBAL_HOST, APP_GLOBAL_LINK, IOS_GLOBAL_DOOR_FROM, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isPhoneBrowser, lobbyJoinWays,
     phoneLaterLines,
 } from './global-entry';
 
@@ -42,6 +42,7 @@ describe('isAppsGlobal: this page is the community the BeanPool app\'s link open
     it('the link and its community are the app\'s own (apps/native GLOBAL_NODE_URL)', () => {
         expect(APP_GLOBAL_LINK).toBe('https://beanpool.org/global');
         expect(APP_GLOBAL_HOST).toBe('global.beanpool.org');
+        expect(IOS_GLOBAL_DOOR_FROM).toBe('1.2.56');
     });
 
     it('opened at global.beanpool.org, or at another name of a node that publishes it', () => {
@@ -69,6 +70,41 @@ describe("lobbyJoinWays: the Join card's ways in, in order", () => {
             if (phone && appsGlobal && doorOpen) continue;
             expect(lobbyJoinWays({ phone, appsGlobal, doorOpen })).toEqual(['browser', 'have-account']);
         }
+    });
+
+    describe('iOS gate (S14): App Store build before 1.2.56 has no global door', () => {
+        it('an iOS phone browser at the app\'s global with appVersions.ios "1.2.31" gets no "app"', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: '1.2.31' } }))
+                .toEqual(['browser', 'have-account']);
+        });
+
+        it('an iOS phone browser at the app\'s global with appVersions.ios "1.2.56" gets "app" first', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: '1.2.56' } }))
+                .toEqual(['app', 'browser', 'have-account']);
+        });
+
+        it('an iOS phone browser at the app\'s global with appVersions.ios "1.3.0" gets "app" first', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: '1.3.0' } }))
+                .toEqual(['app', 'browser', 'have-account']);
+        });
+
+        it('an iOS phone browser with appVersions missing or unreadable gets no "app"', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: undefined }))
+                .toEqual(['browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: null }))
+                .toEqual(['browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: null } }))
+                .toEqual(['browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: 'invalid' } }))
+                .toEqual(['browser', 'have-account']);
+        });
+
+        it('an Android phone browser is unchanged (gets "app" first)', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'android', appVersions: { ios: '1.2.31' } }))
+                .toEqual(['app', 'browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'android', appVersions: undefined }))
+                .toEqual(['app', 'browser', 'have-account']);
+        });
     });
 });
 

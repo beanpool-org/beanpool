@@ -180,7 +180,7 @@ export function PictureCropView({ picture, shape, colors = lightColors, onCancel
                     <Text style={[s.buttonText, s.cancelText]}>{t('Cancel')}</Text>
                 </Pressable>
                 <Pressable style={({ pressed }) => [s.button, s.done, pressed && s.pressed]} onPress={() => { void done(); }} disabled={busy}
-                    accessibilityRole="button" accessibilityLabel={busy ? t('Cropping picture...') : t('Done')} accessibilityHint={t('Crops the picture to the selected area')} accessibilityState={{ disabled: busy, busy }} testID="picture-crop-done">
+                    accessibilityRole="button" accessibilityLabel={busy ? t('Cropping picture...') : t('Done')} accessibilityState={{ disabled: busy, busy }} testID="picture-crop-done">
                     {busy ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={[s.buttonText, s.doneText]}>{t('Done')}</Text>}
                 </Pressable>
             </View>

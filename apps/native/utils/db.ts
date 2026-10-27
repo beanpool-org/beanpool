@@ -4766,9 +4766,25 @@ export async function syncSingleConversation(conversationId: string) {
         if (messages.length === 0) {
             const req = msgData?.conversation?.request;
             if (req && req.state === 'pending') {
+                const myIdentity = await loadIdentity().catch(() => null);
+                const myPubkey = myIdentity?.publicKey ?? null;
                 const db = await getDb();
-                const res = await db.runAsync('DELETE FROM messages WHERE conversation_id = ?', [conversationId]);
-                deletedStaleMessages = res?.changes ?? 0;
+                const localConv = await db.getFirstAsync<{ created_by: string | null }>(
+                    'SELECT created_by FROM conversations WHERE id = ?',
+                    [conversationId]
+                ).catch(() => null);
+                const isOpener = !!myPubkey && (
+                    req.from === myPubkey ||
+                    msgData?.conversation?.createdBy === myPubkey ||
+                    msgData?.conversation?.created_by === myPubkey ||
+                    localConv?.created_by === myPubkey
+                );
+                if (!isOpener) {
+                    const res = myPubkey
+                        ? await db.runAsync('DELETE FROM messages WHERE conversation_id = ? AND author_pubkey != ?', [conversationId, myPubkey])
+                        : await db.runAsync('DELETE FROM messages WHERE conversation_id = ?', [conversationId]);
+                    deletedStaleMessages = res?.changes ?? 0;
+                }
             }
         }
 

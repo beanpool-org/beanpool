@@ -24,6 +24,29 @@ export function isPastDeadline(deadline: string | null | undefined, now: number 
     return deadlineDaysRemaining(deadline, now) < 0;
 }
 
+/**
+ * How many days after its end date a project that didn't reach its goal gives its backers their Beans back, unless the end
+ * date moves before then (Marty, board, 27 Oct 2026: "Return them a week after the end date").
+ */
+export const PLEDGE_RETURN_DAYS = 7;
+
+/**
+ * When an unfunded project's pledges go back to their backers (ms): its deadline's instant + 7 days. By the day rule above
+ * a deadline is a day starting at its instant, over (pledges stop) a day later; this is the start of the end date + 7, the
+ * day both apps' project page names, and the moment the deadline badge's number reaches -7. The node returns them at its
+ * first tick from then on (apps/server/src/engine/unfunded-pledges.ts). NaN for no deadline, or one that names no time.
+ */
+export function pledgeReturnAt(deadline: string | null | undefined): number {
+    if (!deadline) return NaN;
+    return new Date(deadline).getTime() + PLEDGE_RETURN_DAYS * DAY_MS;
+}
+
+/** Whether an unfunded project's pledges are due to go back: from pledgeReturnAt on, however late. Never without a deadline. */
+export function isPledgeReturnDue(deadline: string | null | undefined, now: number = Date.now()): boolean {
+    const at = pledgeReturnAt(deadline);
+    return Number.isFinite(at) && now >= at;
+}
+
 export interface TakesPledgesInput {
     goalAmount?: number | null;
     currentAmount?: number | null;

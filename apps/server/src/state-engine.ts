@@ -75,6 +75,7 @@ import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges } from './engine/stranded-pledges.js';
+import { returnUnfundedPledges, noticeEndDateMoved } from './engine/unfunded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -1091,7 +1092,37 @@ function armMainServerTimers(): void {
         try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
         // A message request push folded in the last hour goes as one, naming nobody, once the hour is over (engine/dm-requests.ts).
         try { tickRequestPushFolds(dispatchPushNotification); } catch (e) { console.warn('[Push] Request push fold failed:', e); }
+        // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
+        // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
+        try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
     }), 60 * 1000);
+}
+
+/** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
+const unfundedPledgeHooks = {
+    transfer: (...args: Parameters<typeof transfer>) => transfer(...args),
+    conservingTransaction: <T>(fn: () => T): T => conservingTransaction(fn),
+    // A closed account's share of a project's pledges, out of its escrow into the Commons pot (the escrow floor applies).
+    moveToCommons: (from: string, amount: number, memo: string) => moveToCommons(from, amount, memo),
+    broadcast: (event: any, recipients?: string[]) => broadcast(event, recipients),
+    dispatchPushNotification: (...args: Parameters<typeof dispatchPushNotification>) => dispatchPushNotification(...args),
+};
+
+/**
+ * Give the backers of every project that ended short of its goal their Beans back once its end date is a week gone, and tell
+ * them and its leader (engine/unfunded-pledges.ts). The main server's minute tick calls it; on a standby it does nothing.
+ * Never throws.
+ */
+export function returnUnfundedProjectPledges(now?: number): { returned: number; left: number } {
+    return returnUnfundedPledges(unfundedPledgeHooks, now);
+}
+
+/**
+ * The leader moved a project's end date (POST /api/crowdfund/projects/update), `before` being the one it had: in the week
+ * after it, while its pledges are still held, its backers are told (engine/unfunded-pledges.ts). Never throws.
+ */
+export function noticeProjectEndDateMoved(projectId: string, before: string | null, actor: string | null): number {
+    return noticeEndDateMoved(unfundedPledgeHooks, projectId, before, actor);
 }
 
 /**
@@ -1101,7 +1132,7 @@ function armMainServerTimers(): void {
  * without one (a server need not run under anything that restarts it): what initSchema runs only on a main server
  * (db.ts runMainServerSchemaPasses), the node profile's record and the community's settings, the listing-photo URLs'
  * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, settled escrows swept, and the main
- * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
+ * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene, unfunded projects' pledges due back). Without it they waited for the next restart: votes
  * did not close, passed grants were not paid, stale requests did not expire (the 2026-10-02 review of #1448). The keys
  * and seals for the role are installed by the boot's next steps (index.ts 2.65), which read the role as it now stands.
  * Each part idempotent and on its own guard; nothing on a standby. Throws only the node profile's refusals, which stop a

@@ -1,4 +1,4 @@
-import { keeperWords, t, isPastDeadline } from '@beanpool/core';
+import { formatDate, isPastDeadline, isPledgeReturnDue, keeperWords, pledgeReturnAt, t } from '@beanpool/core';
 
 export {
     isPastDeadline,
@@ -28,4 +28,46 @@ export function pledgeClosedLine(
         return t("This project's deadline has passed: it takes no more pledges.");
     }
     return null;
+}
+
+export interface PledgeReturnInput {
+    goalAmount?: number | null;
+    /** What the page shows as raised. */
+    currentAmount?: number | null;
+    status?: string | null;
+    deadlineAt?: string | null;
+    /** When the node gave the backers their Beans back for this end date (GET /api/treasury/:id), else null. */
+    pledgesReturnedAt?: string | null;
+}
+
+/**
+ * What a project's page says happens to its backers' Beans if its goal isn't reached (Marty, board, 27 Oct 2026): they go
+ * back a week after its end date (core's pledgeReturnAt, the node's own rule), unless the end date moves before then; and
+ * once the node has given them back, that they went back. Until it has, only the day they are due back from: a node that
+ * can't pay one of the backers leaves the whole project for its operator (apps/server/src/engine/unfunded-pledges.ts), so
+ * the page never says they are on their way. The dates are days on the reader's own clock. Null for an enterprise with no
+ * goal, a project with no end date or one that reached its goal, and one whose end date is over with nothing pledged.
+ */
+export function pledgeReturnLine(p: PledgeReturnInput, now: number = Date.now()): string | null {
+    const goal = Number(p.goalAmount ?? 0);
+    if (!(goal > 0) || !p.deadlineAt) return null;
+    const ends = new Date(p.deadlineAt);
+    if (Number.isNaN(ends.getTime())) return null;
+    const raised = Number(p.currentAmount ?? 0);
+    if (raised >= goal || p.status === 'funded' || p.status === 'completed') return null;
+    const date = formatDate(ends, 'day-month-year');
+    const returned = p.pledgesReturnedAt ? new Date(p.pledgesReturnedAt) : null;
+    if (returned && !Number.isNaN(returned.getTime())) {
+        return t('The goal wasn’t reached by {date}, so everyone’s Beans went back on {returned}.', { date, returned: formatDate(returned, 'day-month-year') });
+    }
+    const returnDate = formatDate(new Date(pledgeReturnAt(p.deadlineAt)), 'day-month-year');
+    if (!isPastDeadline(p.deadlineAt, now)) {
+        return t('If the goal isn’t reached by {date}, everyone’s Beans go back on {returnDate}.', { date, returnDate });
+    }
+    // In cents, as every pledge is: a float residue where all of them went back is nothing held (review of #2525).
+    if (!(Math.round(raised * 100) > 0)) return null;
+    if (!isPledgeReturnDue(p.deadlineAt, now)) {
+        return t('The goal wasn’t reached by {date}. Everyone’s Beans go back on {returnDate}, unless the end date moves before then.', { date, returnDate });
+    }
+    return t('The goal wasn’t reached by {date}, so everyone’s Beans are due back from {returnDate}.', { date, returnDate });
 }

@@ -35,6 +35,7 @@ import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../eng
 import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/shops.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
+import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
@@ -447,10 +448,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             LIMIT 50
         `).all(treasury, treasury, treasury, treasury) as any[]) : [];
         let currentAmount: number | null = null;
+        // When the node gave the backers their Beans back, its goal not reached a week after its end date: the page says so.
+        let pledgesReturnedAt: string | null = null;
         if (m.goal_amount != null) {
             const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(treasury) as any;
             const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${treasury}`) as any)?.balance || 0;
             currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
+            pledgesReturnedAt = pledgesReturnedAtFor(treasury);
         }
 
         ctx.body = {
@@ -473,6 +477,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             goalAmount: m.goal_amount != null ? Number(m.goal_amount) : null,
             currentAmount,
             deadlineAt: m.deadline_at ?? null,
+            pledgesReturnedAt,
             lifecycle: m.lifecycle ?? 'ongoing',
             status: m.status ?? 'active',
             paused: !!m.paused,

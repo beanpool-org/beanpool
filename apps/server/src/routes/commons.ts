@@ -14,8 +14,9 @@ import {
     castDecisionVote, tallyDecision,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding, isNodeMember,
-    payToCommons,
+    payToCommons, noticeProjectEndDateMoved,
 } from '../state-engine.js';
+import { projectEndDate } from '../engine/unfunded-pledges.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
 import { decisionsOn, madeWithoutVote } from '../decisions-engine.js';
@@ -469,7 +470,10 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
 
     if (respondIfMuted(ctx, actor)) return;
     try {
+        // Its end date before the change: moved in the week after it, while its pledges are held, the backers are told.
+        const endDateBefore = projectEndDate(id);
         updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadline?.deadline);
+        noticeProjectEndDateMoved(id, endDateBefore, actor);
         const project = getCrowdfundProject(id);
         deps.broadcast?.({ type: 'project_updated', project });
         ctx.body = { success: true, project };

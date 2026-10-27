@@ -3453,11 +3453,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         {searchQuery.trim() ? '🔍' : radiusSettings ? '📍' : '🛒'}
                                     </div>
                                     <h4 className="font-bold text-lg text-nature-900 dark:text-white mb-2">{t('No items found')}</h4>
-                                    <p className="text-nature-500 dark:text-nature-400 text-sm">
+                                    <p className="text-nature-500 dark:text-nature-400 text-sm mb-6">
                                         {searchQuery.trim()
                                             ? t('No matches for "{query}".', { query: searchQuery })
                                             : t('Try adjusting your filters or expanding your search to see more results.')}
                                     </p>
+                                    <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
+                                        {t('Nothing here yet. Be the first:')}
+                                    </p>
+                                    <div data-testid="market-empty-tiles" className="flex items-center justify-center gap-3 mb-6">
+                                        {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
+                                            <div key={cat} className="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+                                                <CategoryTile category={cat} size="thumb" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCreateModal(true)}
+                                        className="inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on shadow-md transition-colors text-sm"
+                                    >
+                                        <span>+</span> {t('ADD POST')}
+                                    </button>
                                 </div>
                             ) : (
                                 <ActivityWaterfall isFullView={true} isMember={isMember} />

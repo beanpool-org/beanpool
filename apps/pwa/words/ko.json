@@ -581,7 +581,6 @@
   "PULSE": "소식",
   "↻ RECURRING": "↻ 반복",
   "💸 CASH TOO": "💸 현금 포함",
-  "No description provided.": "설명이 없어요.",
   "🤝 Held in Trust": "🤝 신뢰 보관 중",
   "Clear search": "검색어 지우기",
   "Other": "기타",
@@ -947,10 +946,8 @@
   "B\u0004the Beans sign": "콩",
   "View enlarged photo: {title}": "사진 확대 보기: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "연료나 자재를 위한 현금도 필요해요 — 채팅으로 협의",
-  "🌱 FOUNDING TRADE": "🌱 설립 거래",
   "⏳ PENDING": "⏳ 대기 중",
   "DAILY PULSE": "데일리 펄스",
-  "VIEW": "보기",
   "pending\u0004deal status": "대기 중",
   "requested\u0004deal status": "요청됨",
   "completed\u0004deal status": "완료됨",
@@ -3510,5 +3507,6 @@
   "Add a photo first": "먼저 사진을 추가하세요",
   "⚠️ Action Required": "⚠️ 필요 작업 있음",
   "⏳ Awaiting Approval": "⏳ 승인 대기 중",
-  "⏸ PAUSED": "⏸ 일시중지됨"
+  "⏸ PAUSED": "⏸ 일시중지됨",
+  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:"
 }

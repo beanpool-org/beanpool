@@ -898,7 +898,6 @@
   "No items found": "موردی پیدا نشد",
   "Try adjusting your filters to see more results.": "فیلترهای خود را تغییر دهید تا نتایج بیشتری ببینید.",
   "Clear All Filters": "پاک کردن همه فیلترها",
-  "+ Post a Deal": "+ ثبت معامله",
   "Close categories": "بستن دسته‌ها",
   "Something went wrong": "مشکلی پیش آمد",
   "🎣 Post an Offer to go deeper": "🎣 برای دسترسی بیشتر یک پیشنهاد ثبت کنید",
@@ -6120,5 +6119,6 @@
   "Turn on": "روشن کردن",
   "Turn on notifications?": "روشن کردن اعلان‌ها؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "اعلان‌های BeanPool در تنظیمات تلفن شما خاموش است. برای روشن کردن آن‌ها، تنظیمات را باز کنید."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "اعلان‌های BeanPool در تنظیمات تلفن شما خاموش است. برای روشن کردن آن‌ها، تنظیمات را باز کنید.",
+  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:"
 }

@@ -849,7 +849,6 @@
   "No items found": "見つかりませんでした",
   "Try adjusting your filters to see more results.": "条件を変えて再度お試しください。",
   "Clear All Filters": "すべてのフィルターを解除",
-  "+ Post a Deal": "+ 取引を投稿",
   "Close categories": "カテゴリーを閉じる",
   "Something went wrong": "問題が発生しました",
   "🎣 Post an Offer to go deeper": "🎣 「ゆずれるもの」を投稿してさらに活用",
@@ -5881,5 +5880,6 @@
   "Turn on": "オンにする",
   "Turn on notifications?": "通知をオンにしますか？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "スマートフォンの設定で BeanPool の通知がオフになっています。オンにするには設定を開いてください。"
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "スマートフォンの設定で BeanPool の通知がオフになっています。オンにするには設定を開いてください。",
+  "Nothing here yet. Be the first:": "ここにはまだ何もありません。最初になりましょう:"
 }

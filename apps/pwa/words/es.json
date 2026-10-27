@@ -677,11 +677,8 @@
   "↻ RECURRING": "↻ PERIÓDICO",
   "Cash also needed for fuel or materials — agreed in chat": "También se necesita efectivo para combustible o materiales; acordado por chat",
   "💸 CASH TOO": "💸 TAMBIÉN EFECTIVO",
-  "🌱 FOUNDING TRADE": "🌱 INTERCAMBIO FUNDADOR",
   "⏳ PENDING": "⏳ PENDIENTE",
-  "No description provided.": "No se proporcionó descripción.",
   "DAILY PULSE": "PULSO DIARIO",
-  "VIEW": "VER",
   "pending\u0004deal status": "pendiente",
   "requested\u0004deal status": "solicitado",
   "completed\u0004deal status": "completado",
@@ -3636,5 +3633,6 @@
   "Add a photo first": "Añade una foto primero",
   "⚠️ Action Required": "⚠️ Acción requerida",
   "⏳ Awaiting Approval": "⏳ Esperando aprobación",
-  "⏸ PAUSED": "⏸ PAUSADO"
+  "⏸ PAUSED": "⏸ PAUSADO",
+  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:"
 }

@@ -1089,7 +1089,6 @@
   "No items found": "لم يتم العثور على عناصر",
   "Try adjusting your filters to see more results.": "جرّب تعديل عوامل التصفية لمزيد من النتائج.",
   "Clear All Filters": "مسح كل عوامل التصفية",
-  "+ Post a Deal": "+ نشر صفقة",
   "Close categories": "إغلاق الفئات",
   "Something went wrong": "حدث خطأ ما",
   "🎣 Post an Offer to go deeper": "🎣 انشر عرضًا للتعمق أكثر",
@@ -7076,5 +7075,6 @@
   "Turn on": "تشغيل",
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها.",
+  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:"
 }

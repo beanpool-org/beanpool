@@ -665,11 +665,8 @@
   "↻ RECURRING": "↻ BERULANG",
   "Cash also needed for fuel or materials — agreed in chat": "Uang tunai juga dibutuhkan untuk bahan bakar atau material — disepakati dalam obrolan",
   "💸 CASH TOO": "💸 UANG TUNAI JUGA",
-  "🌱 FOUNDING TRADE": "🌱 TRANSAKSI PENDIRI",
   "⏳ PENDING": "⏳ MENUNGGU",
-  "No description provided.": "Tidak ada deskripsi yang diberikan.",
   "DAILY PULSE": "DAILY PULSE",
-  "VIEW": "LIHAT",
   "pending\u0004deal status": "menunggu",
   "requested\u0004deal status": "diminta",
   "completed\u0004deal status": "selesai",
@@ -3510,5 +3507,6 @@
   "Add a photo first": "Tambahkan foto terlebih dahulu",
   "⚠️ Action Required": "⚠️ Tindakan Diperlukan",
   "⏳ Awaiting Approval": "⏳ Menunggu Persetujuan",
-  "⏸ PAUSED": "⏸ DIJEDA"
+  "⏸ PAUSED": "⏸ DIJEDA",
+  "Nothing here yet. Be the first:": "Belum ada apa-apa di sini. Jadilah yang pertama:"
 }

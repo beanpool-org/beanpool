@@ -592,7 +592,6 @@
   "PULSE": "துடிப்பு",
   "↻ RECURRING": "↻ தொடர்ச்சியானது",
   "💸 CASH TOO": "💸 பணமும் உண்டு",
-  "No description provided.": "விளக்கம் எதுவும் வழங்கப்படவில்லை.",
   "🤝 Held in Trust": "🤝 பொறுப்பில் வைக்கப்பட்டுள்ளது",
   "Clear search": "தேடலை அழி",
   "Other": "மற்றவை",
@@ -967,10 +966,8 @@
   "B\u0004the Beans sign": "பயறு",
   "View enlarged photo: {title}": "பெரிதாக்கப்பட்ட புகைப்படத்தைக் காண்க: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "எரிபொருள் அல்லது பொருட்களுக்குப் பணமும் தேவைப்படுகிறது — அரட்டையில் ஒப்புக்கொள்ளப்பட்டது",
-  "🌱 FOUNDING TRADE": "🌱 நிறுவன வர்த்தகம்",
   "⏳ PENDING": "⏳ நிலுவையில் உள்ளது",
   "DAILY PULSE": "தினசரி துடிப்பு",
-  "VIEW": "பார்",
   "pending\u0004deal status": "நிலுவையில் உள்ளது",
   "requested\u0004deal status": "கோரப்பட்டது",
   "completed\u0004deal status": "முடிந்தது",
@@ -3635,5 +3632,6 @@
   "Add a photo first": "முதலில் ஒரு புகைப்படத்தைச் சேர்க்கவும்",
   "⚠️ Action Required": "⚠️ நடவடிக்கை தேவை",
   "⏳ Awaiting Approval": "⏳ ஒப்புதலுக்காகக் காத்திருக்கிறது",
-  "⏸ PAUSED": "⏸ இடைநிறுத்தப்பட்டது"
+  "⏸ PAUSED": "⏸ இடைநிறுத்தப்பட்டது",
+  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:"
 }

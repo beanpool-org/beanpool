@@ -592,7 +592,6 @@
   "PULSE": "পালস",
   "↻ RECURRING": "↻ পুনরাবৃত্ত",
   "💸 CASH TOO": "💸 নগদ টাকাও প্রয়োজন",
-  "No description provided.": "কোনো বিবরণ দেওয়া হয়নি।",
   "🤝 Held in Trust": "🤝 আস্থায় রাখা হয়েছে",
   "Clear search": "অনুসন্ধান মুছুন",
   "Other": "অন্যান্য",
@@ -986,10 +985,8 @@
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "বড় ছবি দেখুন: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "জ্বালানি বা উপকরণের জন্য নগদ অর্থও প্রয়োজন — চ্যাটে সম্মত",
-  "🌱 FOUNDING TRADE": "🌱 প্রতিষ্ঠাতাকালীন লেনদেন",
   "⏳ PENDING": "⏳ অপেক্ষমাণ",
   "DAILY PULSE": "দৈনিক স্পন্দন",
-  "VIEW": "দেখুন",
   "pending\u0004deal status": "অপেক্ষমাণ",
   "requested\u0004deal status": "অনুরোধকৃত",
   "completed\u0004deal status": "সম্পন্ন",
@@ -3635,5 +3632,6 @@
   "Add a photo first": "আগে একটি ছবি যোগ করুন",
   "⚠️ Action Required": "⚠️ করণীয় প্রয়োজন",
   "⏳ Awaiting Approval": "⏳ অনুমোদনের অপেক্ষায়",
-  "⏸ PAUSED": "⏸ স্থগিত"
+  "⏸ PAUSED": "⏸ স্থগিত",
+  "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:"
 }

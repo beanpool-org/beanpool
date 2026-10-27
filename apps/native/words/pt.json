@@ -897,7 +897,6 @@
   "No items found": "Nenhum anúncio encontrado",
   "Try adjusting your filters to see more results.": "Tente ajustar seus filtros para ver mais resultados.",
   "Clear All Filters": "Limpar todos os filtros",
-  "+ Post a Deal": "+ Publicar um anúncio",
   "Close categories": "Fechar categorias",
   "Something went wrong": "Algo deu errado",
   "🎣 Post an Offer to go deeper": "🎣 Publique uma Oferta para ir além",
@@ -6120,5 +6119,6 @@
   "Turn on": "Ativar",
   "Turn on notifications?": "Ativar notificações?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para saber quando alguém responder, enviar uma mensagem ou pedir para entrar. Nada mais.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "As notificações do BeanPool estão desligadas nas definições do seu telefone. Abra as Definições para as ligar."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "As notificações do BeanPool estão desligadas nas definições do seu telefone. Abra as Definições para as ligar.",
+  "Nothing here yet. Be the first:": "Nada aqui ainda. Seja o primeiro:"
 }

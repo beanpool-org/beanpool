@@ -698,11 +698,8 @@
   "↻ RECURRING": "↻ РЕГУЛЯРНО",
   "Cash also needed for fuel or materials — agreed in chat": "Также нужны наличные на топливо или материалы — по договорённости в чате",
   "💸 CASH TOO": "💸 ТАКЖЕ ДЕНЬГИ",
-  "🌱 FOUNDING TRADE": "🌱 СДЕЛКА ОСНОВАТЕЛЯ",
   "⏳ PENDING": "⏳ В ОЖИДАНИИ",
-  "No description provided.": "Описание отсутствует.",
   "DAILY PULSE": "ЕЖЕДНЕВНЫЙ ПУЛЬС",
-  "VIEW": "СМОТРЕТЬ",
   "pending\u0004deal status": "в ожидании",
   "requested\u0004deal status": "запрошено",
   "completed\u0004deal status": "завершено",
@@ -3885,5 +3882,6 @@
   "Add a photo first": "Сначала добавьте фото",
   "⚠️ Action Required": "⚠️ Требуется действие",
   "⏳ Awaiting Approval": "⏳ Ожидает подтверждения",
-  "⏸ PAUSED": "⏸ ПРИОСТАНОВЛЕНО"
+  "⏸ PAUSED": "⏸ ПРИОСТАНОВЛЕНО",
+  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:"
 }

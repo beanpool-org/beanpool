@@ -1557,16 +1557,30 @@ export default function MarketScreen() {
                                 <Text style={[styles.gridPriceText, { color: colors.feedback.warning.fg, fontWeight: '900' }]}>{t('🗞️ PULSE')}</Text>
                             </View>
                         )}
-                        {!!item.repeatable && !isPulse && (
-                            <View style={styles.gridBadge}>
-                                <Text style={styles.gridPriceText}>{t('↻ RECURRING')}</Text>
-                            </View>
-                        )}
-                        {isOwn && (
-                            <View style={[styles.gridBadge, { backgroundColor: '#2563eb' }]}>
-                                <Text style={styles.gridPriceText}>{t('👤 YOU')}</Text>
-                            </View>
-                        )}
+                        {!isPulse && (() => {
+                            if (item.status === 'pending') {
+                                return (
+                                    <View style={[styles.gridBadge, { backgroundColor: theme === 'dark' ? '#f59e0b' : '#fbbf24', borderColor: '#d97706' }]}>
+                                        <Text style={[styles.gridPriceText, { color: '#451a03', fontWeight: '900' }]}>{t('⏳ PENDING')}</Text>
+                                    </View>
+                                );
+                            }
+                            if (isOwn) {
+                                return (
+                                    <View style={[styles.gridBadge, { backgroundColor: '#2563eb' }]}>
+                                        <Text style={styles.gridPriceText}>{t('👤 YOU')}</Text>
+                                    </View>
+                                );
+                            }
+                            if (item.repeatable) {
+                                return (
+                                    <View style={styles.gridBadge}>
+                                        <Text style={styles.gridPriceText}>{t('↻ RECURRING')}</Text>
+                                    </View>
+                                );
+                            }
+                            return null;
+                        })()}
                         {!isPulse && showsBeans && (
                             <View style={[styles.gridBadge, styles.gridPriceEnd]}>
                                 <CurrencyDisplay
@@ -1584,7 +1598,7 @@ export default function MarketScreen() {
                         )}
                     </View>
                     <View style={styles.gridTextContent}>
-                        <Text style={styles.gridCardTitle} numberOfLines={1}>
+                        <Text style={styles.gridCardTitle} numberOfLines={2}>
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
                         <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />
@@ -1676,9 +1690,9 @@ export default function MarketScreen() {
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
+                        <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
                     ) : (
-                        <View style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
+                        <View style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
                             <CategoryTile
                                 category={item.category}
                                 kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
@@ -1874,17 +1888,30 @@ export default function MarketScreen() {
                         </Text>
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
+                            style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 16 }}
                             onPress={() => { setFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); setGroupFilter('all'); }}
                         >
                             <Text style={{ fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 }}>{t('Clear All Filters')}</Text>
                         </Pressable>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
+                            {t('Nothing here yet. Be the first:')}
+                        </Text>
+                        <View testID="market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                            {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
+                                <View key={cat} style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden' }}>
+                                    <CategoryTile category={cat} size="thumb" />
+                                </View>
+                            ))}
+                        </View>
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                            onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                            style={{ backgroundColor: colors.action.fab || palette.gray900, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }}
+                            onPress={() => setShowNewPostTypePicker(true)}
                         >
-                            <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>{t('+ Post a Deal')}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text style={{ color: colors.text.inverse, fontSize: 16, fontWeight: '700' }}>+</Text>
+                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>{t('ADD POST')}</Text>
+                            </View>
                         </Pressable>
                     </View>
                     )

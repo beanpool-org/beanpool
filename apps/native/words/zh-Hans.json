@@ -849,7 +849,6 @@
   "No items found": "未找到任何内容",
   "Try adjusting your filters to see more results.": "尝试调整筛选条件以查看更多结果。",
   "Clear All Filters": "清除所有筛选",
-  "+ Post a Deal": "+ 发布交易",
   "Close categories": "关闭类别",
   "Something went wrong": "出了点问题",
   "🎣 Post an Offer to go deeper": "🎣 发布一个提供以深入体验",
@@ -5881,5 +5880,6 @@
   "Turn on": "开启",
   "Turn on notifications?": "开启通知？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手机设置中已关闭 BeanPool 的通知。打开设置即可开启。"
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手机设置中已关闭 BeanPool 的通知。打开设置即可开启。",
+  "Nothing here yet. Be the first:": "这里还没有任何内容。成为第一个发布者："
 }

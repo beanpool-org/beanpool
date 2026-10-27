@@ -3470,7 +3470,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => setShowCreateModal(true)}
+                                        onClick={() => onNavigate?.('map-post')}
                                         className="inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on shadow-md transition-colors text-sm"
                                     >
                                         <span>+</span> {t('ADD POST')}

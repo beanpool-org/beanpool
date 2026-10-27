@@ -1957,6 +1957,46 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN promise TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))`).run(); } catch { }
+    // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
+    try {
+        const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;
+        if (jrSql && !jrSql.includes("'cancelled'")) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS join_requests_migration;
+                    CREATE TABLE join_requests_migration (
+                        id TEXT PRIMARY KEY,
+                        pubkey TEXT NOT NULL,
+                        callsign TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        avatar TEXT,
+                        from_node TEXT,
+                        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
+                        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        decided_by TEXT,
+                        invite_code TEXT UNIQUE,
+                        decided_at TEXT,
+                        ip_hash TEXT,
+                        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        CHECK ((status = 'pending') = (decided_at IS NULL)),
+                        CHECK ((status = 'approved') = (invite_code IS NOT NULL))
+                    );
+                    INSERT INTO join_requests_migration SELECT * FROM join_requests;
+                    DROP TABLE join_requests;
+                    ALTER TABLE join_requests_migration RENAME TO join_requests;
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_join_requests_one_open ON join_requests(pubkey) WHERE status = 'pending';
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_pubkey ON join_requests(pubkey, created_at);
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_status ON join_requests(status, created_at);
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_ip ON join_requests(ip_hash, created_at) WHERE ip_hash IS NOT NULL;
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_updated_at ON join_requests(updated_at);
+                `);
+            })();
+            console.log("[DB] ✅ Migrated join_requests CHECK constraint to allow 'cancelled'");
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate join_requests table for cancelled status:', err?.message || err);
+    }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).
@@ -2834,7 +2874,8 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     }
     try {
         // Pledges in, less any sent back out of the escrow to a backer (a pledge made after the goal, returned at boot by
-        // engine/stranded-pledges.ts): those never reached the project. The sweep to the enterprise is neither.
+        // engine/stranded-pledges.ts, or an unfunded project's, a week after its end date by engine/unfunded-pledges.ts): those
+        // never reached the project. The sweep to the enterprise is neither.
         const txSum = (db.prepare(`
             SELECT COALESCE(SUM(CASE WHEN from_pubkey = 'escrow_' || ? THEN -amount ELSE amount END), 0) as s FROM transactions
             WHERE project_id = ? AND (
@@ -2843,7 +2884,9 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
             )
         `).get(e.public_key, e.public_key, e.public_key, e.public_key, e.public_key, e.public_key) as any)?.s || 0;
         const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
-        currentAmount = Math.max(currentAmount, txSum, accBal);
+        // The sum in cents, as every pledge is: SQLite's sum of REALs is not 0 where every pledge went back (0.1, 0.2 and 0.7
+        // from one backer, 0.3 and 0.6 from another, leave 2.8e-17), and the update read that as pledges received. Review of #2525.
+        currentAmount = Math.max(currentAmount, Math.round(Number(txSum) * 100) / 100, accBal);
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -3138,7 +3181,8 @@ export function updateCrowdfundProject(
     description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
     assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
-    if (project.current_amount > 0 && Number(goal_amount) !== project.goal_amount) {
+    // In cents, as pledgeToProject reads a goal: a float residue where every pledge went back is no pledge received.
+    if (Math.round(Number(project.current_amount) * 100) > 0 && Number(goal_amount) !== project.goal_amount) {
         throw new Error("Cannot change funding goal after receiving pledges");
     }
 
@@ -3158,13 +3202,17 @@ export function updateCrowdfundProject(
     // Its name and purpose, never its About (members.bio): that is its keepers' (PUT /api/treasury/:t/profile).
     const rowName = projectRowName(db, title, id);
 
+    // The projects row by its id alone: its creator_pubkey is whoever made the project, and the check above already
+    // holds the change to the lead today (getCrowdfundProject's creator_pubkey). Matched on the maker, a new lead's change
+    // (the leader closed their account, a keeper took over) was answered 200 and missed the row the return, the end-date
+    // notice and the pledge gate read (review of #2525).
     db.transaction(() => {
         if (deadline_at !== undefined) {
             db.prepare(`
                 UPDATE projects
                 SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
-                WHERE id = ? AND creator_pubkey = ?
-            `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, now, id, creator_pubkey);
+                WHERE id = ?
+            `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, now, id);
 
             db.prepare(`
                 UPDATE members
@@ -3175,8 +3223,8 @@ export function updateCrowdfundProject(
             db.prepare(`
                 UPDATE projects
                 SET title = ?, description = ?, photos = ?, goal_amount = ?, updated_at = ?
-                WHERE id = ? AND creator_pubkey = ?
-            `).run(title, description, JSON.stringify(photos), goal_amount, now, id, creator_pubkey);
+                WHERE id = ?
+            `).run(title, description, JSON.stringify(photos), goal_amount, now, id);
 
             db.prepare(`
                 UPDATE members
@@ -3330,6 +3378,20 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     onBalanceMutation?.();
 }
 
+/**
+ * The pledges a project's escrow still holds (@escrow, @project): each pledge into it with no row out of it after it. Out of
+ * an ACTIVE project's escrow only the return of its pledges a week after its end date pays (engine/unfunded-pledges.ts), and
+ * it pays out every pledge the escrow holds at once, so the pledges before it went back then. Once its date moves, the
+ * project takes pledges again, and only those are still held. Before any return, every pledge, as it always was.
+ */
+const HELD_PLEDGES_SQL = `
+    SELECT t.from_pubkey, t.amount, t.id FROM transactions t
+    WHERE t.to_pubkey = @escrow AND t.project_id = @project
+      AND NOT EXISTS (
+          SELECT 1 FROM transactions o
+          WHERE o.from_pubkey = @escrow AND o.project_id = @project
+            AND (o.timestamp > t.timestamp OR (o.timestamp = t.timestamp AND o.rowid > t.rowid)))`;
+
 export function deleteCrowdfundProject(projectId: string, requesterPubkey: string) {
     // It refunds the backers from the project's escrow (raw SQL below): never on a standby (config/node-role.ts).
     assertLedgerWritable();
@@ -3358,20 +3420,17 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     // transaction that then rolls back is the exact conservation hazard conservingTransaction exists for
     // (state-engine.ts) — which this module cannot reach.
     if (project.status === 'ACTIVE') {
-        const backers = db.prepare(`
-            SELECT DISTINCT from_pubkey FROM transactions WHERE to_pubkey = ? AND project_id = ?
-        `).all(`escrow_${projectId}`, projectId) as { from_pubkey: string }[];
+        const backers = db.prepare(`SELECT DISTINCT from_pubkey FROM (${HELD_PLEDGES_SQL})`)
+            .all({ escrow: `escrow_${projectId}`, project: projectId }) as { from_pubkey: string }[];
         if (backers.length > 0) onSettleDemurrage?.(backers.map(b => b.from_pubkey));
     }
 
     const executeDelete = db.transaction(() => {
-        // If still ACTIVE, funds are locked in Escrow. Refund them to backers.
+        // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that
+        // already went back a week after the project's end date (HELD_PLEDGES_SQL), which would be paid twice.
         if (project.status === 'ACTIVE') {
             const escrowPubkey = `escrow_${projectId}`;
-            const pledges = db.prepare(`
-                SELECT from_pubkey, amount, id FROM transactions 
-                WHERE to_pubkey = ? AND project_id = ?
-            `).all(escrowPubkey, projectId) as { from_pubkey: string, amount: number, id: string }[];
+            const pledges = db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[];
 
             let totalRefunded = 0;
             for (const pledge of pledges) {

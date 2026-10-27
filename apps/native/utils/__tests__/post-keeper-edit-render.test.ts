@@ -161,6 +161,14 @@ function answers(keeperOf: string[]) {
             post = { ...post, title: u.title, description: u.description, photos: u.photos };
             return Promise.resolve(undefined);
         }
+        if (name === 'pausePost') {
+            post = { ...post, status: 'paused' };
+            return Promise.resolve(undefined);
+        }
+        if (name === 'resumePost') {
+            post = { ...post, status: 'active' };
+            return Promise.resolve(undefined);
+        }
         const table: Record<string, unknown> = {
             getDb: database, getMemberRatings: { average: 4.5, count: 3 }, getUnreadCountForPost: 0,
             getBalance: { isBlockedFromTrading: false, keeperOf }, fetchGroupDetails: { group: { viewerRole: null } },
@@ -239,9 +247,27 @@ describe("a keeper editing their enterprise's Offer", () => {
         expect(button('✏️ Edit Post')).toBeTruthy();
     });
 
-    it('a member who keeps nothing: no Edit', async () => {
+    it("Pause and resume Offer for a keeper: Pause Offer calls pausePost with member's key, and Activate Offer calls resumePost", async () => {
+        await open([ENT]);
+        expect(host.textContent).toContain('Dozen eggs');
+        const pauseBtn = button('⏸️ Pause Offer');
+        expect(pauseBtn).toBeTruthy();
+        await click(pauseBtn, 'Pause Offer');
+        expect(net.calls).toContain('db.pausePost');
+        expect(net.args.get('pausePost')).toEqual(['p-eggs']);
+
+        // Now Offer is paused on the screen
+        const activateBtn = button('▶️ Activate Offer');
+        expect(activateBtn).toBeTruthy();
+        await click(activateBtn, 'Activate Offer');
+        expect(net.calls).toContain('db.resumePost');
+        expect(net.args.get('resumePost')).toEqual(['p-eggs']);
+    });
+
+    it('a member who keeps nothing: no Edit and no Pause', async () => {
         await open([]);
         expect(host.textContent).toContain('Dozen eggs');
         expect(button('✏️ Edit Post')).toBeNull();
+        expect(button('⏸️ Pause Offer')).toBeNull();
     });
 });

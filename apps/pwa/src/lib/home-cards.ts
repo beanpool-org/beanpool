@@ -69,9 +69,11 @@ export type NeedsTarget =
      */
     | { to: 'invite'; id: string }
     | { to: 'invites' }
+    | { to: 'people' }
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
-export interface NeedsItem { kind: 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+/** `knock`: requests to join (front doors S1), only to an app that asks with lands=people, which this one doesn't yet (S2 lists them here). */
+export interface NeedsItem { kind: 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**
  * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only

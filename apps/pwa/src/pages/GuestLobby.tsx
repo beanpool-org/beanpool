@@ -20,7 +20,7 @@
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
-import type { CommunityInfo } from '../lib/api';
+import type { AppStoreVersions, CommunityInfo } from '../lib/api';
 import { connectToAnchor, reconnectToAnchor } from '../lib/sync';
 import { browserKeyProblem } from '../lib/web-join';
 import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
@@ -56,6 +56,8 @@ const LEDGER_TAB: { id: LobbyTab; label: WordKey; emoji: string } = { id: 'ledge
 interface Props {
     /** `/api/community/info`, as App read it to choose the lobby. */
     info: CommunityInfo;
+    /** `/api/community/health`, read by App on boot: carries appVersions for the store-availability gates (S14). */
+    health?: { appVersions?: AppStoreVersions | null } | null;
     /** Joined, or an account brought back: App draws the member's app. */
     onComplete: (identity: BeanPoolIdentity) => void;
     /** `/?post=<id>`, a shared listing: opened in the lobby's Market, and kept for after the join. */
@@ -63,7 +65,7 @@ interface Props {
     onLinkedPostTaken?: () => void;
 }
 
-export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
+export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
     const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
     // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
@@ -108,7 +110,12 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     // On a phone's browser at the community the BeanPool app's link opens: the app first, the browser second (design
     // DESIGN-global-entry-fable.md §B.3, decision 3), so a phone keeps one account in the app. Anywhere else, as before.
     const phone = usePhoneBrowser();
-    const appFirst = lobbyJoinWays({ phone, appsGlobal: isAppsGlobal(info, webAppHost()), doorOpen })[0] === 'app';
+    const appFirst = lobbyJoinWays({
+        phone,
+        appsGlobal: isAppsGlobal(info, webAppHost()),
+        doorOpen,
+        appVersions: health?.appVersions,
+    })[0] === 'app';
 
     function openJoin(start: 'guard' | 'restore') {
         setJoin({ start: start === 'guard' && canHoldKey === false ? undefined : start });

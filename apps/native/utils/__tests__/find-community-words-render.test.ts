@@ -77,6 +77,7 @@ vi.mock('../community-directory', async () => {
 });
 vi.mock('../knock', () => ({
     sendKnock: vi.fn(), readKnockStatus: vi.fn(), rememberedKnocks: vi.fn(async () => []), rememberKnock: vi.fn(), forgetKnock: vi.fn(),
+    cancelKnock: vi.fn(), cancelledKnocks: vi.fn(async () => ({})), KNOCK_MESSAGES: {},
     knockCardState: vi.fn(() => ({ kind: 'ask' })), knockFormProblem: vi.fn(() => null), KNOCK_MESSAGE_CHARS: 280, KNOCK_CALLSIGN_CHARS: 20,
 }));
 vi.mock('../join-another-community', () => ({ joinAnotherCommunity: vi.fn(), joinedNudge: vi.fn(), PROTECT_REDIRECT: '/x', HOME_REDIRECT: '/y' }));

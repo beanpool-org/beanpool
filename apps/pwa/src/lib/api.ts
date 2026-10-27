@@ -551,7 +551,22 @@ export async function getInviteTree(root?: string): Promise<any[]> {
     return request('GET', root ? `/api/invite/tree?root=${encodeURIComponent(root)}` : '/api/invite/tree');
 }
 
-export async function getCommunityHealth(): Promise<any> {
+export interface AppStoreVersions {
+    android?: string | null;
+    ios?: string | null;
+    checkedAt?: string | null;
+}
+
+export interface CommunityHealth {
+    nodeName?: string;
+    version?: string;
+    minAppVersion?: string;
+    minAppVersionFrom?: string | null;
+    appVersions?: AppStoreVersions;
+    [key: string]: unknown;
+}
+
+export async function getCommunityHealth(): Promise<CommunityHealth> {
     return request('GET', '/api/community/health');
 }
 
@@ -1307,6 +1322,8 @@ export async function getMarketplacePosts(filter?: {
     sort?: 'distance' | 'recent';
     /** Online events only, wherever they are (DESIGN-event-times §9): a read by radius never meets them. Needs events in `types`. */
     online?: boolean;
+    /** Enterprise's listings as its keeper reads them: includes paused listings (routes/marketplace.ts). */
+    keeper?: boolean;
 }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1314,6 +1331,7 @@ export async function getMarketplacePosts(filter?: {
     if (filter?.types) params.set('types', filter.types);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
+    if (filter?.keeper) params.set('keeper', '1');
     if (filter?.beansOnly) params.set('beansOnly', 'true');
     if (filter?.updatedAfter) params.set('updatedAfter', filter.updatedAfter);
     if (filter?.audienceScope) params.set('audienceScope', filter.audienceScope);
@@ -2257,6 +2275,8 @@ export interface Treasury {
     goalAmount?: number | null;
     currentAmount?: number | null;
     deadlineAt?: string | null;
+    /** When the node gave a project's backers their Beans back, its goal not reached a week after its end date; else null. */
+    pledgesReturnedAt?: string | null;
     lifecycle?: string;
     status?: 'active' | 'winding_up' | 'completed' | string;
     paused?: boolean;

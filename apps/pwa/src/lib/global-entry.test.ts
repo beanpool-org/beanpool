@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    APP_GLOBAL_HOST, APP_GLOBAL_LINK, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isPhoneBrowser, lobbyJoinWays,
+    APP_GLOBAL_HOST, APP_GLOBAL_LINK, IOS_GLOBAL_DOOR_FROM, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isIOS, isPhoneBrowser, lobbyJoinWays,
     phoneLaterLines,
 } from './global-entry';
 
@@ -38,10 +38,46 @@ describe('isPhoneBrowser: a touch screen as the main pointer, narrower than the 
     });
 });
 
+describe('isIOS: iPhone, iPad, iPod detection', () => {
+    it('detects iPhone, iPad, iPod from user agent', () => {
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(true);
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(true);
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (iPod touch; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(true);
+    });
+
+    it('detects iPadOS Safari desktop user agent with touch support', () => {
+        const originalTouch = 'ontouchend' in document;
+        try {
+            (document as any).ontouchend = () => {};
+            expect(isIOS({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15' })).toBe(true);
+        } finally {
+            if (!originalTouch) delete (document as any).ontouchend;
+        }
+    });
+
+    it('does not falsely detect desktop Chrome/Chromium on macOS with touch emulation as iOS', () => {
+        const originalTouch = 'ontouchend' in document;
+        try {
+            (document as any).ontouchend = () => {};
+            expect(isIOS({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' })).toBe(false);
+            expect(isIOS({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chromium/120.0.0.0 Safari/537.36' })).toBe(false);
+        } finally {
+            if (!originalTouch) delete (document as any).ontouchend;
+        }
+    });
+
+    it('returns false for Android and desktop platforms', () => {
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' })).toBe(false);
+        expect(isIOS({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' })).toBe(false);
+        expect(isIOS(undefined)).toBe(false);
+    });
+});
+
 describe('isAppsGlobal: this page is the community the BeanPool app\'s link opens', () => {
     it('the link and its community are the app\'s own (apps/native GLOBAL_NODE_URL)', () => {
         expect(APP_GLOBAL_LINK).toBe('https://beanpool.org/global');
         expect(APP_GLOBAL_HOST).toBe('global.beanpool.org');
+        expect(IOS_GLOBAL_DOOR_FROM).toBe('1.2.56');
     });
 
     it('opened at global.beanpool.org, or at another name of a node that publishes it', () => {
@@ -69,6 +105,41 @@ describe("lobbyJoinWays: the Join card's ways in, in order", () => {
             if (phone && appsGlobal && doorOpen) continue;
             expect(lobbyJoinWays({ phone, appsGlobal, doorOpen })).toEqual(['browser', 'have-account']);
         }
+    });
+
+    describe('iOS gate (S14): App Store build before 1.2.56 has no global door', () => {
+        it('an iOS phone browser at the app\'s global with appVersions.ios "1.2.31" gets no "app"', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: '1.2.31' } }))
+                .toEqual(['browser', 'have-account']);
+        });
+
+        it('an iOS phone browser at the app\'s global with appVersions.ios "1.2.56" gets "app" first', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: '1.2.56' } }))
+                .toEqual(['app', 'browser', 'have-account']);
+        });
+
+        it('an iOS phone browser at the app\'s global with appVersions.ios "1.3.0" gets "app" first', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: '1.3.0' } }))
+                .toEqual(['app', 'browser', 'have-account']);
+        });
+
+        it('an iOS phone browser with appVersions missing or unreadable gets no "app"', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: undefined }))
+                .toEqual(['browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: null }))
+                .toEqual(['browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: null } }))
+                .toEqual(['browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'ios', appVersions: { ios: 'invalid' } }))
+                .toEqual(['browser', 'have-account']);
+        });
+
+        it('an Android phone browser is unchanged (gets "app" first)', () => {
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'android', appVersions: { ios: '1.2.31' } }))
+                .toEqual(['app', 'browser', 'have-account']);
+            expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'android', appVersions: undefined }))
+                .toEqual(['app', 'browser', 'have-account']);
+        });
     });
 });
 

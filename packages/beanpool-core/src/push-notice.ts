@@ -50,8 +50,20 @@ import { t, word, type Words } from './words.js';
 /** The title of every push a community sends: the app's name, the same in every language. */
 export const PUSH_NOTICE_TITLE = 'BeanPool';
 
+/**
+ * Whether Settings shows the "Requests to join" switch (`notify_knocks`) to this member: only where it changes
+ * something. Owners and admins are always told (the server's engine/knocks.ts notifyKnockReceived); a Known community
+ * (door `admins`) never tells its other members, since only owners and admins answer there; a community that takes no
+ * requests (`knocks` off) has none to tell. `features`: the community's, as it said them; `role`: GET
+ * /api/node-admin/me's, null for none, undefined while not known (the switch waits for it). Both apps use this.
+ */
+export function knockSwitchShown(features: { door?: unknown; knocks?: unknown } | null | undefined, role: unknown): boolean {
+    if (role === undefined || role === 'owner' || role === 'admin') return false;
+    return features?.knocks !== false && features?.door !== 'admins';
+}
+
 /** Where the app goes for a notice whose details it can't fetch: the tab its kind belongs to. */
-export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings';
+export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings' | 'people';
 
 /**
  * Every kind of push a community sends, with the one sentence its lock screen shows. A server never sends free text in a
@@ -77,6 +89,10 @@ export const PUSH_NOTICE_KINDS = {
     'event.update': { body: word("There is news about an event you're going to."), tab: 'market' },
     'community.notice': { body: word('Your community has a notice for you.'), tab: 'home' },
     'community.near': { body: word('A community has started near you.'), tab: 'home' },
+    // To a community's owners and admins, and members who asked for it, when someone asks to join (server engine/knocks.ts
+    // notifyKnockReceived). People, whose Invites list holds the request. The asker's "answered" notice is no push: their
+    // phone posts it from its own background check (apps/native utils/sync-notices.ts), since no community has their token.
+    'community.knock': { body: word('Someone asked to join your community.'), tab: 'people' },
     'account.recovery-started': { body: word("Someone is trying to recover your account. If this isn't you, open BeanPool and stop it."), tab: 'settings' },
     'account.restored': { body: word("Your account was just restored on another device. If that wasn't you, open BeanPool now."), tab: 'settings' },
     // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a

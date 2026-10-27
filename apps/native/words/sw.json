@@ -882,6 +882,7 @@
   "🗞️ PULSE": "🗞️ MAPIGO",
   "↻ RECURRING": "↻ INAYOJIRUDIA",
   "👤 YOU": "👤 WEWE",
+  "⏳ PENDING": "⏳ INASUBIRI",
   "PULSE": "MAPIGO",
   "🗞️ DAILY PULSE": "🗞️ MAPIGO YA KILA SIKU",
   "💸 CASH TOO": "💸 PESA TASLIMU PIA",
@@ -6120,5 +6121,6 @@
   "Turn on": "Washa",
   "Turn on notifications?": "Washa arifa?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Arifa za BeanPool zimezimwa katika mipangilio ya simu yako. Fungua Mipangilio ili kuziwasha."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Arifa za BeanPool zimezimwa katika mipangilio ya simu yako. Fungua Mipangilio ili kuziwasha.",
+  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:"
 }

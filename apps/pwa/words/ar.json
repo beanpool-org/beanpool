@@ -636,7 +636,6 @@
   "PULSE": "النبض",
   "↻ RECURRING": "↻ متكرر",
   "💸 CASH TOO": "💸 نقد أيضًا",
-  "No description provided.": "لا يوجد وصف.",
   "🤝 Held in Trust": "🤝 محجوز في الضمان",
   "Clear search": "مسح البحث",
   "Other": "أخرى",
@@ -1062,14 +1061,12 @@
   "by {name} ⛰️ {you}": "بواسطة {name} ⛰️ {you}",
   "by {name} {you}": "بواسطة {name} {you}",
   "👤 (You)": "👤 (أنت)",
-  "🌱 FOUNDING": "🌱 تأسيسي",
+  "Founding": "تأسيسي",
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "عرض الصورة المكبرة: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "يلزم أيضًا دفع نقد للوقود أو المواد — يتم الاتفاق في المحادثة",
-  "🌱 FOUNDING TRADE": "🌱 تداول تأسيسي",
   "⏳ PENDING": "⏳ قيد الانتظار",
   "DAILY PULSE": "النبض اليومي",
-  "VIEW": "عرض",
   "pending\u0004deal status": "قيد الانتظار",
   "requested\u0004deal status": "مطلوب",
   "completed\u0004deal status": "مكتمل",
@@ -4135,5 +4132,7 @@
   "Add a photo first": "أضف صورة أولاً",
   "⚠️ Action Required": "⚠️ إجراء مطلوب",
   "⏳ Awaiting Approval": "⏳ بانتظار الموافقة",
-  "⏸ PAUSED": "⏸ متوقف مؤقتًا"
+  "⏸ PAUSED": "⏸ متوقف مؤقتًا",
+  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:",
+  "🔑 FOUNDING": "🔑 تأسيسي"
 }

@@ -449,6 +449,15 @@ function MarketBody({
                     <p className="m-0 text-xs text-text-secondary">{t(EXAMPLE_WORDS.note)}</p>
                 </div>
             )}
+            {items.length === 0 && (
+                <div data-testid="home-market-empty-tiles" className="flex items-center justify-center gap-3 py-3">
+                    {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
+                        <div key={cat} className="w-12 h-12 rounded-xl overflow-hidden shadow-sm">
+                            <CategoryTile category={cat} size="thumb" />
+                        </div>
+                    ))}
+                </div>
+            )}
             <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
         </div>
     );
@@ -1824,6 +1833,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // group shows as invited.
                 case 'invite': return onNavigate('group', target.id);
                 case 'invites': return onNavigate('projects');
+                case 'people': return onNavigate('people-invites');
                 case 'shop': return onNavigate('shop', (target as any).id);
                 case 'shop-mine': return onNavigate('shop-mine');
                 default: return undefined;

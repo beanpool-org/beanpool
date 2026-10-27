@@ -1286,9 +1286,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // meeting that as a raw error alert is a worse version of the same bug.
         const isRemotePost = !!((selectedPost as any)._remoteNode ?? (selectedPost as any).originNode);
         const isPulsePost = (selectedPost.authorCallsign || (selectedPost as any).author_callsign) === 'Daily Pulse';
-        // A keeper of the enterprise that listed it may edit it, as on the phone (app/post/[id].tsx isOperatorOfAuthor): the
-        // node takes the edit signed with the keeper's own key (apps/server engine/posts.ts updatePost), for a listing here
-        // for everyone. Edit only: pausing and deleting it stay as they were on this page.
+        // A keeper of the enterprise that listed it may edit or pause/resume it, as on the phone (app/post/[id].tsx isOperatorOfAuthor):
+        // the node takes the mutation signed with the keeper's own key (apps/server engine/posts.ts updatePost, pausePost, resumePost),
+        // for a listing here for everyone. Deleting it stays the author's alone on this page.
         const keepsAuthor = !!identity && !isOwnPost && !isRemotePost && keeperOf.includes(selectedPost.authorPublicKey)
             && (selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.targetGroupId && !selectedPost.targetPubkey;
 
@@ -2441,7 +2441,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <>
                                 {/* Active/Paused toggle (Offers only). A live Offer counts toward your
                                     credit line (offer covenant, v3); pausing it drops it from the feed. */}
-                                {isOwnPost && selectedPost.type === 'offer' && (
+                                {(isOwnPost || keepsAuthor) && selectedPost.type === 'offer' && (
                                     <button
                                         onClick={async () => {
                                             if (!identity || !selectedPost) return;
@@ -3460,7 +3460,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </p>
                                 </div>
                             ) : (
-                                <ActivityWaterfall isFullView={true} isMember={isMember} />
+                                <div className="space-y-6">
+                                    <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-10 mt-2 text-center shadow-soft">
+                                        <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
+                                            {t('Nothing here yet. Be the first:')}
+                                        </p>
+                                        <div data-testid="market-empty-tiles" className="flex items-center justify-center gap-3 mb-6">
+                                            {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
+                                                <div key={cat} className="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+                                                    <CategoryTile category={cat} size="thumb" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => onNavigate?.('map-post')}
+                                            className="inline-flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-full font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on shadow-md transition-colors text-sm"
+                                        >
+                                            <span>+</span> {t('ADD POST')}
+                                        </button>
+                                    </div>
+                                    <ActivityWaterfall isFullView={true} isMember={isMember} />
+                                </div>
                             )
                         ) : (() => {
                             if (viewMode === 'grid') {
@@ -3472,7 +3493,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     // It only ever moves a tile forward past the poll, and only into a cell that
                                     // would otherwise be blank; with no item wider than one column there is nothing
                                     // to back-fill, so below `md` this changes nothing.
-                                    <div className="grid grid-flow-row-dense grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                                    <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => {
                                             if (post.type === 'event') {
                                                 return (

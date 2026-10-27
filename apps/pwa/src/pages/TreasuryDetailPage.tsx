@@ -25,7 +25,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
-import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { pledgeClosedLine, pledgeReturnLine } from '../lib/enterprise-pledge';
 import {
     deadlineDaysRemaining, formatDate, formatNumber, groupKindLine, isSampleId, isWholeCents, keeperWords, t, tn, word, amountRefusalWords, ANY_DECIMALS,
     isAmbiguousAmount, parseAmount, type WordKey, BANNER_PICTURE,
@@ -39,7 +39,7 @@ import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker
 import { Sentence } from '../components/Sentence';
 import { sampleTreasuryDetail, sampleEnterpriseLedger, SampleHeader } from '../components/ShowcasePreviews';
 import {
-    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText, ShopfrontTogether,
+    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontPaused, ShopfrontSections, ShopfrontText, ShopfrontTogether,
     ShopfrontVisitorNote,
 } from '../components/Shopfront';
 import { EnterpriseFace, EnterpriseFeatured } from '../components/EnterpriseManage';
@@ -133,6 +133,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
+    const isKeeperRef = useRef(false);
     // The page or its keepers' Manage tab (round 3 §3, S8). Each enterprise opens on its page unless initialTab asked.
     const [tab, setTab] = useState<'page' | 'manage'>(initialTab ?? 'page');
 
@@ -191,6 +192,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // The shopfront's listings with their photos and stamps (S5, S8): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
+    // The keeper-only Paused section: its own read (readOwnerListings(pubkey, { keeper: true })), keeping only rows
+    // with status === 'paused', in its own state, with stale-read guards (shownPubkey / turn), re-read with readListings.
+    const [pausedListings, setPausedListings] = useState<ShopfrontListing[]>([]);
+    const pausedTurn = useRef(0);
     // Another enterprise can open over this one (a keeper's profile, a link: App.tsx changes the key, not the page). It opens
     // on its page with none of the one before's listings, and a read for the one before that lands late is dropped.
     const shownPubkey = useRef(pubkey);
@@ -201,6 +206,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             prevPubkey.current = pubkey;
             setTab('page');
             setOwnListings(undefined);
+            setPausedListings([]);
         }
     }, [pubkey]);
     // Manage's Featured card shows these same listings, so an Offer posted, paused or resumed in Manage shows there as on the
@@ -208,17 +214,32 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     // An Offer put on or off the shelf while a read is out keeps its new place over what that read says of it.
     const listingsTurn = useRef(0);
     const featuredMeanwhile = useRef(new Set<Map<string, string | null>>());
+    const readPaused = useCallback(async () => {
+        if (!isKeeperRef.current) {
+            setPausedListings([]);
+            return;
+        }
+        const turn = ++pausedTurn.current;
+        const read = await readOwnerListings(pubkey, { keeper: true });
+        if (shownPubkey.current !== pubkey || turn !== pausedTurn.current) return;
+        if (read) {
+            setPausedListings(read.filter((l) => l.status === 'paused'));
+        }
+    }, [pubkey]);
     const readListings = useCallback(async () => {
         const turn = ++listingsTurn.current;
         const meanwhile = new Map<string, string | null>();
         featuredMeanwhile.current.add(meanwhile);
+        // The page's sections, Featured, Together and "No live listings yet." read what members read (no keeper flag), even for keepers.
         const read = await readOwnerListings(pubkey);
         featuredMeanwhile.current.delete(meanwhile);
         if (shownPubkey.current !== pubkey || turn !== listingsTurn.current) return;
         setOwnListings((was) => !read
             ? (Array.isArray(was) ? was : read)
             : read.map((l) => (meanwhile.has(l.id) ? { ...l, featuredAt: meanwhile.get(l.id) ?? null } : l)));
-    }, [pubkey]);
+        if (isKeeperRef.current) void readPaused();
+        else setPausedListings([]);
+    }, [pubkey, readPaused]);
     const featuredHere = (postId: string, featuredAt: string | null) => {
         if (shownPubkey.current !== pubkey) return;
         featuredMeanwhile.current.forEach((m) => m.set(postId, featuredAt));
@@ -586,9 +607,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             const d = await getTreasury(pubkey);
             if (!current()) return;
             setDetail(d);
-            // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
-            if (hasShopfront(d) && readsAsMember(d)) void readListings();
 
+            let keeper = false;
             if (identity?.publicKey && viewerIsMember) {
                 const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
                 // The viewer's balance only refines keeper status. The node answers "Member not
@@ -600,10 +620,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 } catch {
                     // fall back to the keeper list the enterprise itself returned
                 }
-                if (!current()) return;
-                setIsKeeperOfThis(mine.includes(pubkey) || inKeepers);
+                keeper = mine.includes(pubkey) || inKeepers;
+            }
+            if (!current()) return;
+            setIsKeeperOfThis(keeper);
+            isKeeperRef.current = keeper;
+
+            // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
+            if (hasShopfront(d) && readsAsMember(d)) {
+                void readListings();
             } else {
-                setIsKeeperOfThis(false);
+                setPausedListings([]);
             }
         } catch (e: any) {
             // A quiet read again that fails leaves the page as it was.
@@ -2165,6 +2192,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     const daysRemaining = getDaysRemaining(detail.deadlineAt);
                                     // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
                                     const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle, detail.deadlineAt);
+                                    // What happens to the backers' Beans if the goal isn't reached, and once they have gone back, that they did.
+                                    const returnLine = pledgeReturnLine({ ...detail, currentAmount: current });
+                                    const wentBack = !!returnLine && !!detail.pledgesReturnedAt;
 
                                     return (
                                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -2201,6 +2231,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 />
                                             </div>
 
+                                            {/* Once the Beans went back nothing is held: the line below says so instead. */}
+                                            {!wentBack && (
                                             <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 {isFunded
                                                     ? (project
@@ -2210,6 +2242,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
                                                         : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
                                             </p>
+                                            )}
+                                            {returnLine && (
+                                                <p data-testid="pledge-return-line" className="text-sm font-semibold text-bp-ink-accent leading-relaxed">
+                                                    {returnLine}
+                                                </p>
+                                            )}
 
                                             {/* Inline Pledge Form — pledging moves the member's own beans */}
                                             {isEffectivePreview ? (
@@ -2277,6 +2315,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <ShopfrontFeatured listings={featuredOf(shopListings)} showsBeans onOpen={openListing} />
                                         <ShopfrontTogether categories={Array.isArray(detail?.offerCategories) ? detail.offerCategories : []} />
                                         <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} note={listingNote} onOpen={openListing} />
+                                        {isKeeperOfThis && pausedListings.length > 0 && (
+                                            <ShopfrontPaused listings={pausedListings} onOpen={openListing} />
+                                        )}
                                     </>
                                 )}
 

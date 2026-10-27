@@ -835,6 +835,7 @@
   "🗞️ PULSE": "🗞️ KABAR",
   "↻ RECURRING": "↻ BERULANG",
   "👤 YOU": "👤 ANDA",
+  "⏳ PENDING": "⏳ MENUNGGU",
   "PULSE": "KABAR",
   "🗞️ DAILY PULSE": "🗞️ KABAR HARIAN",
   "💸 CASH TOO": "💸 UANG TUNAI JUGA",
@@ -5881,5 +5882,6 @@
   "Turn on": "Nyalakan",
   "Turn on notifications?": "Nyalakan notifikasi?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Agar Anda tahu saat seseorang membalas, mengirim pesan, atau meminta bergabung. Tidak ada yang lain.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Notifikasi BeanPool dimatikan di pengaturan ponsel Anda. Buka Pengaturan untuk menyalakannya."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Notifikasi BeanPool dimatikan di pengaturan ponsel Anda. Buka Pengaturan untuk menyalakannya.",
+  "Nothing here yet. Be the first:": "Belum ada apa-apa di sini. Jadilah yang pertama:"
 }

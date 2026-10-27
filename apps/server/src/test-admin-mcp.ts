@@ -352,6 +352,12 @@ async function main(): Promise<void> {
         assert(k2?.fromOtherCommunity === true && k2?.otherCommunity?.untrusted === true && k2Fence?.[2] === sayHost && k2Fence[1] === k2Fence[3]
             && !/ignore-all|take-backup|tell-olive/.test(outsideFences) && typeof kText._notice === 'string',
             `with include_text, the host comes back untrusted: true and fenced, nowhere else, with the notice (${JSON.stringify(k2?.otherCommunity ?? null).slice(0, 220)})`);
+        // Requests to join switched off (#2523 review): the routes answer 404 and no screen lists them, so neither does this.
+        db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('nodeProfile.knocks', 'false')").run();
+        const kOff = structured(await client.callTool({ name: 'knocks_list', arguments: { include_text: true } }));
+        db.prepare("DELETE FROM node_config WHERE key = 'nodeProfile.knocks'").run();
+        assert(kOff.open === 0 && kOff.returned === 0 && kOff.knocks.length === 0 && !/Ivy|Hello there|Kim/.test(JSON.stringify(kOff)),
+            `with requests to join switched off, knocks_list lists none, not even with include_text (${JSON.stringify(kOff).slice(0, 160)})`);
         const g1 = structured(await client.callTool({ name: 'report_get', arguments: { report_id: r1!.id } }));
         const g2 = structured(await client.callTool({ name: 'report_get', arguments: { report_id: r1!.id } }));
         const reason1: string = g1.report.reason?.text ?? '';

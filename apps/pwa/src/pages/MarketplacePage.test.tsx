@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { MarketplacePage } from './MarketplacePage';
@@ -314,6 +314,24 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         expect(screen.getByText('No items found')).toBeInTheDocument();
     });
 
+    it('a filter with no matches shows main\'s no-matches state and no tiles', async () => {
+        await openForYou();
+        expect(screen.getByText('No items found')).toBeInTheDocument();
+        expect(screen.queryByText('Nothing here yet. Be the first:')).toBeNull();
+        expect(screen.queryByTestId('market-empty-tiles')).toBeNull();
+    });
+
+    it('the truly empty Market shows the four category tiles, "Nothing here yet. Be the first:" and + ADD POST', async () => {
+        vi.mocked(api.getMarketplacePosts).mockResolvedValue([]);
+        render(<MarketplacePage identity={identity} />);
+        expect(await screen.findByText('Nothing here yet. Be the first:')).toBeInTheDocument();
+        const emptyTiles = screen.getByTestId('market-empty-tiles');
+        expect(emptyTiles).toBeInTheDocument();
+        expect(emptyTiles.querySelectorAll('[data-testid="category-tile"]').length).toBe(4);
+        expect(within(emptyTiles.parentElement!).getByRole('button', { name: /\+ ADD POST/ })).toBeInTheDocument();
+        expect(screen.queryByText('No items found')).toBeNull();
+    });
+
     it("a category starred here is kept on the member's account too, one truth with Home's interests (Home design §4.3)", async () => {
         localStorage.removeItem('bp_fav_categories');
         const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
@@ -407,23 +425,21 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('reserves the clamped description line instead of letting it absorb the row', async () => {
+    it('removes the description line on non-Pulse grid cards (Pictures S5)', async () => {
         await openGrid();
         for (const title of ['Bicycle Repair', 'Chainsaw']) {
-            const description = tileOf(title).querySelector('p') as HTMLElement;
-            expect(description.className).toContain('line-clamp-1');
-            expect(description.className).toContain('min-h-[1.625em]');
-            // `flex-1` is the stretch: in a cell taller than the tile it swallowed the difference.
-            expect(description.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+            const description = tileOf(title).querySelector('p');
+            expect(description).toBeNull();
         }
     });
 
-    it('gives a tile with a photo and one without the same media height, so VIEW lines up', async () => {
+    it('gives a tile with a photo and one without the same square media (aspect-square), and no VIEW button (Pictures S5)', async () => {
         await openGrid();
-        const mediaHeight = (title: string) =>
-            (tileOf(title).querySelector('div.relative.w-full') as HTMLElement).className.match(/h-\[\d+px\]/)?.[0];
-        expect(mediaHeight('Bicycle Repair')).toBe('h-[110px]'); // emoji placeholder
-        expect(mediaHeight('Chainsaw')).toBe('h-[110px]');       // photo
+        for (const title of ['Bicycle Repair', 'Chainsaw']) {
+            const media = tileOf(title).querySelector('div.relative.w-full') as HTMLElement;
+            expect(media.className).toContain('aspect-square');
+            expect(tileOf(title).textContent).not.toContain('VIEW');
+        }
     });
 
     it('gives the poll two of the columns from md up, and lays its answers out in two', async () => {
@@ -439,7 +455,7 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         await openGrid();
         const gridEl = pollCard().parentElement!.parentElement as HTMLElement;
         // Anchor: this really is the Card View grid, not a wrapper.
-        expect(gridEl.className).toContain('grid-cols-1');
+        expect(gridEl.className).toContain('grid-cols-2');
         expect(gridEl.className).toContain('xl:grid-cols-5');
         expect(gridEl.className).toContain('grid-flow-row-dense');
     });

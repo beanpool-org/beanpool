@@ -353,9 +353,9 @@ export function faceChanges(was: Face, now: Face, may: { lead: boolean; shop: bo
 // ── reads ───────────────────────────────────────────────────────────────────────────────────────
 
 /** Every listing of `owner`'s the reader may see (an enterprise's Offers and Needs, with photos and stamps); null with no answer. */
-export async function readOwnerListings(owner: string): Promise<ShopfrontListing[] | null> {
+export async function readOwnerListings(owner: string, opts?: { keeper?: boolean }): Promise<ShopfrontListing[] | null> {
     try {
-        const rows: unknown = await getMarketplacePosts({ author: owner, limit: 200 });
+        const rows: unknown = await getMarketplacePosts({ author: owner, limit: 200, keeper: opts?.keeper });
         if (!Array.isArray(rows)) return null;
         return rows.map((row) => readShopfrontListing(row)).filter((l): l is ShopfrontListing => !!l);
     } catch {

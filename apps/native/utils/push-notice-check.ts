@@ -166,6 +166,8 @@ export type TapDecision =
     | { kind: 'open'; community: string; id: string; noticeKind: PushNoticeKind | null; active: boolean }
     /** The key vault's notice, on a phone that gave the vault its token. */
     | { kind: 'settings' }
+    /** The app's own notice of a request to join, or of the answer to one: where it is answered ({@link LOCAL_NOTICE_ROUTES}). */
+    | { kind: 'route'; route: NoticeRoute }
     /** Open the app where it was. */
     | { kind: 'nothing'; reason: DropReason | 'local' }
     /** Go nowhere, and show {@link FORGED_NOTICE_LINE}. */
@@ -233,6 +235,21 @@ function signedNotice(data: unknown): Record<string, unknown> | null {
 function vaultNoticeType(data: unknown): VaultNoticeType | null {
     const type = asObject(data)?.type;
     return typeof type === 'string' && Object.prototype.hasOwnProperty.call(VAULT_NOTICE_WORDS, type) ? type as VaultNoticeType : null;
+}
+
+/**
+ * Where a tap on the background sync's own notice lands, by the type it wrote (utils/sync-notices.ts): a new request to
+ * join, for an owner or admin with no push, opens People → Invites, where it is listed with Invite and Not now, as the
+ * community.knock push does; an answer to this phone's own request opens Find a community, where its invite is. Only
+ * this app posts a notice of its own, so nothing from outside reaches these.
+ */
+const LOCAL_NOTICE_ROUTES = { 'admin-knocks': '/(tabs)/people?view=invites', 'knock-answer': '/find-community' } as const satisfies Record<string, NoticeRoute>;
+
+/** The route for the app's own notice's type, or null for any other. */
+function localNoticeRoute(data: unknown): NoticeRoute | null {
+    const type = asObject(data)?.type;
+    return typeof type === 'string' && Object.prototype.hasOwnProperty.call(LOCAL_NOTICE_ROUTES, type)
+        ? LOCAL_NOTICE_ROUTES[type as keyof typeof LOCAL_NOTICE_ROUTES] : null;
 }
 
 async function vaultHasToken(ctx: NoticeContext): Promise<boolean> {
@@ -435,8 +452,13 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
             if (checked.reason !== 'other-community') return refuse(checked.reason);
         }
         // The app's own notices carry no target: it opens where it was. The copy it showed of the vault's notice opens
-        // Settings, as the vault's own push does; nothing from outside can post a notice of the app's own.
-        if (!n.remote) return vaultNoticeType(n.data) ? { kind: 'settings' } : { kind: 'nothing', reason: 'local' };
+        // Settings, as the vault's own push does, and the sync's notices of requests to join open where they are
+        // answered; nothing from outside can post a notice of the app's own.
+        if (!n.remote) {
+            if (vaultNoticeType(n.data)) return { kind: 'settings' };
+            const route = localNoticeRoute(n.data);
+            return route ? { kind: 'route', route } : { kind: 'nothing', reason: 'local' };
+        }
         if (!notice && vaultNoticeType(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
         const pins = await readPushPins(ctx.storage);
         const reason: DropReason = notice ? 'other-community' : 'unsigned';
@@ -470,7 +492,8 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites' | '/find-community'
+    | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
@@ -482,6 +505,8 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     market: '/(tabs)/market',
     chats: '/(tabs)/chats',
     settings: '/(tabs)/settings',
+    // A request to join (community.knock, the People tab's only kind): Invites, where it is listed with Invite and Not now.
+    people: '/(tabs)/people?view=invites',
 };
 
 /**
@@ -539,7 +564,8 @@ export async function noticeDetails(community: string, id: string, account: Acco
 
 /**
  * A tap on a notification (or the one that launched the app), followed: {@link checkTap}, then for a valid notice its
- * details and {@link noticeRoute}; Settings for the key vault's; the warning for one the phone can't trust. A valid notice
+ * details and {@link noticeRoute}; Settings for the key vault's; where it is answered for the sync's own notice of a
+ * request to join; the warning for one the phone can't trust. A valid notice
  * from the community the phone is set to opens here (`navigate`). One from another community the phone keeps goes to
  * `openIn` (push-notice-switch.ts `openNoticeIn`), which moves the phone there unless something holds it, and opens it
  * there: the screens show the community the phone is set to. `openIn` asks for the route only once it is going, so a
@@ -564,6 +590,8 @@ export async function followTap(
             else await ctx.openIn(decision.community, decision.id, route);
         } else if (decision.kind === 'settings') {
             navigate('/(tabs)/settings');
+        } else if (decision.kind === 'route') {
+            navigate(decision.route);
         } else if (decision.kind === 'warn') {
             warnAboutNotice();
         }

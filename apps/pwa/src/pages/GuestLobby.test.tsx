@@ -161,7 +161,7 @@ type Call = { path: string; headers: Record<string, string>; method: string; bod
  * `peerNodes`: the peer communities `/api/node/info` names. `gone`: listings taken down since Home was read — no post
  * read returns them, by id or in the list, while Home's cards still name them.
  */
-function stubNode(info: unknown, members: Map<string, string> = new Map(), peerNodes: unknown[] = [], gone: string[] = []) {
+function stubNode(info: unknown, members: Map<string, string> = new Map(), peerNodes: unknown[] = [], gone: string[] = [], health: unknown = { status: 'ok', version: '1.2.26' }) {
     const calls: Call[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const url = String(input);
@@ -170,7 +170,7 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         try { body = typeof init.body === 'string' ? JSON.parse(init.body) as Sent : undefined; } catch { body = undefined; }
         calls.push({ path, headers: (init.headers ?? {}) as Record<string, string>, method: init.method ?? 'GET', body });
         if (path === '/api/community/info') return json(200, info);
-        if (path === '/api/community/health') return json(200, { status: 'ok', version: '1.2.26' });
+        if (path === '/api/community/health') return json(200, health);
         if (path === '/api/marketplace/posts') {
             const id = new URLSearchParams(url.split('?')[1] ?? '').get('id');
             const shown = GUEST_POSTS.filter(p => !gone.includes(p.id));
@@ -319,6 +319,10 @@ describe('a visitor with no key on the global node', () => {
         await openLobby();
         const list = await screen.findByTestId('visitor-list');
         expect(list.className).toMatch(/\bsm:grid-cols-2\b/);
+        // One column below sm: the lobby's cards are rows (thumb + text), so two to a row at 320 px leaves the text ~20 px.
+        const listClasses = list.className.split(/\s+/);
+        expect(listClasses).toContain('grid-cols-1');
+        expect(listClasses).not.toContain('grid-cols-2');
         const note = within(list).getByTestId('visitor-list-note');
         // Still one line, under the first card in the one-column list at 320 px (the order the test above holds).
         expect(within(list).getAllByTestId('visitor-list-note')).toHaveLength(1);
@@ -587,6 +591,15 @@ describe("the lobby's Join card on a phone's browser (W1)", () => {
         expect(within(card).getByTestId('lobby-open-app').getAttribute('href')).toBe('https://beanpool.org/global');
         // The header keeps Join (§B.3).
         expect(screen.getAllByTestId('header-join')[0]).toHaveTextContent(/^Join$/);
+    });
+
+    it('at global.beanpool.org on an iPhone browser with App Store at 1.2.31: no "Open in the BeanPool app"', async () => {
+        stubPhone();
+        vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');
+        stubNode(OURS, new Map(), [], [], { status: 'ok', version: '1.2.26', appVersions: { ios: '1.2.31', android: '1.2.74' } });
+        const { card, ways } = await cardWays();
+        expect(ways).toEqual(['Join', 'Already have BeanPool?']);
+        expect(within(card).queryByTestId('lobby-open-app')).toBeNull();
     });
 
     it('the browser join is still one tap: it opens screen 1, which asks for the account they have before a new one', async () => {

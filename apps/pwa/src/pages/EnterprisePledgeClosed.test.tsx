@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -132,5 +132,58 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
         expect(screen.getByText(`⏳ ${badge}`).className).toContain(open ? 'bg-bp-chip-ok-tint' : 'bg-bp-chip-danger-tint');
         expect(screen.queryByRole('button', { name: /Pledge Beans/ }) !== null).toBe(open);
         expect(screen.queryByText("This project's deadline has passed: it takes no more pledges.") !== null).toBe(!open);
+    });
+});
+
+// A project that ends short of its goal gives its backers their Beans back a week after its end date, unless the end date
+// moves before then (Marty, board, 27 Oct 2026). Its page says so plainly in the goal card, and once the node has returned
+// them (the page's pledgesReturnedAt), that they went back.
+describe('The project page says when the Beans go back if the goal is not reached', () => {
+    // 10:00 UTC is the same calendar day on every clock from UTC-10 to UTC+13, so the dates read the same wherever this runs.
+    const NOW = Date.parse('2026-11-20T10:00:00.000Z');
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(NOW);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [] } as any);
+        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(ledger as any);
+        vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: {}, messages: [], readOnly: false } as any);
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
+    async function openProject(over: Record<string, unknown>) {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({ ...well('active', 5), ...over } as any);
+        render(<TreasuryDetailPage identity={member} isMember={true} pubkey="enterprise-well-pubkey" onBack={() => {}} />);
+        await screen.findByRole('heading', { level: 1, name: 'Village Well' });
+    }
+
+    it('before its end date: if the goal isn’t reached by then, everyone’s Beans go back a week after it, beside the pledge box', async () => {
+        await openProject({ deadlineAt: '2026-11-30T10:00:00.000Z' });
+        expect(screen.getByTestId('pledge-return-line').textContent).toBe('If the goal isn’t reached by 30 Nov 2026, everyone’s Beans go back on 7 Dec 2026.');
+        expect(screen.getByRole('button', { name: /Pledge Beans/ })).toBeInTheDocument();
+    });
+
+    it('in the week after its end date: they go back on the day, unless the end date moves before then', async () => {
+        await openProject({ deadlineAt: '2026-11-17T10:00:00.000Z' });
+        expect(screen.getByTestId('pledge-return-line').textContent)
+            .toBe('The goal wasn’t reached by 17 Nov 2026. Everyone’s Beans go back on 24 Nov 2026, unless the end date moves before then.');
+        expect(screen.getByText("This project's deadline has passed: it takes no more pledges.")).toBeInTheDocument();
+    });
+
+    it('once the node has returned them: they went back, and nothing reads as still held', async () => {
+        await openProject({ deadlineAt: '2026-11-10T10:00:00.000Z', currentAmount: 0, balance: 0, pledgesReturnedAt: '2026-11-17T10:00:30.000Z' });
+        expect(screen.getByTestId('pledge-return-line').textContent).toBe('The goal wasn’t reached by 10 Nov 2026, so everyone’s Beans went back on 17 Nov 2026.');
+        expect(screen.queryByText(/Pledges are held securely/)).not.toBeInTheDocument();
+    });
+
+    it('a project that reached its goal, or has no end date, says nothing of it', async () => {
+        await openProject({ status: 'funded', currentAmount: 20, deadlineAt: '2026-11-30T10:00:00.000Z' });
+        expect(screen.queryByTestId('pledge-return-line')).not.toBeInTheDocument();
+    });
+
+    it('nor does one with no end date', async () => {
+        await openProject({ deadlineAt: null });
+        expect(screen.queryByTestId('pledge-return-line')).not.toBeInTheDocument();
     });
 });

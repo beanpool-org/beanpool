@@ -123,19 +123,27 @@ import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
 import { addEntry, assertNamesAdmin, reconcileHolders } from './names-list.js';
-import { mayInviteHere } from '../config/door.js';
+import { mayInviteHere, getDoor } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { dispatchPushNotification } from '../state-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 export const KNOCK_RULES = {
     /** An unanswered knock is open this long, then lapses (the applicant may ask again). */
     openDays: 30,
     /** A declined knock blocks the key this long from the decline, and reads as still open to the applicant. */
     declineBlockDays: 30,
+    /**
+     * A knock its applicant cancelled blocks the same key from asking again this long from the cancel (the guide's 24
+     * hours), so asking, cancelling and asking again can't ring every admin's phone over and over.
+     */
+    cancelBlockHours: 24,
     /** Knocks from one address in any 24 hours. */
     perAddressPerDay: 3,
     /** Knocks made on this node in any 24 hours, from every address together. A reopened knock counts. */
@@ -162,7 +170,7 @@ export const KNOCK_RULES = {
 /** How long an invite lasts: `redeemInvite` refuses one older than this. */
 const INVITE_LIFETIME_MS = 30 * DAY_MS;
 
-export type KnockStatus = 'pending' | 'approved' | 'declined';
+export type KnockStatus = 'pending' | 'approved' | 'declined' | 'cancelled';
 
 interface KnockRow {
     id: string;
@@ -221,16 +229,21 @@ function listedCount(now: number): number {
  *   - `waiting`: open, or declined within its block (the applicant can't tell which), so no new knock;
  *   - `invited`: approved with an invite that still works, or that this key has already used;
  *   - `lapsed`: an open knock past `openDays` (the same row reopens on the next knock);
- *   - `free`: none, an expired decline block, or an invite that expired unused (a new row on the next knock).
+ *   - `cancelled`: taken back by its applicant within `cancelBlockHours` (no new knock yet; nothing open to read);
+ *   - `free`: none, an expired decline or cancel block, or an invite that expired unused (a new row on the next knock).
  */
 type Standing =
     | { kind: 'waiting'; row: KnockRow }
+    | { kind: 'cancelled'; row: KnockRow }
     | { kind: 'invited'; row: KnockRow; expiresAt: number | null }
     | { kind: 'lapsed'; row: KnockRow }
     | { kind: 'free' };
 
 function standingOf(row: KnockRow | undefined, now: number): Standing {
     if (!row) return { kind: 'free' };
+    if (row.status === 'cancelled') {
+        return ageMs(row.decided_at, now) < KNOCK_RULES.cancelBlockHours * HOUR_MS ? { kind: 'cancelled', row } : { kind: 'free' };
+    }
     if (row.status === 'pending') return isOpen(row, now) ? { kind: 'waiting', row } : { kind: 'lapsed', row };
     if (row.status === 'declined') {
         return ageMs(row.decided_at, now) < KNOCK_RULES.declineBlockDays * DAY_MS ? { kind: 'waiting', row } : { kind: 'free' };
@@ -248,7 +261,7 @@ function standingOf(row: KnockRow | undefined, now: number): Standing {
 
 /** `rate_limited`: this address's knocks today. `busy`: a node-wide ceiling, whichever (the applicant did nothing). */
 export type KnockRefusal =
-    'already_member' | 'account_closed' | 'key_invalidated' | 'knock_open' | 'knock_approved' | 'rate_limited' | 'busy';
+    'already_member' | 'account_closed' | 'key_invalidated' | 'knock_open' | 'knock_approved' | 'knock_cancelled' | 'rate_limited' | 'busy';
 
 export interface KnockInput {
     /** The key that signed the knock, lower-case hex. Never a body field. */
@@ -294,6 +307,7 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             const standing = standingOf(latestKnock(pubkey), now);
             if (standing.kind === 'waiting') return { ok: false, reason: 'knock_open' };
             if (standing.kind === 'invited') return { ok: false, reason: 'knock_approved' };
+            if (standing.kind === 'cancelled') return { ok: false, reason: 'knock_cancelled' };
             const fromAddress = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE ip_hash = ? AND created_at >= ?')
                 .get(ipHash, iso(now - DAY_MS)) as { n: number }).n;
             if (fromAddress >= KNOCK_RULES.perAddressPerDay) return { ok: false, reason: 'rate_limited' };
@@ -349,6 +363,23 @@ export function knockStatusFor(pubkey: string, now = Date.now()): KnockStatusAns
     }
 }
 
+/**
+ * The applicant takes back their request ("Cancel my request", POST /api/join/knock/cancel). An open one is closed:
+ * members no longer see it, and the key may ask again `cancelBlockHours` after (standingOf). A declined one still in its
+ * block is answered the same and left as it is: the applicant can't tell it from an open one (a decline is never a
+ * message), Cancel doesn't tell them either, and the decline keeps its block. Anything else: nothing open to cancel.
+ */
+export function cancelKnock(pubkey: string, now = Date.now()): { ok: true } | { ok: false; reason: 'not_found' } {
+    const standing = standingOf(latestKnock(pubkey.toLowerCase()), now);
+    if (standing.kind !== 'waiting') return { ok: false, reason: 'not_found' };
+    if (standing.row.status === 'pending') {
+        const at = iso(now);
+        db.prepare(`UPDATE join_requests SET status = 'cancelled', decided_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'`)
+            .run(at, at, standing.row.id);
+    }
+    return { ok: true };
+}
+
 // ── The members ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface OpenKnock {
@@ -375,9 +406,172 @@ export function listOpenKnocks(limit: number, offset: number, now = Date.now()):
     };
 }
 
-/** How many knocks are open, for the operator's Settings. */
+/** How many knocks are open, for the operator's Settings (shown beside the switch, on or off). */
 export function openKnockCount(now = Date.now()): number {
     return listOpenKnocks(0, 0, now).total;
+}
+
+/**
+ * The open knocks someone can act on: none while the `knocks` switch is off, when every /api/join/knock route answers
+ * 404 feature_off and no screen can list or answer them. The admin queue, Home's line, the manager's count and the
+ * 7-day alert count these; only the operator's Settings, beside the switch, counts every open one (#2523 review).
+ */
+export function actionableKnockCount(now = Date.now()): number {
+    return getProfileSwitches().knocks ? openKnockCount(now) : 0;
+}
+
+/** openKnocksWaitingDays, for the same callers: none while the `knocks` switch is off (see actionableKnockCount). */
+export function actionableKnocksWaitingDays(minDays: number, now = Date.now()): number {
+    return getProfileSwitches().knocks ? openKnocksWaitingDays(minDays, now) : 0;
+}
+
+/**
+ * How many open knocks have been waiting for at least `minDays` (e.g. 3 days for members door, 7 days for alerts).
+ */
+export function openKnocksWaitingDays(minDays: number, now = Date.now()): number {
+    const cutoff = iso(now - minDays * DAY_MS);
+    const maxAge = iso(now - KNOCK_RULES.openDays * DAY_MS);
+    return (db.prepare(`
+        SELECT COUNT(*) AS n FROM join_requests
+        WHERE status = 'pending' AND created_at <= ? AND created_at >= ?
+        AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey AND (m.is_visitor = 0 OR m.status = 'pruned'))
+        AND NOT EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)
+    `).get(cutoff, maxAge) as { n: number }).n;
+}
+
+/**
+ * How promptly the community answers requests to join, as the directory push carries it (design §5.6). A request is
+ * judged once it has had its chance: answered (either way), or still open past `answerDays`. One only hours or days old
+ * is neither an answer nor a miss yet, so a burst of new requests never marks a community that answers as one that
+ * doesn't. Cancelled ones are never judged; nor is an open one whose key joined another way or was replaced (it can't be
+ * answered).
+ */
+export const KNOCK_ANSWER_RULES = {
+    /** How far back requests are judged. */
+    windowDays: 90,
+    /** Answered within this many days is answered on time; open past it, a miss. */
+    answerDays: 7,
+    /** An open request older than this says the community isn't answering. */
+    staleOpenDays: 14,
+    /** Nothing is said until this many requests have been judged. */
+    minJudged: 3,
+    /** 'week' when at least this share was answered on time (and none is stale). */
+    weekShare: 0.8,
+    /** 'none' when fewer than this share was answered at all (or one is stale). */
+    noneShare: 0.5,
+    /**
+     * 'none' sorts the community after those that answer (directory-cache.ts listCommunities), so it is published only
+     * once the measure has said it this long without a break; until then the push says 'slow' ("hasn't answered requests
+     * lately" too, without the demotion). The operator page promises the 60 days.
+     */
+    noneHoldDays: 60,
+} as const;
+
+export type KnockAnswers = 'week' | 'slow' | 'none';
+
+/**
+ * This node's own measure, over its last {@link KNOCK_ANSWER_RULES}.windowDays: null until `minJudged` requests were
+ * judged; 'none' when an open one is older than `staleOpenDays` or fewer than `noneShare` of those judged were answered;
+ * 'week' when at least `weekShare` were answered within `answerDays`; else 'slow'. What the directory is told is
+ * {@link knockAnswersForDirectory}, which holds 'none' back for `noneHoldDays`.
+ */
+export function measureKnockAnswers(now = Date.now()): KnockAnswers | null {
+    const R = KNOCK_ANSWER_RULES;
+    const rows = db.prepare(`
+        SELECT created_at, status, decided_at FROM join_requests
+        WHERE created_at >= ? AND status IN ('pending', 'approved', 'declined')
+        AND NOT (
+            status = 'pending' AND (
+                EXISTS (SELECT 1 FROM members m WHERE m.public_key = join_requests.pubkey AND (m.is_visitor = 0 OR m.status = 'pruned'))
+                OR EXISTS (SELECT 1 FROM invalidated_keys i WHERE i.public_key = join_requests.pubkey)
+            )
+        )
+    `).all(iso(now - R.windowDays * DAY_MS)) as Pick<KnockRow, 'created_at' | 'status' | 'decided_at'>[];
+
+    let judged = 0;
+    let answered = 0;
+    let onTime = 0;
+    let stale = false;
+    for (const r of rows) {
+        if (r.status === 'pending') {
+            const waited = ageMs(r.created_at, now);
+            // Still within its chance: not judged.
+            if (waited <= R.answerDays * DAY_MS) continue;
+            judged++;
+            if (waited > R.staleOpenDays * DAY_MS) stale = true;
+            continue;
+        }
+        judged++;
+        answered++;
+        if (r.decided_at && Date.parse(r.decided_at) - Date.parse(r.created_at) <= R.answerDays * DAY_MS) onTime++;
+    }
+    if (judged < R.minJudged) return null;
+    if (stale || answered / judged < R.noneShare) return 'none';
+    if (onTime / judged >= R.weekShare) return 'week';
+    return 'slow';
+}
+
+/** node_config: when this server's measure began saying 'none' without a break (ISO), or no row. */
+export const KNOCK_ANSWERS_NONE_SINCE_KEY = 'knockAnswersNoneSince';
+
+/**
+ * What the directory push says ({@link measureKnockAnswers}, with 'none' held back): the first time the measure says
+ * 'none' is written down, and until it has said so for `noneHoldDays` the push says 'slow'. Any other answer clears it,
+ * so the hold starts again. Per server: a standby that takes over starts its own count, which only delays the demotion.
+ */
+export function knockAnswersForDirectory(now = Date.now()): KnockAnswers | null {
+    const measured = measureKnockAnswers(now);
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(KNOCK_ANSWERS_NONE_SINCE_KEY) as { value: string } | undefined;
+    if (measured !== 'none') {
+        if (row) db.prepare('DELETE FROM node_config WHERE key = ?').run(KNOCK_ANSWERS_NONE_SINCE_KEY);
+        return measured;
+    }
+    const since = row ? Date.parse(row.value) : NaN;
+    if (!Number.isFinite(since) || since > now) {
+        db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(KNOCK_ANSWERS_NONE_SINCE_KEY, iso(now));
+        return 'slow';
+    }
+    return now - since >= KNOCK_ANSWER_RULES.noneHoldDays * DAY_MS ? 'none' : 'slow';
+}
+
+/**
+ * Notifies active owners and admins (and opted-in members if door !== 'admins') of an incoming knock.
+ */
+export function notifyKnockReceived(_now = Date.now()): void {
+    const adminRows = db.prepare(`
+        SELECT nr.member_pubkey AS pk
+        FROM node_roles nr
+        JOIN members m ON m.public_key = nr.member_pubkey
+        WHERE nr.role IN ('owner', 'admin') AND m.status = 'active' AND m.is_visitor = 0
+    `).all() as { pk: string }[];
+    const adminPks = adminRows.map(r => r.pk);
+
+    let memberPks: string[] = [];
+    if (getDoor() !== 'admins') {
+        const memberRows = db.prepare(`
+            SELECT mp.public_key AS pk
+            FROM member_preferences mp
+            JOIN members m ON m.public_key = mp.public_key
+            WHERE mp.pref_key = 'notify_knocks' AND mp.pref_value = 'true' AND m.status = 'active' AND m.is_visitor = 0
+        `).all() as { pk: string }[];
+        memberPks = memberRows.map(r => r.pk);
+    }
+
+    const recipients = Array.from(new Set([...adminPks, ...memberPks]));
+    if (recipients.length === 0) return;
+
+    try {
+        dispatchPushNotification(
+            recipients,
+            'SYSTEM',
+            'BeanPool',
+            'Someone asked to join your community.',
+            { screen: 'people' },
+            'knocks',
+            'community.knock',
+        );
+    } catch { }
 }
 
 export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated' | 'admins_only';
@@ -535,8 +729,9 @@ export function tidyKnocks(now = Date.now()): { cleared: number; deleted: number
         const past = db.prepare(`SELECT id FROM join_requests
                                  WHERE (status = 'pending' AND created_at < ?)
                                     OR (status = 'declined' AND decided_at < ?)
-                                    OR (status = 'approved' AND decided_at < ?)`)
-            .all(daysAgo(KNOCK_RULES.openDays + KNOCK_RULES.lapsedKeptDays), daysAgo(KNOCK_RULES.declineBlockDays), iso(now - INVITE_LIFETIME_MS)) as { id: string }[];
+                                    OR (status = 'approved' AND decided_at < ?)
+                                    OR (status = 'cancelled' AND decided_at < ?)`)
+            .all(daysAgo(KNOCK_RULES.openDays + KNOCK_RULES.lapsedKeptDays), daysAgo(KNOCK_RULES.declineBlockDays), iso(now - INVITE_LIFETIME_MS), daysAgo(KNOCK_RULES.declineBlockDays)) as { id: string }[];
         const remove = db.prepare('DELETE FROM join_requests WHERE id = ?');
         for (const { id } of past) {
             remove.run(id);
@@ -574,7 +769,7 @@ export interface KnockMerge { written: number; kept: number; removed: number; in
 
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 const isNullableText = (v: unknown, max: number) => v === null || v === undefined || isText(v, max);
-const STATUSES = new Set<string>(['pending', 'approved', 'declined']);
+const STATUSES = new Set<string>(['pending', 'approved', 'declined', 'cancelled']);
 
 /**
  * The main server's knocks as a copy carries them (SyncPayload.joinRequests), merged into this standby's database in

@@ -111,6 +111,7 @@ import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { tidyKnocks } from './engine/knocks.js';
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
@@ -770,12 +771,18 @@ async function main(): Promise<void> {
             const [method, path] = route.split(' ');
             if (MAY.has(route)) continue;
             const stranger = keypair('StrangerVA');
+            // A cancel takes back the signer's own open knock (front doors S1), and Zed's is the one this sweep's knock just
+            // made: the key with no row knocks first too, so the two cancels are compared like for like.
+            const cancel = route === 'POST /api/join/knock/cancel';
+            if (cancel) { resetLimits(); await call('POST', stranger, '/api/join/knock', bodyFor(stranger)); }
             resetLimits();
             const n = await changes(() => call(method, stranger, materialise(path), bodyFor(stranger)));
             resetLimits();
             const v = await changes(() => call(method, zed, materialise(path), bodyFor(zed)));
             const d = asNoRow(route, v, n, 'admin visitor', 'no row       ');
             if (d) differZed.push(d);
+            // The cancelled rows' words go at the tidy-up's next tick: now, so a later step's "changes nothing" isn't that tick.
+            if (cancel) tidyKnocks();
         }
         assert(differZed.length === 0,
             `every one is answered to a visitor's row holding admin as to a key with no row, and changes nothing more${differZed.length ? `; ${differZed.length} were not:\n    ${differZed.join('\n    ')}` : ''}`);
@@ -1070,6 +1077,8 @@ async function main(): Promise<void> {
             'POST /api/member/purge',
             // The join doors, signed by the joiner (its invite or ticket redeem is one the middleware never sees).
             'POST /api/join', 'POST /api/join/work', 'POST /api/join/sso-nonce', 'POST /api/join/knock',
+            // Taking back its own open knock (front doors S1): the route finds only the signer's own.
+            'POST /api/join/knock/cancel',
             // A re-key ask (#1768), which the route itself refuses for any key with a row here, with its own plain sentence.
             'POST /api/member/re-enroll',
             // What anyone may do, signed or not.
@@ -1145,6 +1154,18 @@ async function main(): Promise<void> {
         const status = await call('GET', una, '/api/join/knock/status');
         assert(isVisitorRow(una.pk) && knock.status === 201 && status.status === 200 && status.body?.status === 'pending',
             `a visitor's row knocks and reads its knock (${show(knock)}; ${show(status)})`);
+        // It takes its own knock back, and only its own: a second cancel is told there is none, as a key with no knock is.
+        resetLimits();
+        const noKnock = await call('POST', keypair('NoKnockVA'), '/api/join/knock/cancel', {});
+        resetLimits();
+        const unaCancels = await call('POST', una, '/api/join/knock/cancel', {});
+        resetLimits();
+        const cancelAgain = await call('POST', una, '/api/join/knock/cancel', {});
+        assert(unaCancels.status === 200 && unaCancels.body?.knock?.status === 'cancelled' && cancelAgain.status === 404 && noKnock.status === 404
+            && JSON.stringify(cancelAgain.body) === JSON.stringify(noKnock.body),
+            `a visitor's row cancels its own knock, and a second cancel is answered as a key with no knock (${show(unaCancels)}; ${show(cancelAgain)}; ${show(noKnock)})`);
+        // The cancelled row's words go at the tidy-up's next tick: now, so a later section's "changes nothing" isn't that tick.
+        tidyKnocks();
         for (const [path, body] of [['/api/join', { provider: 'google', idToken: 'x', nonce: 'y', callsign: 'Una' }], ['/api/join/sso-nonce', {}],
             ['/api/pricing-guide/report', { itemId: 'no-such-item', reportType: 'too_high' }]] as const) {
             resetLimits();

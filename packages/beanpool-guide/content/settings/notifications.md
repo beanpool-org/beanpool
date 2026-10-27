@@ -13,6 +13,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 - **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in.
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
 - **Held in Trust & System:** beans held, released or in question.
+- **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
 
 In the web app the first is called **Chat Messages**, and the third is the one named after **Deals**. They set what reaches your phone.
 
@@ -28,6 +29,8 @@ An alert on your phone says only what kind of news it is, for example:
 - "There is news on one of your trades."
 - "An event you're going to starts soon."
 - "Your community has a notice for you."
+- "Someone asked to join your community."
+- "A community answered your request."
 
 It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it.
 

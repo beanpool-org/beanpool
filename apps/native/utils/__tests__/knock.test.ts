@@ -28,7 +28,8 @@ import { bytesToHex } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import {
     sendKnock, readKnockStatus, readStatus, knockCardState, knockFormProblem, knockBody, knockAvatar,
-    rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, KNOCK_MESSAGES, KNOCK_FROM_NODE,
+    rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, cancelKnock, cancelledKnocks, KNOCK_MESSAGES, KNOCK_FROM_NODE, KNOCK_CANCEL_BLOCK_HOURS,
+    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable,
     type KnockStatusResult,
 } from '../knock';
 import { GLOBAL_NODE_URL } from '../node-profile';
@@ -300,9 +301,24 @@ describe('what the phone remembers', () => {
     it('keeps the communities this key asked, newest first, and forgets one on request', async () => {
         await rememberKnock('key-1', { url: 'https://a.example.org/', name: 'Alpha', key: 'a' }, new Date('2026-09-20T00:00:00Z'));
         await rememberKnock('key-1', { url: 'https://b.example.org', name: 'Beta' }, new Date('2026-09-21T00:00:00Z'));
-        expect((await rememberedKnocks('key-1')).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
+        const later = Date.parse('2026-09-22T00:00:00Z');
+        expect((await rememberedKnocks('key-1', later)).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
         await forgetKnock('key-1', 'https://a.example.org');
-        expect((await rememberedKnocks('key-1')).map(k => k.url)).toEqual(['https://b.example.org']);
+        expect((await rememberedKnocks('key-1', later)).map(k => k.url)).toEqual(['https://b.example.org']);
+    });
+
+    it('forgets a knock too old to be answered (an open month, then an invite\'s month, and a day): no status is read for it again', async () => {
+        const sent = new Date('2026-09-01T00:00:00Z');
+        const DAY = 86_400_000;
+        await rememberKnock('key-1', { url: 'https://a.example.org', name: 'Alpha' }, sent);
+        await rememberKnock('key-1', { url: 'https://b.example.org', name: 'Beta' }, new Date(sent.getTime() + 10 * DAY));
+        expect(KNOCK_ANSWERABLE_DAYS).toBe(61);
+        expect((await rememberedKnocks('key-1', sent.getTime() + 60 * DAY)).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
+        expect((await rememberedKnocks('key-1', sent.getTime() + 61 * DAY)).map(k => k.url)).toEqual(['https://b.example.org']);
+        // Gone from the phone's memory, not only from that answer.
+        expect((await rememberedKnocks('key-1', sent.getTime())).map(k => k.url)).toEqual(['https://b.example.org']);
+        expect(knockStillAnswerable({ sentAt: 'yesterday' })).toBe(false);
+        expect(knockStillAnswerable({})).toBe(false);
     });
 
     it('another key’s list is none of this key’s business (a wiped and restored phone)', async () => {
@@ -314,5 +330,54 @@ describe('what the phone remembers', () => {
         await rememberKnock('key-1', { url: GLOBAL_NODE_URL, name: 'Global' });
         await rememberKnock('key-1', { url: 'http://a.example.org', name: 'Alpha' });
         expect(await rememberedKnocks('key-1')).toEqual([]);
+    });
+});
+
+describe('"Cancel my request" (front doors S1)', () => {
+    const AT = new Date('2026-10-27T08:00:00Z');
+    const HOUR = 3_600_000;
+
+    it('is a signed POST to the community’s /api/join/knock/cancel by the member’s own key', async () => {
+        const me = await member();
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' });
+        answer = () => ({ status: 200, body: { knock: { status: 'cancelled' } } });
+        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: true });
+        expect(sent).toHaveLength(1);
+        expect(sent[0].url).toBe(`${COMMUNITY}/api/join/knock/cancel`);
+        expect(sent[0].method).toBe('POST');
+        expect(await signedBy(sent[0], me.publicKey)).toBe(true);
+    });
+
+    it('done: no longer waiting, and the card says so for 24 hours, then offers "Ask to join" again', async () => {
+        const me = await member();
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' });
+        answer = () => ({ status: 200, body: { knock: { status: 'cancelled' } } });
+        await cancelKnock(COMMUNITY, me, AT);
+        expect(await rememberedKnocks(me.publicKey)).toEqual([]);
+        expect(await cancelledKnocks(me.publicKey, AT.getTime() + 23 * HOUR)).toEqual({ [COMMUNITY]: AT.getTime() });
+        expect(KNOCK_MESSAGES.cancelled).toBe('You cancelled your request. You can ask again after 24 hours.');
+        expect(await cancelledKnocks(me.publicKey, AT.getTime() + KNOCK_CANCEL_BLOCK_HOURS * HOUR)).toEqual({});
+        // Forgotten once the day is over: nothing left that says it was cancelled.
+        expect(await cancelledKnocks(me.publicKey, AT.getTime() + 23 * HOUR)).toEqual({});
+    });
+
+    it('asking that community again (after the day) clears it', async () => {
+        const me = await member();
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' });
+        answer = () => ({ status: 200, body: { knock: { status: 'cancelled' } } });
+        await cancelKnock(COMMUNITY, me, AT);
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' }, new Date(AT.getTime() + 2 * HOUR));
+        expect((await rememberedKnocks(me.publicKey)).map(k => k.url)).toEqual([COMMUNITY]);
+        expect(await cancelledKnocks(me.publicKey, AT.getTime() + 3 * HOUR)).toEqual({});
+    });
+
+    it('refused (nothing open: it lapsed, or a member said yes meanwhile): the community’s words, and the request is kept', async () => {
+        const me = await member();
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' });
+        answer = () => ({ status: 404, body: { error: 'There’s no open request to join to cancel.', code: 'not_found' } });
+        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: 'There’s no open request to join to cancel.' });
+        expect((await rememberedKnocks(me.publicKey)).map(k => k.url)).toEqual([COMMUNITY]);
+        (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
+        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: KNOCK_MESSAGES.unreachable });
     });
 });

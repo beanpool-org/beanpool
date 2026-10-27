@@ -80,3 +80,28 @@ describe('PostAuthorTrust face', () => {
         expect(container.querySelector('img')?.getAttribute('src')).toBe('/api/avatar/abc?v=1');
     });
 });
+
+describe('PostAuthorTrust founding mark', () => {
+    it('compact mode: displays 🔑 without rating', () => {
+        render(<PostAuthorTrust callsign="Rowan" mode="compact" isFounding={true} />);
+        const founding = screen.getByTestId('author-founding');
+        expect(founding).toHaveTextContent('🔑');
+        expect(founding).not.toHaveTextContent('🌱');
+    });
+
+    it('full mode: displays 🔑 FOUNDING without rating', () => {
+        render(<PostAuthorTrust callsign="Rowan" mode="full" isFounding={true} />);
+        const founding = screen.getByTestId('author-founding');
+        expect(founding).toHaveTextContent('🔑 FOUNDING');
+        expect(founding).not.toHaveTextContent('🌱');
+    });
+
+    it('rating takes precedence over founding mark in both modes', () => {
+        const { unmount } = render(<PostAuthorTrust callsign="Rowan" mode="compact" isFounding={true} rating={{ average: 5, count: 3 }} />);
+        expect(screen.queryByTestId('author-founding')).toBeNull();
+        unmount();
+
+        render(<PostAuthorTrust callsign="Rowan" mode="full" isFounding={true} rating={{ average: 5, count: 3 }} />);
+        expect(screen.queryByTestId('author-founding')).toBeNull();
+    });
+});

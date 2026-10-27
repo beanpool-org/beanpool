@@ -26,7 +26,7 @@ import { ReportReasonBox } from '../components/ReportReasonBox';
 import { Sentence } from '../components/Sentence';
 import { reportedAlertBody } from '../utils/reportReasons';
 import { blockUser, isUserBlocked } from '../utils/blocklist';
-import { pledgeClosedLine } from '../utils/enterprise-pledge';
+import { pledgeClosedLine, pledgeReturnLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/showcase/sample-screens';
@@ -34,7 +34,7 @@ import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../compo
 import { useReaderFeatures } from '../utils/use-reader-features';
 import { showcaseMode } from '../utils/node-profile';
 import {
-    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontSections, ShopfrontText,
+    ShopfrontFeatured, ShopfrontHeader, ShopfrontKeepers, ShopfrontMessage, ShopfrontMoney, ShopfrontPaused, ShopfrontSections, ShopfrontText,
     ShopfrontTogether, ShopfrontVisitorNote, categorySinceLine, openListing,
 } from '../components/shopfront/Shopfront';
 import {
@@ -90,6 +90,20 @@ export default function TreasuryDetailScreen() {
     // The shopfront's listings with their photos and stamps (S5): undefined until read, null when they couldn't be, and
     // asked only of a node with the shopfront and only for a member's page; else the detail's own text listings stand in.
     const [ownListings, setOwnListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
+    // The keeper-only Paused section: its own read (readOwnerListings(treasuryKey, { keeper: true })), keeping only rows
+    // with status === 'paused', in its own state, with stale-read guards (shownPubkey / turn), cleared when not keeper.
+    const [pausedListings, setPausedListings] = useState<ShopfrontListing[]>([]);
+    const shownPubkey = useRef(treasuryKey);
+    shownPubkey.current = treasuryKey;
+    const pausedTurn = useRef(0);
+    const prevKey = useRef(treasuryKey);
+    useEffect(() => {
+        if (prevKey.current !== treasuryKey) {
+            prevKey.current = treasuryKey;
+            setOwnListings(undefined);
+            setPausedListings([]);
+        }
+    }, [treasuryKey]);
     const [messagingLead, setMessagingLead] = useState(false);
 
     // Keeper Join Request State
@@ -176,6 +190,7 @@ export default function TreasuryDetailScreen() {
         escrowNotice: { fontSize: 12, color: colors.text.secondary, lineHeight: 17, marginBottom: 14 },
         pledgeBox: { backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default },
         pledgeClosedText: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20 },
+        pledgeReturnText: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20, marginBottom: 14 },
         pledgeInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
         pledgeAmountInput: { flex: 1, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
@@ -321,6 +336,7 @@ export default function TreasuryDetailScreen() {
             const d = sampleTreasuryDetail(treasuryKey);
             setDetail(d);
             setIsKeeperOfThis(false);
+            setPausedListings([]);
             setLoading(false);
             return () => { active = false; };
         }
@@ -328,6 +344,7 @@ export default function TreasuryDetailScreen() {
         if (!reader.known) return () => { active = false; };
         if (elsewhere) {
             setDetail(null);
+            setPausedListings([]);
             setLoading(false);
             return () => { active = false; };
         }
@@ -340,17 +357,33 @@ export default function TreasuryDetailScreen() {
                 if (!active) return;
                 if (d) setDetail(d);
                 setIdentity(id);
-                if (d && treasuryKey && hasShopfront(d) && readsAsMember(d)) {
-                    void readOwnerListings(treasuryKey).then((rows) => { if (active) setOwnListings(rows); });
-                }
+                let keeper = false;
                 if (id?.publicKey && treasuryKey) {
                     const b: any = await getBalance(id.publicKey).catch(() => ({}));
                     if (!active) return;
                     const mine: string[] = Array.isArray(b?.keeperOf) ? b.keeperOf : [];
                     const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
-                    setIsKeeperOfThis(mine.includes(treasuryKey) || inKeepers);
+                    keeper = mine.includes(treasuryKey) || inKeepers;
+                    setIsKeeperOfThis(keeper);
                 } else {
                     setIsKeeperOfThis(false);
+                }
+                if (d && treasuryKey && hasShopfront(d) && readsAsMember(d)) {
+                    void readOwnerListings(treasuryKey).then((rows) => {
+                        if (active && shownPubkey.current === treasuryKey) setOwnListings(rows);
+                    });
+                    if (keeper) {
+                        const turn = ++pausedTurn.current;
+                        void readOwnerListings(treasuryKey, { keeper: true }).then((rows) => {
+                            if (active && shownPubkey.current === treasuryKey && turn === pausedTurn.current && rows) {
+                                setPausedListings(rows.filter((l) => l.status === 'paused'));
+                            }
+                        });
+                    } else {
+                        setPausedListings([]);
+                    }
+                } else {
+                    setPausedListings([]);
                 }
             } catch {
                 // handle error
@@ -726,6 +759,9 @@ export default function TreasuryDetailScreen() {
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
                             // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
                             const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle, detail?.deadlineAt);
+                            // What happens to the backers' Beans if the goal isn't reached, and once they have gone back, that they did.
+                            const returnLine = pledgeReturnLine({ ...detail, currentAmount: current });
+                            const wentBack = !!returnLine && !!detail?.pledgesReturnedAt;
                             return (
                                 <View style={styles.progressCard}>
                                     <View style={styles.progressHeader}>
@@ -747,6 +783,8 @@ export default function TreasuryDetailScreen() {
                                     <View style={styles.progressBarBg}>
                                         <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }]} />
                                     </View>
+                                    {/* Once the Beans went back nothing is held: the line below says so instead. */}
+                                    {!wentBack && (
                                     <Text style={styles.escrowNotice}>
                                         {isFunded
                                             ? (project
@@ -756,6 +794,8 @@ export default function TreasuryDetailScreen() {
                                                 ? t("🔒 Pledges are held securely in the project's account, spendable only on transparent offers and needs that the whole community can see.")
                                                 : t("🔒 Pledges are held securely in the enterprise's account, spendable only on transparent offers and needs that the whole community can see."))}
                                     </Text>
+                                    )}
+                                    {!!returnLine && <Text style={styles.pledgeReturnText} testID="pledge-return-line">{returnLine}</Text>}
 
                                     {/* Inline Pledge Beans Input */}
                                     {/* In preview (Example Valley's): the marker, never the box. */}
@@ -822,6 +862,9 @@ export default function TreasuryDetailScreen() {
                                 <ShopfrontFeatured listings={featuredOf(shopListings)} showsBeans onOpen={openListingHere} />
                                 <ShopfrontTogether categories={Array.isArray(detail?.offerCategories) ? detail.offerCategories : []} />
                                 <ShopfrontSections sections={shopSectionsOf(shopListings)} showsBeans empty={t('No live listings yet.')} onOpen={openListingHere} />
+                                {isKeeperOfThis && pausedListings.length > 0 && (
+                                    <ShopfrontPaused listings={pausedListings} onOpen={openListingHere} />
+                                )}
                             </>
                         )}
 

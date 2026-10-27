@@ -199,7 +199,7 @@ export function directoryPromiseSaved(): void {
 }
 
 /** The fields a registry from before the listing promise (mothership A2) doesn't know: the push without them is the old one. */
-const LISTING_FIELDS: (keyof ListingFields)[] = ['promise', 'acceptingKnocks', 'closingOn'];
+const LISTING_FIELDS: (keyof ListingFields)[] = ['promise', 'acceptingKnocks', 'closingOn', 'answers'];
 
 /** Signs `payload` with the node key and POSTs it to the registry. Throws on a network failure; the answer is the caller's. */
 async function signedPush(payload: Record<string, unknown>, privateKey: NonNullable<ReturnType<typeof getPrivateKey>>): Promise<Response> {

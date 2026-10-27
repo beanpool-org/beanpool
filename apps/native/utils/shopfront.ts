@@ -299,8 +299,9 @@ async function readListings(path: string): Promise<ShopfrontListing[] | null> {
 }
 
 /** Every listing of `owner`'s the reader may see (an enterprise's Offers and Needs); null with no answer. */
-export function readOwnerListings(owner: string): Promise<ShopfrontListing[] | null> {
-    return readListings(`/api/marketplace/posts?author=${encodeURIComponent(owner)}&limit=200`);
+export function readOwnerListings(owner: string, opts?: { keeper?: boolean }): Promise<ShopfrontListing[] | null> {
+    const k = opts?.keeper ? '&keeper=1' : '';
+    return readListings(`/api/marketplace/posts?author=${encodeURIComponent(owner)}&limit=200${k}`);
 }
 
 /** A shop's Offers as the reader may see them; null with no answer. */

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pluralKey, setLanguage } from '@beanpool/core';
 import {
-    adminItemInWords, adminLabel, buildNeedsYou, closesInWords, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_PRIORITY,
+    adminItemInWords, adminLabel, buildNeedsYou, closesInWords, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_PRIORITY,
     type NeedsYouInputs, type NeedsYouEntry, type NeedsYouTransaction,
 } from '../needs-you';
 
@@ -40,7 +40,7 @@ describe('What needs you: which kinds show', () => {
     });
 
     it('orders by priority, highest first: admin, deal, vote, invite, message, group', () => {
-        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'deal', 'vote', 'invite', 'message', 'group']);
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'deal', 'vote', 'invite', 'message', 'group']);
         expect(allFour().map(e => e.kind)).toEqual(['deal', 'vote', 'message', 'group']);
     });
 
@@ -269,6 +269,18 @@ describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
             expect(admin(role, queue(item('reports', 2, 'moderation')))).toEqual([]);
         }
         expect(buildNeedsYou(quiet({ admin: null }))).toEqual([]);
+    });
+
+    it('requests to join are a line of their own, landing on People → Invites where they are answered; never in 🛡️, which opens Settings (front doors S1)', () => {
+        const both = admin('owner', queue(item('reports', 2, 'moderation'), item('knocks', 3, 'home', 'Requests to join')));
+        expect(both).toEqual([
+            { kind: 'admin', count: 2, accent: true, label: '2 reports to review', target: { to: 'admin', section: 'moderation' } },
+            { kind: 'knock', count: 3, accent: true, label: '3 people asked to join', target: { to: 'people' } },
+        ]);
+        expect(admin('admin', queue(item('knocks', 1, 'home', 'Requests to join')))).toEqual([
+            { kind: 'knock', count: 1, accent: true, label: '1 person asked to join', target: { to: 'people' } },
+        ]);
+        expect(needsTargetHref({ to: 'people' })).toEqual({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     });
 
     it('not while the queue is empty, unknown, or holds only zeros', () => {

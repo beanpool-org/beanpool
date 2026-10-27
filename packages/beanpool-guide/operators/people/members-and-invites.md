@@ -44,6 +44,12 @@ Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** 
 
 Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
 
+**Requests to join and the public directory.** When someone finds your community in the global directory and asks to join, your server tells its owners and admins with a push notification ("Someone asked to join your community.") and a line on Home under Needs you ("2 people asked to join"). Tapping either opens People → Invites in the app, where the request is listed with **Invite** and **Not now**. The manager's Home counts them under Action Required too; they are answered in the app, not here. In an Invite community (any member invites), members who opted into "Requests to join" in Notification Preferences are notified too; in a Known one, only owners and admins are.
+
+If a request waits **3 days** without an answer in an Invite community (any member invites), the Needs you line is shown to all members so someone can welcome them.
+
+If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
+
 **While no new members are being taken** (the community is paused), the card says so first. No choice is marked as the one in use; the one from before the pause is marked "before the pause". Saving either choice takes new members again, and every member is told. Until the manager has checked whether the community is paused, it won't save: if it can't check, reload to try again.
 
 **While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The card says so first, in the server's words, with what would end it, and offers nothing to save until the preview is off.

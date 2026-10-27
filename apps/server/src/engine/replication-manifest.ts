@@ -359,7 +359,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',
-        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on'),
+        columns: cols('community_key listed name node_url lat lng radius_km member_count contact_email contact_phone registry_updated_at first_seen_at updated_at promise accepting_knocks closing_on answers'),
     },
     join_requests: {
         kind: 'replicated-except', payload: 'joinRequests', watermark: 'updated_at',
@@ -743,6 +743,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
+    knockAnswersNoneSince: { kind: 'per-server', reason: "when this server's measure of how it answers requests to join began saying 'none' (engine/knocks.ts knockAnswersForDirectory); a standby that takes over starts its own count, which only delays the directory's demotion" },
     friendsAddedYouSince: { kind: 'per-server', reason: "when this server began telling members who added them; an add from before it is never news (engine/friends-added-you.ts)" },
     // These two and standby_health hold internet addresses: 7 days at most, and none in any copy of the database
     // (services/address-retention.ts).

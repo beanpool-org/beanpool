@@ -75,6 +75,7 @@ import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges } from './engine/stranded-pledges.js';
+import { returnUnfundedPledges, noticeEndDateMoved } from './engine/unfunded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -1091,7 +1092,37 @@ function armMainServerTimers(): void {
         try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
         // A message request push folded in the last hour goes as one, naming nobody, once the hour is over (engine/dm-requests.ts).
         try { tickRequestPushFolds(dispatchPushNotification); } catch (e) { console.warn('[Push] Request push fold failed:', e); }
+        // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
+        // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
+        try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
     }), 60 * 1000);
+}
+
+/** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
+const unfundedPledgeHooks = {
+    transfer: (...args: Parameters<typeof transfer>) => transfer(...args),
+    conservingTransaction: <T>(fn: () => T): T => conservingTransaction(fn),
+    // A closed account's share of a project's pledges, out of its escrow into the Commons pot (the escrow floor applies).
+    moveToCommons: (from: string, amount: number, memo: string) => moveToCommons(from, amount, memo),
+    broadcast: (event: any, recipients?: string[]) => broadcast(event, recipients),
+    dispatchPushNotification: (...args: Parameters<typeof dispatchPushNotification>) => dispatchPushNotification(...args),
+};
+
+/**
+ * Give the backers of every project that ended short of its goal their Beans back once its end date is a week gone, and tell
+ * them and its leader (engine/unfunded-pledges.ts). The main server's minute tick calls it; on a standby it does nothing.
+ * Never throws.
+ */
+export function returnUnfundedProjectPledges(now?: number): { returned: number; left: number } {
+    return returnUnfundedPledges(unfundedPledgeHooks, now);
+}
+
+/**
+ * The leader moved a project's end date (POST /api/crowdfund/projects/update), `before` being the one it had: in the week
+ * after it, while its pledges are still held, its backers are told (engine/unfunded-pledges.ts). Never throws.
+ */
+export function noticeProjectEndDateMoved(projectId: string, before: string | null, actor: string | null): number {
+    return noticeEndDateMoved(unfundedPledgeHooks, projectId, before, actor);
 }
 
 /**
@@ -1101,7 +1132,7 @@ function armMainServerTimers(): void {
  * without one (a server need not run under anything that restarts it): what initSchema runs only on a main server
  * (db.ts runMainServerSchemaPasses), the node profile's record and the community's settings, the listing-photo URLs'
  * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, settled escrows swept, and the main
- * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
+ * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene, unfunded projects' pledges due back). Without it they waited for the next restart: votes
  * did not close, passed grants were not paid, stale requests did not expire (the 2026-10-02 review of #1448). The keys
  * and seals for the role are installed by the boot's next steps (index.ts 2.65), which read the role as it now stands.
  * Each part idempotent and on its own guard; nothing on a standby. Throws only the node profile's refusals, which stop a
@@ -6874,12 +6905,14 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
     return mapDisputeRow(row);
 }
 
-export function pausePost(postId: string, authorPublicKey: string): boolean {
-    return pausePostEngine(broadcast, postId, authorPublicKey);
+export function pausePost(postId: string, authorPublicKey: string, actorPubkey?: string): boolean {
+    const keeps = actorPubkey ? (enterprise: string) => isTreasuryKey(enterprise) && canOperateTreasury(actorPubkey, enterprise) : undefined;
+    return pausePostEngine(broadcast, postId, authorPublicKey, actorPubkey, keeps);
 }
 
-export function resumePost(postId: string, authorPublicKey: string): boolean {
-    return resumePostEngine(broadcast, postId, authorPublicKey);
+export function resumePost(postId: string, authorPublicKey: string, actorPubkey?: string): boolean {
+    const keeps = actorPubkey ? (enterprise: string) => isTreasuryKey(enterprise) && canOperateTreasury(actorPubkey, enterprise) : undefined;
+    return resumePostEngine(broadcast, postId, authorPublicKey, actorPubkey, keeps);
 }
 
 export function getMarketplaceTransaction(transactionId: string): MarketplaceTransaction | null {
@@ -9897,6 +9930,7 @@ export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTok
 
 export function getMemberPreference(publicKey: string, prefKey: string): string {
     const row = db.prepare(`SELECT pref_value FROM member_preferences WHERE public_key = ? AND pref_key = ?`).get(publicKey, prefKey) as any;
+    if (prefKey === 'notify_knocks') return row?.pref_value ?? 'false';
     return row?.pref_value ?? 'true'; // Default to 'true' (enabled)
 }
 
@@ -9906,7 +9940,7 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
  * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
-export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', 'eventReminderOffsets'];
 
 /**
  * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
@@ -9924,6 +9958,8 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     word("Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.");
 export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = word('Only a member of this community shows as a connection in common.');
+/** Requests to join go to members who may answer (front doors S1, design §5.2): a visitor's row can't, so it isn't told. */
+export const KNOCK_PUSH_MEMBERS_ONLY_MESSAGE = word('Only a member of this community is told when someone asks to join.');
 /** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
     `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
@@ -9949,6 +9985,7 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         notify_marketplace: 'true',
         notify_escrow: 'true',
         notify_recovery: 'true',
+        notify_knocks: 'false',
     };
     for (const r of rows) {
         // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.
@@ -9995,6 +10032,8 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     const namesHome = Object.keys(body).some(isHomeKey);
     if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
     if (Object.prototype.hasOwnProperty.call(body, SHOW_AS_CONNECTION_PREF) && !getActingMember(publicKey)) throw new Error(SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE);
+    // Turning it off is anyone's (the web app saves every switch at once); turning it on, a member's alone.
+    if (body.notify_knocks === true && !getActingMember(publicKey)) throw new Error(KNOCK_PUSH_MEMBERS_ONLY_MESSAGE);
     const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
@@ -10080,7 +10119,7 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 // ===================== GENERIC PUSH DISPATCHER =====================
 
 /** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
-export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
+export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'knocks';
 
 /**
  * Notices to a node's owners about the server itself (services/alerts.ts, services/standby-health.ts): sent whatever the
@@ -10143,6 +10182,7 @@ export function dispatchPushNotification(
         marketplace: 'marketplace',
         escrow: 'escrow',
         recovery: 'recovery',
+        knocks: 'knocks',
     };
 
     // Map categoryId to notification sound
@@ -10151,6 +10191,7 @@ export function dispatchPushNotification(
         marketplace: 'default',
         escrow: 'default',
         recovery: 'default',
+        knocks: 'default',
     };
 
     // The kind's words in each phone's language (its registration's `lang`; English without one), once per language a send.
@@ -10171,7 +10212,11 @@ export function dispatchPushNotification(
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
-        const pref = OWNER_SERVER_KINDS.has(kind) ? null : getMemberPreference(pk, prefKey);
+        // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
+        // for it. The role is looked up for that kind only.
+        const alwaysTold = OWNER_SERVER_KINDS.has(kind)
+            || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
+        const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;

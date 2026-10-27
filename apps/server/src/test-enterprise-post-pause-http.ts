@@ -28,6 +28,7 @@ import { initStateEngine, createTreasury, adminAssignTreasuryOperator } from './
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -96,7 +97,7 @@ async function main(): Promise<void> {
     // ── 1. Enterprise Offer pause and resume ──────────────────────────────────────────────────
     console.log('── 1. An enterprise Offer paused then resumed by a keeper ──');
     const offerRes = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
-        category: 'food', title: 'Dozen eggs', description: 'Fresh farm eggs', credits: 6, priceType: 'fixed', repeatable: true,
+        category: 'food', title: 'Dozen eggs', description: 'Fresh farm eggs', credits: 6, priceType: 'fixed', repeatable: true, photos: TEST_PHOTOS,
     }, keeper);
     assert(offerRes.status === 200 && offerRes.body?.success === true, `keeper creates enterprise Offer (${show(offerRes)})`);
     const offerId: string = offerRes.body?.post?.id;
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
     // ── 2. Enterprise Need pause and resume ───────────────────────────────────────────────────
     console.log('\n── 2. An enterprise Need paused then resumed by a keeper ──');
     const needRes = await signedFetch('POST', `/api/treasury/${enterprise}/need`, {
-        category: 'labour', title: 'Tend flock', description: 'Weekend coop help', credits: 10, priceType: 'fixed',
+        category: 'labour', title: 'Tend flock', description: 'Weekend coop help', credits: 10, priceType: 'fixed', photos: TEST_PHOTOS,
     }, keeper);
     assert(needRes.status === 200 && needRes.body?.success === true, `keeper creates enterprise Need (${show(needRes)})`);
     const needId: string = needRes.body?.post?.id;
@@ -218,7 +219,7 @@ async function main(): Promise<void> {
 
     // Create an offer in the enterprise shop
     const shopOffer = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
-        category: 'food', title: 'Carton of eggs', description: 'Fresh in shop', credits: 7, shopId,
+        category: 'food', title: 'Carton of eggs', description: 'Fresh in shop', credits: 7, shopId, photos: TEST_PHOTOS,
     }, keeper);
     assert(shopOffer.status === 200, `created Offer in enterprise shop (${show(shopOffer)})`);
     const shopOfferId = shopOffer.body.post.id;

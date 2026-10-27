@@ -25,6 +25,7 @@ import type { BeanPoolIdentity } from './identity';
 import { LOCAL_NOTICE_DATA } from './push-notice-check';
 import { communityAddress } from './push-pins';
 import { KNOCKS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY } from './storage-keys';
+import { knockStillAnswerable } from './knock';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const UNSEEN_NOTICES_PATH = '/api/notices?unseen=1';
@@ -241,9 +242,11 @@ export async function postKnockStatusNoticesFromSync(deps: SyncNoticeDeps): Prom
     try {
         const stored = parseJson(await deps.storage.getItem(KNOCKS_STORE_KEY));
         if (!stored || stored.pubkey !== account.publicKey || !Array.isArray(stored.knocks)) return 0;
-        // A request this key cancelled is no longer waiting for an answer.
-        const waiting = (stored.knocks as Array<{ url?: unknown; cancelledAt?: unknown }>)
-            .filter((k): k is { url: string } => !!k && typeof k.url === 'string' && !!communityAddress(k.url) && !k.cancelledAt);
+        // A request this key cancelled is no longer waiting for an answer, and one too old to be answered is asked
+        // nothing: its community is not shown this key again (the screens forget it, utils/knock.ts rememberedKnocks).
+        const waiting = (stored.knocks as Array<{ url?: unknown; cancelledAt?: unknown; sentAt?: unknown }>)
+            .filter((k): k is { url: string } => !!k && typeof k.url === 'string' && !!communityAddress(k.url) && !k.cancelledAt
+                && knockStillAnswerable(k, now));
         const said = await Promise.all(waiting.map(async (k) => ({
             url: k.url,
             body: await signedRead(`${k.url}${KNOCK_STATUS_PATH}`, account, deps.timeoutMs ?? SYNC_NOTICES_TIMEOUT_MS, deps.signal),

@@ -29,6 +29,7 @@ import { boundSignatureValid } from './server-signature-check';
 import {
     sendKnock, readKnockStatus, readStatus, knockCardState, knockFormProblem, knockBody, knockAvatar,
     rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, cancelKnock, cancelledKnocks, KNOCK_MESSAGES, KNOCK_FROM_NODE, KNOCK_CANCEL_BLOCK_HOURS,
+    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable,
     type KnockStatusResult,
 } from '../knock';
 import { GLOBAL_NODE_URL } from '../node-profile';
@@ -300,9 +301,24 @@ describe('what the phone remembers', () => {
     it('keeps the communities this key asked, newest first, and forgets one on request', async () => {
         await rememberKnock('key-1', { url: 'https://a.example.org/', name: 'Alpha', key: 'a' }, new Date('2026-09-20T00:00:00Z'));
         await rememberKnock('key-1', { url: 'https://b.example.org', name: 'Beta' }, new Date('2026-09-21T00:00:00Z'));
-        expect((await rememberedKnocks('key-1')).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
+        const later = Date.parse('2026-09-22T00:00:00Z');
+        expect((await rememberedKnocks('key-1', later)).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
         await forgetKnock('key-1', 'https://a.example.org');
-        expect((await rememberedKnocks('key-1')).map(k => k.url)).toEqual(['https://b.example.org']);
+        expect((await rememberedKnocks('key-1', later)).map(k => k.url)).toEqual(['https://b.example.org']);
+    });
+
+    it('forgets a knock too old to be answered (an open month, then an invite\'s month, and a day): no status is read for it again', async () => {
+        const sent = new Date('2026-09-01T00:00:00Z');
+        const DAY = 86_400_000;
+        await rememberKnock('key-1', { url: 'https://a.example.org', name: 'Alpha' }, sent);
+        await rememberKnock('key-1', { url: 'https://b.example.org', name: 'Beta' }, new Date(sent.getTime() + 10 * DAY));
+        expect(KNOCK_ANSWERABLE_DAYS).toBe(61);
+        expect((await rememberedKnocks('key-1', sent.getTime() + 60 * DAY)).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
+        expect((await rememberedKnocks('key-1', sent.getTime() + 61 * DAY)).map(k => k.url)).toEqual(['https://b.example.org']);
+        // Gone from the phone's memory, not only from that answer.
+        expect((await rememberedKnocks('key-1', sent.getTime())).map(k => k.url)).toEqual(['https://b.example.org']);
+        expect(knockStillAnswerable({ sentAt: 'yesterday' })).toBe(false);
+        expect(knockStillAnswerable({})).toBe(false);
     });
 
     it('another key’s list is none of this key’s business (a wiped and restored phone)', async () => {

@@ -336,6 +336,30 @@ describe('requests to join, from the background sync', () => {
         expect(requests.map((r) => r.url)).toEqual([`${MULLUM}/api/join/knock/status`, `${MULLUM}/api/join/knock/status`]);
     });
 
+    it('a request too old to be answered (61 days: an open month, an invite\'s month, a day) is asked nothing, and the sync writes nothing back', async () => {
+        const CASTLE = 'https://castlemaine.beanpool.org';
+        community({
+            [`${MULLUM}/api/join/knock/status`]: () => json({ status: 'pending' }),
+            [`${CASTLE}/api/join/knock/status`]: () => json({ status: 'approved', invite: 'INV-OLD', expiresAt: null }),
+        });
+        const now = Date.now();
+        const store = JSON.stringify({
+            pubkey: kim.publicKey,
+            knocks: [
+                { url: MULLUM, name: 'Mullumbimby', key: 'mullum', sentAt: new Date(now - 60 * DAY).toISOString() },
+                { url: CASTLE, name: 'Castlemaine', key: 'castle', sentAt: new Date(now - 61 * DAY).toISOString() },
+                { url: 'https://c.example.org', name: null, key: null },
+            ],
+        });
+        mem.async.set('beanpool_knocks', store);
+        const { postKnockStatusNoticesFromSync } = await import('../sync-notices');
+        expect(await postKnockStatusNoticesFromSync({ storage: AsyncStorage, account: kim, post: async (n) => { posted.push(n); }, now })).toBe(0);
+        expect(requests.map((r) => r.url)).toEqual([`${MULLUM}/api/join/knock/status`]);
+        expect(posted).toEqual([]);
+        // Forgetting it is the screens' job (utils/knock.ts rememberedKnocks), never a background write under them.
+        expect(mem.async.get('beanpool_knocks')).toBe(store);
+    });
+
     it('a tap on either of its notices opens where it is answered: Invites for the owner, Find a community for the asker', async () => {
         adminRoutes();
         open = 1;

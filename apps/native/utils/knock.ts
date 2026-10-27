@@ -41,6 +41,11 @@ export const KNOCK_STATUS_PATH = '/api/join/knock/status';
 export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
 /** How long after "Cancel my request" the same key may ask that community again (the node's KNOCK_RULES.cancelBlockHours). */
 export const KNOCK_CANCEL_BLOCK_HOURS = 24;
+/**
+ * How long after a knock its community could still say yes: the node keeps it open 30 days (KNOCK_RULES.openDays) and
+ * an invite made for it lasts 30 days, so no status read can say `approved` after that; and a day for the clocks.
+ */
+export const KNOCK_ANSWERABLE_DAYS = 61;
 /** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending. */
 export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
@@ -267,10 +272,21 @@ async function writeStore(pubkey: string, knocks: RememberedKnock[]): Promise<vo
     }
 }
 
-/** The communities this key has asked and not cancelled, newest first. */
-export async function rememberedKnocks(pubkey: string): Promise<RememberedKnock[]> {
-    const knocks = (await readStore(pubkey)).filter(k => !k.cancelledAt);
-    return [...knocks].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+/** Whether a remembered knock could still be answered at `now` (sent within {@link KNOCK_ANSWERABLE_DAYS}). */
+export function knockStillAnswerable(k: { sentAt?: unknown }, now: number = Date.now()): boolean {
+    const at = typeof k.sentAt === 'string' ? Date.parse(k.sentAt) : NaN;
+    return Number.isFinite(at) && now - at < KNOCK_ANSWERABLE_DAYS * 86_400_000;
+}
+
+/**
+ * The communities this key has asked and not cancelled, newest first. One too old to be answered
+ * ({@link knockStillAnswerable}) is forgotten here, so nothing reads its status again.
+ */
+export async function rememberedKnocks(pubkey: string, now: number = Date.now()): Promise<RememberedKnock[]> {
+    const stored = await readStore(pubkey);
+    const answerable = stored.filter(k => knockStillAnswerable(k, now));
+    if (answerable.length !== stored.length) await writeStore(pubkey, answerable);
+    return answerable.filter(k => !k.cancelledAt).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 }
 
 /**

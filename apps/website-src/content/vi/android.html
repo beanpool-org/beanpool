@@ -1,4 +1,4 @@
-<!-- source-hash: 9b554708644c29f4 -->
+<!-- source-hash: d646156c09a440d3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,15 +82,16 @@
             <li>Lần đầu, Android yêu cầu bạn cho phép trình duyệt cài ứng dụng. Hãy cho phép trong phần cài đặt vừa mở, rồi quay lại.</li>
             <li>Xác nhận cài đặt. Nếu BeanPool đã có trên điện thoại, Android gọi đó là bản cập nhật. Sau đó mở BeanPool.</li>
         </ol>
+        <p id="not-installed">Nếu Android báo ứng dụng chưa được cài vì xung đột với ứng dụng trên điện thoại, hãy xem phiên bản BeanPool của bạn: trong phần cài đặt của điện thoại, mục Ứng dụng, rồi BeanPool. Phiên bản <span data-apk="version">1.2.83</span> hoặc mới hơn không cần gì từ đây: hãy giữ nguyên. Bản cũ hơn đã được ký bằng một khóa khác, chẳng hạn một bản thử nghiệm. Khi đó, hãy ghi lại 12 từ của bạn (xem <a href="#words">bên dưới</a>), gỡ BeanPool, rồi cài tệp này. Mở BeanPool, chạm <strong>Đã là thành viên? Khôi phục tài khoản</strong>, rồi <strong>Khôi phục bằng 12 từ</strong>.</p>
 
         <h2 id="updates">Cập nhật</h2>
         <p>Ứng dụng tải từ đây không tự cập nhật. BeanPool sẽ báo cho bạn khi có phiên bản mới: quay lại trang này, tải về và cài đè lên bản bạn đang có. Tài khoản của bạn và mọi thứ trong ứng dụng vẫn còn nguyên.</p>
 
         <h2 id="words">Giữ an toàn 12 từ của bạn</h2>
-        <p>Tài khoản của bạn là một khóa được giữ trong ứng dụng trên điện thoại. Đừng bao giờ gỡ BeanPool để cài bản này, vì gỡ cài đặt sẽ xóa tài khoản của bạn khỏi điện thoại: hãy cài đè lên. 12 từ của bạn giúp lấy lại tài khoản trên điện thoại mới. Trong ứng dụng, chúng nằm trong <strong>Cài đặt</strong>, dưới mục <strong>TÀI KHOẢN &amp; DANH TÍNH</strong>, ở <strong>Xem cụm từ khôi phục</strong>. Hãy ghi lại và cất giữ an toàn.</p>
+        <p>Tài khoản của bạn là một khóa được giữ trong ứng dụng trên điện thoại. Gỡ BeanPool sẽ xóa tài khoản của bạn khỏi điện thoại, vì vậy hãy cài đè lên. Chỉ gỡ khi BeanPool trên điện thoại cũ hơn và được ký bằng một khóa khác (xem <a href="#not-installed">bên trên</a>), và chỉ khi đã ghi lại 12 từ của bạn. 12 từ của bạn giúp lấy lại tài khoản trên điện thoại mới, hoặc trên chính điện thoại này. Trong ứng dụng, chúng nằm trong <strong>Cài đặt</strong>, dưới mục <strong>TÀI KHOẢN &amp; DANH TÍNH</strong>, ở <strong>Xem cụm từ khôi phục</strong>. Hãy ghi lại và cất giữ an toàn.</p>
 
         <h2 id="check">Kiểm tra rằng nó là của chúng tôi</h2>
-        <p>BeanPool cho Android được ký bằng một khóa duy nhất. Dấu vân tay SHA-256 của chứng chỉ là:</p>
+        <p>Tệp này được ký bằng cùng một khóa với BeanPool trên Google Play. Dấu vân tay SHA-256 của chứng chỉ là:</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>Trên máy tính có công cụ build của Android, hãy chạy:</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

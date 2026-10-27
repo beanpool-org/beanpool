@@ -1,4 +1,4 @@
-<!-- source-hash: 9b554708644c29f4 -->
+<!-- source-hash: d646156c09a440d3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,15 +82,16 @@
             <li>Pertama kali, Android memintamu mengizinkan browser memasang aplikasi. Izinkan di pengaturan yang terbuka, lalu kembali.</li>
             <li>Konfirmasi pemasangan. Kalau BeanPool sudah ada di ponselmu, Android menyebutnya pembaruan. Lalu buka BeanPool.</li>
         </ol>
+        <p id="not-installed">Jika Android bilang aplikasinya tidak terpasang karena bentrok dengan yang ada di ponselmu, lihat versi BeanPool-mu: di setelan ponsel, di Aplikasi, lalu BeanPool. Versi <span data-apk="version">1.2.83</span> atau yang lebih baru tidak perlu apa-apa dari sini: biarkan saja. Versi yang lebih lama ditandatangani dengan kunci lain, misalnya salinan uji coba. Kalau begitu, tulis 12 katamu (lihat <a href="#words">di bawah</a>), copot BeanPool, lalu pasang file ini. Buka BeanPool, ketuk <strong>Sudah jadi anggota? Pulihkan akun</strong>, lalu <strong>Pulihkan dengan 12 Kata</strong>.</p>
 
         <h2 id="updates">Pembaruan</h2>
         <p>Aplikasi yang diunduh di sini tidak memperbarui dirinya sendiri. BeanPool memberi tahu kalau ada versi baru: kembali ke halaman ini, unduh, lalu pasang di atas versi yang kamu punya. Akunmu dan semua yang ada di aplikasi tetap ada.</p>
 
         <h2 id="words">Simpan 12 katamu dengan aman</h2>
-        <p>Akunmu adalah kunci yang disimpan di aplikasi pada ponselmu. Jangan pernah mencopot BeanPool untuk memasang yang ini, karena mencopotnya menghapus akunmu dari ponsel: pasang saja di atasnya. 12 katamu mengembalikan akunmu di ponsel baru. Di aplikasi, kata-kata itu ada di <strong>Pengaturan</strong>, di bawah <strong>AKUN &amp; IDENTITAS</strong>, pada <strong>Lihat Frasa Pemulihan</strong>. Tulis dan simpan dengan aman.</p>
+        <p>Akunmu adalah kunci yang disimpan di aplikasi pada ponselmu. Mencopot BeanPool menghapus akunmu dari ponsel, jadi pasang di atasnya. Copot hanya jika BeanPool di ponselmu lebih lama dan ditandatangani dengan kunci lain (lihat <a href="#not-installed">di atas</a>), dan hanya setelah 12 katamu tertulis. 12 katamu mengembalikan akunmu di ponsel baru, atau di ponsel ini. Di aplikasi, kata-kata itu ada di <strong>Pengaturan</strong>, di bawah <strong>AKUN &amp; IDENTITAS</strong>, pada <strong>Lihat Frasa Pemulihan</strong>. Tulis dan simpan dengan aman.</p>
 
         <h2 id="check">Pastikan ini dari kami</h2>
-        <p>BeanPool untuk Android ditandatangani dengan satu kunci. Sidik jari SHA-256 sertifikatnya adalah:</p>
+        <p>File ini ditandatangani dengan kunci yang sama seperti BeanPool di Google Play. Sidik jari SHA-256 sertifikatnya adalah:</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>Di komputer yang memiliki build tools Android, jalankan:</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

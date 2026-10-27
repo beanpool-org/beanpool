@@ -1,4 +1,4 @@
-<!-- source-hash: 9b554708644c29f4 -->
+<!-- source-hash: d646156c09a440d3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,15 +82,16 @@
             <li>Beim ersten Mal bittet Android dich, deinem Browser das Installieren von Apps zu erlauben. Erlaube es in den Einstellungen, die sich öffnen, und geh dann zurück.</li>
             <li>Bestätige die Installation. Ist BeanPool schon auf deinem Handy, nennt Android das ein Update. Öffne dann BeanPool.</li>
         </ol>
+        <p id="not-installed">Wenn Android meldet, dass die App nicht installiert wurde, weil sie mit der auf deinem Handy in Konflikt steht, schau nach der Version deines BeanPool: in den Einstellungen des Handys unter Apps, dann BeanPool. Version <span data-apk="version">1.2.83</span> oder neuer braucht nichts von hier: Behalte sie. Eine ältere wurde mit einem anderen Schlüssel signiert, etwa eine Testkopie. Dann schreib deine 12 Wörter auf (siehe <a href="#words">unten</a>), deinstalliere BeanPool und installiere diese Datei. Öffne BeanPool, tippe auf <strong>Schon Mitglied? Konto wiederherstellen</strong> und dann auf <strong>Mit 12 Wörtern wiederherstellen</strong>.</p>
 
         <h2 id="updates">Updates</h2>
         <p>Eine hier heruntergeladene App aktualisiert sich nicht selbst. BeanPool sagt dir, wenn eine neuere Version da ist: Komm auf diese Seite zurück, lade sie herunter und installiere sie über die, die du hast. Dein Konto und alles in der App bleiben.</p>
 
         <h2 id="words">Bewahre deine 12 Wörter sicher auf</h2>
-        <p>Dein Konto ist ein Schlüssel, der in der App auf deinem Handy liegt. Deinstalliere BeanPool nie, um diese hier aufzuspielen, denn Deinstallieren nimmt dein Konto vom Handy: Installiere sie stattdessen darüber. Deine 12 Wörter holen dein Konto auf ein neues Handy zurück. In der App findest du sie in den <strong>Einstellungen</strong> unter <strong>KONTO &amp; IDENTITÄT</strong> bei <strong>12 Wörter anzeigen</strong>. Schreib sie auf und bewahre sie sicher auf.</p>
+        <p>Dein Konto ist ein Schlüssel, der in der App auf deinem Handy liegt. BeanPool zu deinstallieren nimmt dein Konto vom Handy, also installiere darüber. Deinstalliere nur, wenn das BeanPool auf deinem Handy älter und mit einem anderen Schlüssel signiert ist (siehe <a href="#not-installed">oben</a>), und nur mit aufgeschriebenen 12 Wörtern. Deine 12 Wörter holen dein Konto auf ein neues Handy zurück, oder auf dieses. In der App findest du sie in den <strong>Einstellungen</strong> unter <strong>KONTO &amp; IDENTITÄT</strong> bei <strong>12 Wörter anzeigen</strong>. Schreib sie auf und bewahre sie sicher auf.</p>
 
         <h2 id="check">Prüfe, dass sie von uns ist</h2>
-        <p>BeanPool für Android ist mit einem einzigen Schlüssel signiert. Der SHA-256-Fingerabdruck seines Zertifikats ist:</p>
+        <p>Diese Datei ist mit demselben Schlüssel signiert wie BeanPool bei Google Play. Der SHA-256-Fingerabdruck ihres Zertifikats ist:</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>Führe auf einem Computer mit den Build-Tools von Android aus:</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

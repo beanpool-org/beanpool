@@ -1,4 +1,4 @@
-<!-- source-hash: 9b554708644c29f4 -->
+<!-- source-hash: d646156c09a440d3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,15 +82,16 @@
             <li>La première fois, Android vous demande d'autoriser votre navigateur à installer des applications. Autorisez-le dans les paramètres qui s'ouvrent, puis revenez en arrière.</li>
             <li>Confirmez l'installation. Si BeanPool est déjà sur votre téléphone, Android parle de mise à jour. Ouvrez ensuite BeanPool.</li>
         </ol>
+        <p id="not-installed">Si Android indique que l'application n'a pas été installée parce qu'elle est en conflit avec celle de votre téléphone, regardez la version de votre BeanPool : dans les paramètres du téléphone, sous Applications, puis BeanPool. La version <span data-apk="version">1.2.83</span> ou plus récente n'a besoin de rien ici : gardez-la. Une version plus ancienne a été signée avec une autre clé, par exemple une copie de test. Dans ce cas, notez vos 12 mots (voir <a href="#words">plus bas</a>), désinstallez BeanPool et installez ce fichier. Ouvrez BeanPool, touchez <strong>Déjà membre ? Restaurer le compte</strong>, puis <strong>Récupérer avec 12 mots</strong>.</p>
 
         <h2 id="updates">Mises à jour</h2>
         <p>Une application téléchargée ici ne se met pas à jour toute seule. BeanPool vous prévient quand une nouvelle version sort : revenez sur cette page, téléchargez-la et installez-la par-dessus celle que vous avez. Votre compte et tout ce qui est dans l'application restent.</p>
 
         <h2 id="words">Gardez vos 12 mots en lieu sûr</h2>
-        <p>Votre compte est une clé conservée dans l'application de votre téléphone. Ne désinstallez jamais BeanPool pour mettre celle-ci, car désinstaller retire votre compte du téléphone : installez-la par-dessus. Vos 12 mots retrouvent votre compte sur un nouveau téléphone. Dans l'application, ils sont dans <strong>Paramètres</strong>, sous <strong>COMPTE ET IDENTITÉ</strong>, à <strong>Afficher la phrase de récupération</strong>. Notez-les et gardez-les en lieu sûr.</p>
+        <p>Votre compte est une clé conservée dans l'application de votre téléphone. Désinstaller BeanPool retire votre compte du téléphone : installez donc par-dessus. Ne désinstallez que si le BeanPool de votre téléphone est plus ancien et signé avec une autre clé (voir <a href="#not-installed">plus haut</a>), et seulement une fois vos 12 mots notés. Vos 12 mots retrouvent votre compte sur un nouveau téléphone, ou sur celui-ci. Dans l'application, ils sont dans <strong>Paramètres</strong>, sous <strong>COMPTE ET IDENTITÉ</strong>, à <strong>Afficher la phrase de récupération</strong>. Notez-les et gardez-les en lieu sûr.</p>
 
         <h2 id="check">Vérifiez qu'elle vient de nous</h2>
-        <p>BeanPool pour Android est signée avec une seule clé. L'empreinte SHA-256 de son certificat est :</p>
+        <p>Ce fichier est signé avec la même clé que BeanPool sur Google Play. L'empreinte SHA-256 de son certificat est :</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>Sur un ordinateur avec les outils de compilation d'Android, lancez :</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

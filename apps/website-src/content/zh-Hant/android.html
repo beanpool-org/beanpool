@@ -1,4 +1,4 @@
-<!-- source-hash: 9b554708644c29f4 -->
+<!-- source-hash: d646156c09a440d3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,15 +82,16 @@
             <li>第一次安裝時，Android 會請你允許瀏覽器安裝應用程式。在開啟的設定中允許，然後返回。</li>
             <li>確認安裝。如果手機上已有 BeanPool，Android 會稱之為更新。然後開啟 BeanPool。</li>
         </ol>
+        <p id="not-installed">如果 Android 提示應用程式未安裝，因為它與手機上已有的應用程式衝突，請查看你的 BeanPool 版本：在手機的設定中，進入「應用程式」，再點 BeanPool。版本 <span data-apk="version">1.2.83</span> 或更新的版本不需要這裡的任何東西：保留它即可。更舊的版本是用另一把金鑰簽署的，例如測試版。這種情況下，請先寫下你的 12 個助記詞（見<a href="#words">下文</a>），解除安裝 BeanPool，再安裝這個檔案。打開 BeanPool，點按<strong>已經是會員?還原帳號</strong>，然後點按<strong>透過 12 個助記詞找回</strong>。</p>
 
         <h2 id="updates">更新</h2>
         <p>從這裡下載的應用程式不會自動更新。有新版本時，BeanPool 會告訴你：回到本頁面，下載新版本，並覆蓋安裝在現有版本之上。你的帳戶和應用程式中的一切都會保留。</p>
 
         <h2 id="words">妥善保管你的 12 個助記詞</h2>
-        <p>你的帳戶是一把保存在手機應用程式裡的金鑰。千萬不要為了裝這個版本而解除安裝 BeanPool，因為解除安裝會把你的帳戶從手機上移除：請直接覆蓋安裝。你的 12 個助記詞可以在新手機上找回你的帳戶。在應用程式中，它們位於<strong>設定</strong>裡<strong>帳號與身分</strong>下方的<strong>檢視復原助記詞</strong>。請把它們寫下來並妥善保管。</p>
+        <p>你的帳戶是一把保存在手機應用程式裡的金鑰。解除安裝 BeanPool 會把你的帳戶從手機上移除，所以請直接覆蓋安裝。只有當你手機上的 BeanPool 版本更舊、而且是用另一把金鑰簽署的時候（見<a href="#not-installed">上文</a>），並且你已經寫下 12 個助記詞，才可以解除安裝。你的 12 個助記詞可以在新手機上，或在這支手機上，找回你的帳戶。在應用程式中，它們位於<strong>設定</strong>裡<strong>帳號與身分</strong>下方的<strong>檢視復原助記詞</strong>。請把它們寫下來並妥善保管。</p>
 
         <h2 id="check">確認它來自我們</h2>
-        <p>Android 版 BeanPool 只用一把金鑰簽署。其憑證的 SHA-256 指紋為：</p>
+        <p>這個檔案與 Google Play 上的 BeanPool 使用同一把金鑰簽署。其憑證的 SHA-256 指紋為：</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>在裝有 Android 建置工具的電腦上執行：</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

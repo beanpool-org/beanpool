@@ -1,4 +1,4 @@
-<!-- source-hash: 9b554708644c29f4 -->
+<!-- source-hash: d646156c09a440d3 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,15 +82,16 @@
             <li>La primera vez, Android te pide que permitas a tu navegador instalar apps. Permítelo en los ajustes que se abren y vuelve atrás.</li>
             <li>Confirma la instalación. Si BeanPool ya está en tu teléfono, Android lo llama actualización. Después abre BeanPool.</li>
         </ol>
+        <p id="not-installed">Si Android dice que la app no se instaló porque entra en conflicto con la que tienes en el teléfono, mira la versión de tu BeanPool: en los ajustes del teléfono, en Aplicaciones y luego BeanPool. La versión <span data-apk="version">1.2.83</span> o una más nueva no necesita nada de aquí: consérvala. Una más antigua se firmó con otra clave, como una copia de prueba. En ese caso, anota tus 12 palabras (mira <a href="#words">más abajo</a>), desinstala BeanPool e instala este archivo. Abre BeanPool, toca <strong>¿Ya eres miembro? Restaurar cuenta</strong> y luego <strong>Recuperar con 12 palabras</strong>.</p>
 
         <h2 id="updates">Actualizaciones</h2>
         <p>Una app descargada aquí no se actualiza sola. BeanPool te avisa cuando sale una versión nueva: vuelve a esta página, descárgala e instálala sobre la que tienes. Tu cuenta y todo lo que hay en la app se quedan.</p>
 
         <h2 id="words">Guarda bien tus 12 palabras</h2>
-        <p>Tu cuenta es una clave guardada en la app de tu teléfono. Nunca desinstales BeanPool para poner esta, porque al desinstalarla tu cuenta sale del teléfono: instálala encima. Tus 12 palabras recuperan tu cuenta en un teléfono nuevo. En la app, están en <strong>Ajustes</strong>, bajo <strong>CUENTA E IDENTIDAD</strong>, en <strong>Ver frase de recuperación</strong>. Escríbelas y guárdalas bien.</p>
+        <p>Tu cuenta es una clave guardada en la app de tu teléfono. Desinstalar BeanPool quita tu cuenta del teléfono, así que instala encima. Desinstala solo cuando el BeanPool de tu teléfono sea más antiguo y esté firmado con otra clave (mira <a href="#not-installed">más arriba</a>), y solo con tus 12 palabras anotadas. Tus 12 palabras recuperan tu cuenta en un teléfono nuevo o en este. En la app, están en <strong>Ajustes</strong>, bajo <strong>CUENTA E IDENTIDAD</strong>, en <strong>Ver frase de recuperación</strong>. Escríbelas y guárdalas bien.</p>
 
         <h2 id="check">Comprueba que es nuestra</h2>
-        <p>BeanPool para Android está firmada con una sola clave. La huella SHA-256 de su certificado es:</p>
+        <p>Este archivo está firmado con la misma clave que BeanPool en Google Play. La huella SHA-256 de su certificado es:</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>En un ordenador con las herramientas de compilación de Android, ejecuta:</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

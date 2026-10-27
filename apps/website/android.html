@@ -167,15 +167,16 @@
             <li>The first time, Android asks you to let your browser install apps. Allow it in the settings that open, then go back.</li>
             <li>Confirm the install. If BeanPool is already on your phone, Android calls it an update. Then open BeanPool.</li>
         </ol>
+        <p id="not-installed">If Android says the app was not installed because it conflicts with the one on your phone, look at your BeanPool's version: in your phone's settings, under Apps, then BeanPool. Version <span data-apk="version">1.2.83</span> or newer needs nothing from here: keep it. An older one was signed with a different key, such as a test copy. In that case, write down your 12 words (see <a href="#words">below</a>), uninstall BeanPool, and install this file. Open BeanPool, tap <strong>Already a Member? Restore Account</strong>, then <strong>Recover with 12 Words</strong>.</p>
 
         <h2 id="updates">Updates</h2>
         <p>An app downloaded here does not update itself. BeanPool tells you when a newer version is out: come back to this page, download it, and install it over the one you have. Your account and everything in the app stay.</p>
 
         <h2 id="words">Keep your 12 words safe</h2>
-        <p>Your account is a key kept in the app on your phone. Never uninstall BeanPool to put this one on, because uninstalling takes your account off the phone: install over it instead. Your 12 words bring your account back on a new phone. In the app, they are in <strong>Settings</strong>, under <strong>Account &amp; Identity</strong>, at <strong>View Recovery Phrase</strong>. Write them down and keep them safe.</p>
+        <p>Your account is a key kept in the app on your phone. Uninstalling BeanPool takes your account off the phone, so install over it. Uninstall only when the BeanPool on your phone is older and signed with a different key (see <a href="#not-installed">above</a>), and only with your 12 words written down. Your 12 words bring your account back on a new phone, or on this one. In the app, they are in <strong>Settings</strong>, under <strong>Account &amp; Identity</strong>, at <strong>View Recovery Phrase</strong>. Write them down and keep them safe.</p>
 
         <h2 id="check">Check that it is ours</h2>
-        <p>BeanPool for Android is signed with one key. The SHA-256 fingerprint of its certificate is:</p>
+        <p>This file is signed with the same key as BeanPool on Google Play. The SHA-256 fingerprint of its certificate is:</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>On a computer with Android's build tools, run:</p>
         <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>

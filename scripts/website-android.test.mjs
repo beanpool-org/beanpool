@@ -144,6 +144,29 @@ test('every page names Google Play and the App Store as the other two ways', () 
     }
 });
 
+test('when Android refuses the file, every page says what to do, with the app\'s own words for the buttons', () => {
+    const r = readApkRelease();
+    const html = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    for (const lang of LANGS) {
+        const page = markup(lang, 'android.html');
+        const install = page.match(/<h2 id="install">[\s\S]*?(?=<h2 )/)?.[0] ?? '';
+        const note = install.match(/<p id="not-installed">([\s\S]*?)<\/p>/)?.[1];
+        assert.ok(note, `${lang}: "Install it" says what to do when Android refuses the file`);
+        // A BeanPool newer than this file is kept; an older one under another key goes, after the 12 words are written down.
+        assert.ok(note.includes(`<span data-apk="version">${r.version}</span>`), `${lang}: it names this release's version`);
+        assert.match(note, /<a href="#words">/, `${lang}: it sends you to your 12 words first`);
+        const words = lang === 'en' ? null : JSON.parse(fs.readFileSync(path.join(ROOT, 'apps/native/words', `${lang}.json`), 'utf8'));
+        for (const key of ['Already a Member? Restore Account', 'Recover with 12 Words']) {
+            const shown = html(words ? words[key] : key);
+            assert.ok(note.includes(`<strong>${shown}</strong>`), `${lang}: it names the app's button "${shown}"`);
+        }
+        const keep = page.match(/<h2 id="words">[\s\S]*?(?=<h2 )/)?.[0] ?? '';
+        assert.match(keep, /<a href="#not-installed">/, `${lang}: "Keep your 12 words safe" names the one time to uninstall`);
+    }
+    // assetlinks.json names two keys for the app (Google Play's and the upload key), so the page speaks of this file's.
+    assert.doesNotMatch(markup('en', 'android.html'), /signed with one key/);
+});
+
 test('the home page\'s web note and /global\'s "No Google Play?" line lead to this page, in the same language', () => {
     for (const lang of LANGS) {
         const home = markup(lang, 'index.html');

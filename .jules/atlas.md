@@ -264,3 +264,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `downloadAdminFile` edge cases (`HUGE_DOWNLOAD_BYTES` user confirmation prompt, `Content-Disposition` header filename sanitization and path traversal prevention, and HTTP error response JSON detail extraction) in `apps/manager/src/lib/node-client.ts` were untested.
 **Learning:** Testing `downloadAdminFile` required mocking `window.confirm`, `URL.createObjectURL`, `URL.revokeObjectURL`, and spying on `document.createElement('a')` to assert link download attribute targets and prompt cancellation returns.
 **Action:** Continue identifying utility edge cases or untested UI components across `apps/manager/`.
+
+## 2026-10-27 - [manager tests] getEngineVolumeCap unit test
+**Gap:** `getEngineVolumeCap` in `apps/manager/src/lib/engine-helpers.ts` lacked a direct unit test.
+**Learning:** Testing `getEngineVolumeCap` directly in `engine-helpers.test.ts` verified that it returns `PER_COUNTERPARTY_VOLUME_CAP` (`500`).
+**Action:** Continue identifying helper utilities with unasserted exported functions in `apps/manager/src/lib/`.

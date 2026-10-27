@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { computeSampleTrustSummary, PER_COUNTERPARTY_VOLUME_CAP } from './engine-helpers';
+import { computeSampleTrustSummary, getEngineVolumeCap, PER_COUNTERPARTY_VOLUME_CAP } from './engine-helpers';
+
+describe('getEngineVolumeCap', () => {
+    it('returns PER_COUNTERPARTY_VOLUME_CAP', () => {
+        expect(getEngineVolumeCap()).toBe(PER_COUNTERPARTY_VOLUME_CAP);
+        expect(getEngineVolumeCap()).toBe(500);
+    });
+});
 
 describe('computeSampleTrustSummary', () => {
     it('should calculate correct score and trust level for a Newcomer', () => {

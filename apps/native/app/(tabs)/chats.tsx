@@ -264,7 +264,7 @@ export default function ChatsScreen() {
             fontWeight: '600',
         },
         filterChipTextActive: {
-            color: colors.text.inverse,
+            color: theme === 'dark' ? colors.surface.app : colors.text.inverse,
             fontWeight: '700',
         },
         requestsBadge: {

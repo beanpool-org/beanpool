@@ -884,6 +884,7 @@
   "🗞️ PULSE": "🗞️ पल्स",
   "↻ RECURRING": "↻ आवर्ती",
   "👤 YOU": "👤 आप",
+  "⏳ PENDING": "⏳ लंबित",
   "PULSE": "पल्स",
   "🗞️ DAILY PULSE": "🗞️ दैनिक पल्स",
   "💸 CASH TOO": "💸 नकद भी",
@@ -6120,5 +6121,6 @@
   "Turn on": "चालू करें",
   "Turn on notifications?": "सूचनाएं चालू करें?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ताकि जब कोई आपको उत्तर दे, संदेश भेजे, या जुड़ने का अनुरोध करे तो आपको पता चले। और कुछ नहीं।",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "आपके फ़ोन की सेटिंग में BeanPool की सूचनाएँ बंद हैं। उन्हें चालू करने के लिए सेटिंग खोलें।"
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "आपके फ़ोन की सेटिंग में BeanPool की सूचनाएँ बंद हैं। उन्हें चालू करने के लिए सेटिंग खोलें।",
+  "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:"
 }

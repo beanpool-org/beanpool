@@ -49,6 +49,8 @@ interface PostAuthorTrustProps {
      * earned through Beans, so on such a node every author would read Newcomer for good. Default true.
      */
     showTier?: boolean;
+    /** Whether author needs a founding trade (no prior trades completed) */
+    isFounding?: boolean;
 }
 
 /** Small avatar circle: the author's picture, or the ready-made one their key picks (never an initial). */
@@ -60,10 +62,10 @@ function MiniAvatar({ callsign, avatarUrl, publicKey, size }: { callsign: string
 
 /**
  * Hybrid Trust Display: Avatar + Tier Badge + Star Rating
- * Tier badge shows unless `showTier` is false. Star rating only shows when count > 0.
+ * Tier badge shows unless `showTier` is false. Star rating only shows when count > 0; otherwise founding mark shows if isFounding is true.
  * Clicking opens the public profile modal.
  */
-export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'full', className = '', avatarUrl, publicKey, onOpenProfile, showTier = true }: PostAuthorTrustProps) {
+export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'full', className = '', avatarUrl, publicKey, onOpenProfile, showTier = true, isFounding = false }: PostAuthorTrustProps) {
     const tier = getTrustTier(energyCycled);
 
     const handleClick = (e: React.MouseEvent) => {
@@ -108,11 +110,15 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                     <span className="text-xs text-nature-500 dark:text-nature-400 font-medium truncate flex-1">
                         {callsign}
                     </span>
-                    {/* Stars (only if rated) */}
-                    {rating && rating.count > 0 && (
+                    {/* Stars / Founding mark */}
+                    {rating && rating.count > 0 ? (
                         <span className="text-[9px] text-amber-400 tracking-tighter">
                             {'★'.repeat(Math.min(Math.round(rating.average), 5))}
                         </span>
+                    ) : (
+                        isFounding && (
+                            <span data-testid="author-founding" className="text-[10px] font-extrabold text-nature-700 dark:text-nature-400 ml-0.5" title={t('Founding')} aria-label={t('Founding')}>🔑</span>
+                        )
                     )}
                 </div>
             </>
@@ -140,8 +146,8 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                 <span className="text-[13px] text-nature-600 dark:text-nature-400 font-semibold truncate flex-shrink">
                     {callsign}
                 </span>
-                {/* Star rating (only when rated) */}
-                {rating && rating.count > 0 && (
+                {/* Star rating / Founding badge */}
+                {rating && rating.count > 0 ? (
                     <span className="flex items-center gap-0.5 flex-shrink-0">
                         <span className="text-[11px] text-amber-400 tracking-tighter">
                             {'★'.repeat(Math.min(Math.round(rating.average), 5))}
@@ -149,6 +155,12 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
                         </span>
                         <span className="text-[10px] text-nature-400 font-semibold">({rating.count})</span>
                     </span>
+                ) : (
+                    isFounding && (
+                        <span data-testid="author-founding" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[10px] font-extrabold bg-nature-500/10 border-nature-500/20 text-nature-700 dark:text-nature-300 ml-1">
+                            {t('🔑 FOUNDING')}
+                        </span>
+                    )
                 )}
             </div>
         </>

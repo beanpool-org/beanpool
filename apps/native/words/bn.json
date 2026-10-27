@@ -882,6 +882,7 @@
   "🗞️ PULSE": "🗞️ পালস",
   "↻ RECURRING": "↻ পুনরাবৃত্ত",
   "👤 YOU": "👤 আপনি",
+  "⏳ PENDING": "⏳ অপেক্ষমাণ",
   "PULSE": "পালস",
   "🗞️ DAILY PULSE": "🗞️ দৈনিক পালস",
   "💸 CASH TOO": "💸 নগদ টাকাও প্রয়োজন",
@@ -6120,5 +6121,6 @@
   "Turn on": "চালু করুন",
   "Turn on notifications?": "বিজ্ঞপ্তি চালু করবেন?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "যাতে কেউ উত্তর দিলে, বার্তা পাঠালে বা যোগদানের অনুরোধ করলে জানতে পারেন। আর কিছুই নয়।",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "আপনার ফোনের সেটিংসে BeanPool-এর বিজ্ঞপ্তি বন্ধ আছে। চালু করতে সেটিংস খুলুন।"
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "আপনার ফোনের সেটিংসে BeanPool-এর বিজ্ঞপ্তি বন্ধ আছে। চালু করতে সেটিংস খুলুন।",
+  "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:"
 }

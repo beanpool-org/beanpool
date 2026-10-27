@@ -581,7 +581,6 @@
   "PULSE": "NHỊP SỐNG",
   "↻ RECURRING": "↻ ĐỊNH KỲ",
   "💸 CASH TOO": "💸 KÈM TIỀN MẶT",
-  "No description provided.": "Chưa có mô tả.",
   "🤝 Held in Trust": "🤝 Đang giữ uỷ thác",
   "Clear search": "Xóa tìm kiếm",
   "Other": "Khác",
@@ -943,14 +942,12 @@
   "by {name} ⛰️ {you}": "bởi {name} ⛰️ {you}",
   "by {name} {you}": "bởi {name} {you}",
   "👤 (You)": "👤 (Bạn)",
-  "🌱 FOUNDING": "🌱 SÁNG LẬP",
+  "Founding": "Sáng lập",
   "B\u0004the Beans sign": "đậu",
   "View enlarged photo: {title}": "Xem ảnh phóng to: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "Cần thêm tiền mặt cho nhiên liệu hoặc vật liệu — đã thỏa thuận trong chat",
-  "🌱 FOUNDING TRADE": "🌱 GIAO DỊCH SÁNG LẬP",
   "⏳ PENDING": "⏳ ĐANG CHỜ",
   "DAILY PULSE": "NHỊP SỐNG HÀNG NGÀY",
-  "VIEW": "XEM",
   "pending\u0004deal status": "đang chờ",
   "requested\u0004deal status": "đã yêu cầu",
   "completed\u0004deal status": "đã hoàn tất",
@@ -3510,5 +3507,7 @@
   "Add a photo first": "Hãy thêm ảnh trước",
   "⚠️ Action Required": "⚠️ Cần xử lý",
   "⏳ Awaiting Approval": "⏳ Chờ chấp thuận",
-  "⏸ PAUSED": "⏸ ĐÃ TẠM DỪNG"
+  "⏸ PAUSED": "⏸ ĐÃ TẠM DỪNG",
+  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:",
+  "🔑 FOUNDING": "🔑 SÁNG LẬP"
 }

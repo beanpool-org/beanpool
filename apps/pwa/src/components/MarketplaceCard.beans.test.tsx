@@ -25,7 +25,7 @@ const LAYOUTS = [
 ] as const;
 
 const price = () => screen.queryByText('12');
-const founding = () => screen.queryByText(/FOUNDING/);
+const founding = () => screen.queryByTestId('author-founding');
 const tier = () => screen.queryByTestId('author-tier');
 
 describe('MarketplaceCard where Beans are marked (the global node)', () => {

@@ -581,7 +581,6 @@
   "PULSE": "動態",
   "↻ RECURRING": "↻ 定期",
   "💸 CASH TOO": "💸 亦收現金",
-  "No description provided.": "未提供描述。",
   "🤝 Held in Trust": "🤝 代管中",
   "Clear search": "清除搜尋",
   "Other": "其他",
@@ -943,14 +942,12 @@
   "by {name} ⛰️ {you}": "來自 {name} ⛰️ {you}",
   "by {name} {you}": "來自 {name} {you}",
   "👤 (You)": "👤（你）",
-  "🌱 FOUNDING": "🌱 創始",
+  "Founding": "創始成員",
   "B\u0004the Beans sign": "豆子",
   "View enlarged photo: {title}": "查看放大照片：{title}",
   "Cash also needed for fuel or materials — agreed in chat": "還需要少量現金用於燃油或材料 — 在聊天中約定",
-  "🌱 FOUNDING TRADE": "🌱 創始交易",
   "⏳ PENDING": "⏳ 待處理",
   "DAILY PULSE": "每日動態",
-  "VIEW": "查看",
   "pending\u0004deal status": "待處理",
   "requested\u0004deal status": "已請求",
   "completed\u0004deal status": "已完成",
@@ -3510,5 +3507,7 @@
   "Add a photo first": "請先新增相片",
   "⚠️ Action Required": "⚠️ 需要處理",
   "⏳ Awaiting Approval": "⏳ 等待核准",
-  "⏸ PAUSED": "⏸ 已暫停"
+  "⏸ PAUSED": "⏸ 已暫停",
+  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者：",
+  "🔑 FOUNDING": "🔑 創始成員"
 }

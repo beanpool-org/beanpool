@@ -834,6 +834,7 @@
   "🗞️ PULSE": "🗞️ 소식",
   "↻ RECURRING": "↻ 반복",
   "👤 YOU": "👤 나",
+  "⏳ PENDING": "⏳ 대기 중",
   "PULSE": "소식",
   "🗞️ DAILY PULSE": "🗞️ 오늘의 생각",
   "💸 CASH TOO": "💸 현금 포함",
@@ -5881,5 +5882,6 @@
   "Turn on": "켜기",
   "Turn on notifications?": "알림을 켤까요?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
-  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요."
+  "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요.",
+  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:"
 }

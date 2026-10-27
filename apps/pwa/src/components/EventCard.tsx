@@ -341,11 +341,11 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             src={photo}
                             alt={p.title}
                             className={`object-cover rounded-xl bg-nature-100 dark:bg-nature-900 ${
-                                asRow ? 'w-16 h-16 flex-shrink-0' : 'w-full h-[110px] mb-1'
+                                asRow ? 'w-20 h-20 flex-shrink-0' : 'w-full h-[110px] mb-1'
                             }`}
                         />
                     ) : (
-                        <div className={`overflow-hidden rounded-xl ${asRow ? 'w-16 h-16 flex-shrink-0' : 'w-full h-[110px] mb-1'}`}>
+                        <div className={`overflow-hidden rounded-xl ${asRow ? 'w-20 h-20 flex-shrink-0' : 'w-full h-[110px] mb-1'}`}>
                             <CategoryTile kind="event" size={asRow ? 'thumb' : 'grid'} />
                         </div>
                     )

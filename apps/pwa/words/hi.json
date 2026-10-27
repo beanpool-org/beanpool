@@ -669,18 +669,15 @@
   "by {name} {you}": "{name} द्वारा {you}",
   "👤 (You)": "👤 (आप)",
   "by {name} ⛰️": "{name} द्वारा ⛰️",
-  "🌱 FOUNDING": "🌱 संस्थापक",
+  "Founding": "संस्थापक",
   "B\u0004the Beans sign": "B",
   "PULSE": "पल्स",
   "View enlarged photo: {title}": "बड़ी फ़ोटो देखें: {title}",
   "↻ RECURRING": "↻ आवर्ती",
   "Cash also needed for fuel or materials — agreed in chat": "ईंधन या सामग्री के लिए नकद भी आवश्यक — चैट में सहमति",
   "💸 CASH TOO": "💸 नकद भी",
-  "🌱 FOUNDING TRADE": "🌱 संस्थापक लेन-देन",
   "⏳ PENDING": "⏳ लंबित",
-  "No description provided.": "कोई विवरण नहीं दिया गया।",
   "DAILY PULSE": "दैनिक पल्स",
-  "VIEW": "देखें",
   "pending\u0004deal status": "लंबित",
   "requested\u0004deal status": "अनुरोधित",
   "completed\u0004deal status": "पूर्ण",
@@ -3635,5 +3632,7 @@
   "Add a photo first": "पहले एक फ़ोटो जोड़ें",
   "⚠️ Action Required": "⚠️ कार्रवाई आवश्यक",
   "⏳ Awaiting Approval": "⏳ स्वीकृति की प्रतीक्षा",
-  "⏸ PAUSED": "⏸ रोका गया"
+  "⏸ PAUSED": "⏸ रोका गया",
+  "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:",
+  "🔑 FOUNDING": "🔑 संस्थापक"
 }

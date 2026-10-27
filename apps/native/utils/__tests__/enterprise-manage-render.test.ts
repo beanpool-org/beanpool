@@ -21,6 +21,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], last: [] as Array<{ text?: string; onPress?: () => void }> }));
+// The default banner (DefaultBanner) draws the bundled avatars, whose require(…jpg) vitest cannot load.
+vi.mock('../bundled-avatars', () => ({ BUNDLED_AVATARS: [], resolveBundledAvatar: () => 1 }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', radio: 'radio', checkbox: 'checkbox', alert: 'alert', tab: 'tab' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));

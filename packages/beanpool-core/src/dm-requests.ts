@@ -42,12 +42,16 @@ const at = (iso: string | null | undefined) => (typeof iso === 'string' ? Date.p
  */
 function openerLinesSince(
     conv: { request?: DmRequestCore | null },
-    lines: ReadonlyArray<{ authorPubkey?: string; timestamp?: string | null; type?: string | null }>
+    lines: ReadonlyArray<{ authorPubkey?: string; senderId?: string; timestamp?: string | null; rawTimestamp?: string | null; type?: string | null }>
 ): number {
     const r = conv.request;
     if (!r) return 0;
     const since = at(r.at);
-    return lines.filter((l) => l.authorPubkey === r.from && l.type !== 'system' && Number.isFinite(at(l.timestamp)) && at(l.timestamp) >= since).length;
+    return lines.filter((l) => {
+        const author = l.authorPubkey ?? l.senderId;
+        const ts = at(l.rawTimestamp ?? l.timestamp);
+        return author === r.from && l.type !== 'system' && Number.isFinite(ts) && ts >= since;
+    }).length;
 }
 
 /**
@@ -59,7 +63,7 @@ function openerLinesSince(
 export function requestModeOf(
     conv: { type?: string | null; request?: DmRequestCore | null } | null | undefined,
     me: string,
-    lines: ReadonlyArray<{ authorPubkey?: string; timestamp?: string | null; type?: string | null }> | null,
+    lines: ReadonlyArray<{ authorPubkey?: string; senderId?: string; timestamp?: string | null; rawTimestamp?: string | null; type?: string | null }> | null,
 ): RequestMode {
     const r = conv?.type === 'dm' ? conv.request : null;
     if (!r || r.state === 'accepted') return 'none';

@@ -25,6 +25,13 @@ describe('requestModeOf', () => {
         }
     });
 
+    it('supports native message row shapes (senderId, rawTimestamp)', () => {
+        const nativeLine = { senderId: PEER, rawTimestamp: AT, timestamp: '10:30 AM', type: 'text' };
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, [nativeLine])).toBe('to-me');
+        const nativeMine = { senderId: ME, rawTimestamp: AT, timestamp: '10:30 AM', type: 'text' };
+        expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT }), ME, [nativeMine])).toBe('mine-waiting');
+    });
+
     it('the reader\'s own: waiting once their line is in it, at or after the request was made', () => {
         const mine = dm({ state: 'pending', from: ME, at: AT });
         expect(requestModeOf(mine, ME, [])).toBe('mine-unsent');

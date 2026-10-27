@@ -456,6 +456,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         fetchGroups();
     };
 
+    const groupsById = useMemo(() => new Map(groups.map(g => [g.id, g])), [groups]);
+
     const { kept: yourKeptRows, groups: yourGroupRows } = useMemo(() => {
         if (!identity?.publicKey || isMember === false || isMember === null) return { kept: [], groups: [] };
         const rows = yoursRows(yourChats, treasuries, identity.publicKey, groups);
@@ -769,7 +771,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 );
                             })}
                             {yourGroupRows.map(g => {
-                                const fullGroup = groups.find(item => item.id === g.id);
+                                // O(1) group detail resolution to avoid O(N*M) array scan in list render
+                                const fullGroup = groupsById.get(g.id);
                                 const category = g.category || fullGroup?.category;
                                 const memberCount = fullGroup?.memberCount;
                                 const description = fullGroup?.description;

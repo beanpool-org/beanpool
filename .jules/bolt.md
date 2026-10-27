@@ -279,3 +279,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-23 - Batch pre-fetch own decision votes in group and enterprise decision routes
 **Learning:** In `apps/server/src/routes/group-decisions.ts` and `apps/server/src/routes/enterprise-decisions.ts`, rendering decision cards ran `getOwnDecisionVotes(actor, [d.id])` individually inside `.map()` loops over decision items, triggering N+1 separate SQLite query executions per list request.
 **Action:** Batch pre-fetched all own decision votes for the listed decisions in a single call (`getOwnDecisionVotes(actor, decisions.map(d => d.id))`) prior to mapping cards, passing the resulting lookup Map into `card(...)` for O(1) vote retrievals.
+
+## 2026-10-28 - O(1) Group Lookups in PWA ProjectsPage
+**Learning:** In `apps/pwa/src/pages/ProjectsPage.tsx`, rendering `yourGroupRows` in the "Yours" section called `groups.find(item => item.id === g.id)` inside `yourGroupRows.map()`. For $N$ user groups and $M$ community groups, this created an $O(N \times M)$ nested array scan on every render cycle.
+**Action:** Pre-computed a `groupsById` Map via `useMemo` indexed by `id` at component scope to reduce group detail resolution to constant-time $O(1)$ retrievals ($O(N + M)$ overall).

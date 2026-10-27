@@ -103,6 +103,7 @@ async function main() {
     const { setMemberPhoto } = await import('@beanpool/engine');
     const heavy = await import('./heavy-reads.js');
     const { apiGzipFromEnv } = await import('./api-compression.js');
+    const { TEST_PHOTOS } = await import('./post-test-helper.js');
     const { withAvatarKey } = await import('./avatar-test-url.js');
 
     await initTls();
@@ -123,7 +124,7 @@ async function main() {
         se.createGroup({ name: `Valley group ${i}`, description: `A group about the valley, number ${i}.`, joinPolicy: 'open', createdBy: alice.pubKeyHex });
     }
     for (let i = 0; i < 60; i++) {
-        se.createPost('offer', 'food', `Sourdough loaf ${i}`, `A loaf of sourdough, baked this morning, number ${i} of the batch.`, 5, 'fixed', alice.pubKeyHex)!;
+        se.createPost('offer', 'food', `Sourdough loaf ${i}`, `A loaf of sourdough, baked this morning, number ${i} of the batch.`, 5, 'fixed', alice.pubKeyHex, undefined, undefined, TEST_PHOTOS)!;
     }
 
     const SYNC = '/api/marketplace/posts?sync=1';

@@ -46,6 +46,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 /** A second picture (one red pixel). */
 const RED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4IScHAAK2AQU0pnWqAAAAAElFTkSuQmCC';
+/** A third picture (one blue pixel). */
+const BLUE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const IMMUTABLE = 'max-age=31536000, immutable';
 
 type Id = { pk: string; privateKey: crypto.KeyObject };
@@ -195,8 +197,8 @@ async function main(): Promise<void> {
         const vRow = db.prepare('SELECT sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = 0').get(v.id) as { sha256: string; bytes: number; mime: string };
         db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime) VALUES (?, NULL, 0, ?, ?, ?, ?)`)
             .run(legacy, v.key, vRow.sha256, vRow.bytes, vRow.mime);
-        const edit = await post('/api/marketplace/posts/update', { id: legacy, authorPublicKey: mallory.pk, photos: [] }, mallory);
-        assert(edit.status === 200 && keyOf(legacy) === null, `Mallory's edit takes the photo off her post (${edit.status} ${JSON.stringify(edit.body?.error)})`);
+        const edit = await post('/api/marketplace/posts/update', { id: legacy, authorPublicKey: mallory.pk, photos: [BLUE_PNG] }, mallory);
+        assert(edit.status === 200 && keyOf(legacy) !== v.key, `Mallory's edit replaces the photo on her post (${edit.status} ${JSON.stringify(edit.body?.error)})`);
         const after = await veraIntact(v);
         assert(after.ok, `Vera's object is kept: her row still names it, and her photo serves (got ${after.status})`);
 
@@ -208,7 +210,7 @@ async function main(): Promise<void> {
         const shouted = v2.key.replace(`posts/${v2.id}/`, `posts/${v2.id.toUpperCase()}/`);
         db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime) VALUES (?, NULL, 0, ?, ?, ?, ?)`)
             .run(folded, shouted, v2Row.sha256, v2Row.bytes, v2Row.mime);
-        const edit2 = await post('/api/marketplace/posts/update', { id: folded, authorPublicKey: mallory.pk, photos: [] }, mallory);
+        const edit2 = await post('/api/marketplace/posts/update', { id: folded, authorPublicKey: mallory.pk, photos: [BLUE_PNG] }, mallory);
         const after2 = await veraIntact(v2);
         assert(edit2.status === 200 && after2.ok, `a row naming her key in other capitals leaves her photo too (${edit2.status}, photo ${after2.status})`);
 
@@ -219,12 +221,12 @@ async function main(): Promise<void> {
             assert(plan.includes(index), `whether a ${table} row names a key is answered from ${index} (${plan})`);
         }
 
-        // And the ordinary case is unchanged: a photo no other row names goes with the edit that drops it.
+        // And the ordinary case is unchanged: a photo no other row names goes with the edit that replaces it.
         const own = await listing(mallory, 'Crab apple jelly', [RED_PNG]);
         const ownKey = keyOf(own.body?.post?.id);
-        const dropped = await post('/api/marketplace/posts/update', { id: own.body?.post?.id, authorPublicKey: mallory.pk, photos: [] }, mallory);
+        const dropped = await post('/api/marketplace/posts/update', { id: own.body?.post?.id, authorPublicKey: mallory.pk, photos: [BLUE_PNG] }, mallory);
         assert(own.status === 200 && !!ownKey && dropped.status === 200 && store.get(ownKey!) === null,
-            `an object no other row names is deleted with the photo, as before (${own.status}, ${dropped.status}, ${ownKey})`);
+            `an object no other row names is deleted when replaced, as before (${own.status}, ${dropped.status}, ${ownKey})`);
     }
 
     // ── 4. headers ────────────────────────────────────────────────────────────────────────────

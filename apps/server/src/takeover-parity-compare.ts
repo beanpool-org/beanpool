@@ -1,7 +1,8 @@
 /**
  * The comparisons of the twin suite (test-takeover-parity.ts; not a suite itself): a promoted standby S against T, a copy
  * of its main server's data directory taken at S's last copy. Every difference gets a stable key, so the suite can hold
- * the ones main has today in its KNOWN_GAPS list and fail on any other.
+ * the ones main has today in its KNOWN_GAPS list and fail on any other. (test-standby-devices takes its listing photo
+ * keys' normalising, withListingPhotoKeysNormalised.)
  *
  * Keys:
  *  - `db:<table> rows missing` / `db:<table> rows extra`: a row T has and S hasn't, or the other way round (rows are
@@ -10,7 +11,8 @@
  *  - `db:<table> (not copied)`: any of those in a table main doesn't copy at all (one gap, whatever the standby's own
  *    writes left in it);
  *  - `setting:<where>.<name>`: a community setting (engine/replication-manifest.ts LOCAL_CONFIG_FIELDS, NODE_CONFIG_*);
- *  - `http:<call>`: the same signed call answered differently, after normalising times, new ids, ports and face keys.
+ *  - `http:<call>`: the same signed call answered differently, after normalising times, new ids, ports, face keys and
+ *    listing photo keys.
  */
 
 import type { SettingEntry } from './engine/replication-manifest.js';
@@ -129,10 +131,19 @@ const PORT = /(127\.0\.0\.1|localhost):\d+/g;
  */
 const FACE_URL = /\/api\/avatar\/[^\s"']*/g;
 const FACE_KEY = /(\/api\/avatar\/[^\s"']*?[?&]k=)[A-Za-z0-9_-]{22}/g;
+/**
+ * A listing photo URL's key (`k=`, engine/photo-keys.ts): made from each server's own photoKeySecret, which a standby
+ * never copies either, so a take-over changes every listing photo's URL as it does every face's, and phones catch up at
+ * their next sync. The suite checks apart that every listing photo URL a phone's next sync gets from the promoted
+ * server opens there.
+ */
+const LISTING_PHOTO_URL = /\/api\/marketplace\/posts\/[^\s"'/?]+\/photos\/\d+[^\s"']*/g;
+const LISTING_PHOTO_KEY = /(\/api\/marketplace\/posts\/[^\s"'/?]+\/photos\/\d+[^\s"']*?[?&]k=)[A-Za-z0-9_-]{22}/g;
 
 /**
  * An answer as the comparison sees it: times as `<time>`, ids neither server had before the call as `<new-id>`, local
- * ports as `<port>`, a face URL's key as `<face-key>`. Everything else is kept, order included.
+ * ports as `<port>`, a face URL's key as `<face-key>`, a listing photo URL's key as `<photo-key>`. Everything else is
+ * kept, order included.
  */
 export function normaliseAnswer(value: unknown, knownIds: Set<string>): unknown {
     if (typeof value === 'string') {
@@ -140,6 +151,7 @@ export function normaliseAnswer(value: unknown, knownIds: Set<string>): unknown 
         return value
             .replace(PORT, '$1:<port>')
             .replace(FACE_KEY, '$1<face-key>')
+            .replace(LISTING_PHOTO_KEY, '$1<photo-key>')
             .replace(UUID, (id) => (knownIds.has(id.toLowerCase()) ? id : '<new-id>'));
     }
     if (typeof value === 'number') return value > 1e12 && value < 1e13 ? '<ms>' : value;
@@ -155,6 +167,20 @@ export function normaliseAnswer(value: unknown, knownIds: Set<string>): unknown 
 /** Every face URL in a value (`/api/avatar/…`, with its query), as the server wrote it. */
 export function faceUrlsIn(value: unknown): string[] {
     return ((JSON.stringify(value) ?? '').match(FACE_URL) ?? []).map((u) => u.replace(/\\+$/, ''));
+}
+
+/** Every listing photo URL in a value (`/api/marketplace/posts/<id>/photos/<n>`, with its query), as the server wrote it. */
+export function listingPhotoUrlsIn(value: unknown): string[] {
+    return ((JSON.stringify(value) ?? '').match(LISTING_PHOTO_URL) ?? []).map((u) => u.replace(/\\+$/, ''));
+}
+
+/**
+ * A value with its listing photo URLs' keys as `<photo-key>` and nothing else changed: for a suite that compares a promoted
+ * server's answer with its main server's exactly (test-standby-devices), where only that key may differ.
+ */
+export function withListingPhotoKeysNormalised(value: unknown): unknown {
+    const text = JSON.stringify(value);
+    return text === undefined ? value : JSON.parse(text.replace(LISTING_PHOTO_KEY, '$1<photo-key>'));
 }
 
 /** Every id-shaped string in a value, lower case. */

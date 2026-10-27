@@ -4,8 +4,10 @@ import {
     seedGenesisMember,
     createConversation,
     sendMessage,
-    createPost,
+    createPost as rawCreatePost,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {

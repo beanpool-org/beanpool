@@ -283,13 +283,15 @@ async function main(): Promise<void> {
 
     // A second post, used for the remove path.
     const photoD = makePhoto('d');
-    const post2 = createPost('offer', 'food', 'Jam', 'Plum', 2, 'fixed', author, undefined, undefined, [dataUrl(photoD)], true)!;
-    const rowD = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post2.id) as any;
-    const urlD = photoUrlOf(post2.id, 0);
-    assert((await fetch(urlD)).status === 200, 'setup: the photo about to be removed serves at its URL');
-    updatePost(post2.id, author, { photos: [] } as any);
-    assert(!(await fake.objects()).has(rowD.storage_key), 'removing a post\'s last photo removes its object from the bucket');
-    assert((await fetch(urlD)).status === 404, 'and its URL is a 404');
+    const photoD2 = makePhoto('d2');
+    const post2 = createPost('offer', 'food', 'Jam', 'Plum', 2, 'fixed', author, undefined, undefined, [dataUrl(photoD), dataUrl(photoD2)], true)!;
+    const rowD2 = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 1').get(post2.id) as any;
+    const urlD2 = photoUrlOf(post2.id, 1);
+    const keptUrlD = `${BASE}/api/marketplace/posts/${post2.id}/photos/0`;
+    assert((await fetch(urlD2)).status === 200, 'setup: the photo about to be removed serves at its URL');
+    updatePost(post2.id, author, { photos: [keptUrlD] } as any);
+    assert(!(await fake.objects()).has(rowD2.storage_key), 'removing a photo removes its object from the bucket');
+    assert((await fetch(urlD2)).status === 404, 'and its URL is a 404');
 
     // The row decides, never the bucket: a row gone while its object lingers is never served.
     const photoE = makePhoto('e');

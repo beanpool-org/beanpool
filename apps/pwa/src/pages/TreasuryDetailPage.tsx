@@ -959,6 +959,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostError(t('Please enter a valid credit amount'));
             return;
         }
+        if (postPhotos.length === 0) {
+            setPostError(t('Add a photo first'));
+            return;
+        }
 
         try {
             setPosting(true);
@@ -2978,10 +2982,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={posting}
+                                    disabled={posting || postPhotos.length === 0}
                                     className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
-                                    {posting ? t('Posting…') : t('Publish Listing')}
+                                    {posting ? t('Posting…') : postPhotos.length === 0 ? t('📷 Add a photo') : t('Publish Listing')}
                                 </button>
                             </div>
                         </form>

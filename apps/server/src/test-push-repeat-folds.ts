@@ -53,7 +53,9 @@ async function main(): Promise<void> {
     console.log('Repeatable pushes fold to one an hour...\n');
     if (!process.env.BEANPOOL_DATA_DIR) throw new Error('BEANPOOL_DATA_DIR must be set to a fresh directory');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -105,7 +107,7 @@ async function main(): Promise<void> {
         // ── 1. Let-in ──────────────────────────────────────────────────────────────────────────────────────
         console.log('--- 1. A let-in taken back and given again ---');
         const hana = member('Hana'), sam = member('Sam'), tia = member('Tia');
-        const ev = se.createPost('event', 'community', 'Garden dinner', 'Bring a plate', 0, 'fixed', hana.pk, -28.55, 153.5, [], false, undefined, false,
+        const ev = createPost('event', 'community', 'Garden dinner', 'Bring a plate', 0, 'fixed', hana.pk, -28.55, 153.5, [], false, undefined, false,
             { eventStartAt: inHours(30), eventPlaceName: 'Riverbend hall', eventHostLetsIn: true } as any)!;
         await call('POST', sam, `/api/marketplace/posts/${ev.id}/rsvp`, { status: 'going' });
         await call('POST', tia, `/api/marketplace/posts/${ev.id}/rsvp`, { status: 'going' });
@@ -149,8 +151,8 @@ async function main(): Promise<void> {
         // ── 2. Request and cancel ──────────────────────────────────────────────────────────────────────────
         console.log('\n--- 2. A request cancelled and made again ---');
         const sid = member('Sid'), bea = member('Bea', 10), cal = member('Cal', 10);
-        for (const b of [bea, cal]) se.createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
-        const eggs = se.createPost('offer', 'goods', 'Fresh eggs', 'A dozen', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        for (const b of [bea, cal]) createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
+        const eggs = createPost('offer', 'goods', 'Fresh eggs', 'A dozen', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         const request = (b: Id) => call('POST', b, '/api/marketplace/posts/request', { postId: eggs.id, buyerPublicKey: b.pk });
         const cancel = (b: Id, txId: string) => call('POST', b, '/api/marketplace/transactions/cancel-request', { transactionId: txId, buyerPublicKey: b.pk });
         await flush(); sent.length = 0;
@@ -192,7 +194,7 @@ async function main(): Promise<void> {
         assert(ok.status === 200 && pushesTo(bea, 'market.answer').length === 1, `Sid's approval tells Bea (${ok.status}, ${pushesTo(bea).length})`);
 
         // E. A decline of a folded request tells the requester (1)
-        const tea = se.createPost('offer', 'goods', 'Tea', 'A tin', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        const tea = createPost('offer', 'goods', 'Tea', 'A tin', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const t1 = await call('POST', bea, '/api/marketplace/posts/request', { postId: tea.id, buyerPublicKey: bea.pk });
         await call('POST', bea, '/api/marketplace/transactions/cancel-request', { transactionId: t1.body?.transaction?.id, buyerPublicKey: bea.pk });
@@ -205,8 +207,8 @@ async function main(): Promise<void> {
 
         // B. On a Need the author's cancel tells the helper (1)
         const ana = member('Ana', 20), hal = member('Hal', 0);
-        for (const b of [ana, hal]) se.createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
-        const fence = se.createPost('need', 'services', 'Fix my fence', 'Two posts down', 2, 'fixed', ana.pk, -28.55, 153.5, [], true)!;
+        for (const b of [ana, hal]) createPost('offer', 'goods', `${b.name}'s seeds`, 'A packet', 1, 'fixed', b.pk, -28.55, 153.5, [], false);
+        const fence = createPost('need', 'services', 'Fix my fence', 'Two posts down', 2, 'fixed', ana.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const h1 = await call('POST', hal, '/api/marketplace/posts/request', { postId: fence.id, buyerPublicKey: hal.pk });
         await call('POST', hal, '/api/marketplace/transactions/cancel-request', { transactionId: h1.body?.transaction?.id, buyerPublicKey: hal.pk });
@@ -221,8 +223,8 @@ async function main(): Promise<void> {
 
         // C. An honest second request after a completed deal pushes the author (1)
         const cara = member('Cara', 20);
-        se.createPost('offer', 'goods', "Cara's seeds", 'A packet', 1, 'fixed', cara.pk, -28.55, 153.5, [], false);
-        const honey = se.createPost('offer', 'goods', 'Honey', 'A jar', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        createPost('offer', 'goods', "Cara's seeds", 'A packet', 1, 'fixed', cara.pk, -28.55, 153.5, [], false);
+        const honey = createPost('offer', 'goods', 'Honey', 'A jar', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const c1 = await call('POST', cara, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: cara.pk });
         await call('POST', sid, '/api/marketplace/transactions/approve', { transactionId: c1.body?.transaction?.id, authorPublicKey: sid.pk });
@@ -236,8 +238,8 @@ async function main(): Promise<void> {
         // ── 3. 1-step accept and cancel ────────────────────────────────────────────────────────────────────
         console.log('\n--- 3. A 1-step accept and its cancel, over and over ---');
         const sue = member('Sue'), bix = member('Bix', 10);
-        se.createPost('offer', 'goods', "Bix's seeds", 'A packet', 1, 'fixed', bix.pk, -28.55, 153.5, [], false);
-        const jam = se.createPost('offer', 'goods', 'Jam', 'A jar', 1, 'fixed', sue.pk, -28.55, 153.5, [], true)!;
+        createPost('offer', 'goods', "Bix's seeds", 'A packet', 1, 'fixed', bix.pk, -28.55, 153.5, [], false);
+        const jam = createPost('offer', 'goods', 'Jam', 'A jar', 1, 'fixed', sue.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const start = balanceOf(bix);
         let turnsOk = true, refunded = true;
@@ -262,8 +264,8 @@ async function main(): Promise<void> {
 
         // D. A second one-step buy pushes (1)
         const dan = member('Dan', 20);
-        se.createPost('offer', 'goods', "Dan's seeds", 'A packet', 1, 'fixed', dan.pk, -28.55, 153.5, [], false);
-        const bread = se.createPost('offer', 'goods', 'Bread', 'A loaf', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
+        createPost('offer', 'goods', "Dan's seeds", 'A packet', 1, 'fixed', dan.pk, -28.55, 153.5, [], false);
+        const bread = createPost('offer', 'goods', 'Bread', 'A loaf', 1, 'fixed', sid.pk, -28.55, 153.5, [], true)!;
         await flush(); sent.length = 0;
         const a1 = await call('POST', dan, '/api/marketplace/posts/accept', { postId: bread.id, buyerPublicKey: dan.pk });
         const d1 = await call('POST', dan, '/api/marketplace/transactions/complete', { transactionId: a1.body?.transaction?.id, confirmerPublicKey: dan.pk });

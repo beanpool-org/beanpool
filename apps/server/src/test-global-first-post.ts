@@ -82,7 +82,7 @@ async function main() {
         return { pubKeyHex, privateKey, callsign };
     };
     const post = (who: Id, body: Record<string, unknown>) =>
-        call('POST', '/api/marketplace/posts', { category: 'general', description: 'Anything helps', ...body, authorPublicKey: who.pubKeyHex }, who);
+        call('POST', '/api/marketplace/posts', { category: 'general', description: 'Anything helps', photos: [AVATAR], ...body, authorPublicKey: who.pubKeyHex }, who);
     const need = (who: Id) => post(who, { type: 'need', title: 'Help moving a couch' });
     const poll = (who: Id) => post(who, {
         type: 'poll', title: 'Which day suits?', description: 'Pick one',
@@ -153,7 +153,7 @@ async function main() {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ Where Beans are off a newcomer\'s first post is a Need, with or without a photo; where they are on, the rules hold.');
+    console.log('⭐️ Where Beans are off a newcomer\'s first post is a Need; where they are on, the rules hold.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

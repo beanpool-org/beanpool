@@ -103,6 +103,39 @@ const mockIdentity: BeanPoolIdentity = {
     createdAt: '2026-09-17T00:00:00.000Z',
 };
 
+const canvasGetContext = HTMLCanvasElement.prototype.getContext;
+const canvasToDataURL = HTMLCanvasElement.prototype.toDataURL;
+const origImage = window.Image;
+
+class FakeImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    width = 800; height = 600; naturalWidth = 800; naturalHeight = 600;
+    set src(_v: string) { setTimeout(() => this.onload?.(), 0); }
+}
+
+beforeEach(() => {
+    (window as any).Image = FakeImage;
+    HTMLCanvasElement.prototype.getContext = (() => ({ drawImage() {} })) as any;
+    HTMLCanvasElement.prototype.toDataURL = (() => 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==') as any;
+});
+
+afterEach(() => {
+    (window as any).Image = origImage;
+    HTMLCanvasElement.prototype.getContext = canvasGetContext;
+    HTMLCanvasElement.prototype.toDataURL = canvasToDataURL;
+});
+
+async function pickPhoto(panel: HTMLElement) {
+    const input = panel.querySelector('input[type="file"]') as HTMLInputElement;
+    if (input) {
+        await act(async () => {
+            fireEvent.change(input, { target: { files: [new File(['dummy'], 'photo.jpg', { type: 'image/jpeg' })] } });
+        });
+        await waitFor(() => expect(within(panel).getByAltText(/photo 1/i)).toBeInTheDocument());
+    }
+}
+
 describe('MapPage Enterprise Location Pins (Slice 6, docs/the-commons.md §2.2)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -564,7 +597,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         const clickHandlers = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
         await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Approximate (~100m)' })); });
-
+        await pickPhoto(panel);
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
         await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         const body = create.mock.calls[0][0];
@@ -601,6 +634,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
             fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
             fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'The hall' } });
+            await pickPhoto(panel);
             await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
             const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
             const clickHandlers = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
@@ -736,6 +770,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Approximate (~100m)' })); });
             fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
             fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
+            await pickPhoto(panel);
             await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
             await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
             expect(create.mock.calls[0][0]).toMatchObject({ lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall' });
@@ -1805,12 +1840,12 @@ describe('a Need where Beans are off (B4/M2)', () => {
         return panel;
     }
 
-    it('Beans off (the global node): no Contributions First notice, no "List an Offer first", and the photo is optional', async () => {
+    it('Beans off (the global node): no Contributions First notice, no "List an Offer first", and a photo is required', async () => {
         const panel = await openNeed(false);
         expect(within(panel).queryByText(/Contributions First/)).toBeNull();
         expect(within(panel).queryByText(/ask an Elder/)).toBeNull();
         expect(within(panel).queryByText(/List an Offer first/)).toBeNull();
-        expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(optional)');
+        expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(at least 1 required)');
     });
 
     it('Beans on (a local community): the notice, the button and the photo rule stay', async () => {
@@ -1866,17 +1901,23 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
         return { panel, create };
     }
 
-    it('Beans off (global, no price box): a Need with no photo says "Post Need", is enabled, and goes up free', async () => {
+    it('Beans off (global, no price box): a Need with no photo asks for a photo, and with one goes up free', async () => {
         const { panel, create } = await fillNeed(false, true);
         expect(within(panel).queryByPlaceholderText('B')).toBeNull();
-        const send = within(panel).getByRole('button', { name: 'Post Need' });
-        expect(send).toBeEnabled();
+        const send = within(panel).getByRole('button', { name: '📷 Add a photo' });
+        expect(send).toBeDisabled();
         await act(async () => { fireEvent.click(send); });
+        expect(create).not.toHaveBeenCalled();
+
+        await pickPhoto(panel);
+        const postButton = within(panel).getByRole('button', { name: 'Post Need' });
+        expect(postButton).toBeEnabled();
+        await act(async () => { fireEvent.click(postButton); });
         await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         const body = create.mock.calls[0][0] as any;
         expect(body.type).toBe('need');
         expect(body.credits).toBe(0);
-        expect(body.photos ?? []).toHaveLength(0);
+        expect(body.photos).toHaveLength(1);
     });
 
     it('Beans on: a member the node calls blocked is asked for an Offer first, and nothing is sent', async () => {
@@ -1890,10 +1931,16 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
     it('Beans on: a Need with a price and no photo stays disabled until a photo is added', async () => {
         const { panel, create } = await fillNeed(true, false);
         expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(at least 1 required)');
-        const send = within(panel).getByRole('button', { name: 'Post Need' });
+        const send = within(panel).getByRole('button', { name: '📷 Add a photo' });
         expect(send).toBeDisabled();
         await act(async () => { fireEvent.click(send); });
         expect(create).not.toHaveBeenCalled();
+
+        await pickPhoto(panel);
+        const postButton = within(panel).getByRole('button', { name: 'Post Need' });
+        expect(postButton).toBeEnabled();
+        await act(async () => { fireEvent.click(postButton); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     });
 });
 
@@ -1992,6 +2039,7 @@ describe('MapPage: a new pin starts Approximate where anyone can join', () => {
         // The price field, where this render shows one (the node's Beans switch arrives with its info).
         const price = within(panel).queryByPlaceholderText('B');
         if (price) fireEvent.change(price, { target: { value: '5' } });
+        await pickPhoto(panel);
     };
 
     it('a listing: the pin is sent to about 100 m, and the member can choose the exact spot', async () => {
@@ -2028,6 +2076,7 @@ describe('MapPage: a new pin starts Approximate where anyone can join', () => {
         fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
         fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
         fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'Bindarrabi Hall' } });
+        await pickPhoto(panel);
         await tapPin(panel);
         expect(within(panel).getByRole('button', { name: 'Approximate (~100m)' })).toHaveAttribute('aria-pressed', 'true');
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Use the exact spot' })); });
@@ -2083,6 +2132,7 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
         fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
         fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-10-19T20:50' } });
+        await pickPhoto(panel);
         return panel;
     }
 

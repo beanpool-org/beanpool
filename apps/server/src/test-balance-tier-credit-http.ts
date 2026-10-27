@@ -26,7 +26,10 @@ process.env.ADMIN_PASSWORD = 'TierCreditHttp123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { tierForCredit, tierIndexForName, memberLevel } from '@beanpool/core';
-import { initStateEngine, seedGenesisMember, createPost, getMemberTrustProfile, getMembersVersion, getActivityVersion } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, getMemberTrustProfile, getMembersVersion, getActivityVersion } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';

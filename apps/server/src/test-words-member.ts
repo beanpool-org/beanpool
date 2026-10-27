@@ -39,7 +39,9 @@ delete process.env.BEANPOOL_VAULT_TICKET_KEYS;
 import crypto from 'node:crypto';
 import { sealSeedToSso, solveDoorWorkSync } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, createPost, adminPruneUser } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, adminPruneUser } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
@@ -137,7 +139,7 @@ function oldMember(name: string, daysAgo: number, owner: Id): Id {
 }
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** Kept posts from two days ago, out of every window. */
 function keptPosts(id: Id, count: number): void {
     for (let i = 0; i < count; i++) {

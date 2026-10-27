@@ -40,6 +40,8 @@ async function main(): Promise<void> {
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
     const { addConnector, removeConnector } = await import('./connector-manager.js');
@@ -70,7 +72,7 @@ async function main(): Promise<void> {
     const mia = member('Mia');
     const xan = member('Xan');
     // A trade each, so the two can send Beans to each other (the same set-up as test-request-binding-ledger.ts).
-    const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
+    const offer = (pk: string, title: string) => createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
     offer(mia.pk, 'Mia seedlings');
     se.completePostTransaction(se.acceptPost(offer(xan.pk, 'Xan bread').id, mia.pk).id, mia.pk);
 

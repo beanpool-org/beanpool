@@ -23,9 +23,12 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, createTreasury, adminAssignTreasuryOperator, createPost,
+    initStateEngine, createTreasury, adminAssignTreasuryOperator, createPost as rawCreatePost,
     getConversationsByMember, getUnreadCounts, markConversationRead,
 } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { createPost as createPostEngine, removePost, rsvpEvent } from './engine/posts.js';
 import {
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
@@ -79,7 +82,7 @@ const cb = {
 
 function newEvent(author: string, extra: Record<string, unknown> = {}) {
     return createPostEngine(capture, 'event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', author,
-        -28.55, 153.5, [], false, undefined, false,
+        -28.55, 153.5, TEST_PHOTOS, false, undefined, false,
         { eventStartAt: inHours(24), eventPlaceName: 'The old bowls club', eventPrivateNote: 'Gate code 1234', ...extra } as any)!;
 }
 

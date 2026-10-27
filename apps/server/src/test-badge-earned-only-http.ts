@@ -25,7 +25,10 @@ process.env.ADMIN_PASSWORD = 'BadgeEarnedOnly123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { earnedCreditFromValue, tierForCredit } from '@beanpool/core';
-import { initStateEngine, seedGenesisMember, createPost, getMemberTrustProfile, getEnterpriseUnderlyingFloor, pledgeEnterpriseBacking } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost as rawCreatePost, getMemberTrustProfile, getEnterpriseUnderlyingFloor, pledgeEnterpriseBacking } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';

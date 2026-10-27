@@ -22,14 +22,16 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 
+import { wrapCreatePost } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator, adminSetOperator, setUserStatusRow,
-    keeperOf, getBalance, createProject, createConversation, sendMessage, addFriend, createPost, requestPost,
+    keeperOf, getBalance, createProject, createConversation, sendMessage, addFriend, createPost as rawCreatePost, requestPost,
     approvePostRequest, transfer, ensureEnterpriseThread, exportSyncState, reconcileLedgerFromDb,
     canOperateTreasury,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import {
     approvePostRequest as approvePostRequestEngine,
     completePostTransaction as completePostTransactionEngine,
@@ -42,6 +44,7 @@ import { ensureFederationLink } from './federation-link.js';
 import { ledger } from './engine/ledger.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -222,8 +225,8 @@ async function main() {
             balance: (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ent) as any)?.balance,
         });
         const routes: Array<[string, string, any]> = [
-            ['POST', `/api/treasury/${ent}/offer`, { title: 'x', category: 'food', credits: 1 }],
-            ['POST', `/api/treasury/${ent}/need`, { title: 'x', category: 'food', credits: 1 }],
+            ['POST', `/api/treasury/${ent}/offer`, { title: 'x', category: 'food', credits: 1, photos: TEST_PHOTOS }],
+            ['POST', `/api/treasury/${ent}/need`, { title: 'x', category: 'food', credits: 1, photos: TEST_PHOTOS }],
             ['POST', `/api/treasury/${ent}/approve`, { transactionId: 'nope' }],
             ['POST', `/api/treasury/${ent}/complete`, { transactionId: 'nope' }],
             ['POST', `/api/treasury/${ent}/reject`, { transactionId: 'nope' }],

@@ -23,7 +23,10 @@ delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, createPost } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost } from './state-engine.js';
+import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -89,7 +92,7 @@ const photo = (seed: string) => {
 };
 let n = 0;
 const post = (id: Id, extra: Record<string, unknown> = {}) =>
-    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, ...extra });
+    call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS, ...extra });
 /** A post written straight into the engine two days ago: kept, and out of every window. */
 function oldPost(id: Id, title: string): void {
     const p = createPost('offer', 'other', title, `${title} description`, 0, 'fixed', id.pk)!;

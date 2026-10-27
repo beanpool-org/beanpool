@@ -45,8 +45,11 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { setCommonsBalance } from '@beanpool/core';
 import {
     initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact,
-    createTreasury, createPost, adminAssignTreasuryOperator, adminRevokeTreasuryOperator, getFirstNodeAdminPubkey, getAdminPubkey, seedGenesisMember,
+    createTreasury, createPost as rawCreatePost, adminAssignTreasuryOperator, adminRevokeTreasuryOperator, getFirstNodeAdminPubkey, getAdminPubkey, seedGenesisMember,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
 import { addConnector, setConnectorCreditCap } from './connector-manager.js';

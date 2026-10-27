@@ -97,6 +97,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb, getCommonsBalanceExact, transfer, getMember, createTreasury, adminAssignTreasuryOperator } from './state-engine.js';
@@ -293,9 +294,9 @@ const enterprise = async (keeper: Id, name: string): Promise<string> => {
     setMemberPhoto(db, pk, 'https://example.com/e.jpg');
     return pk;
 };
-const ownPost = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++seq}`, description: 'An offer', credits: 0, authorPublicKey: id.pk });
+const ownPost = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++seq}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
 const entOffer = (keeper: Id, ent: string, extra: Record<string, unknown> = {}) =>
-    call('POST', keeper, `/api/treasury/${ent}/offer`, { title: `Eggs ${++seq}`, category: 'food', credits: 1, ...extra });
+    call('POST', keeper, `/api/treasury/${ent}/offer`, { title: `Eggs ${++seq}`, category: 'food', credits: 1, photos: TEST_PHOTOS, ...extra });
 
 /** `n` of `keeper`'s writes, as the gateway counts them: their own, or for `ent` (its path) when given. */
 function gatewayWrites(keeper: string, n: number, ent: string | null = null): void {
@@ -695,7 +696,7 @@ async function main(): Promise<void> {
         assert(pastApproval.status === 200 && actsAs(y, 'request') === M.enterpriseMarketRequestsPerDay && ownFor(gus.pk, y, 'request') === 1,
             `its 1,001st approval is Gus's own deal, and goes (round 3; before, 429 in Gus Grocer's words) (${show(pastApproval)})`);
         // At its 1,000 payments and its 1,000 approvals, a helper on its need: the approval's id must be text, at both doors.
-        const yNeed = (await call('POST', gus, `/api/treasury/${y}/need`, { title: 'Stock the shelves', category: 'other', credits: 1, repeatable: true })).body?.post?.id as string;
+        const yNeed = (await call('POST', gus, `/api/treasury/${y}/need`, { title: 'Stock the shelves', category: 'other', credits: 1, repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
         assert(!!yNeed, 'setup: Gus Grocer needs help');
         const yHelper = member('Shelf Helper', 0);
         sync();
@@ -711,7 +712,7 @@ async function main(): Promise<void> {
         const z = await enterprise(zed, 'Zed Works');
         setBalance(z, 5_000);
         assert((await entOffer(zed, z)).status === 200, 'setup: Zed Works lists an offer (a need needs one)');
-        const need = (await call('POST', zed, `/api/treasury/${z}/need`, { title: 'Help at the working bee', category: 'other', credits: 1, repeatable: true })).body?.post?.id as string;
+        const need = (await call('POST', zed, `/api/treasury/${z}/need`, { title: 'Help at the working bee', category: 'other', credits: 1, repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
         assert(!!need, 'setup: Zed Works needs help');
         const helpers = Array.from({ length: M.enterpriseNewRecipientsPerDay + 1 }, (_v, i) => member(`Helper ${i}`, 0));
         sync();
@@ -918,7 +919,7 @@ async function main(): Promise<void> {
         for (const e of [a, b, c]) setBalance(e, 5_000);
         adminAssignTreasuryOperator(a, nell.pk, owner.pk);
         assert((await entOffer(mo, a)).status === 200 && (await entOffer(mo, c)).status === 200, 'setup: Mo Apples and Mo Cycles list offers (a need needs one)');
-        const needOf = async (e: string) => (await call('POST', mo, `/api/treasury/${e}/need`, { title: 'Help out', category: 'other', credits: 1, repeatable: true })).body?.post?.id as string;
+        const needOf = async (e: string) => (await call('POST', mo, `/api/treasury/${e}/need`, { title: 'Help out', category: 'other', credits: 1, repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
         const [needA, needC] = [await needOf(a), await needOf(c)];
         assert(!!needA && !!needC, 'setup: and needs');
 

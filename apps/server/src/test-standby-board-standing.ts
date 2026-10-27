@@ -57,7 +57,9 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 async function child(): Promise<void> {
     await runNodeChild({
         'setup-primary': async (a: { replicationToken: string; pat: string; hana: string; olly: string; pia: string }) => {
+            const { wrapCreatePost } = await import('./post-test-helper.js');
             const se = await import('./state-engine.js');
+            const createPost = wrapCreatePost(se.createPost);
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             const genesis = crypto.randomBytes(32).toString('hex');
@@ -74,7 +76,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'lead', 'admin')`).run(mill, a.pat);
             db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(a.pat);
             const offer = (author: string, title: string) =>
-                se.createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, true)!.id;
+                createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, true)!.id;
             return { mill, posts: { mill: offer(mill, 'Flour'), hana: offer(a.hana, 'Lemons'), olly: offer(a.olly, 'Firewood'), pia: offer(a.pia, 'Honey') } };
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {

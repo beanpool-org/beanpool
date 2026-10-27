@@ -4,6 +4,10 @@ import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
 import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
+import { PICKED_PHOTO, pickOfferPhoto } from '../common/__tests__/offer-photo-helpers';
+
+// jsdom decodes no pictures: a picked photo comes back as PICKED_PHOTO (offer-photo-helpers).
+vi.mock('../../lib/photo-resize', () => ({ resizePhotoFile: vi.fn(async () => 'data:image/jpeg;base64,cmVzaXplZA==') }));
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -688,6 +692,8 @@ describe('EconomySection Component', () => {
 
         const titleInput = screen.getByPlaceholderText(/e\.g\. Fresh farm eggs dozen/i);
         fireEvent.change(titleInput, { target: { value: 'Organic Veggie Box' } });
+        // The node refuses a new Offer with no photo, so the form needs one before Post Offer.
+        await pickOfferPhoto();
 
         const postOfferBtn = screen.getByRole('button', { name: /post offer/i });
         await act(async () => {
@@ -697,12 +703,41 @@ describe('EconomySection Component', () => {
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_1234567890',
-            expect.objectContaining({ title: 'Organic Veggie Box' }),
+            expect.objectContaining({ title: 'Organic Veggie Box', photos: [PICKED_PHOTO] }),
             mockProfile.adminPassword,
             'tfa-sess-economy'
         );
 
         nodeClient.setTfaSessionToken(mockProfile.id, undefined);
+    });
+
+    it('the initial offer says "📷 Add a photo" and posts nothing until a photo is chosen (the node refuses an Offer with none)', async () => {
+        vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({ success: true, post: {} });
+
+        await act(async () => {
+            render(<EconomySection activeNode={mockProfile} nodeData={mockNodeData} onRefresh={vi.fn()} />);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /seed offer/i }));
+        });
+        fireEvent.change(screen.getByPlaceholderText(/e\.g\. Fresh farm eggs dozen/i), { target: { value: 'Organic Veggie Box' } });
+
+        const addPhotoBtn = screen.getByRole('button', { name: '📷 Add a photo' });
+        expect(addPhotoBtn).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /post offer/i })).not.toBeInTheDocument();
+        await act(async () => {
+            fireEvent.submit(addPhotoBtn.closest('form')!);
+        });
+        expect(nodeClient.seedTreasuryOffer).not.toHaveBeenCalled();
+
+        await pickOfferPhoto();
+        expect(screen.getByRole('button', { name: /post offer/i })).toBeEnabled();
+
+        // Taking the only photo off puts the button back to "📷 Add a photo".
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
+        });
+        expect(screen.getByRole('button', { name: '📷 Add a photo' })).toBeDisabled();
     });
 
     it('forwards tfaToken prop to assignTreasuryKeeper and revokeTreasuryKeeper', async () => {

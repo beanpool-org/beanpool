@@ -66,7 +66,7 @@ The entry carries the name, the time, the place and the link back to the event. 
 - Choose **At a place** or **Online**. For an online event there is no place and no pin: add a **Link to join** instead. Only you and the people going see it (where you let people in, only the people you let in). Its times are in your own time zone, and everyone else sees them in theirs, marked **your time**.
 - **Place name**, like "Town hall".
 - Put the pin on the map: tap the map, search **Find an address**, or tap **Use my location**. Tap **Approximate (~100 m)** if you do not want the exact spot shown. See "Where your pin goes".
-- A **Description**, and a photo if you like.
+- A **Description**, and at least one **Photo** (every new event needs a photo).
 - **Note for people who are going:** everyone who taps Going sees it, unless you tick **Only people I let in see the note and chat** (ticked to start with on the global community, where anyone can join in a minute): then only the people you let in see it, and the event chat. A good place for the exact address or a gate code; the place name is for everyone.
 - **Who can see it:** your whole community, or one group.
 - If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.

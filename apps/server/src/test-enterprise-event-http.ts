@@ -107,6 +107,7 @@ async function main(): Promise<void> {
         eventStartAt: inHours(30),
         eventPlaceName: 'The old bowls club',
         eventPrivateNote: 'Gate code 1234',
+        photos: [PHOTO],
         ...extra,
     });
 
@@ -169,6 +170,8 @@ async function main(): Promise<void> {
     await bad({ eventPlaceName: 'x'.repeat(81) }, /80 characters/, 'a place name over 80 characters is refused');
     await bad({ eventPrivateNote: 'x'.repeat(1001) }, /1000 characters/, 'a going-note over 1000 characters is refused');
     await bad({ photos: Array(6).fill(PHOTO) }, /at most 5 photos/, 'more than five photos is refused');
+    await bad({ photos: [] }, /Add a photo first/, 'an event without photos is refused');
+    await bad({ lat: undefined, lng: undefined, photos: [] }, /needs a place on the map/, 'coordinates error precedes photos');
     const noTitle = await signedFetch('POST', eventPath, event({ title: '' }), keeper);
     assert(noTitle.status === 400 && /title is required/.test(noTitle.error ?? ''),
         `an event with no title is refused (got ${noTitle.status} "${noTitle.error ?? ''}")`);
@@ -179,7 +182,7 @@ async function main(): Promise<void> {
     console.log("\n── 7. A member's own event ──");
     const own = await signedFetch('POST', '/api/marketplace/posts', {
         type: 'event', category: 'community', title: 'Creek swim', credits: 0, priceType: 'fixed',
-        authorPublicKey: stranger.pubKeyHex, lat: -28.55, lng: 153.5, eventStartAt: inHours(30),
+        authorPublicKey: stranger.pubKeyHex, lat: -28.55, lng: 153.5, eventStartAt: inHours(30), photos: [PHOTO],
     }, stranger);
     assert(own.status === 200 && own.body?.success === true,
         `a member hosting their own event through the marketplace route still works (got ${own.status} ${own.error ?? ''})`);

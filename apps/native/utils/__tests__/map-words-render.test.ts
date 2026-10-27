@@ -77,12 +77,14 @@ vi.mock('expo-location', () => ({
     getCurrentPositionAsync: async () => { throw new Error('no fix'); },
     getLastKnownPositionAsync: async () => null,
 }));
+// The Gallery closes with nothing picked, unless a case has it give a photo: every Offer and Need needs one.
+const roll = vi.hoisted(() => ({ gives: false }));
 vi.mock('expo-image-picker', () => ({
     requestCameraPermissionsAsync: async () => ({ granted: false }),
     launchCameraAsync: async () => ({ canceled: true, assets: [] }),
-    launchImageLibraryAsync: async () => ({ canceled: true, assets: [] }),
+    launchImageLibraryAsync: async () => (roll.gives ? { canceled: false, assets: [{ uri: 'file:///roll/ladder.jpg' }] } : { canceled: true, assets: [] }),
 }));
-vi.mock('expo-image-manipulator', () => ({ manipulateAsync: async () => ({}), SaveFormat: { JPEG: 'jpeg' } }));
+vi.mock('expo-image-manipulator', () => ({ manipulateAsync: async () => ({ base64: '/9j/4AAQSkZJRg' }), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('@react-native-picker/picker', () => ({ Picker: Object.assign(() => null, { Item: () => null }) }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
@@ -188,6 +190,7 @@ beforeEach(() => {
     alerts.buttons = [];
     mapsKey.on = true;
     loc.granted = false;
+    roll.gives = false;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: LOCAL, checkedAt: new Date().toISOString() } }));
@@ -328,7 +331,8 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
     });
 
     it('the form\'s own moments where Beans are off: the note for the price, a missing field, dropping a pin, a photo, the location, a post that fails', async () => {
-        // A community with Beans off (the global one): no price, no photo asked for a Need, the note in the price's place.
+        // A community with Beans off (the global one): no price, the note in the price's place. A Need asks for a photo here
+        // too, as every Offer and Need does (core postRulesFor: needPhoto everywhere).
         store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: { ...LOCAL, beans: false, escrow: false }, checkedAt: new Date().toISOString() } }));
         net.answer = community({ getBalance: { isBlockedFromTrading: false }, createPost: new Error('') });
         await openForm('xx');
@@ -375,6 +379,13 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         // The row itself, the innermost button holding the name (the sheet's backdrop holds every row).
         await click(Array.from(host.querySelectorAll('[data-modal] button')).filter((b) => b.textContent?.includes(xx('Tools'))).pop(), 'Tools');
         expect(host.textContent).toContain(xx('{emoji} {label}').replace('{emoji}', categoryEmoji('tools')).replace('{label}', xx('Tools')));
+        // Every field filled but the photo: the button asks for one, and is not Post Need until it is there.
+        expect(byText(xx('📷 Add a photo')), 'the button, asking for a photo').not.toBeNull();
+        expect(byText(xx('Post Need'))).toBeNull();
+        roll.gives = true;
+        await click(byLabel(xx('Add photo')), 'Add photo');
+        await pressAlert(xx('Gallery'));
+        expect(host.textContent).toContain(upperCase(xx('{n}/5 photos').replace('{n}', '1'), 'xx'));
         alerts.said.length = 0;
         await click(byText(xx('Post Need')), 'Post Need');
         expect(said()).toEqual([xx('Error'), xx('Could not publish post.')]);

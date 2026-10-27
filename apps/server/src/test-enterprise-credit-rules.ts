@@ -13,11 +13,14 @@ delete process.env.CF_RECORD_NAME;
 
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, createTreasury, createPost, completePostTransaction,
+    initStateEngine, createTreasury, createPost as rawCreatePost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance,
     recordDeferredWageClaim, acceptPost, cancelPostTransaction,
     rejectPostRequest, cancelPostRequest,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 

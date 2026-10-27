@@ -5,6 +5,10 @@ import path from 'node:path';
 import { ColdStartWizard } from './ColdStartWizard';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
+import { PICKED_PHOTO, pickOfferPhoto } from '../common/__tests__/offer-photo-helpers';
+
+// jsdom decodes no pictures: a picked photo comes back as PICKED_PHOTO (offer-photo-helpers).
+vi.mock('../../lib/photo-resize', () => ({ resizePhotoFile: vi.fn(async () => 'data:image/jpeg;base64,cmVzaXplZA==') }));
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
@@ -148,6 +152,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByText('Machinery & Transport')).toBeInTheDocument();
         await click(screen.getByRole('button', { name: /Tools & Infrastructure/i }));
         expect(screen.getByTestId('cold-start-keeper')).toHaveTextContent('Robin');
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
 
         expect(nodeClient.createNodeTreasury).toHaveBeenCalled();
@@ -193,6 +198,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await renderWizard({ onComplete });
         await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         await click(screen.getByRole('button', { name: /Next: Founding Invites/i }));
         expect(screen.getByText(/Step 5: Three Founding Invites/i)).toBeInTheDocument();
@@ -472,6 +478,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         // Later calls carry the fresh 2FA session.
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url, expect.any(Object), mockProfile.adminPassword, 'tfa-fresh'
@@ -540,6 +547,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await renderWizard();
         await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
 
@@ -570,6 +578,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         );
 
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
 
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
@@ -588,7 +597,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_first',
-            expect.any(Object),
+            expect.objectContaining({ photos: [PICKED_PHOTO] }),
             mockProfile.adminPassword,
             'tfa-wizard-token'
         );
@@ -717,6 +726,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         expect(screen.getByTestId('cold-start-keeper')).toHaveTextContent('No keeper will be set');
         expect(document.body.textContent).not.toMatch(/Paired Admin Key|@node-owner/);
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
 
         expect(nodeClient.assignTreasuryKeeper).not.toHaveBeenCalled();
@@ -730,6 +740,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             .mockResolvedValueOnce({ success: true, post: {} });
         await goToStep3({ nodeData: ownerNodeData });
 
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         expect(screen.getByText(/Step 3: Establish First Community Enterprise/i)).toBeInTheDocument();
         const alert = screen.getByRole('alert');
@@ -745,10 +756,46 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('✓');
     });
 
+    it('step 3: with no photo the first offer is not sent; the step says so, Retry with a photo posts only the offer, never a second enterprise', async () => {
+        await goToStep3({ nodeData: ownerNodeData });
+
+        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
+        expect(screen.getByText(/Step 3: Establish First Community Enterprise/i)).toBeInTheDocument();
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('The first offer was not posted: every Offer needs a photo. Add one under First Offer, then Retry.');
+        expect(alert).toHaveTextContent('was created');
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledTimes(1);
+        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledTimes(1);
+        expect(nodeClient.seedTreasuryOffer).not.toHaveBeenCalled();
+        expect(screen.getByTestId('wizard-step-3')).not.toHaveTextContent('✓');
+
+        await pickOfferPhoto();
+        await click(screen.getByRole('button', { name: 'Retry' }));
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledTimes(1);
+        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledTimes(1);
+        expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledTimes(1);
+        const [nodeUrl, treasuryPk, offer] = vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0];
+        expect([nodeUrl, treasuryPk]).toEqual([mockProfile.url, 'treasury_pk_first']);
+        expect(offer).toEqual(expect.objectContaining({ photos: [PICKED_PHOTO] }));
+        expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('✓');
+    });
+
+    it('step 3: with no photo, Continue anyway still moves on, with the step marked unfinished (never a hard gate)', async () => {
+        await goToStep3({ nodeData: ownerNodeData });
+
+        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
+        await click(screen.getByRole('button', { name: /Continue anyway/i }));
+        expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('⚠');
+        expect(nodeClient.seedTreasuryOffer).not.toHaveBeenCalled();
+    });
+
     it('step 3: a refused keeper shows the reason; Continue anyway marks the step unfinished', async () => {
         vi.mocked(nodeClient.assignTreasuryKeeper).mockRejectedValue(new Error('Member not found'));
         await goToStep3({ nodeData: ownerNodeData });
 
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         expect(screen.getByRole('alert')).toHaveTextContent('Robin was not made its keeper. The node said: Member not found');
 
@@ -762,6 +809,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         vi.mocked(nodeClient.createNodeTreasury).mockRejectedValue(new Error('name and avatar are required'));
         await goToStep3({ nodeData: ownerNodeData });
 
+        await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         expect(screen.getByRole('alert')).toHaveTextContent('The enterprise was not created. The node said: name and avatar are required');
         expect(nodeClient.assignTreasuryKeeper).not.toHaveBeenCalled();

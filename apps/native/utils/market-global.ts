@@ -103,7 +103,7 @@ export interface PostFormState {
     category: string;
     hasLocation: boolean;
     photoCount: number;
-    /** False where a photo is optional (a Need where Beans are off: postFormRules); left out, one is required. */
+    /** Whether a photo is required (every Offer and Need carries at least one photo). */
     photoRequired?: boolean;
     credits: string;
     title: string;
@@ -112,7 +112,7 @@ export interface PostFormState {
 
 /**
  * What a post on the map's form needs first, from the node's Beans switch (@beanpool/core postRulesFor, as the node
- * decides it): where Beans are off (the global node) a Need waits for no Offer and carries no photo it doesn't want, and
+ * decides it): every Offer and Need carries at least one photo. Where Beans are off (the global node) a Need waits for no Offer, and
  * no post waits for a profile photo. A node that says nothing yet: the local rules.
  */
 export function postFormRules(

@@ -23,7 +23,7 @@ import Koa from 'koa';
 import { db, initSchema } from './db/db.js';
 import {
     initStateEngine,
-    createPost,
+    createPost as rawCreatePost,
     acceptPost,
     transfer,
     getBalance,
@@ -35,6 +35,9 @@ import {
     getPostsVersion,
     type EscrowDisputeAction,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { runLedgerAudit } from './engine/audit.js';
 import { getActivityFeed } from './db/activity-feed-db.js';
 import { createAdminRoutes } from './routes/admin.js';

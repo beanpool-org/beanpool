@@ -24,10 +24,12 @@ process.env.ADMIN_PASSWORD = 'VerifyLedger123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, seedGenesisMember, createPost, completePostTransaction, getCommonsBalanceExact,
+    initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, completePostTransaction, getCommonsBalanceExact,
     moveToCommons, conservingTransaction, createTreasury,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { createDecision, executeDecision, tickDecisions } from './decisions-engine.js';

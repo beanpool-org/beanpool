@@ -322,7 +322,7 @@ async function main(): Promise<void> {
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
         const offer = async (who: Id, title: string, credits: number, extra: Record<string, unknown> = {}) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, ...extra,
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG], ...extra,
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string, finish: boolean) => {
             const tx = built(`${buyer.name} asks for ${seller.name}'s listing`, await S_(buyer, '/api/marketplace/posts/request', { postId, buyerPublicKey: buyer.pk })).transaction;

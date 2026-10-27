@@ -571,6 +571,7 @@ async function main(): Promise<void> {
         require_(await main.send('backdate-members', { publicKeys: [gwen, ann, bo, cy, dee, kip].map((w) => w.pk), days: 20 }) === 6, 'M: the six members joined twenty days ago');
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         const deal = async (buyer: Id, seller: Id, postId: string, finish: boolean) => {
             const tx = built(`${buyer.name} asks for ${seller.name}'s listing`, await S_(buyer, '/api/marketplace/posts/request', { postId, buyerPublicKey: buyer.pk })).transaction;
@@ -838,6 +839,7 @@ async function main(): Promise<void> {
         built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: await main0.send('owner-session'), body: { grant: true } }));
         const offer0 = async (who: Id, title: string, credits: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+            photos: [TINY_PNG],
         })).post;
         await offer0(gwen0, 'Jam', 3);
         const eggs = await offer0(yan, 'Eggs', 12);
@@ -1003,6 +1005,7 @@ async function main(): Promise<void> {
         // doesn't see: it is checked against JSON.stringify's text, where Infinity is null), and a pair of ±1e15 that cancel.
         built('M0: Gwen lists plums (a change the next copy carries)', await Z_(gwen0, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title: 'Plums', description: 'Plums, from Gwen', credits: 2, priceType: 'fixed', authorPublicKey: gwen0.pk,
+            photos: [TINY_PNG],
         }));
         const inf = hexKey();
         const infRaw = JSON.stringify(await main0.send('forge', { kind: 'add', add: [{ publicKey: inf, balance: null }] }))

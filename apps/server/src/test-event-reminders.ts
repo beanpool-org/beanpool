@@ -98,11 +98,11 @@ function placeTime(startIso: string): string {
 }
 
 let hostSeq = 0;
-function newEvent(startMs: number, title = 'Working bee', photos: string[] = [PHOTO]) {
+function newEvent(startMs: number, title = 'Working bee', photos: string[] = [PHOTO], extra: Record<string, unknown> = {}) {
     const author = makeMember(`Host${++hostSeq}`);
     return createPostEngine(capture, 'event', 'other', title, 'Bring gloves', 0, 'fixed', author,
         -28.55, 153.5, photos, false, undefined, true,
-        { eventStartAt: at(startMs), eventEndAt: at(startMs + 2 * HOUR), eventPlaceName: 'The old bowls club' } as any)!;
+        { eventStartAt: at(startMs), eventEndAt: at(startMs + 2 * HOUR), eventPlaceName: 'The old bowls club', ...extra } as any)!;
 }
 
 /**
@@ -326,7 +326,8 @@ async function main(): Promise<void> {
     const later = newEvent(6 * DAY, 'Later');
     const notMine = newEvent(4 * DAY, 'Someone else’s');
     const offList = newEvent(5 * DAY, 'Called off too');
-    const noPhoto = newEvent(7 * DAY, 'No photo', []);
+    // A photoless event as one from before the photo rule (or another node) left it: the node refuses a new one.
+    const noPhoto = newEvent(7 * DAY, 'No photo', [], { allowNoPhoto: true });
     // A member of their own, so the list is exactly what this section RSVPed to and nothing the sections
     // above left lying around.
     const planner = makeMember('Planner');

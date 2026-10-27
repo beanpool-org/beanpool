@@ -75,6 +75,7 @@ async function child(): Promise<void> {
         ...serveCommands,
         'setup-primary': async (a: { replicationToken: string; gwen: string; members: [string, string][] }) => {
             const se = await import('./state-engine.js');
+            const { TEST_PHOTOS } = await import('./post-test-helper.js');
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             se.seedGenesisMember(a.gwen, 'Gwen');
@@ -91,6 +92,7 @@ async function child(): Promise<void> {
         /** Section 1's chats. Returns the ids the orchestrator checks, and Rhea's DM ciphertexts and photo bytes. */
         'chat-fixture': async (a: { rhea: string; bo: string; cy: string; words: typeof WORDS }) => {
             const se = await import('./state-engine.js');
+            const { TEST_PHOTOS } = await import('./post-test-helper.js');
             const { db } = await import('./db/db.js');
             const { postGroupThreadMessage, removeGroupThreadMessage } = await import('./engine/group-thread.js');
             const { postEnterpriseThreadMessage } = await import('./engine/enterprise-thread.js');
@@ -125,7 +127,7 @@ async function child(): Promise<void> {
             const ent = postEnterpriseThreadMessage(quiet, bakery, rhea, words.enterprise);
             const boEnt = postEnterpriseThreadMessage(quiet, bakery, bo, 'We will bake rye instead');
 
-            const ev = se.createPost('event', 'community', 'Riverside picnic', 'Bring a rug', 0, 'fixed', bo, -28.5, 153.5, [], false, undefined, false,
+            const ev = se.createPost('event', 'community', 'Riverside picnic', 'Bring a rug', 0, 'fixed', bo, -28.5, 153.5, TEST_PHOTOS, false, undefined, false,
                 { eventStartAt: new Date(Date.now() + 24 * 3600_000).toISOString(), eventPlaceName: 'The river bank' })!;
             rsvpEvent(() => { }, ev.id, rhea, 'going');
             const evLine = postEventThreadMessage(quiet, ev.id, rhea, words.event);
@@ -135,7 +137,7 @@ async function child(): Promise<void> {
             const bakery2 = se.createTreasury('Corner Shop', AVATAR, 0).publicKey;
             se.adminAssignTreasuryOperator(bakery2, bo, 'admin');
             const lastEnt = postEnterpriseThreadMessage(quiet, bakery2, rhea, words.enterprise);
-            const ev2 = se.createPost('event', 'community', 'Quiet tea', 'Bring a cup', 0, 'fixed', bo, -28.5, 153.5, [], false, undefined, false,
+            const ev2 = se.createPost('event', 'community', 'Quiet tea', 'Bring a cup', 0, 'fixed', bo, -28.5, 153.5, TEST_PHOTOS, false, undefined, false,
                 { eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventPlaceName: 'The hall' })!;
             rsvpEvent(() => { }, ev2.id, rhea, 'going');
             const lastEv = postEventThreadMessage(quiet, ev2.id, rhea, words.event);

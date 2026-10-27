@@ -481,6 +481,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             Alert.alert(t('Almost there'), editCheck.error);
             return;
         }
+        if (editOf?.values?.photo && !photo) {
+            Alert.alert(t('Almost there'), t('Add a photo first'));
+            return;
+        }
         if (Object.keys(editCheck.patch).length === 0) {
             onClose();
             return;
@@ -536,6 +540,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         });
         if (!built.ok) {
             Alert.alert(t('Almost there'), built.error);
+            return;
+        }
+        if (!photo) {
+            Alert.alert(t('Almost there'), t('Add a photo first'));
             return;
         }
         setSubmitting(true);
@@ -623,6 +631,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         </Pressable>
     );
 
+    const photoMissing = editOf ? (Boolean(editOf.values.photo) && !photo) : !photo;
+    const submitDisabled = submitting || photoMissing;
+
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -634,14 +645,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{editOf ? t('Edit Event') : isCopy ? t('Copy Event') : t('New Event')}</Text>
                         <Pressable
                             onPress={editOf ? handleSave : handleCreate}
-                            disabled={submitting}
-                            style={[styles.postBtn, submitting && { opacity: 0.5 }]}
+                            disabled={submitDisabled}
+                            style={[styles.postBtn, submitDisabled && { opacity: 0.5 }]}
                             accessibilityRole="button"
                             accessibilityLabel={editOf ? (submitting ? t('Saving event') : t('Save changes')) : (submitting ? t('Creating event') : t('Create event'))}
                             accessibilityHint={editOf ? t('Saves changes to this event') : isCopy ? t('Creates a copy of this event') : t('Publishes your new event to the Market feed')}
-                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                            accessibilityState={{ disabled: submitDisabled, busy: submitting }}
                         >
-                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{editOf ? t('Save') : t('Create')}</Text>}
+                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{photoMissing ? t('📷 Add a photo') : editOf ? t('Save') : t('Create')}</Text>}
                         </Pressable>
                     </View>
 
@@ -870,7 +881,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </View>
 
                         <View style={styles.field}>
-                            <Text style={styles.label}>{t('PHOTO (OPTIONAL)')}</Text>
+                            <Text style={styles.label}>{editOf && !editOf.values.photo ? t('PHOTO (OPTIONAL)') : t('PHOTO *')}</Text>
                             <View style={styles.photoRow}>
                                 {photo ? (
                                     <Image source={{ uri: photo }} style={styles.photo} contentFit="cover" accessibilityLabel={t('Event photo')} />

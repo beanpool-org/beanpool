@@ -32,6 +32,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { FEDERATION_SETTLEMENT_ENABLED, isVisitor, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -141,7 +142,7 @@ async function main() {
     const mkOffer = async (id: typeof local, title: string) => {
         const r = await signedFetch('POST', '/api/marketplace/posts', id, {
             type: 'offer', category: 'general', title, description: 'x', credits: 5,
-            priceType: 'fixed', authorPublicKey: id.pubKeyHex,
+            priceType: 'fixed', authorPublicKey: id.pubKeyHex, photos: TEST_PHOTOS,
         });
         return r.body?.post?.id as string | undefined;
     };
@@ -162,7 +163,7 @@ async function main() {
     // (post author) is the payer, so it must be refused even though the actor is local.
     const vNeed = await signedFetch('POST', '/api/marketplace/posts', visitor, {
         type: 'need', category: 'general', title: 'Visiting need', description: 'x', credits: 5,
-        priceType: 'fixed', authorPublicKey: visitor.pubKeyHex,
+        priceType: 'fixed', authorPublicKey: visitor.pubKeyHex, photos: TEST_PHOTOS,
     });
     assert(vNeed.status === 200, `a visitor can still POST a need (got ${vNeed.status} ${vNeed.error ?? ''})`);
     const vReq = await signedFetch('POST', '/api/marketplace/posts/request', local,
@@ -174,7 +175,7 @@ async function main() {
     // is not simply refusing everything.
     const lNeed = await signedFetch('POST', '/api/marketplace/posts', local, {
         type: 'need', category: 'general', title: 'Local need', description: 'x', credits: 5,
-        priceType: 'fixed', authorPublicKey: local.pubKeyHex,
+        priceType: 'fixed', authorPublicKey: local.pubKeyHex, photos: TEST_PHOTOS,
     });
     const lReq = await signedFetch('POST', '/api/marketplace/posts/request', payee,
         { postId: lNeed.body?.post?.id, buyerPublicKey: payee.pubKeyHex });

@@ -68,6 +68,7 @@ import { setMemberPhoto, guestPost } from '@beanpool/engine';
 import { tierForCredit } from '@beanpool/core';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getMemberPhotoUsageForTests } from './engine/photo-upload-budget.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import { ledger } from './engine/ledger.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
@@ -364,12 +365,12 @@ async function main(): Promise<void> {
     console.log('\n── 4. the detail: the shopfront\'s data, members only ──');
     const memberOffer = async (who: Id, category: string, title: string, extra: Record<string, unknown> = {}): Promise<string> => {
         const r = await call('POST', who, '/api/marketplace/posts', { type: 'offer', category, title, description: `${title}.`, credits: 0,
-            authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, ...extra });
+            authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra });
         if (r.status !== 200 || !r.body?.post?.id) throw new Error(`setup: ${who.name} could not post ${title}: ${show(r)}`);
         return r.body.post.id;
     };
     const entOffer = async (by: Id, category: string, title: string, extra: Record<string, unknown> = {}): Promise<string> => {
-        const r = await call('POST', by, `/api/treasury/${ent}/offer`, { category, title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, ...extra });
+        const r = await call('POST', by, `/api/treasury/${ent}/offer`, { category, title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra });
         if (r.status !== 200 || !(r.body?.post?.id ?? r.body?.id)) throw new Error(`setup: ${by.name} could not post ${title} for the enterprise: ${show(r)}`);
         return r.body?.post?.id ?? r.body?.id;
     };
@@ -378,7 +379,7 @@ async function main(): Promise<void> {
     await memberOffer(rae, 'tools', 'Rake');
     const seeds = await memberOffer(rae, 'garden', 'Seeds');
     await call('POST', rae, '/api/marketplace/posts/pause', { postId: seeds, authorPublicKey: rae.pk });
-    await call('POST', rae, '/api/marketplace/posts', { type: 'need', category: 'transport', title: 'A lift', description: 'To town.', credits: 0, authorPublicKey: rae.pk, lat: MULLUM.lat, lng: MULLUM.lng });
+    await call('POST', rae, '/api/marketplace/posts', { type: 'need', category: 'transport', title: 'A lift', description: 'To town.', credits: 0, authorPublicKey: rae.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     await memberOffer(rae, 'art', 'A portrait for Max', { audienceScope: 'direct', targetPubkey: max.pk });
     const ended = await memberOffer(rae, 'music', 'Old guitar');
     await call('POST', rae, '/api/marketplace/posts/remove', { id: ended, authorPublicKey: rae.pk });
@@ -464,7 +465,7 @@ async function main(): Promise<void> {
     const maxShop: string = (await call('PUT', max, '/api/shops/mine', {})).body?.shop?.id ?? '';
     const lamp = await memberOffer(max, 'home', 'Lamp', { shopId: maxShop });
     const chair = await memberOffer(max, 'home', 'Chair');
-    const needR = await call('POST', max, '/api/marketplace/posts', { type: 'need', category: 'home', title: 'A ladder', description: 'For a day.', credits: 0, authorPublicKey: max.pk, lat: MULLUM.lat, lng: MULLUM.lng });
+    const needR = await call('POST', max, '/api/marketplace/posts', { type: 'need', category: 'home', title: 'A ladder', description: 'For a day.', credits: 0, authorPublicKey: max.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     const ladderNeed: string = needR.body?.post?.id ?? '';
     const fLamp = await call('PUT', max, featurePath(lamp), { featured: true });
     assert(fLamp.status === 200 && typeof fLamp.body?.featuredAt === 'string' && featuredAtOf(lamp) === fLamp.body.featuredAt,
@@ -571,7 +572,7 @@ async function main(): Promise<void> {
     const otherShop = shopIdOf(other);
     setMemberPhoto(db, other, png(60, 90, 120));
     const otherOffer = async (title: string): Promise<string> => {
-        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop });
+        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop, photos: TEST_PHOTOS });
         if (r.status !== 200 || !(r.body?.post?.id ?? r.body?.id)) throw new Error(`setup: Ida could not post ${title} for her enterprise: ${show(r)}`);
         return r.body?.post?.id ?? r.body?.id;
     };

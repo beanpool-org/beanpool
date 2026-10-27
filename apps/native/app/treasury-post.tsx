@@ -109,9 +109,14 @@ export default function TreasuryPostScreen() {
         const price = parseAmount(credits, undefined, ANY_DECIMALS);
         const priceValue = price.ok ? price.value : NaN;
         if (!credits.trim() || isNaN(priceValue) || priceValue <= 0) errs.add('credits');
+        if (photos.length === 0) errs.add('photos');
         setErrors(errs);
         if (errs.size > 0) {
-            setToast(!price.ok && isAmbiguousAmount(price.refusal) ? amountRefusalWords(price.refusal) : t('⚠️ Add a title, category and price'));
+            if (errs.has('photos') && errs.size === 1) {
+                setToast(t('📷 Add a photo'));
+            } else {
+                setToast(!price.ok && isAmbiguousAmount(price.refusal) ? amountRefusalWords(price.refusal) : t('⚠️ Add a title, category and price'));
+            }
             setTimeout(() => setToast(''), 3000);
             return;
         }
@@ -261,7 +266,7 @@ export default function TreasuryPostScreen() {
 
                     {/* Photos */}
                     <View style={styles.field}>
-                        <PostPhotoRow photos={photos} onChange={setPhotos} testID="treasury-post-photos" />
+                        <PostPhotoRow photos={photos} onChange={setPhotos} testID="treasury-post-photos" required />
                     </View>
 
                     {/* Recurring */}
@@ -286,11 +291,19 @@ export default function TreasuryPostScreen() {
                     ) : null}
 
                     <View style={styles.footer}>
-                        <Pressable style={styles.submitBtn} onPress={handleSubmit} disabled={submitting} accessibilityRole="button">
+                        <Pressable
+                            style={[styles.submitBtn, (submitting || photos.length === 0) && { opacity: 0.5 }]}
+                            onPress={handleSubmit}
+                            disabled={submitting || photos.length === 0}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: submitting || photos.length === 0 }}
+                        >
                             {submitting ? (
                                 <ActivityIndicator color={colors.text.inverse} />
                             ) : (
-                                <Text style={styles.submitBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{isNeed ? t('POST NEED') : t('POST OFFER')}</Text>
+                                <Text style={styles.submitBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                    {photos.length === 0 ? t('📷 Add a photo') : (isNeed ? t('POST NEED') : t('POST OFFER'))}
+                                </Text>
                             )}
                         </Pressable>
                     </View>

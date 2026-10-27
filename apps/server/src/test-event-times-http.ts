@@ -49,6 +49,7 @@ import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
+const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const SYDNEY = { lat: -33.8688, lng: 151.2093 };
 const LAGOS = { lat: 6.5244, lng: 3.3792 };
 const ACCRA = { lat: 5.6037, lng: -0.187 };
@@ -123,7 +124,7 @@ async function main(): Promise<void> {
     const linker = makeIdentity('LinkerLev');
     const clocks = makeIdentity('ClocksCleo');
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
-        type: 'event', title: 'Working bee', description: 'Bring gloves', authorPublicKey: who.pubKeyHex, ...body,
+        type: 'event', title: 'Working bee', description: 'Bring gloves', authorPublicKey: who.pubKeyHex, photos: [PHOTO], ...body,
     }, who);
 
     // ── 1. Clock + zone ──────────────────────────────────────────────────────────────────────

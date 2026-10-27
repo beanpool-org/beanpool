@@ -52,6 +52,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 // With GLOBAL_PINS_LOG_OUT set, everything this run prints is also written there (the runner keeps no log of a passing run).
 if (process.env.GLOBAL_PINS_LOG_OUT) {
@@ -465,7 +466,7 @@ async function main() {
         const authorSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
         await sleep(300);
         const made = await post('/api/marketplace/posts', { type: 'offer', category: 'general', title: `Reach ${k}`, description: 'Spare seedlings',
-            credits: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng }, alice);
+            credits: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng, photos: TEST_PHOTOS }, alice);
         const newId = made.body?.id ?? made.body?.post?.id;
         await sleep(800);
         const got = (s: Sock) => s.raw.some(x => { try { const e = JSON.parse(x); return (e.post?.id ?? e.id) === newId; } catch { return false; } });
@@ -619,7 +620,7 @@ async function main() {
     const SC = cellOf(SP.lat, SP.lng);
     const madeSeries = await post('/api/marketplace/posts', {
         type: 'event', title: 'Friday garden working bee', description: 'Bring gloves', credits: 0, authorPublicKey: hana.pubKeyHex,
-        lat: SP.lat, lng: SP.lng, eventPrivateNote: 'Side gate, number 7', eventHostLetsIn: true,
+        lat: SP.lat, lng: SP.lng, photos: TEST_PHOTOS, eventPrivateNote: 'Side gate, number 7', eventHostLetsIn: true,
         eventStartLocal: '2098-01-03T19:00', eventEndLocal: '2098-01-03T21:00', eventTz: 'Australia/Sydney',
         eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },
     }, hana);

@@ -10,6 +10,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { createPost } from '../utils/db';
 import { useIdentity } from './IdentityContext';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
+import { PostPhotoRow } from '../components/PostPhotoRow';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
 import { hapticSuccess, hapticWarning } from '../utils/haptics';
@@ -54,6 +55,7 @@ export default function GroupPostScreen() {
     // Where Beans are a preview (the worldwide one's showcase), the note is followed by the marker's price line, as on a listing.
     const beansPreview = showcaseMode('beans', nodeProfile?.features) === 'preview';
     const [description, setDescription] = useState('');
+    const [photos, setPhotos] = useState<string[]>([]);
     const [repeatable, setRepeatable] = useState(false);
     const [cashAlsoNeeded, setCashAlsoNeeded] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -215,10 +217,15 @@ export default function GroupPostScreen() {
         if (!title.trim()) errs.add('title');
         if (!category) errs.add('category');
         if (groupPostPriceInvalid(credits, nodeProfile?.features)) errs.add('credits');
+        if (photos.length === 0) errs.add('photos');
         setErrors(errs);
         if (errs.size > 0) {
             hapticWarning();
-            Alert.alert(t('Missing Fields'), groupPostMissingFields(nodeProfile?.features));
+            if (errs.has('photos') && errs.size === 1) {
+                Alert.alert(t('Missing Photo'), t('Add a photo first'));
+            } else {
+                Alert.alert(t('Missing Fields'), groupPostMissingFields(nodeProfile?.features));
+            }
             return;
         }
 
@@ -242,6 +249,7 @@ export default function GroupPostScreen() {
                 description: description.trim(),
                 category,
                 ...groupPostPrice(credits, priceType, nodeProfile?.features),
+                photos: photos.length > 0 ? JSON.stringify(photos) : null,
                 repeatable: repeatable ? 1 : 0,
                 cash_also_needed: cashAlsoNeeded ? 1 : 0,
                 author_pubkey: identity.publicKey,
@@ -392,6 +400,19 @@ export default function GroupPostScreen() {
                             placeholderTextColor={colors.text.muted}
                             multiline
                             textAlignVertical="top"
+                        />
+                    </View>
+
+                    {/* Photos */}
+                    <View style={styles.field}>
+                        <PostPhotoRow
+                            photos={photos}
+                            onChange={(p) => {
+                                setPhotos(p);
+                                if (p.length > 0) clearError('photos');
+                            }}
+                            testID="group-post-photos"
+                            required
                         />
                     </View>
 

@@ -23,7 +23,7 @@ delete process.env.CF_RECORD_NAME;
 
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, createTreasury, createPost, completePostTransaction,
+    initStateEngine, createTreasury, createPost as rawCreatePost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance, getMemberTrustProfile,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     adminSetCreditFrozen, adminSetUserStatus, adminPruneUser,
@@ -31,6 +31,9 @@ import {
     pledgeEnterpriseBacking, releaseEnterpriseBacking, clearEnterpriseFloorCache,
     runLedgerAudit, payFromCommons,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { db, initSchema } from './db/db.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';

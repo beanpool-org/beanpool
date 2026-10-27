@@ -77,15 +77,16 @@ async function child(): Promise<void> {
                         VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), k.fay, k.cara, daysAgo(40), daysAgo(40));
             se.transfer('genesis', k.ben, 30, 'seed Ben', 'direct', true);
             se.transfer('genesis', k.dan, 3, 'seed Dan', 'direct', true);
+            const { TEST_PHOTOS } = await import('./post-test-helper.js');
             // Ben buys from Cara twice: one deal completed, one held in escrow.
-            for (const pk of [k.ben, k.cara]) se.createPost('offer', 'general', 'Odd jobs', 'Help around the place', 5, 'fixed', pk, undefined, undefined, undefined, true);
-            const kale = se.createPost('offer', 'food', 'Kale', 'Kale', 6, 'fixed', k.cara)!;
+            for (const pk of [k.ben, k.cara]) se.createPost('offer', 'general', 'Odd jobs', 'Help around the place', 5, 'fixed', pk, undefined, undefined, TEST_PHOTOS, true);
+            const kale = se.createPost('offer', 'food', 'Kale', 'Kale', 6, 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!;
             const done = se.acceptPost(kale.id, k.ben);
             se.completePostTransaction(done.id, k.ben);
-            const chard = se.createPost('offer', 'food', 'Chard', 'Chard', 3, 'fixed', k.cara)!;
+            const chard = se.createPost('offer', 'food', 'Chard', 'Chard', 3, 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!;
             const held = se.acceptPost(chard.id, k.ben);
             // Three listings with no deal on them, one of them reported.
-            const posts = ['Eggs', 'Plums', 'Honey'].map((t) => se.createPost('offer', 'food', t, t, 2, 'fixed', k.cara)!.id);
+            const posts = ['Eggs', 'Plums', 'Honey'].map((t) => se.createPost('offer', 'food', t, t, 2, 'fixed', k.cara, undefined, undefined, TEST_PHOTOS)!.id);
             const report = crypto.randomUUID();
             db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status) VALUES (?, ?, ?, ?, 'spam', 'pending')")
                 .run(report, k.ben, k.cara, posts[2]);

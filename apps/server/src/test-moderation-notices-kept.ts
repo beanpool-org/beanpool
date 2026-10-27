@@ -36,10 +36,12 @@ delete process.env.ENFORCE_WS_AUTH;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
     adminPruneUser, runMarketplaceHygiene,
 } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';

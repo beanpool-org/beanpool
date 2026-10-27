@@ -49,9 +49,12 @@ import http from 'node:http';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, createGroup, joinGroup, createPost, requestPost,
+    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, createGroup, joinGroup, createPost as rawCreatePost, requestPost,
     createConversation, sendMessage, transfer, getAdminPubkey, runMarketplaceHygiene,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { initAdminPassword } from './config/local-config.js';

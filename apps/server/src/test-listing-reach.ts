@@ -25,7 +25,9 @@ process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, createPost, updatePost, getPosts } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { initStateEngine, createPost as rawCreatePost, updatePost, getPosts } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';

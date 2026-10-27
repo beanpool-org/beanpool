@@ -278,7 +278,9 @@ async function call(method: 'GET' | 'POST' | 'PATCH', id: Id | null, route: stri
 async function testRealServer(): Promise<void> {
     if (!process.env.BEANPOOL_DATA_DIR) throw new Error('BEANPOOL_DATA_DIR must be set to a fresh directory');
     const { initTls } = await import('./services/tls.js');
+    const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
+    const createPost = wrapCreatePost(se.createPost);
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { startP2P } = await import('./p2p.js');
@@ -421,6 +423,8 @@ interface People { owner: Id; ann: Id; bob: Id; cat: Id; se: any; db: any }
  */
 async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> {
     console.log("\n--- 6. Each family's refusals in the member's language ---");
+    const { wrapCreatePost } = await import('./post-test-helper.js');
+    const createPost = wrapCreatePost(se.createPost);
     useCatalogsForTests('fr', { server: await everyMarkInFrench(), core: FR_CORE });
     const family = async (name: string, english: string, method: 'GET' | 'POST', who: Id | null, route: string, body?: unknown,
         field: 'error' | 'message' = 'error'): Promise<void> => {
@@ -493,7 +497,7 @@ async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> 
         { transactionId: 'no-such-deal', cancellerPublicKey: ann.pk });
     await family('a post that moved on', 'Post not found or not active', 'POST', ann, '/api/marketplace/posts/accept', { postId: 'no-such-post', buyerPublicKey: ann.pk });
     // Asking for one (a Need, a loan) that is gone or no longer active: the same code, from requestPost and its route.
-    const shears = se.createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
+    const shears = createPost('offer', 'tools', 'Garden shears', 'Sharp shears for the hedges along the lane', 5, 'fixed', bob.pk);
     db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(shears.id);
     const askGone = await call('POST', ann, '/api/marketplace/posts/request', { postId: 'no-such-post', buyerPublicKey: ann.pk });
     const askPaused = await call('POST', ann, '/api/marketplace/posts/request', { postId: shears.id, buyerPublicKey: ann.pk });

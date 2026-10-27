@@ -20,14 +20,14 @@ describe('posting an Offer or Need from the map', () => {
         expect(offerNeedSubmit({ ...filled, title: ' ' }).disabled).toBe(true);
         expect(offerNeedSubmit({ ...filled, description: '' }).label).toBe('✏️ Fill required fields');
         expect(offerNeedSubmit({ ...filled, hasLocation: false }).label).toBe('📍 Map location required');
-        expect(offerNeedSubmit({ ...filled, photoCount: 0 }).disabled).toBe(true);
+        expect(offerNeedSubmit({ ...filled, photoCount: 0 })).toEqual({ disabled: true, label: '📷 Add a photo' });
     });
 
-    it('where a Need\'s photo is optional (Beans off), a Need with no photo can be posted; left out, the photo is required', () => {
+    it('every Need carries at least one photo; Submit stays disabled with "📷 Add a photo" until one is picked', () => {
         const need: OfferNeedForm = { ...filled, type: 'need', photoCount: 0 };
-        expect(offerNeedSubmit({ ...need, photoRequired: false })).toEqual({ disabled: false, label: 'Post Need' });
-        expect(offerNeedSubmit({ ...need, photoRequired: true }).disabled).toBe(true);
-        expect(offerNeedSubmit(need).disabled).toBe(true);
+        expect(offerNeedSubmit(need)).toEqual({ disabled: true, label: '📷 Add a photo' });
+        expect(offerNeedSubmit({ ...need, photoRequired: true })).toEqual({ disabled: true, label: '📷 Add a photo' });
+        expect(offerNeedSubmit({ ...need, photoCount: 1 })).toEqual({ disabled: false, label: 'Post Need' });
     });
 
     it('a Need waits for an Offer first, and the button says so', () => {

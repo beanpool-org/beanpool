@@ -48,9 +48,12 @@ import path from 'node:path';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, generateInvite,
+    initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, acceptPost, completePostTransaction, generateInvite,
     getBalance, assertMemberActive,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { issueRekeyCode, completeRekey, getOffboardPreview, executeOffboard } from './engine/member-wizards.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { authorizeKeySigner } from './admin-key-auth.js';

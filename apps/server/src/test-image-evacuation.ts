@@ -515,7 +515,7 @@ async function main(): Promise<void> {
             'and it re-stored under the same content-addressed key, so the edit cost nothing');
     }
 
-    // The same post is still editable down to zero photos when the object is missing and NOT replaced.
+    // Under the photo-required rule, recovering a lost only-photo requires replacing it.
     {
         const lonelyBytes = makePhoto('lonely');
         const lonely = createPost('offer', 'food', 'Bread', 'One loaf', 1, 'fixed', author, undefined, undefined,
@@ -523,11 +523,13 @@ async function main(): Promise<void> {
         if (!lonely) throw new Error('setup: the one-photo post was not created');
         const lonelyRow = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = 0').get(lonely.id) as any;
         store.delete(lonelyRow.storage_key);
-        let dropErr: unknown = null;
-        try { updatePost(lonely.id, author, { photos: [] } as any); } catch (e) { dropErr = e; }
-        assert(dropErr === null, 'and an edit that simply DELETES the broken photo succeeds too');
-        assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos WHERE post_id = ?').get(lonely.id) as any).c === 0,
-            'the post is left with no photos');
+        const replaceBytes = makePhoto('lonely-replace');
+        let replaceErr: unknown = null;
+        try { updatePost(lonely.id, author, { photos: [dataUrl(replaceBytes)] } as any); } catch (e) { replaceErr = e; }
+        assert(replaceErr === null, 'and an edit that replaces the broken only-photo succeeds');
+        const replacedRow = db.prepare('SELECT storage_key, photo_data FROM post_photos WHERE post_id = ? AND order_num = 0').get(lonely.id) as any;
+        assert(replacedRow && store.get(replacedRow.storage_key)?.equals(replaceBytes) === true,
+            'the replacement photo is stored');
     }
 
     // ── 11. an import puts the bytes on disk BEFORE it opens the write transaction ──────────────

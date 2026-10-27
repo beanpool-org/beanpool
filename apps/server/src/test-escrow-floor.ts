@@ -45,7 +45,7 @@ import { runLedgerAudit } from './engine/audit.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
     initStateEngine,
-    createPost,
+    createPost as rawCreatePost,
     acceptPost,
     cancelPostTransaction,
     completePostTransaction,
@@ -59,6 +59,9 @@ import {
     getCommonsBalanceExact,
     conservingTransaction,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {

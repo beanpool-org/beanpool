@@ -27,11 +27,14 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, createTreasury, createPost, completePostTransaction,
+    initStateEngine, createTreasury, createPost as rawCreatePost, completePostTransaction,
     requestPost, approvePostRequest, getBalance, usableFloor,
     pauseEnterprise, resumeEnterprise, adminAssignTreasuryOperator,
     adminRevokeTreasuryOperator, getEnterpriseUnderlyingFloor, reconcileLedgerFromDb,
 } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { db, pledgeToProject } from './db/db.js';
 import { getPosts, setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 

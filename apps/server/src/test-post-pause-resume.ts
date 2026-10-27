@@ -12,6 +12,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { TEST_PHOTOS } from './post-test-helper.js';
 import { initTls } from './services/tls.js';
 import { initStateEngine, getPosts } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -69,7 +70,7 @@ async function main() {
     // Create a post as author
     const createRes = await signedFetch('POST', '/api/marketplace/posts', author, {
         type: 'offer', category: 'general', title: 'Garden Tools', description: 'Rake and shovel',
-        credits: 10, priceType: 'fixed', authorPublicKey: author.pubKeyHex,
+        credits: 10, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
     });
     assert(createRes.status === 200, 'author created a post successfully');
     const postId = createRes.body?.post?.id;

@@ -46,6 +46,7 @@ import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/e
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -89,7 +90,7 @@ const pushSpy = (targets: string[], actor: string, title: string, body: string, 
 
 function newEvent(author: string, extra: Record<string, unknown> = {}) {
     return createPostEngine(capture, 'event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', author,
-        -28.55, 153.5, [], false, undefined, false,
+        -28.55, 153.5, TEST_PHOTOS, false, undefined, false,
         { eventStartAt: inHours(24), eventPlaceName: 'The old bowls club', eventPrivateNote: 'Gate code 1234', ...extra } as any)!;
 }
 
@@ -209,7 +210,7 @@ async function main(): Promise<void> {
     // an older node or hand-edited could be, and a NULL end must not read as "ended long ago".
     db.prepare('UPDATE posts SET event_end_at = NULL WHERE id = ?').run(openEnded.id);
     const offer = createPostEngine(capture, 'offer', 'other', 'Spare tomatoes', 'Free', 5, 'fixed', host,
-        undefined, undefined, [], false)!;
+        undefined, undefined, TEST_PHOTOS, false)!;
     db.prepare(`UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?`)
         .run(new Date(Date.now() - 400 * DAY).toISOString(), new Date(Date.now() - 400 * DAY).toISOString(), offer.id);
 
@@ -281,7 +282,7 @@ async function main(): Promise<void> {
 
     pushes = [];
     const plainOffer = createPostEngine(capture, 'offer', 'other', 'Jam jars', 'Free', 1, 'fixed', host,
-        undefined, undefined, [], false)!;
+        undefined, undefined, TEST_PHOTOS, false)!;
     assert(adminDeletePost(capture, plainOffer.id, undefined, undefined, pushSpy) === true, 'an offer can still be removed');
     assert(pushes.length === 0, 'and removing a non-event sends no event notification');
     assert(adminDeletePost(capture, crypto.randomUUID(), undefined, undefined, pushSpy) === false,
@@ -317,7 +318,7 @@ async function main(): Promise<void> {
 
         // A reported listing that is not an event still sends nothing on this path.
         const offerReported = createPostEngine(capture, 'offer', 'other', 'Dodgy', 'Nope', 1, 'fixed', host,
-            undefined, undefined, [], false)!;
+            undefined, undefined, TEST_PHOTOS, false)!;
         const report2 = submitReport(admin, host, 'Spam', offerReported.id)!;
         sent.length = 0;
         actionReport(report2.id, true);

@@ -27,7 +27,9 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, createPost, acceptPost, getCommonsBalanceExact, runLedgerAudit } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
+import { initStateEngine, transfer, createPost as rawCreatePost, acceptPost, getCommonsBalanceExact, runLedgerAudit } from './state-engine.js';
+const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { ledger } from './engine/ledger.js';

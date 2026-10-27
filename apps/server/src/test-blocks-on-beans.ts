@@ -33,6 +33,7 @@ import WebSocket from 'ws';
 import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { TEST_PHOTOS } from './post-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -83,7 +84,7 @@ async function child(): Promise<void> {
                 putPushTokenRow(key, `ExponentPushToken[${name}]`, 'android');
             }
             // Each sender holds Beans and has a completed trade behind them: a direct send needs both (state-engine transfer).
-            const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
+            const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk, undefined, undefined, TEST_PHOTOS)!;
             offer(a.seller, 'Dee eggs');
             for (const pk of a.senders) {
                 se.transfer('genesis', pk, 100, 'seed', 'direct', true);

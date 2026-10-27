@@ -739,12 +739,21 @@ function ChatScreen({ id }: { id: string }) {
         }
     };
 
+    // A request holds every send until it is decided, or the node has answered; the opener's, once their line is in, until
+    // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
+    const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
     // Asked before the composer empties the box, so a refused send keeps what was typed.
-    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && requestMode !== 'mine-waiting' && requestMode !== 'to-me' && requestMode !== 'mine-loading';
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
+
+    // An Edit fills the box once it is drawn: while the opener's request waits, the composer only appears with the edit
+    // (review 4394827275), so it isn't there yet when Edit is tapped.
+    useEffect(() => {
+        if (editingMessage) composerRef.current?.setText(editingMessage.text || '');
+    }, [editingMessage]);
 
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
-        if (!currentDraft || !canSendNow() || !identity?.publicKey || requestMode === 'mine-waiting' || requestMode === 'to-me' || requestMode === 'mine-loading') return;
+        if (!currentDraft || !canSendNow() || !identity?.publicKey || requestHoldsSends) return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
@@ -1240,11 +1249,16 @@ function ChatScreen({ id }: { id: string }) {
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;
-        const showEmojiPicker = activeEmojiPickerId === item.id;
-        const actions = messageActions(item, viewer);
+        // A chat that is still a request offers no Reply and no React, as the web (MessagesPage `inRequest`): the person it
+        // is for decides first, and their reaction would reach the opener while it still reads waiting; the opener's are
+        // refused until it is accepted (PR #2540 review 4394827119). Their own line still edits and deletes.
+        const inRequest = requestMode !== 'none';
+        const showEmojiPicker = !inRequest && activeEmojiPickerId === item.id;
+        const allowed = messageActions(item, viewer);
+        const actions = inRequest ? { ...allowed, reply: false, react: false } : allowed;
 
         const handleEmojiSelect = async (emoji: string) => {
-            if (!identity?.publicKey) return;
+            if (!identity?.publicKey || inRequest) return;
             try {
                 await toggleMessageReactionApi(item.id, identity.publicKey, emoji);
                 hapticSuccess();
@@ -1285,9 +1299,9 @@ function ChatScreen({ id }: { id: string }) {
         };
 
         const handleEditPress = () => {
+            // The box takes the line's words from the effect on editingMessage, once the composer is drawn.
             setEditingMessage(item);
             setReplyToMessage(null);
-            composerRef.current?.setText(item.text || '');
             setActiveMessageActionsId(null);
             setActiveEmojiPickerId(null);
         };

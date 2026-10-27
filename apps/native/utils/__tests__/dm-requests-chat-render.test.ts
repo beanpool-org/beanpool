@@ -226,6 +226,22 @@ async function syncLanded(): Promise<void> {
 }
 const box = () => host.querySelector('input[placeholder="Message..."]');
 const sent = () => net.calls.filter((c) => c === 'db.insertMessage').length;
+const callsOf = (name: string) => net.calls.filter((c) => c === `db.${name}`).length;
+// By the label's own value: jsdom's selectors miss a label holding an emoji ("React with 👍").
+const button = (label: string) => Array.from(host.querySelectorAll<HTMLElement>('button[aria-label]')).find((b) => b.getAttribute('aria-label') === label) ?? null;
+/** Taps a line's bubble (the unlabelled button holding its words), as a member would to see what it offers. */
+async function tapLine(words: string): Promise<void> {
+    const bubble = Array.from(host.querySelectorAll<HTMLElement>('button:not([aria-label])')).find((b) => b.textContent?.includes(words));
+    expect(bubble, `a bubble reading "${words}"`).toBeTruthy();
+    await act(async () => { bubble!.click(); });
+    await settle(2);
+}
+async function tap(label: string): Promise<void> {
+    const b = button(label);
+    expect(b, `a "${label}" button`).toBeTruthy();
+    await act(async () => { b!.click(); });
+    await settle();
+}
 
 describe('a request waiting for this member, on the phone', () => {
     it('keeps a stranger\'s photo closed before Accept: nothing fetched, nothing drawn, the caption reads (review 4393642129)', async () => {
@@ -264,6 +280,35 @@ describe('a request waiting for this member, on the phone', () => {
         expect(host.textContent).toContain('Loading the chat');
         await typeAndSend('hi there');
         expect(sent()).toBe(0);
+    });
+
+    // Review 4394827119: React and Reply on the stranger's line, with the Accept card on screen; the node took the reaction
+    // and sent it to the opener, while the request still read waiting to them. The web offers neither while `inRequest`.
+    it('offers no Reply or React on the stranger\'s line before Accept, so nothing reaches them; after Accept both are back', async () => {
+        let conv = { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST as Record<string, unknown> };
+        standIn({
+            getConversation: () => Promise.resolve(conv),
+            getMessages: [{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }],
+            syncSingleConversation: true,
+            decideMessageRequest: () => { conv = { ...conv, request: { ...KOFI_REQUEST, state: 'accepted' } }; return Promise.resolve({ request: conv.request }); },
+            toggleMessageReactionApi: {},
+        });
+        await open();
+        expect(host.textContent).toContain('Kofi wants to message you');
+
+        await tapLine('hello Ana');
+        expect(button('React')).toBeNull();
+        expect(button('Reply')).toBeNull();
+        expect(host.querySelector('button[aria-label^="React with"]')).toBeNull();
+        expect(callsOf('toggleMessageReactionApi')).toBe(0);
+
+        await tap('Accept');
+        expect(host.textContent).not.toContain('Kofi wants to message you');
+        await tapLine('hello Ana');
+        expect(button('Reply')).not.toBeNull();
+        await tap('React');
+        await tap('React with 👍');
+        expect(callsOf('toggleMessageReactionApi')).toBe(1);
     });
 
     it('control: once the node has answered an ordinary chat, the composer sends', async () => {
@@ -318,6 +363,53 @@ describe("the opener's first line, on the phone", () => {
         lines = lineAs(undefined);
         await syncLanded();
         expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
+    });
+
+    // Review 4394827275: Edit was offered on the waiting request's line and drew the composer, but Send refused it (and the
+    // box opened empty, its ref not yet mounted). The node and the web let the line edit; a new line still waits.
+    describe('waiting for Kofi: my request\'s line still edits, and nothing new is sent', () => {
+        const WAITING = { ...MINE, request: { ...MINE.request, nextLineIsRequest: false } };
+        const mine = (text = 'hello Kofi') => [{ id: 'line-1', senderId: 'me-key', authorPubkey: 'me-key', type: 'text', text, outgoing: true, rawTimestamp: iso(now - 60_000), timestamp: '' }];
+        let edits: unknown[][];
+        beforeEach(() => {
+            edits = [];
+            standIn({
+                getConversation: WAITING, getMessages: () => Promise.resolve(mine()), syncSingleConversation: true,
+                editMessage: (...args: unknown[]) => { edits.push(args); return Promise.resolve(); },
+                insertMessage: 'line-2',
+            });
+        });
+
+        it('Edit opens the box holding the line\'s words, and Send edits it', async () => {
+            await open();
+            expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
+            expect(box()).toBeNull();
+
+            await tapLine('hello Kofi');
+            expect(button('React')).toBeNull();
+            expect(button('Reply')).toBeNull();
+            await tap('Edit message');
+            expect(host.querySelector('[data-testid="request-waiting"]')).toBeNull();
+            expect(box()).not.toBeNull();
+            // Untouched, the box sends what it was filled with: the line's own words.
+            await act(async () => { composer.send!(); });
+            await settle();
+
+            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi']]);
+            expect(sent()).toBe(0);
+            expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
+            expect(box()).toBeNull();
+        });
+
+        it('a changed line is sent as the edit, never as a new line', async () => {
+            await open();
+            await tapLine('hello Kofi');
+            await tap('Edit message');
+            await typeAndSend('hello Kofi, it is Ana');
+
+            expect(edits).toEqual([['dm1', 'line-1', 'hello Kofi, it is Ana']]);
+            expect(sent()).toBe(0);
+        });
     });
 
     it('refused or never delivered: the composer stays, unsent, and the line says it did not go', async () => {

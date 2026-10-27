@@ -54,31 +54,42 @@ function main() {
     assert(WITHHELD_NOTE_JOIN === 'LEFT JOIN withheld_notes wn ON wn.transaction_id = t.id', 'WITHHELD_NOTE_JOIN defines correct LEFT JOIN');
 
     // 2. withholdsNote decision logic
-    assert(withholdsNote(alice, bob, null) === false, 'withholdsNote returns false for null memo');
-    assert(withholdsNote(alice, bob, '') === false, 'withholdsNote returns false for empty string memo');
-    assert(withholdsNote(alice, bob, '   ') === false, 'withholdsNote returns false for whitespace memo');
+    const now = new Date().toISOString();
+    const insertBlock = (blocker: string, blocked: string) => {
+        db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)').run(blocker, blocked, now, now);
+    };
 
+    // Bob blocks Alice
+    insertBlock(bob, alice);
+    // Bob blocks treasuryKey
+    insertBlock(bob, treasuryKey);
+    // treasuryKey blocks Alice
+    insertBlock(treasuryKey, alice);
+
+    // Normal non-exempt send when blocked -> WITHHELD (true)
+    assert(withholdsNote(alice, bob, 'secret memo') === true, 'withholdsNote returns true when recipient (Bob) blocked sender (Alice)');
+    assert(withholdsNote(alice, bob, 12345) === true, 'withholdsNote returns true for numeric memo when blocked');
+
+    // Sender has NOT been blocked by recipient (Bob sends to Alice, Alice has not blocked Bob) -> NOT WITHHELD (false)
+    assert(withholdsNote(bob, alice, 'hello') === false, 'withholdsNote returns false when recipient has not blocked sender');
+
+    // Exemption 1: Blank / null / whitespace memo under active block (Bob blocked Alice -> would withhold if not blank)
+    assert(withholdsNote(alice, bob, null) === false, 'withholdsNote returns false for null memo despite active block');
+    assert(withholdsNote(alice, bob, '') === false, 'withholdsNote returns false for empty string memo despite active block');
+    assert(withholdsNote(alice, bob, '   ') === false, 'withholdsNote returns false for whitespace memo despite active block');
+
+    // Exemption 2: Missing or self sender/recipient
     assert(withholdsNote('', bob, 'hello') === false, 'withholdsNote returns false when from is empty');
     assert(withholdsNote(alice, '', 'hello') === false, 'withholdsNote returns false when to is empty');
     assert(withholdsNote(alice, alice, 'hello') === false, 'withholdsNote returns false when sender and recipient are the same');
 
-    assert(withholdsNote('genesis', bob, 'hello') === false, 'withholdsNote returns false for synthetic account "genesis"');
-    assert(withholdsNote(alice, 'genesis', 'hello') === false, 'withholdsNote returns false to synthetic account "genesis"');
+    // Exemption 3: Synthetic accounts ("genesis")
+    assert(withholdsNote('genesis', bob, 'hello') === false, 'withholdsNote returns false for synthetic sender "genesis"');
+    assert(withholdsNote(bob, 'genesis', 'hello') === false, 'withholdsNote returns false to synthetic recipient "genesis"');
 
-    // Without a block in place
-    assert(withholdsNote(alice, bob, 'unblocked memo') === false, 'withholdsNote returns false when recipient has not blocked sender');
-
-    // Add block: Bob blocks Alice (owner_pubkey = Bob, blocked_pubkey = Alice)
-    const now = new Date().toISOString();
-    db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)').run(bob, alice, now, now);
-
-    assert(withholdsNote(alice, bob, 'secret memo') === true, 'withholdsNote returns true when recipient (Bob) blocked sender (Alice)');
-    assert(withholdsNote(alice, bob, 12345) === true, 'withholdsNote returns true for numeric memo when blocked');
-    assert(withholdsNote(bob, alice, 'hello') === false, 'withholdsNote returns false when sender (Bob) sends to blocked person (Alice)');
-
-    // Treasury accounts are exempt from withholding notes
-    assert(withholdsNote(treasuryKey, bob, 'treasury note') === false, 'withholdsNote returns false when sender is a treasury');
-    assert(withholdsNote(alice, treasuryKey, 'to treasury') === false, 'withholdsNote returns false when recipient is a treasury');
+    // Exemption 4: Treasury accounts under active block (Bob blocked treasuryKey, treasuryKey blocked Alice)
+    assert(withholdsNote(treasuryKey, bob, 'treasury note') === false, 'withholdsNote returns false for treasury sender despite active block');
+    assert(withholdsNote(alice, treasuryKey, 'to treasury') === false, 'withholdsNote returns false for treasury recipient despite active block');
 
     // 3. keepWithheldNote storage
     const txId1 = 'tx_1111111111111111111111111111111111111111111111111111111111111111';

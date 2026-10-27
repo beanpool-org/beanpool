@@ -11,7 +11,7 @@
  * 7. close with "End its Offers too"
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import * as pictureCrop from '../lib/picture-crop';
 import { YourShopPage } from './YourShopPage';
@@ -551,5 +551,162 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         expect(screen.queryByTestId('shop-page-spinner')).not.toBeInTheDocument();
         expect(screen.getByTestId('shopfront-name')).toHaveTextContent('Stable Shop');
         expect(readCount).toBe(1);
+    });
+
+    it('11. YourShopPage Banner field shows the default banner (S3): monogram (10 round copies), echo (one), new words, returns to default on remove', async () => {
+        let shopData: any = {
+            id: SHOP_ID,
+            name: "Ana's Pottery",
+            ownerName: 'Ana',
+            category: 'arts',
+            blurb: null,
+            howToDeal: null,
+            photoUrl: null,
+            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+            paused: false,
+            backOn: null,
+        };
+        const fetchedUrls: string[] = [];
+        vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            const method = init?.method ?? 'GET';
+            const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+            fetchedUrls.push(path);
+            if (path === '/api/shops/mine' && method === 'GET') {
+                return { ok: true, status: 200, json: async () => ({ shop: shopData }) };
+            }
+            if (path.startsWith('/api/marketplace/posts?shop=')) {
+                return { ok: true, status: 200, json: async () => [] };
+            }
+            if (path === '/api/shops/mine' && method === 'PUT') {
+                shopData = { ...shopData, ...body };
+                return { ok: true, status: 200, json: async () => ({ shop: shopData, paused: 0, resumed: 0 }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        // Case A: bundled avatar on identity -> monogram with 10 round copies, category tint, new words
+        const meBundled = { ...me, avatar: 'bundled://leaf' };
+        const { unmount } = render(<YourShopPage identity={meBundled} onBack={vi.fn()} />);
+        expect(await screen.findByTestId('shop-front')).toBeInTheDocument();
+
+        const bannerField = screen.getByTestId('shop-field-banner-container');
+        expect(bannerField).toBeInTheDocument();
+        const defaultBanner = screen.getByTestId('default-banner');
+        expect(defaultBanner).toBeInTheDocument();
+        expect(defaultBanner.style.backgroundColor).toContain('var(--bp-tile-arts-tint)');
+        const monogramCopies = screen.getAllByTestId('default-banner-monogram-copy');
+        expect(monogramCopies).toHaveLength(10);
+        for (const copy of monogramCopies) {
+            expect(copy.className).toContain('rounded-full');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.jpg');
+        }
+        expect(screen.getByText('Your picture, until you choose a banner.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Choose a banner photo' })).toBeInTheDocument();
+        expect(screen.queryByTestId('shop-banner-remove')).toBeNull();
+
+        // No photo was fetched
+        expect(fetchedUrls.some((u) => u.includes('/photo'))).toBe(false);
+        unmount();
+
+        // Case B: photo avatar on identity -> echo (1 round copy)
+        const mePhoto = { ...me, avatar: 'https://mullum.example/ana.jpg' };
+        const view2 = render(<YourShopPage identity={mePhoto} onBack={vi.fn()} />);
+        expect(await screen.findByTestId('shop-front')).toBeInTheDocument();
+        const echoBanner = screen.getByTestId('default-banner');
+        expect(echoBanner).toBeInTheDocument();
+        const echoCopy = screen.getByTestId('default-banner-echo-copy');
+        expect(echoCopy).toBeInTheDocument();
+        expect(echoCopy.className).toContain('rounded-full');
+        expect(echoCopy.getAttribute('src')).toBe('https://mullum.example/ana.jpg');
+        expect(screen.queryByTestId('default-banner-monogram-copy')).toBeNull();
+
+        // Add a banner photo via crop
+        stubCrop('data:image/jpeg;base64,CROPPED_BANNER');
+        const file = new File(['banner'], 'banner.jpg', { type: 'image/jpeg' });
+        const bannerInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        if (bannerInput) {
+            fireEvent.change(bannerInput, { target: { files: [file] } });
+            const doneCrop = await screen.findByRole('button', { name: 'Done' });
+            fireEvent.click(doneCrop);
+            await waitFor(() => {
+                expect(screen.getByTestId('shop-banner-remove')).toBeInTheDocument();
+            });
+        }
+        expect(screen.getByTestId('shop-banner-image')).toBeInTheDocument();
+
+        // Remove the banner photo returns to the default banner (never a grey block)
+        fireEvent.click(screen.getByTestId('shop-banner-remove'));
+        await waitFor(() => {
+            expect(screen.queryByTestId('shop-banner-image')).toBeNull();
+        });
+        expect(screen.getByTestId('default-banner')).toBeInTheDocument();
+        expect(screen.getByText('Your picture, until you choose a banner.')).toBeInTheDocument();
+        view2.unmount();
+    });
+
+    it('12. ShopDetailPage shows default banner when banner is empty: monogram (10 copies) for bundled, echo (1) for photo, category tint', async () => {
+        const shopData = {
+            id: 'shop-flowers',
+            name: "Flowers & Co",
+            ownerName: 'Chloe',
+            ownerPublicKey: 'chloe-pubkey',
+            category: 'garden',
+            counts: { things: 1, available: 1, toBorrow: 0, toBuy: 1, out: 0, newThisWeek: 0 },
+            paused: false,
+            backOn: null,
+            photoUrl: null,
+        };
+        const fetchedUrls: string[] = [];
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            fetchedUrls.push(path);
+            if (path === '/api/shops/shop-flowers') {
+                return { ok: true, status: 200, json: async () => shopData };
+            }
+            if (path.startsWith('/api/marketplace/posts?shop=shop-flowers')) {
+                return { ok: true, status: 200, json: async () => [] };
+            }
+            if (path === '/api/members/chloe-pubkey') {
+                return { ok: true, status: 200, json: async () => ({ avatar: 'bundled://sunflower' }) };
+            }
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+
+        // Case A: bundled avatar
+        const { unmount } = render(<ShopDetailPage id="shop-flowers" identity={me} onBack={vi.fn()} />);
+        expect(await screen.findByTestId('shopfront-name')).toHaveTextContent("Flowers & Co");
+        const banner = screen.getByTestId('shopfront-banner');
+        const defaultBanner = within(banner).getByTestId('default-banner');
+        expect(defaultBanner).toBeInTheDocument();
+        expect(defaultBanner.style.backgroundColor).toContain('var(--bp-tile-garden-tint)');
+        const copies = within(defaultBanner).getAllByTestId('default-banner-monogram-copy');
+        expect(copies).toHaveLength(10);
+        for (const copy of copies) {
+            expect(copy.className).toContain('rounded-full');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_sunflower.jpg');
+        }
+        // Nothing fetched beyond avatar
+        expect(fetchedUrls.some((u) => u.includes('/photo'))).toBe(false);
+        unmount();
+
+        // Case B: photo avatar
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/shop-flowers') return { ok: true, status: 200, json: async () => shopData };
+            if (path.startsWith('/api/marketplace/posts?shop=shop-flowers')) return { ok: true, status: 200, json: async () => [] };
+            if (path === '/api/members/chloe-pubkey') return { ok: true, status: 200, json: async () => ({ avatar: 'https://mullum.example/chloe.jpg' }) };
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+        const view2 = render(<ShopDetailPage id="shop-flowers" identity={me} onBack={vi.fn()} />);
+        expect(await screen.findByTestId('shopfront-name')).toHaveTextContent("Flowers & Co");
+        const banner2 = screen.getByTestId('shopfront-banner');
+        const echoBanner = within(banner2).getByTestId('default-banner');
+        expect(echoBanner.style.backgroundColor).toContain('var(--bp-tile-garden-tint)');
+        const echoCopy = within(echoBanner).getByTestId('default-banner-echo-copy');
+        expect(echoCopy).toBeInTheDocument();
+        expect(echoCopy.className).toContain('rounded-full');
+        expect(echoCopy.getAttribute('src')).toBe('https://mullum.example/chloe.jpg');
+        view2.unmount();
     });
 });

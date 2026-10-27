@@ -219,8 +219,11 @@ for (const dark of [false, true]) {
 
         it('a member reads its shopfront in order, and Message writes to its owner', async () => {
             await renderIn();
-            // No banner photo: the category's tile, emoji and word (pictures S2).
-            expect(byId('shopfront-banner')?.querySelector('[data-testid="category-tile"]')?.textContent).toBe('🛠️TOOLS');
+            // No banner photo: the default banner from its logo (S3), monogram with 10 round copies on category's tint.
+            const defaultBanner = byId('shopfront-banner')?.querySelector('[data-testid="default-banner"]');
+            expect(defaultBanner).not.toBeNull();
+            expect(styleOf(defaultBanner).backgroundColor).toBe(colors().tile.tools.tint);
+            expect(defaultBanner?.querySelectorAll('[data-testid="default-banner-monogram-copy"]').length).toBe(10);
             expect(styleOf(byId('shopfront-banner')).backgroundColor).toBe(colors().brand.tint);
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
             expect(byId('shopfront-name')?.textContent).toBe("Dave's Tool Shed");

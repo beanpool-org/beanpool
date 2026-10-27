@@ -228,11 +228,13 @@ for (const dark of [false, true]) {
 
         it('a member reads the shopfront first and the money last, in the order of round 3 §3', async () => {
             await renderIn();
-            // The banner, a category tile with the category's sticker disc and word (no shop photo yet), the logo over its foot, then the name.
+            // The banner: with no shop photo yet, the default banner from its logo (S3), monogram for bundled with 10 round copies on category's tint.
             const banner = byId('shopfront-banner');
-            expect(banner?.querySelector('[data-testid="category-tile"]')).not.toBeNull();
-            expect(banner?.textContent).toContain('💻');
-            expect(banner?.textContent).toMatch(/Tech/i);
+            const defaultBanner = banner?.querySelector('[data-testid="default-banner"]');
+            expect(defaultBanner).not.toBeNull();
+            expect(styleOf(defaultBanner).backgroundColor).toBe(colors().tile.tech.tint);
+            const monogramCopies = defaultBanner?.querySelectorAll('[data-testid="default-banner-monogram-copy"]');
+            expect(monogramCopies?.length).toBe(10);
             expect(styleOf(banner).aspectRatio).toBe(3); // 3:1, the shape its keeper chose the strip in (choose-the-part)
             expect(styleOf(banner).width).toBe('100%');
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();
@@ -405,7 +407,7 @@ for (const dark of [false, true]) {
             const { about: _a, since: _s, offerCategories: _o, shop: _shop, ...older } = membersView();
             net.answer = community({ getTreasuryDetail: { ...older, keepers: keepers.map(({ publicKey, callsign, role }) => ({ publicKey, callsign, role })) } }, 'down');
             await renderIn();
-            expect(byId('shopfront-banner')?.querySelector('[data-testid="category-tile"]')).not.toBeNull();
+            expect(byId('shopfront-banner')?.querySelector('[data-testid="default-banner"]')).not.toBeNull();
             expect(byId('shopfront-visitor')).toBeNull();
             expect(byId('shopfront-section-toBuy')?.textContent).toContain('Text-only listing');
             expect(byId('shopfront-money-line')?.textContent).toBe('12 🫘 · credit line 50 🫘');

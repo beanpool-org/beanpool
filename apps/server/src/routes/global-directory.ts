@@ -6,7 +6,8 @@
  *          taking requests to join first, each group shuffled (engine/directory-cache.ts listCommunities); else by name.
  *          `q` searches names. `order` (up to 8 hex digits, the reader's own pick) fixes the shuffle: a reader paging
  *          sends the same one with every page, which then walk one order; left out, every read shuffles afresh. Each
- *          community carries `promise`, `acceptingKnocks` and `closingOn` (mothership A2).
+ *          community carries `promise`, `acceptingKnocks` and `closingOn` (mothership A2), and `lastSeenAt`, its last push
+ *          to the directory (front doors S13: both apps say "Not answering lately" past 36 hours).
  *          → { communities, total, limit, offset, fetchedAt }
  *   GET    /api/global/home?lat&lng                           public, better signed. Everything the "Find your community"
  *          card needs in one request (session-cost-baselines). → { point, communities, communityCount, nearbyPosts,

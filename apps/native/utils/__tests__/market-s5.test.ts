@@ -50,4 +50,16 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(noMatchesBranch).not.toContain('market-empty-tiles');
         expect(noMatchesBranch).not.toContain('Nothing here yet. Be the first:');
     });
+
+    it('translates ⏳ PENDING across all 24 native words catalogs', () => {
+        const wordsDir = path.resolve(APP, 'words');
+        const catalogs = fs.readdirSync(wordsDir).filter(f => f.endsWith('.json'));
+        expect(catalogs.length).toBe(24);
+        for (const cat of catalogs) {
+            const data = JSON.parse(fs.readFileSync(path.join(wordsDir, cat), 'utf8'));
+            expect(data['⏳ PENDING']).toBeDefined();
+            expect(typeof data['⏳ PENDING']).toBe('string');
+            expect(data['⏳ PENDING'].length).toBeGreaterThan(0);
+        }
+    });
 });

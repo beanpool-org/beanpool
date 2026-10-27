@@ -19,6 +19,12 @@
  *  4. The totals count communities and whole-number member counts only.
  *  5. An empty directory says the apps' one "none" sentence with Start a community (the site's own #run-a-node); a
  *     first read that fails says the list isn't available, never "none", and offers no Start.
+ *  6. The directory tells the truth (front doors S13): the site reads the view of the rows a stranger is shown
+ *     (directory_listed), and applies its rules again: no row of our own test servers (review, *.test), none that leads
+ *     nowhere (no address and no contact), none not pushed for 7 days; the stats count only the rows shown; a row whose
+ *     community has no name of its own is shown as its host; past 36 h since its last push a row says "Not answering
+ *     lately" under its name (the apps' word), and not before; while the view isn't there yet, the table is read with
+ *     the same rules; every language of the site has the line.
  *
  * Run: pnpm exec tsx src/test-website-directory-map.ts
  */
@@ -36,6 +42,7 @@ const WEBSITE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..',
 
 let run = 0;
 let passed = 0;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) {
@@ -69,12 +76,15 @@ const HOSTILE_ROWS = [
 ];
 // One rule each: a row with a real place and nothing else to link, whose node_url only that rule turns away, so dropping
 // the rule from nodeHref (apps/website/main.js) puts a link in that row's popup.
+// Each has a contact that is no phone number (shown as text, never a link), so the row is still shown now that a row
+// with no address and no contact is not (section 6), and its popup's only possible link is the node_url.
+const ASK = 'ask at the hall';
 const URL_RULE_ROWS = [
-    { rule: 'a user:password@ address', row: { node_id: 'userinfo', community_name: 'Userinfo Row', member_count: 2, service_radius: { lat: -33.9, lng: 151.2, radiusKm: 5 }, node_url: 'https://user:pw@good.example.org' } },
-    { rule: 'an IP address', row: { node_id: 'ip', community_name: 'IP Row', member_count: 5, service_radius: { lat: -27.5, lng: 153.0, radiusKm: 5 }, node_url: 'https://10.0.0.1' } },
-    { rule: 'localhost', row: { node_id: 'localhost', community_name: 'Localhost Row', member_count: 6, service_radius: { lat: -31.9, lng: 115.9, radiusKm: 5 }, node_url: 'https://localhost' } },
+    { rule: 'a user:password@ address', row: { node_id: 'userinfo', community_name: 'Userinfo Row', member_count: 2, service_radius: { lat: -33.9, lng: 151.2, radiusKm: 5 }, node_url: 'https://user:pw@good.example.org', contact_phone: ASK } },
+    { rule: 'an IP address', row: { node_id: 'ip', community_name: 'IP Row', member_count: 5, service_radius: { lat: -27.5, lng: 153.0, radiusKm: 5 }, node_url: 'https://10.0.0.1', contact_phone: ASK } },
+    { rule: 'localhost', row: { node_id: 'localhost', community_name: 'Localhost Row', member_count: 6, service_radius: { lat: -31.9, lng: 115.9, radiusKm: 5 }, node_url: 'https://localhost', contact_phone: ASK } },
 ];
-const NOT_A_PLACE = { node_id: 'nowhere', community_name: 'Nowhere', member_count: 1, service_radius: { lat: 'north', lng: 'east', radiusKm: 5 }, node_url: 'https://localhost' };
+const NOT_A_PLACE = { node_id: 'nowhere', community_name: 'Nowhere', member_count: 1, service_radius: { lat: 'north', lng: 'east', radiusKm: 5 }, node_url: 'https://localhost', contact_phone: ASK };
 const NORMAL = {
     node_id: 'mullum', community_name: 'Mullum Creek', contact_email: 'hello@mullum.example', contact_phone: '+61 (2) 6684-0000',
     member_count: 42, service_radius: { lat: -28.55, lng: 153.5, radiusKm: 25 }, node_url: 'mullum.example.org/',
@@ -145,18 +155,28 @@ async function main() {
     let reads = 0;
     let currentRows: unknown[] = ROWS;
     let readFails = false;
+    // The directory as Supabase answers it: the view of the rows a stranger is shown (directory_listed), and the table.
+    // `viewMissing`: the view isn't there yet (the PR merged, the director hasn't applied it): asking for it is an error.
+    let viewMissing = false;
+    const tablesRead: string[] = [];
     w.supabase = {
         createClient: () => ({
             from: (table: string) => ({
                 select: async () => {
                     reads++;
+                    tablesRead.push(table);
                     if (readFails) return { data: null, error: new Error('the directory is down') };
-                    return table === 'directory_nodes' ? { data: currentRows, error: null } : { data: [], error: null };
+                    if (table === 'directory_listed') {
+                        return viewMissing ? { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.directory_listed'" } } : { data: currentRows, error: null };
+                    }
+                    return table === 'directory_nodes' && viewMissing ? { data: currentRows, error: null } : { data: [], error: null };
                 },
             }),
             auth: { signUp: async () => ({ data: null, error: null }) },
         }),
     };
+
+    const fakeSupabase = w.supabase;
 
     const scripts = siteScripts();
     assert(scripts.includes('main.js'), `index.html loads main.js (${scripts.join(', ')})`);
@@ -283,6 +303,87 @@ async function main() {
         `a first read that fails says the list isn't available, not that there is none (${JSON.stringify(downText)})`);
     assert(d.document.getElementById('map-empty-start')?.style.display === 'none', 'and offers no Start on a map it could not read');
     down.window.close();
+
+    console.log('\n── 6. the directory tells the truth: shown rows only, a host for an unnamed row, "Not answering lately" ──');
+    const HOUR = 3_600_000;
+    const ago = (h: number) => new Date(Date.now() - h * HOUR).toISOString();
+    const place = (lat: number) => ({ lat, lng: 145.0, radiusKm: 10 });
+    // What the view could still hand the site, and what only the site's own check turns away.
+    const REVIEW = { node_id: 'review', community_name: 'BeanPool Review', node_url: 'https://review.beanpool.org', contact_email: 'ops@beanpool.org', member_count: 50, service_radius: place(-37.1), last_seen_at: ago(1) };
+    const LANE = { node_id: 'lane', community_name: 'Lane Seven', node_url: 'https://lane-7.test.beanpool.org', member_count: 40, service_radius: place(-37.2), last_seen_at: ago(1) };
+    const NO_ADDRESS = { node_id: 'yarra', community_name: 'Yarra Valley', node_url: null, contact_email: ' ', contact_phone: null, member_count: 30, service_radius: place(-37.3), last_seen_at: ago(1) };
+    const STALE = { node_id: 'stale', community_name: 'Gone Quiet', node_url: 'https://quiet.example.org', member_count: 20, service_radius: place(-37.4), last_seen_at: ago(7 * 24 + 1) };
+    // Shown.
+    const SLEEPY = { node_id: 'sleepy', community_name: 'Sleepy Hollow', node_url: 'https://sleepy.example.org', member_count: 6, service_radius: place(-37.5), last_seen_at: ago(40) };
+    const EDGE = { node_id: 'edge', community_name: 'Edge Creek', node_url: 'https://edge.example.org', member_count: 1, service_radius: place(-37.6), last_seen_at: ago(35) };
+    const FRESH = { node_id: 'fresh', community_name: 'Riverbend', node_url: 'https://riverbend.example.org', member_count: 10, service_radius: place(-37.7), last_seen_at: ago(2) };
+    const GIPP = { node_id: 'gipp', community_name: 'BeanPool Community', shown_name: 'gippsland.beanpool.org', node_url: 'https://gippsland.beanpool.org', member_count: 3, service_radius: place(-37.8), last_seen_at: ago(3) };
+    // From the table (no shown_name): the site makes the host the name itself.
+    const EAST = { node_id: 'east', community_name: 'BeanPool Community', node_url: 'https://eastgippy.beanpool.org', member_count: 2, service_radius: place(-37.9), updated_at: ago(4) };
+    const TRUTH = [REVIEW, LANE, NO_ADDRESS, STALE, SLEEPY, EDGE, FRESH, GIPP, EAST];
+    const SHOWN = [SLEEPY, EDGE, FRESH, GIPP, EAST];
+
+    const truth = new JSDOM(
+        `<!doctype html><html><body><nav id="navbar"></nav><div class="map-wrapper"><div id="nodes-map"></div>
+         ${emptyStateMarkup()}</div><span id="stat-nodes">—</span><span id="stat-members">—</span></body></html>`,
+        { runScripts: 'dangerously', url: 'https://beanpool.org/', virtualConsole: new VirtualConsole() },
+    );
+    const t = truth.window as any;
+    t.L = w.L;
+    t.supabase = fakeSupabase;
+    readFails = false;
+    viewMissing = false;
+    currentRows = TRUTH;
+    tablesRead.length = 0;
+    for (const src of scripts) {
+        const el = t.document.createElement('script');
+        el.textContent = fs.readFileSync(path.join(WEBSITE, src), 'utf-8');
+        t.document.body.appendChild(el);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    assert(tablesRead[0] === 'directory_listed' && !tablesRead.includes('directory_nodes'),
+        `the site reads the view of the rows a stranger is shown, directory_listed (${tablesRead.join(', ')})`);
+    const truthBoxes = () => popups.map((content) => {
+        const box = t.document.createElement('div');
+        if (content instanceof t.Node) box.appendChild(content);
+        return box as any;
+    });
+    let boxes = truthBoxes();
+    let names = boxes.map((b: any) => b.querySelector('strong')?.textContent);
+    assert(same(names, SHOWN.map((r) => (r as any).shown_name ?? (r === EAST ? 'eastgippy.beanpool.org' : r.community_name))),
+        `only the shown rows are on the map: no Review row, no test server, no row that leads nowhere, none gone 7 days (${JSON.stringify(names)})`);
+    assert(!names.includes('BeanPool Community') && names.includes('gippsland.beanpool.org') && names.includes('eastgippy.beanpool.org'),
+        'the two unnamed communities show as their hosts, never as one default name');
+    assert(t.document.getElementById('stat-nodes').textContent === String(SHOWN.length),
+        `the stats count only the rows shown (${t.document.getElementById('stat-nodes').textContent} of ${TRUTH.length})`);
+    assert(t.document.getElementById('stat-members').textContent === String(6 + 1 + 10 + 3 + 2),
+        `members are summed over the rows shown only (${t.document.getElementById('stat-members').textContent})`);
+    const quietLine = (b: any) => b.querySelector('.directory-not-answering')?.textContent ?? null;
+    const sleepyBox = boxes[0], edgeBox = boxes[1], freshBox = boxes[2];
+    assert(quietLine(sleepyBox) === FIND_COMMUNITY_WORDS.notAnswering,
+        `40 h since its last push: "${FIND_COMMUNITY_WORDS.notAnswering}" under the name (${JSON.stringify(sleepyBox?.textContent)})`);
+    assert(sleepyBox?.querySelector('a[href="https://sleepy.example.org"]') !== null, 'and its link stays: it is still worth a try');
+    assert(quietLine(edgeBox) === null && quietLine(freshBox) === null,
+        `35 h and 2 h: no such line (${JSON.stringify([edgeBox?.textContent, freshBox?.textContent])})`);
+
+    console.log('\n── 6b. before the view is applied: the table, with the same rules ──');
+    viewMissing = true;
+    tablesRead.length = 0;
+    await t.pollNodes();
+    boxes = truthBoxes();
+    names = boxes.map((b: any) => b.querySelector('strong')?.textContent);
+    assert(same(tablesRead, ['directory_listed', 'directory_nodes']) && names.length === SHOWN.length && !names.includes('BeanPool Review')
+        && t.document.getElementById('stat-nodes').textContent === String(SHOWN.length),
+        `the view missing, the site reads the table and shows the same rows (${tablesRead.join(', ')}: ${JSON.stringify(names)})`);
+    viewMissing = false;
+    truth.window.close();
+
+    const mainJs = fs.readFileSync(path.join(WEBSITE, 'main.js'), 'utf-8');
+    const wordsBlock = mainJs.slice(mainJs.indexOf('const WORDS = {'), mainJs.indexOf('\n};', mainJs.indexOf('const WORDS = {')));
+    const langs = [...wordsBlock.matchAll(/^    '?([a-zA-Z-]+)'?: \{$/gm)].map((m) => m[1]);
+    const lines = [...wordsBlock.matchAll(/^        notAnswering: '([^']+)',$/gm)].map((m) => m[1]);
+    assert(langs.length === 25 && lines.length === 25 && lines[0] === FIND_COMMUNITY_WORDS.notAnswering && new Set(lines).size === 25,
+        `every one of the site's 25 languages has its own "Not answering lately" (${langs.length} languages, ${lines.length} lines)`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

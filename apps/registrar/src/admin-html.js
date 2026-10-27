@@ -505,7 +505,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                     nameCell(alloc, look[1]) + communityCell(alloc) + keyCell(alloc) +
                     '<td data-label="Status"><span class="mono" style="color: ' + look[1] + '; font-weight: 600; font-size: 0.75rem;">' + look[0] + ' ' + esc(alloc.status) + why + '</span>' +
                         (since ? '<span class="sub">since ' + when(since) + '</span>' : '') +
-                        (alloc.probation ? '<span class="sub">on probation: not yet on the switchboard or the directory</span>' : '') + '</td>' +
+                        (alloc.probation ? '<span class="sub">on probation: not yet in the directory</span>' : '') + '</td>' +
                     '<td><div class="acts">' + acts.map(function(a) {
                         const button = '<button data-name="' + esc(alloc.name) + '" data-action="' + a[0] + '"' + (a[0] === 'release' && fromAll ? ' data-held-from-all="1"' : '') +
                             ' class="' + (a[0] === 'resume' ? 'btn-approve' : 'btn-revoke') + '">' + a[1] + '</button>';

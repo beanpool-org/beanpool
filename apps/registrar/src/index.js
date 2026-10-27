@@ -123,7 +123,7 @@ export const isOwnRow = (row, pubkey) =>
 const awaitingApproval = async (env, a) => a.status === 'pending' && (!!a.held_reason || (await db.policyTier(env, a.name)) !== 'auto');
 
 // On probation (migration 0011, design §4.3.2): a live name that has not yet answered as its own node in enough sweeps in
-// a row, for long enough (settings probation_sweeps, probation_s). Routed, but off the switchboard (/i/), its node told
+// a row, for long enough (settings probation_sweeps, probation_s). Routed, but its node told
 // `probation: true` (its directory listing waits), and its "New community" alert waits for its verification (applyVerdict).
 // Only NULL is probation: a row read from a database without the column (undefined) is never held back by it.
 const onProbation = (a) => !!a && a.verified_at === null;
@@ -876,7 +876,7 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
-    // A new tenure is on probation (its "New community" alert, its directory listing and the switchboard wait for it).
+    // A new tenure is on probation (its "New community" alert and its directory listing wait for it).
     if (onProbation({ verified_at: a.verified_at !== undefined ? a.verified_at : existing?.verified_at })) out.probation = true;
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
@@ -2070,7 +2070,7 @@ async function applyVerdict(env, r, limits, verified, verifiedNow = []) {
         const oks = (cur.ok_sweeps || 0) + 1;
         const done = oks >= limits.probation_sweeps && now - (cur.decided_at || cur.requested_at || now) >= limits.probation_s;
         if ((await db.updateIfUnchanged(env, a.name, cur, { ...ok, ok_sweeps: oks, ...(done ? { verified_at: now } : {}) })) && done) {
-            await logEvent(env, a.name, 'verified', `probation over: ${oks} ok sweeps in a row, live since ${new Date((cur.decided_at || cur.requested_at) * 1000).toISOString()}; listed on the switchboard, and its node's directory listing goes ahead`);
+            await logEvent(env, a.name, 'verified', `probation over: ${oks} ok sweeps in a row, live since ${new Date((cur.decided_at || cur.requested_at) * 1000).toISOString()}; its node's directory listing goes ahead`);
             verifiedNow.push(cur);
         }
         return;

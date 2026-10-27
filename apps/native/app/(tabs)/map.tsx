@@ -2,8 +2,6 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } 
 import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, TextInput, Pressable, Switch, Dimensions, Image as RNImage, Keyboard, Linking, DeviceEventEmitter, Animated, Modal, FlatList, PixelRatio } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Location from 'expo-location';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
@@ -13,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers } from '../../utils/db';
 import { getCanonicalAvatar } from '../../utils/canonical-profile';
+import { askForPostPhoto } from '../../utils/post-photo';
 import { useIdentity } from '../IdentityContext';
 import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDisplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -995,45 +994,8 @@ export default function MapScreen() {
 
     const pickPhoto = async () => {
         if (postPhotos.length >= 5) return;
-        Alert.alert(t('Add Photo'), t('Choose a source'), [
-            { text: t('Camera'), onPress: async () => {
-                try {
-                    const perm = await ImagePicker.requestCameraPermissionsAsync();
-                    if (!perm.granted) { Alert.alert(t('Permission needed')); return; }
-                    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, base64: false });
-                    if (!result.canceled && result.assets[0]?.uri) {
-                        try {
-                            const manipResult = await ImageManipulator.manipulateAsync(
-                                result.assets[0].uri,
-                                [{ resize: { width: 800 } }],
-                                { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                            );
-                            if (manipResult.base64) {
-                                setPostPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                            }
-                        } catch (e) { console.error("Failed to manipulate image:", e); }
-                    }
-                } catch (e: any) {
-                    Alert.alert(t('Camera Unavailable'), e?.message || t('Could not launch camera.'));
-                }
-            }},
-            { text: t('Gallery'), onPress: async () => {
-                const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: false });
-                if (!result.canceled && result.assets[0]?.uri) {
-                    try {
-                        const manipResult = await ImageManipulator.manipulateAsync(
-                            result.assets[0].uri,
-                            [{ resize: { width: 800 } }],
-                            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-                        );
-                        if (manipResult.base64) {
-                            setPostPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                        }
-                    } catch (e) { console.error("Failed to manipulate image:", e); }
-                }
-            }},
-            { text: t('Cancel'), style: 'cancel' },
-        ]);
+        // The shared sheet: Camera, Gallery, and Browse files on Android, closed by Back (utils/post-photo).
+        askForPostPhoto((photo) => setPostPhotos(prev => [...prev, photo]));
     };
 
     const showPricingGuide = () => {

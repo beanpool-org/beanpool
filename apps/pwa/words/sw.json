@@ -592,7 +592,6 @@
   "PULSE": "MAPIGO",
   "↻ RECURRING": "↻ INAYOJIRUDIA",
   "💸 CASH TOO": "💸 PESA TASLIMU PIA",
-  "No description provided.": "Hakuna maelezo yaliyotolewa.",
   "🤝 Held in Trust": "🤝 Imeshikiliwa kwa Amana",
   "Clear search": "Futa utafutaji",
   "Other": "Nyingine",
@@ -963,14 +962,12 @@
   "by {name} ⛰️ {you}": "na {name} ⛰️ {you}",
   "by {name} {you}": "na {name} {you}",
   "👤 (You)": "👤 (Wewe)",
-  "🌱 FOUNDING": "🌱 MWANZILISHI",
+  "Founding": "Waanzilishi",
   "B\u0004the Beans sign": "maharagwe",
   "View enlarged photo: {title}": "Tazama picha kubwa: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "Pesa taslimu pia zinahitajika kwa mafuta au vifaa — imekubaliwa kwenye mazungumzo",
-  "🌱 FOUNDING TRADE": "🌱 BIASHARA YA MWANZILISHI",
   "⏳ PENDING": "⏳ INASUBIRI",
   "DAILY PULSE": "MAPIGO YA KILA SIKU",
-  "VIEW": "TAZAMA",
   "pending\u0004deal status": "inasubiri",
   "requested\u0004deal status": "imeombwa",
   "completed\u0004deal status": "imekamilika",
@@ -3636,5 +3633,7 @@
   "⚠️ Action Required": "⚠️ Hatua Inahitajika",
   "⏳ Awaiting Approval": "⏳ Inasubiri Uidhinishaji",
   "⏸ PAUSED": "⏸ IMESITISHWA",
-  "Cancel request": "Ghairi ombi"
+  "Cancel request": "Ghairi ombi",
+  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:",
+  "🔑 FOUNDING": "🔑 MWANZILISHI"
 }

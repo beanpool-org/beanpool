@@ -54,8 +54,11 @@ run creates the appearance of coverage without the fact of it. See POLICY.md §6
 
 ## Journal — Critical Learnings Only
 
-Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [Any surprising setup or patterns discovered]\n**Action:** [How to find similar gaps next time]`
-## 2026-08-05 - [manager tests] computeSampleTrustSummary unit tests\n**Gap:** computeSampleTrustSummary in apps/manager/src/lib/engine-helpers.ts was untested.\n**Learning:** Vitest needed to be set up from scratch, which involved updating vite.config.ts (using vitest/config), creating setupTests.ts for jest-dom, and updating tsconfig.json types to include vitest/globals and @testing-library/jest-dom.\n**Action:** Check for existing lib/ helper files like profiles.ts and node-client.ts for future test coverage.
+Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [Any surprising setup or patterns discovered]\n**Action:** [How to find similar grains next time]`
+## 2026-08-05 - [manager tests] computeSampleTrustSummary unit tests
+**Gap:** computeSampleTrustSummary in apps/manager/src/lib/engine-helpers.ts was untested.
+**Learning:** Vitest needed to be set up from scratch, which involved updating vite.config.ts (using vitest/config), creating setupTests.ts for jest-dom, and updating tsconfig.json types to include vitest/globals and @testing-library/jest-dom.
+**Action:** Check for existing lib/ helper files like profiles.ts and node-client.ts for future test coverage.
 
 ## 2026-08-07 - [manager tests] resolveAvatarUrl unit tests
 **Gap:** resolveAvatarUrl in apps/manager/src/lib/avatar.ts was untested.
@@ -256,3 +259,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `forgetStandby` and `passwordNeeds2faError` helper functions in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage.
 **Learning:** Testing `passwordNeeds2faError` required testing non-403 responses (returns `null`), `password_retired` code (attaches `PASSWORD_RETIRED_HINT`), `password_needs_2fa` code with custom vs default error messages (attaches `PASSWORD_NEEDS_2FA_HINT`), and unrelated 403 error codes.
 **Action:** Continue identifying remaining untested helper functions across `apps/manager/src/lib/`.
+
+## 2026-10-26 - [manager tests] downloadAdminFile edge cases unit tests
+**Gap:** `downloadAdminFile` edge cases (`HUGE_DOWNLOAD_BYTES` user confirmation prompt, `Content-Disposition` header filename sanitization and path traversal prevention, and HTTP error response JSON detail extraction) in `apps/manager/src/lib/node-client.ts` were untested.
+**Learning:** Testing `downloadAdminFile` required mocking `window.confirm`, `URL.createObjectURL`, `URL.revokeObjectURL`, and spying on `document.createElement('a')` to assert link download attribute targets and prompt cancellation returns.
+**Action:** Continue identifying utility edge cases or untested UI components across `apps/manager/`.

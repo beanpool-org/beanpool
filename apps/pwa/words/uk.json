@@ -614,7 +614,6 @@
   "PULSE": "ПУЛЬС",
   "↻ RECURRING": "↻ РЕГУЛЯРНО",
   "💸 CASH TOO": "💸 ТАКОЖ ГОТІВКА",
-  "No description provided.": "Опис відсутній.",
   "🤝 Held in Trust": "🤝 У трасті",
   "Clear search": "Очистити пошук",
   "Other": "Інше",
@@ -1003,14 +1002,12 @@
   "by {name} ⛰️ {you}": "від {name} ⛰️ {you}",
   "by {name} {you}": "від {name} {you}",
   "👤 (You)": "👤 (Ви)",
-  "🌱 FOUNDING": "🌱 ЗАСНОВНИЦЬКИЙ",
+  "Founding": "Засновники",
   "B\u0004the Beans sign": "боби",
   "View enlarged photo: {title}": "Збільшити фото: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "Також потрібні готівкові кошти на паливо чи матеріали — узгоджується в чаті",
-  "🌱 FOUNDING TRADE": "🌱 ЗАСНОВНИЦЬКИЙ ОБМІН",
   "⏳ PENDING": "⏳ ОЧІКУЄ",
   "DAILY PULSE": "ЩОДЕННИЙ ПУЛЬС",
-  "VIEW": "ПЕРЕГЛЯНУТИ",
   "pending\u0004deal status": "очікує",
   "requested\u0004deal status": "запитано",
   "completed\u0004deal status": "завершено",
@@ -3886,5 +3883,7 @@
   "⚠️ Action Required": "⚠️ Потрібна дія",
   "⏳ Awaiting Approval": "⏳ Очікує на схвалення",
   "⏸ PAUSED": "⏸ ПРИЗУПИНЕНО",
-  "Cancel request": "Скасувати запит"
+  "Cancel request": "Скасувати запит",
+  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:",
+  "🔑 FOUNDING": "🔑 ЗАСНОВНИК"
 }

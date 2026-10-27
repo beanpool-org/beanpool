@@ -120,5 +120,5 @@ export async function settle(page) {
 
 /** The Card View grid itself — the element the pictures are of. */
 export function grid(page) {
-    return page.locator('div.grid.grid-cols-1.sm\\:grid-cols-2').first();
+    return page.locator('div.grid.grid-cols-2.sm\\:grid-cols-2').first();
 }

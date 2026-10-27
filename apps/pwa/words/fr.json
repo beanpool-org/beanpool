@@ -670,18 +670,15 @@
   "by {name} {you}": "par {name} {you}",
   "👤 (You)": "👤 (Vous)",
   "by {name} ⛰️": "par {name} ⛰️",
-  "🌱 FOUNDING": "🌱 FONDATEUR",
+  "Founding": "Fondateurs",
   "B\u0004the Beans sign": "B",
   "PULSE": "POULS",
   "View enlarged photo: {title}": "Agrandir la photo : {title}",
   "↻ RECURRING": "↻ RÉCURRENT",
   "Cash also needed for fuel or materials — agreed in chat": "Espèces également nécessaires pour le carburant ou les matériaux — convenu par chat",
   "💸 CASH TOO": "💸 ESPÈCES AUSSI",
-  "🌱 FOUNDING TRADE": "🌱 ÉCHANGE FONDATEUR",
   "⏳ PENDING": "⏳ EN ATTENTE",
-  "No description provided.": "Aucune description fournie.",
   "DAILY PULSE": "POULS QUOTIDIEN",
-  "VIEW": "VOIR",
   "pending\u0004deal status": "en attente",
   "requested\u0004deal status": "demandé",
   "completed\u0004deal status": "terminé",
@@ -3637,5 +3634,7 @@
   "⚠️ Action Required": "⚠️ Action requise",
   "⏳ Awaiting Approval": "⏳ En attente d'approbation",
   "⏸ PAUSED": "⏸ EN PAUSE",
-  "Cancel request": "Annuler la demande"
+  "Cancel request": "Annuler la demande",
+  "Nothing here yet. Be the first:": "Rien ici pour le moment. Soyez le premier :",
+  "🔑 FOUNDING": "🔑 FONDATEUR"
 }

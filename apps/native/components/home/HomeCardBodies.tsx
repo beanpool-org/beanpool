@@ -358,6 +358,15 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
     return (
         <>
             {items.map(p => <MarketRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} testID={`home-market-${p.id}`} />)}
+            {items.length === 0 && (
+                <View testID="home-market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
+                    {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
+                        <View key={cat} style={{ width: 48, height: 48, borderRadius: 12, overflow: 'hidden' }}>
+                            <CategoryTile category={cat} size="thumb" />
+                        </View>
+                    ))}
+                </View>
+            )}
             {/* A node that asks for them, with fewer than a handful of real listings: the made-up ones, each marked Example (§6.1). */}
             {examples && <View style={{ marginHorizontal: -14 }}><ExampleListings /></View>}
             <HomeLink id="market:all" colors={colors} text={t('See all')} a11y={t('See all listings in the Market')} onPress={onSeeAll} testID="home-market-all" />

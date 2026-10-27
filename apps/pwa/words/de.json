@@ -592,7 +592,6 @@
   "PULSE": "PULSE",
   "↻ RECURRING": "↻ WIEDERKEHREND",
   "💸 CASH TOO": "💸 AUCH BARGELD",
-  "No description provided.": "Keine Beschreibung vorhanden.",
   "🤝 Held in Trust": "🤝 Treuhänderisch verwahrt",
   "Clear search": "Suche löschen",
   "Other": "Sonstiges",
@@ -982,14 +981,12 @@
   "by {name} ⛰️ {you}": "von {name} ⛰️ {you}",
   "by {name} {you}": "von {name} {you}",
   "👤 (You)": "👤 (Du)",
-  "🌱 FOUNDING": "🌱 GRÜNDUNG",
+  "Founding": "Gründer",
   "B\u0004the Beans sign": "B",
   "View enlarged photo: {title}": "Vergrößertes Foto ansehen: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "Bargeld für Benzin oder Material nötig — im Chat vereinbart",
-  "🌱 FOUNDING TRADE": "🌱 GRÜNDUNGSTAUSCH",
   "⏳ PENDING": "⏳ AUSSTEHEND",
   "DAILY PULSE": "TÄGLICHER PULS",
-  "VIEW": "ANSEHEN",
   "pending\u0004deal status": "ausstehend",
   "requested\u0004deal status": "angefragt",
   "completed\u0004deal status": "abgeschlossen",
@@ -3636,5 +3633,7 @@
   "⚠️ Action Required": "⚠️ Aktion erforderlich",
   "⏳ Awaiting Approval": "⏳ Wartet auf Genehmigung",
   "⏸ PAUSED": "⏸ PAUSIERT",
-  "Cancel request": "Anfrage abbrechen"
+  "Cancel request": "Anfrage abbrechen",
+  "Nothing here yet. Be the first:": "Hier gibt es noch nichts. Sei der Erste:",
+  "🔑 FOUNDING": "🔑 GRÜNDER"
 }

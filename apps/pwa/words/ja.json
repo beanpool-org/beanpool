@@ -658,18 +658,15 @@
   "by {name} {you}": "{name} {you}",
   "👤 (You)": "👤（あなた）",
   "by {name} ⛰️": "投稿者: {name} ⛰️",
-  "🌱 FOUNDING": "🌱 創設",
+  "Founding": "創設者",
   "B\u0004the Beans sign": "B",
   "PULSE": "パルス",
   "View enlarged photo: {title}": "写真を拡大表示: {title}",
   "↻ RECURRING": "↻ 定期",
   "Cash also needed for fuel or materials — agreed in chat": "燃料や材料費として現金も必要 — チャットで合意",
   "💸 CASH TOO": "💸 一部現金あり",
-  "🌱 FOUNDING TRADE": "🌱 創設取引",
   "⏳ PENDING": "⏳ 保留中",
-  "No description provided.": "説明文はありません。",
   "DAILY PULSE": "DAILY PULSE",
-  "VIEW": "表示",
   "pending\u0004deal status": "保留中",
   "requested\u0004deal status": "リクエスト済",
   "completed\u0004deal status": "完了",
@@ -3511,5 +3508,7 @@
   "⚠️ Action Required": "⚠️ アクションが必要",
   "⏳ Awaiting Approval": "⏳ 承認待ち",
   "⏸ PAUSED": "⏸ 一時停止",
-  "Cancel request": "リクエストをキャンセル"
+  "Cancel request": "リクエストをキャンセル",
+  "Nothing here yet. Be the first:": "ここにはまだ何もありません。最初になりましょう:",
+  "🔑 FOUNDING": "🔑 創設者"
 }

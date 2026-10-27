@@ -240,7 +240,7 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
     });
 
     // Decision 1: an event should sit among the offers, so the photo takes the same size, crop and rounding the
-    // offer card uses in that view — MarketplaceCard's 110px banner in the grid, its 64px square in the list.
+    // offer card uses in that view — MarketplaceCard's 110px banner in the grid, its 80px square in the list.
     it('matches the offer card: a banner in the grid, a square thumbnail in the list', () => {
         const { unmount } = renderAt320(<EventCard post={withPhoto} identity={identity} />);
         const grid = within(screen.getByTestId('event-card')).getByRole('img');
@@ -252,8 +252,8 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
 
         renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" />);
         const list = within(screen.getByTestId('event-card')).getByRole('img');
-        expect(list.className).toMatch(/w-16/);
-        expect(list.className).toMatch(/h-16/);
+        expect(list.className).toMatch(/w-20/);
+        expect(list.className).toMatch(/h-20/);
         expect(list.className).toMatch(/object-cover/);
         expect(list.className).toMatch(/rounded-xl/);
         expect(list.className).toMatch(/flex-shrink-0/);

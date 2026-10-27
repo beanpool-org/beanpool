@@ -592,7 +592,6 @@
   "PULSE": "പൾസ്",
   "↻ RECURRING": "↻ ആവർത്തിക്കുന്നത്",
   "💸 CASH TOO": "💸 പണവും",
-  "No description provided.": "വിവരണം നൽകിയിട്ടില്ല.",
   "🤝 Held in Trust": "🤝 ട്രസ്റ്റിൽ സൂക്ഷിച്ചിരിക്കുന്നു",
   "Clear search": "തിരഞ്ഞത് മായ്ക്കുക",
   "Other": "മറ്റുള്ളവ",
@@ -963,14 +962,12 @@
   "by {name} ⛰️ {you}": "{name} വഴി ⛰️ {you}",
   "by {name} {you}": "{name} വഴി {you}",
   "👤 (You)": "👤 (നിങ്ങൾ)",
-  "🌱 FOUNDING": "🌱 സ്ഥാപക",
+  "Founding": "ഫൗണ്ടിംഗ്",
   "B\u0004the Beans sign": "പയർ",
   "View enlarged photo: {title}": "വലുതാക്കിയ ഫോട്ടോ കാണുക: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "ഇന്ധനത്തിനോ സാമഗ്രികൾക്കോ പണവും ആവശ്യമാണ് — ചാറ്റിൽ സമ്മതിച്ചത്",
-  "🌱 FOUNDING TRADE": "🌱 സ്ഥാപക വ്യാപാരം",
   "⏳ PENDING": "⏳ തീർപ്പുകൽപ്പിച്ചിട്ടില്ല",
   "DAILY PULSE": "പ്രതിദിന പൾസ്",
-  "VIEW": "കാണുക",
   "pending\u0004deal status": "തീർപ്പുകൽപ്പിച്ചിട്ടില്ല",
   "requested\u0004deal status": "അഭ്യർത്ഥിച്ചു",
   "completed\u0004deal status": "പൂർത്തിയായി",
@@ -3636,5 +3633,7 @@
   "⚠️ Action Required": "⚠️ നടപടി ആവശ്യമാണ്",
   "⏳ Awaiting Approval": "⏳ അംഗീകാരത്തിനായി കാത്തിരിക്കുന്നു",
   "⏸ PAUSED": "⏸ താൽക്കാലികമായി നിർത്തി",
-  "Cancel request": "അഭ്യർത്ഥന റദ്ദാക്കുക"
+  "Cancel request": "അഭ്യർത്ഥന റദ്ദാക്കുക",
+  "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:",
+  "🔑 FOUNDING": "🔑 ഫൗണ്ടിംഗ്"
 }

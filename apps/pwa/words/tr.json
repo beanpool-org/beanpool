@@ -592,7 +592,6 @@
   "PULSE": "NABIZ",
   "↻ RECURRING": "↻ TEKRARLAYAN",
   "💸 CASH TOO": "💸 NAKİT DE GEÇERLİ",
-  "No description provided.": "Açıklama belirtilmedi.",
   "🤝 Held in Trust": "🤝 Emanette Tutuluyor",
   "Clear search": "Aramayı temizle",
   "Other": "Diğer",
@@ -963,14 +962,12 @@
   "by {name} ⛰️ {you}": "{name} tarafından ⛰️ {you}",
   "by {name} {you}": "{name} tarafından {you}",
   "👤 (You)": "👤 (Sen)",
-  "🌱 FOUNDING": "🌱 KURUCU",
+  "Founding": "Kurucu",
   "B\u0004the Beans sign": "fasulye",
   "View enlarged photo: {title}": "Büyütülmüş fotoğrafı gör: {title}",
   "Cash also needed for fuel or materials — agreed in chat": "Yakıt veya malzeme için nakit de gerekiyor — sohbette kararlaştırılır",
-  "🌱 FOUNDING TRADE": "🌱 KURUCU TAKAS",
   "⏳ PENDING": "⏳ BEKLİYOR",
   "DAILY PULSE": "GÜNLÜK NABIZ",
-  "VIEW": "GÖR",
   "pending\u0004deal status": "bekliyor",
   "requested\u0004deal status": "istendi",
   "completed\u0004deal status": "tamamlandı",
@@ -3636,5 +3633,7 @@
   "⚠️ Action Required": "⚠️ Eylem Gerekli",
   "⏳ Awaiting Approval": "⏳ Onay Bekleniyor",
   "⏸ PAUSED": "⏸ DURAKLATILDI",
-  "Cancel request": "İsteği iptal et"
+  "Cancel request": "İsteği iptal et",
+  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:",
+  "🔑 FOUNDING": "🔑 KURUCU"
 }

@@ -658,18 +658,15 @@
   "by {name} {you}": "oleh {name} {you}",
   "👤 (You)": "👤 (Anda)",
   "by {name} ⛰️": "oleh {name} ⛰️",
-  "🌱 FOUNDING": "🌱 PENDIRI",
+  "Founding": "Pendiri",
   "B\u0004the Beans sign": "B",
   "PULSE": "KABAR",
   "View enlarged photo: {title}": "Lihat foto diperbesar: {title}",
   "↻ RECURRING": "↻ BERULANG",
   "Cash also needed for fuel or materials — agreed in chat": "Uang tunai juga dibutuhkan untuk bahan bakar atau material — disepakati dalam obrolan",
   "💸 CASH TOO": "💸 UANG TUNAI JUGA",
-  "🌱 FOUNDING TRADE": "🌱 TRANSAKSI PENDIRI",
   "⏳ PENDING": "⏳ MENUNGGU",
-  "No description provided.": "Tidak ada deskripsi yang diberikan.",
   "DAILY PULSE": "DAILY PULSE",
-  "VIEW": "LIHAT",
   "pending\u0004deal status": "menunggu",
   "requested\u0004deal status": "diminta",
   "completed\u0004deal status": "selesai",
@@ -3511,5 +3508,7 @@
   "⚠️ Action Required": "⚠️ Tindakan Diperlukan",
   "⏳ Awaiting Approval": "⏳ Menunggu Persetujuan",
   "⏸ PAUSED": "⏸ DIJEDA",
-  "Cancel request": "Batalkan permintaan"
+  "Cancel request": "Batalkan permintaan",
+  "Nothing here yet. Be the first:": "Belum ada apa-apa di sini. Jadilah yang pertama:",
+  "🔑 FOUNDING": "🔑 PENDIRI"
 }

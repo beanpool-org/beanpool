@@ -834,6 +834,7 @@
   "🗞️ PULSE": "🗞️ 动态",
   "↻ RECURRING": "↻ 循环",
   "👤 YOU": "👤 你",
+  "⏳ PENDING": "⏳ 待处理",
   "PULSE": "动态",
   "🗞️ DAILY PULSE": "🗞️ 每日动态",
   "💸 CASH TOO": "💸 亦收现金",
@@ -5882,5 +5883,6 @@
   "Turn on notifications?": "开启通知？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手机设置中已关闭 BeanPool 的通知。打开设置即可开启。",
-  "Cancel request": "取消请求"
+  "Cancel request": "取消请求",
+  "Nothing here yet. Be the first:": "这里还没有任何内容。成为第一个发布者："
 }

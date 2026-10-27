@@ -19,6 +19,15 @@
 // project exactly as it is, with a log line once a process for the operator, and every one of its backers waits: all or
 // nothing, as there.
 //
+// A CLOSED ACCOUNT (Marty, board, 27 Oct 2026: "To the Commons"). A backer whose account is closed for good (stranded-
+// pledges.ts isClosedAccount: deleted by its owner or removed by the community, 'pruned'; or an enterprise that has wound
+// up, 'completed') can't be paid here, and must not stop everyone else's return: their exact share goes to the Commons, as
+// account deletion moved the rest of their balance there (state-engine.ts purgeMemberSelf, moveToCommons), in the same
+// transaction as the other backers' Beans, out of the escrow through moveToCommons (the escrow floor), the row stamped with
+// the project and a memo that names nobody. The escrow still ends at 0. Nobody is told of it: the leader's notice counts the
+// backers who were paid. Still left for the operator: a backer with no member's row, a live visitor's row, or a key a re-key
+// invalidated whose rows did not move to its successor (one whose rows moved is paid under the new key, as anyone is).
+//
 // HOW. As the stranded return does: transfer() from the escrow to each backer (the escrow floor, fee-exempt, the backer's
 // demurrage settled before the credit), all of a project's payments inside ONE conservingTransaction, each row stamped with
 // the project, its raised figure set to 0: all of it went back. The leader's cancel (db.ts deleteCrowdfundProject) sends the
@@ -46,7 +55,7 @@ import { getNodeRole } from '../config/node-role.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { keepNotice } from './kept-notices.js';
 import {
-    attributeProjectEscrow, owedFromProjectEscrow, type StrandedPledgeLedger, type StrandedPledgeReturn, type StrandedProjectEscrow,
+    attributeProjectEscrow, isClosedAccount, owedFromProjectEscrow, type StrandedPledgeLedger, type StrandedPledgeReturn, type StrandedProjectEscrow,
 } from './stranded-pledges.js';
 
 // The notices are kept in English, as every kept notice is, each sentence marked for the catalogs.
@@ -54,6 +63,8 @@ const { t: tr, tn: trn } = wordsFor('en');
 
 /** What the return needs of the node besides the ledger: a member's live notice and the push (state-engine.ts passes its own). */
 export interface UnfundedPledgeHooks extends StrandedPledgeLedger {
+    /** state-engine.ts moveToCommons: a closed account's share, out of the escrow into the Commons pot, recorded. */
+    moveToCommons: (from: string, amount: number, memo: string) => { id: string } | null;
     broadcast: (event: any, recipients?: string[]) => unknown;
     dispatchPushNotification: (
         targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>,
@@ -115,7 +126,7 @@ export function findUnfundedProjectsDue(now: number = Date.now()): UnfundedProje
                 ...extra,
             };
         }
-        return { ...attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance)), ...extra };
+        return { ...attributeProjectEscrow(p.id, p.title ?? '', p.status ?? '', Number(p.balance), { closedToCommons: true }), ...extra };
     });
 }
 
@@ -127,6 +138,9 @@ function named(title: string): string {
 
 /** Beans as a notice writes them: to the cent, no trailing zeros. */
 const beans = (n: number) => String(Math.round(n * 100) / 100);
+
+/** The memo of a closed account's share moved to the Commons: it names nobody (the row names the project). */
+export const CLOSED_ACCOUNT_PLEDGE_MEMO = 'Pledge from a closed account, returned to the Commons';
 
 interface Notice { to: string; title: string; body: string; id: string | null }
 
@@ -177,9 +191,11 @@ export function returnUnfundedPledges(hooks: UnfundedPledgeHooks, now: number = 
     return { returned, left };
 }
 
-function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: true; returns: StrandedPledgeReturn[] }): boolean {
+function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: true; returns: StrandedPledgeReturn[]; toCommons?: StrandedPledgeReturn[] }): boolean {
     const project = named(s.title);
     const total = s.returns.reduce((sum, o) => sum + o.amount, 0);
+    const toCommons = s.toCommons ?? [];
+    const toCommonsTotal = toCommons.reduce((sum, o) => sum + o.amount, 0);
     const memo = `Pledge returned: "${project}" didn't reach its goal by its end date`;
     const data = { kind: 'pledges_returned', enterprise: s.projectId };
     // The leader hears it once, in their own words, whether or not they backed it too.
@@ -201,6 +217,12 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
                 // The row names the project, as the delete path's refunds and the stranded return's do: its history shows it went back.
                 db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
             }
+            // A closed account's share, to the Commons (A CLOSED ACCOUNT above): one row each, naming the project, not them.
+            for (const o of toCommons) {
+                const txn = hooks.moveToCommons(s.escrow, o.amount, CLOSED_ACCOUNT_PLEDGE_MEMO);
+                if (!txn) throw new Error(`the ledger refused to move ${o.amount} of a closed account's pledge to the Commons`);
+                db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
+            }
             // An ACTIVE project's raised figure is what its escrow holds (pledgeToProject adds each pledge to both), and the escrow
             // has just paid all of it out: 0. Not the figure less `total`: SQLite adds the pledges up in the order they came and
             // this adds them up backer by backer, so for amounts not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7) the difference was
@@ -209,7 +231,9 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
             // Kept with the money: a crash after the commit still leaves every one of them to read.
             told = [
                 ...backers.map((to) => ({ to, title: backerTitle, body: backerBody, id: keepNotice(to, backerTitle, backerBody, data) })),
-                ...(s.leader ? [{ to: s.leader, title: leaderTitle, body: leaderBody, id: keepNotice(s.leader, leaderTitle, leaderBody, data) }] : []),
+                // Only when a backer was paid: the notice counts them. A project all of whose backers closed their accounts
+                // tells nobody (its page still says its Beans went back).
+                ...(s.leader && s.returns.length > 0 ? [{ to: s.leader, title: leaderTitle, body: leaderBody, id: keepNotice(s.leader, leaderTitle, leaderBody, data) }] : []),
             ];
         });
     } catch (e: any) {
@@ -218,7 +242,8 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
     }
     logged.delete(s.projectId);
     console.log(`[Pledges] Returned the pledges held for project ${s.projectId}, which didn't reach its goal by its end date (${s.deadline}): `
-        + `${s.returns.length} backer(s), ${beans(total)} Beans.`);
+        + `${s.returns.length} backer(s), ${beans(total)} Beans`
+        + (toCommons.length > 0 ? `; ${toCommons.length} closed account(s)' ${beans(toCommonsTotal)} Beans to the Commons.` : '.'));
     tell(hooks, told, data);
     try {
         hooks.broadcast({ type: 'project_updated', project: getCrowdfundProject(s.projectId) });
@@ -301,8 +326,9 @@ export function noticeEndDateMoved(
         // takes a date back to 36 hours ago), told every backer again at each request, and each copy kept pushed one of
         // their other notices out (kept-notices.ts KEPT_NOTICES.perMember). Review of #2525.
         const since = new Date(now - END_DATE_TOLD_EVERY_MS).toISOString();
+        // Not a closed account (its share goes to the Commons when the pledges go back).
         const backers = [...new Set(owed.returns.map((o) => o.backer))]
-            .filter((pk) => pk !== actor && !toldOfEndDateSince(pk, projectId, endDate, since));
+            .filter((pk) => pk !== actor && !isClosedAccount(pk) && !toldOfEndDateSince(pk, projectId, endDate, since));
         const told = backers.map((to) => ({ to, title, body, id: keepNotice(to, title, body, data, now) }));
         tell(hooks, told, data);
         return told.length;

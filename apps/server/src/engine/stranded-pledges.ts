@@ -19,7 +19,9 @@
 // naming the project and the reason, for the operator: a history that does not add up to what the escrow holds, a Bean
 // in it after that zero point that is not a member's pledge to this project, a payment out of it to anyone who did not
 // pledge after that point, or a backer who can't be paid here (pruned, re-keyed away, a visitor's row, or a wound-up
-// enterprise). A project's return is all or nothing: every backer is paid, or none is.
+// enterprise). A project's return is all or nothing: every backer is paid, or none is. (The return of an unfunded
+// project's pledges a week after its end date asks attributeProjectEscrow for `closedToCommons`, and sends a closed
+// account's share to the Commons instead of stopping: see there. This boot step keeps stopping.)
 //
 // HOW. Each backer is paid through `transfer()` from the escrow (the ledger's own primitive: the escrow floor, fee-exempt,
 // the demurrage window on the backer settled before the credit), all of one project's payments inside ONE
@@ -60,7 +62,15 @@ interface StrandedBase {
 }
 
 export type StrandedProjectEscrow =
-    | (StrandedBase & { ok: true; returns: StrandedPledgeReturn[] })
+    | (StrandedBase & {
+        ok: true;
+        returns: StrandedPledgeReturn[];
+        /**
+         * The shares of backers whose account is closed (isClosedAccount), for the Commons: only when asked for
+         * (`closedToCommons`), else such a backer stops the project. Empty or absent otherwise.
+         */
+        toCommons?: StrandedPledgeReturn[];
+    })
     | (StrandedBase & { ok: false; reason: string });
 
 interface EscrowRow {
@@ -93,22 +103,50 @@ export function findStrandedProjectEscrows(): StrandedProjectEscrow[] {
 }
 
 /**
- * Who is owed what from a project's escrow holding `held`, and that each of them can be paid here; or why not. Reads only.
+ * Whether `pubkey`'s account here is closed for good: its row says 'pruned' (its owner deleted it, purgeMemberSelf, or the
+ * community removed it, adminPruneUser; a visitor's row too) or 'completed' (an enterprise that has wound up). Its balance
+ * went to the Commons when it closed (state-engine.ts moveToCommons), and nothing can be paid into it again. Not a key a
+ * re-key left behind (its ledger rows move to the new key, which is paid), nor a live visitor's row, nor a key with no row:
+ * those are not closed accounts.
  */
-export function attributeProjectEscrow(projectId: string, title: string, status: string, held: number): StrandedProjectEscrow {
+export function isClosedAccount(pubkey: string): boolean {
+    const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(pubkey) as { status: string | null } | undefined;
+    return row?.status === 'pruned' || row?.status === 'completed';
+}
+
+/**
+ * Who is owed what from a project's escrow holding `held`, and that each of them can be paid here; or why not. Reads only.
+ *
+ * `closedToCommons` (the return of an unfunded project's pledges a week after its end date; Marty, board, 27 Oct 2026: "To
+ * the Commons"): a backer whose account is closed (isClosedAccount) does not stop the project; their exact share is listed
+ * in `toCommons`, for the Commons, as account deletion moves a closed account's balance there. Any other backer who can't
+ * be paid here (no member's row, a live visitor's row, a key a re-key invalidated whose rows did not move) still stops it.
+ */
+export function attributeProjectEscrow(
+    projectId: string, title: string, status: string, held: number, opts: { closedToCommons?: boolean } = {},
+): StrandedProjectEscrow {
     const owed = owedFromProjectEscrow(projectId, title, status, held);
     if (!owed.ok) return owed;
+    const returns: StrandedPledgeReturn[] = [];
+    const toCommons: StrandedPledgeReturn[] = [];
     for (const o of owed.returns) {
+        if (opts.closedToCommons && isClosedAccount(o.backer)) {
+            toCommons.push(o);
+            continue;
+        }
         const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(o.backer) as { status: string | null } | undefined;
         if (!isNodeMember(db, o.backer) || member?.status === 'completed') {
             const { projectId: id, title: name, status: state, escrow, held: holds } = owed;
             return {
                 projectId: id, title: name, status: state, escrow, held: holds, ok: false,
-                reason: `backer ${o.backer} can't be paid here (no member's row, pruned, re-keyed away, or a wound-up enterprise)`,
+                reason: opts.closedToCommons
+                    ? `backer ${o.backer} can't be paid here (no member's row, a visitor's row, or re-keyed away)`
+                    : `backer ${o.backer} can't be paid here (no member's row, pruned, re-keyed away, or a wound-up enterprise)`,
             };
         }
+        returns.push(o);
     }
-    return owed;
+    return { ...owed, returns, toCommons };
 }
 
 /**

@@ -1102,6 +1102,8 @@ function armMainServerTimers(): void {
 const unfundedPledgeHooks = {
     transfer: (...args: Parameters<typeof transfer>) => transfer(...args),
     conservingTransaction: <T>(fn: () => T): T => conservingTransaction(fn),
+    // A closed account's share of a project's pledges, out of its escrow into the Commons pot (the escrow floor applies).
+    moveToCommons: (from: string, amount: number, memo: string) => moveToCommons(from, amount, memo),
     broadcast: (event: any, recipients?: string[]) => broadcast(event, recipients),
     dispatchPushNotification: (...args: Parameters<typeof dispatchPushNotification>) => dispatchPushNotification(...args),
 };

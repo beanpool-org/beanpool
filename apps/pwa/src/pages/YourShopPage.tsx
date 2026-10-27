@@ -7,6 +7,7 @@ import { BANNER_PICTURE, t, tn, type ShopCategory } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { DefaultBanner } from '../components/DefaultBanner';
+import { resolveAvatarUrl } from '../lib/avatar';
 import { useOwnAvatar } from '../lib/useOwnAvatar';
 import {
     ShopAddOffersDialog, ShopCategoryDialog, ShopCloseDialog, ShopPauseDialog, ShopTextDialog,
@@ -60,6 +61,7 @@ export function YourShopPage({
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<({ where: Where } & ShopSheetRefusal) | null>(null);
     const [closed, setClosed] = useState<{ ended: number | null } | null>(null);
+    const [bannerFailed, setBannerFailed] = useState<string | null>(null);
 
     const cropper = usePictureCrop();
     const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -184,6 +186,7 @@ export function YourShopPage({
 
     const notSet = t('Not written yet');
     const categoryWords = shop?.category ? shopCategoryLabel(shop.category) : null;
+    const bannerSrc = resolveAvatarUrl(shop?.photoUrl);
     const shown = (listings ?? []).filter((l) => LIVE.has(l.status));
 
     return (
@@ -347,12 +350,13 @@ export function YourShopPage({
                                     data-testid="shop-banner-preview"
                                     className="w-full aspect-[3/1] max-w-[720px] rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 mb-2"
                                 >
-                                    {shop.photoUrl ? (
+                                    {bannerSrc && bannerSrc !== bannerFailed ? (
                                         <img
-                                            src={shop.photoUrl}
+                                            src={bannerSrc}
                                             alt=""
                                             data-testid="shop-banner-image"
                                             className="w-full h-full object-cover"
+                                            onError={() => setBannerFailed(bannerSrc)}
                                         />
                                     ) : (
                                         <DefaultBanner

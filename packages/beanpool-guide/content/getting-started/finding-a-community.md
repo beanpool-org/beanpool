@@ -26,6 +26,12 @@ Not in the global community yet? Tap the bean at the top left and, under **Your 
 
 A community that hasn't published its address is listed, but it can't be asked from here yet.
 
+## Not answering lately
+
+Each community's server tells the BeanPool directory about itself every few hours. When a community's server hasn't done that for more than a day and a half, the community says **Not answering lately** under its name: in the app, in the web app and on the map at beanpool.org. Its server may just be off for a while. It is still listed, and you can still ask to join: your request reaches it when it answers.
+
+A community whose server stays silent for a week is no longer listed, and comes back when its server is in touch again. A community can also take itself off the list at any time. The list shows only communities that give you somewhere to go: a web address, or a way to contact them.
+
 ## Asking to join
 
 - Tap **Ask to join** on a community.

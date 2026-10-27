@@ -137,22 +137,24 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
         if (typeof support !== 'boolean') { ctx.status = 400; ctx.body = { error: 'support (true or false) is required' }; return; }
         try {
             getGroupDecision(ctx.params.id, ctx.params.decisionId, actor);
-        } catch (err) {
-            if (err instanceof ScopedNotFoundError) return notFound(ctx);
-            throw err;
-        }
-        const result = castDecisionVote(ctx.params.decisionId, actor, support, 1, typeof signature === 'string' ? signature : undefined, 'group');
-        if (!result.success) {
-            if (result.code === FEATURE_OFF) {
-                ctx.status = 404;
-                ctx.body = { error: result.error, code: result.code, feature: 'decisions' };
+            const result = castDecisionVote(ctx.params.decisionId, actor, support, 1, typeof signature === 'string' ? signature : undefined, 'group');
+            if (!result.success) {
+                if (result.code === FEATURE_OFF) {
+                    ctx.status = 404;
+                    ctx.body = { error: result.error, code: result.code, feature: 'decisions' };
+                    return;
+                }
+                ctx.status = 400;
+                ctx.body = { error: result.error };
                 return;
             }
+            ctx.body = { success: true };
+        } catch (err: any) {
+            if (err instanceof ScopedNotFoundError) return notFound(ctx);
+            if (respondProfileRefusal(ctx, err)) return;
             ctx.status = 400;
-            ctx.body = { error: result.error };
-            return;
+            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
         }
-        ctx.body = { success: true };
     });
 
     return router;

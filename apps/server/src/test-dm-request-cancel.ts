@@ -46,11 +46,11 @@ let BASE = '';
 
 // ── Expo stubbed ─────────────────────────────────────────────────────────────────────────────────
 const realFetch = globalThis.fetch;
-const pushes: { to: string; title: string; body: string; data: any; badge?: number }[] = [];
-(globalThis as any).fetch = async (url: any, init: any) => {
-    if (String(url).includes('exp.host')) {
-        pushes.push(...JSON.parse(init.body));
-        return { ok: true, status: 200, json: async () => ({}) } as any;
+const pushes: { to: string; title: string; body: string; data: unknown; badge?: number }[] = [];
+(globalThis as unknown as { fetch: typeof fetch }).fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).includes('exp.host') && init?.body) {
+        pushes.push(...JSON.parse(init.body as string));
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
     }
     return realFetch(url, init);
 };
@@ -63,7 +63,7 @@ function newId(name: string): Id {
 const tokenOf = (id: Id) => `ExponentPushToken[${id.name}]`;
 const pushesTo = (id: Id) => pushes.filter(p => p.to === tokenOf(id));
 
-let owner: Id;
+const owner: Id = newId('Owner');
 function member(name: string): Id {
     const id = newId(name);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor)
@@ -118,7 +118,6 @@ initStateEngine();
 await initTls();
 initAdminPassword();
 const p2p = await startP2P(0, 0);
-owner = newId('Owner');
 seedGenesisMember(owner.pk, 'owner');
 
 const port = await startHttpsServer(0);
@@ -132,7 +131,11 @@ const bobSock = await socket(bob);
 const aliceSock = await socket(alice);
 
 // ── 1. Alice opens a conversation with Bob and sends a request line ──────────────────────────────
-const openRes = await call('POST', alice, '/api/messages/conversation', { recipientPubkey: bob.pk });
+const openRes = await call('POST', alice, '/api/messages/conversation', {
+    type: 'dm',
+    participants: [alice.pk, bob.pk],
+    createdBy: alice.pk,
+});
 assert(openRes.status === 200, `Alice opens chat with Bob: ${openRes.status}`);
 const convId = openRes.body.conversation.id;
 

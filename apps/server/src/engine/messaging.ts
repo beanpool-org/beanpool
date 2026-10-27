@@ -655,8 +655,10 @@ export function sendMessage(
     })();
     if (photo && attBytes > 0) recordStoredPhotoBytes(authorPubkey, attBytes);
 
-    // Only the conversation's participants — the people GET /api/messages/:id lets read it.
-    cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) }, participants.map(p => p.public_key));
+    // Only the conversation's participants — the people GET /api/messages/:id lets read it. The line of a request its
+    // recipient ignored, which it leaves ignored (engine/dm-requests.ts), only its author: the other put it away.
+    const hearers = through?.kind === 'request' && through.ignored ? [authorPubkey] : participants.map(p => p.public_key);
+    cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) }, hearers);
 
     // Node-readable threads never push per message; a DM does, unless the recipient muted it (decision 12).
     // After the answer, never inside it: the push's work (the recipient's preferences, tokens and badge count over all
@@ -671,8 +673,9 @@ export function sendMessage(
                 // A push names people in words, never a slice of their key.
                 const senderName = senderMember?.callsign || 'A member';
                 // A message request's line says so, at most once an hour per person (engine/dm-requests.ts). One folded into
-                // the hour's single push does the push's work all the same and drops it, as a withheld line does above.
-                const send = through?.kind === 'request' && !requestPushDue(through.to, pushConvId)
+                // the hour's single push does the push's work all the same and drops it, as a withheld line does above, and so
+                // does one in a request its recipient ignored, which the line leaves ignored.
+                const send = through?.kind === 'request' && (through.ignored || !requestPushDue(through.to, pushConvId))
                     ? cb.rehearsePushNotification
                     : cb.dispatchPushNotification;
                 send?.(

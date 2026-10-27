@@ -98,7 +98,8 @@
  * moves them (engine/key-move.ts).
  */
 import { word, wordsFor } from '@beanpool/core';
-import { db, deletePlainRows, afterTransactionCommit } from '../db/db.js';
+import { db, deletePlainRows, afterTransactionCommit, writeTombstone } from '../db/db.js';
+import { deleteStoredObjects } from '../storage/image-columns.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { nodeRoleOf } from './node-roles.js';
@@ -330,7 +331,8 @@ export function dropRequestOf(conversationId: string): void {
 /** What a line does to a request: nothing, it is the request's line, or it is refused (in these words, 403). */
 export type LineThroughRequest =
     | { kind: 'direct' }
-    | { kind: 'request'; to: string }
+    /** `ignored`: one the person ignored, which the line leaves ignored: its push is done and dropped, and only its author hears it. */
+    | { kind: 'request'; to: string; ignored?: boolean }
     | { kind: 'refused'; message: string };
 const DIRECT: LineThroughRequest = { kind: 'direct' };
 
@@ -346,8 +348,13 @@ function openerLinesSince(row: RequestRow): number {
     const stored = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at')
         .get(args) as { n: number }).n;
     if (stored > 0 || !hasBlocked(row.to_pubkey, row.from_pubkey)) return stored;
-    return (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at')
-        .get(args) as { n: number }).n;
+    return keptLinesSince(row);
+}
+
+/** The opener's lines since the request was made that were kept for them alone, during a block then or still. */
+function keptLinesSince(row: RequestRow): number {
+    return (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE conversation_id = ? AND author_pubkey = ? AND timestamp >= ?')
+        .get(row.conversation_id, row.from_pubkey, row.requested_at) as { n: number }).n;
 }
 
 /** The refusal of the opener's line or reaction while their request waits for `to`. */
@@ -407,6 +414,15 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
         return requestLine;
     }
     if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
+    // One the person ignored whose line its opener withdrew since (Cancel request, decideRequest), with nothing of theirs
+    // kept during a block either, stays ignored for the rest of its 30 days: the line moves only the request's time, as one
+    // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as a
+    // folded one's is (PR #2540 review 4393642102). Cancelling and writing again never undoes an Ignore. One ignored before
+    // a block lifted since has the line kept during it, and is a new request with this one, as above.
+    if (row.state === 'ignored' && keptLinesSince(row) === 0) {
+        if (!standbyWritesNothing()) db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
+        return { kind: 'request', to: row.to_pubkey, ignored: true };
+    }
     // The request's line: the request is made by it, so its 30 days run from it, not from the open (PR #2392 review
     // 4354580417). Stored after this, so it is a line since the request was made (OPENER_WROTE). A standby stamps nothing.
     // One the person had ignored, or that had lapsed, when a line kept during their block moved its time is a new request
@@ -632,10 +648,7 @@ export function decideRequest(conversationId: string, actor: string, decision: '
             throw new RequestDecisionError(409, 'request_not_pending', word('Only a pending message request can be cancelled.'));
         }
         assertPlainTablesWritable();
-        db.transaction(() => {
-            db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(row.conversation_id);
-            db.prepare('DELETE FROM withheld_lines WHERE conversation_id = ?').run(row.conversation_id);
-        })();
+        withdrawOpenerLines(row);
         const isReal = !!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(row.conversation_id);
         const openerView = viewOf(row, actor, now);
         const recipientHears = isReal && !hasBlocked(row.to_pubkey, actor) && row.state !== 'ignored';
@@ -673,6 +686,34 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: viewOf({ ...row, state: 'ignored' }, actor, now) }, [actor]);
     }
     return viewOf(rowOf(row.conversation_id)!, actor, now);
+}
+
+/**
+ * A cancel's withdrawal: the opener's lines since the request was made, the ones openerLinesSince counts, stored and kept
+ * for them alone. Never the other person's: one they wrote after accepting it while the opener blocks them is kept for them,
+ * and stays theirs (PR #2540 review 4393642111). Each stored line leaves its tombstone, which is how a delta carries a
+ * delete to a standby, and a photo's row goes with its line, its object once the rows are gone; so do the edits and
+ * reactions kept for the opener alone on them (withheld_overlays; review 4393642119).
+ */
+function withdrawOpenerLines(row: RequestRow): void {
+    const args = { c: row.conversation_id, a: row.from_pubkey, at: row.requested_at };
+    const stored = (db.prepare('SELECT id FROM messages WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at').all(args) as { id: string }[])
+        .map(r => r.id);
+    const kept = db.prepare('SELECT id, storage_key FROM withheld_lines WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at')
+        .all(args) as { id: string; storage_key: string | null }[];
+    if (stored.length === 0 && kept.length === 0) return;
+    const ids = JSON.stringify(stored);
+    db.transaction(() => {
+        const keys = (db.prepare('SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT value FROM json_each(?))')
+            .all(ids) as { storage_key: string }[]).map(r => r.storage_key);
+        for (const k of kept) if (k.storage_key) keys.push(k.storage_key);
+        db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT value FROM json_each(?))').run(ids);
+        db.prepare('DELETE FROM messages WHERE id IN (SELECT value FROM json_each(?))').run(ids);
+        for (const id of stored) writeTombstone('messages', id);
+        db.prepare('DELETE FROM withheld_lines WHERE id IN (SELECT value FROM json_each(?))').run(JSON.stringify(kept.map(k => k.id)));
+        db.prepare('DELETE FROM withheld_overlays WHERE message_id IN (SELECT value FROM json_each(?))').run(JSON.stringify([...stored, ...kept.map(k => k.id)]));
+        if (keys.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, keys));
+    })();
 }
 
 /** Ignore all: every request waiting for `actor` (the ones their list shows), at once. The openers are never told. */

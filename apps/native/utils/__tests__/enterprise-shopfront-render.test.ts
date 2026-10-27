@@ -237,7 +237,7 @@ for (const dark of [false, true]) {
             const banner = byId('shopfront-banner');
             const defaultBanner = banner?.querySelector('[data-testid="default-banner"]');
             expect(defaultBanner).not.toBeNull();
-            expect(styleOf(defaultBanner).backgroundColor).toBe(colors().tile.tech.tint);
+            expect(styleOf(defaultBanner!).backgroundColor).toBe(colors().tile.tech.tint);
             const monogramCopies = defaultBanner?.querySelectorAll('[data-testid="default-banner-monogram-copy"]');
             expect(monogramCopies?.length).toBe(10);
             expect(styleOf(banner).aspectRatio).toBe(3); // 3:1, the shape its keeper chose the strip in (choose-the-part)

@@ -7,6 +7,7 @@ import { BANNER_PICTURE, t, tn, type ShopCategory } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { DefaultBanner } from '../components/DefaultBanner';
+import { useOwnAvatar } from '../lib/useOwnAvatar';
 import {
     ShopAddOffersDialog, ShopCategoryDialog, ShopCloseDialog, ShopPauseDialog, ShopTextDialog,
     type ShopSheetRefusal, type ShopTextField,
@@ -49,6 +50,7 @@ export function YourShopPage({
     onOpenDeals,
 }: YourShopPageProps) {
     const me = identity?.publicKey ?? '';
+    const ownAvatar = useOwnAvatar(identity?.publicKey ?? null);
     const [read, setRead] = useState<MyShopRead | null>(null);
     const [listings, setListings] = useState<ShopListing[] | null | undefined>(undefined);
     const [editing, setEditing] = useState<ShopTextField | null>(null);
@@ -354,7 +356,7 @@ export function YourShopPage({
                                     ) : (
                                         <DefaultBanner
                                             category={shop.category}
-                                            logoUrl={identity?.avatar}
+                                            logoUrl={ownAvatar}
                                             pubkey={identity?.publicKey}
                                         />
                                     )}

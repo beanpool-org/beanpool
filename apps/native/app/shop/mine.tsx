@@ -17,7 +17,7 @@
  *
  * Not here: "Give the shop its own account" (slice S7, after the node's step S6), and an enterprise's shopfront.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -35,6 +35,7 @@ import {
     shopTitle, type MyShop, type MyShopChanges, type MyShopRead, type ShopListing,
 } from '../../utils/shop';
 import { pickBannerPhoto } from '../../utils/banner-photo';
+import { getMemberProfile } from '../../utils/db';
 import { usePictureCrop } from '../../components/PictureCrop';
 import { Image } from 'expo-image';
 import { DefaultBanner } from '../../components/DefaultBanner';
@@ -68,6 +69,15 @@ export default function YourShopScreen() {
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
     const me = identity?.publicKey ?? '';
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getMemberProfile(identity.publicKey)
+                .then(p => setAvatarUrl(p?.avatar_url || null))
+                .catch(() => {});
+        }
+    }, [identity?.publicKey]);
     const s = homeStyles(colors);
     const [read, setRead] = useState<MyShopRead | null>(null);
     /** Its Offers: undefined while read, null when they couldn't be. */
@@ -265,7 +275,7 @@ export default function YourShopScreen() {
                                     {shop.photoUrl ? (
                                         <Image source={{ uri: bannerUri ?? shop.photoUrl }} style={styles.bannerImage} contentFit="cover" testID="shop-banner-image" />
                                     ) : (
-                                        <DefaultBanner category={shop.category} logoUrl={identity?.avatar} pubkey={identity?.publicKey} />
+                                        <DefaultBanner category={shop.category} logoUrl={avatarUrl} pubkey={identity?.publicKey} />
                                     )}
                                 </View>
                                 {!shop.photoUrl ? (

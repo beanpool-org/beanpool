@@ -227,7 +227,7 @@ for (const dark of [false, true]) {
             // No banner photo: the default banner from its logo (S3), echo with 1 round copy on category's tint (photo avatar).
             const defaultBanner = byId('shopfront-banner')?.querySelector('[data-testid="default-banner"]');
             expect(defaultBanner).not.toBeNull();
-            expect(styleOf(defaultBanner).backgroundColor).toBe(colors().tile.tools.tint);
+            expect(styleOf(defaultBanner!).backgroundColor).toBe(colors().tile.tools.tint);
             expect(defaultBanner?.querySelectorAll('[data-testid="default-banner-echo-copy"]').length).toBe(1);
             expect(styleOf(byId('shopfront-banner')).backgroundColor).toBe(colors().brand.tint);
             expect(byId('shopfront-logo')?.querySelector('[data-avatar="64"]')).toBeTruthy();

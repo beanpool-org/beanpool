@@ -122,11 +122,11 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         try {
             setStatus(await fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode), tfa));
             setStatusError(null);
-        } catch (e) {
+        } catch (e: unknown) {
             setStatus(null);
             setStatusError(e instanceof TakeoverRequestError && e.status === 404
                 ? 'This node is too old to lock its take-over keys. Update it to the latest release.'
-                : `Could not read who can unlock this community: ${e instanceof Error ? e.message : 'the node did not answer'}.`);
+                : `Could not read who can unlock this community: ${e instanceof Error && e.message ? e.message : 'the node did not answer'}.`);
         }
         try {
             setBackupLock((await fetchBackupLock(activeNode.url, nodeCredential(activeNode), tfa)) ?? 'unknown');
@@ -181,11 +181,11 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
             fetchBackupLock(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
                 .then((l) => setBackupLock(l ?? 'unknown'))
                 .catch(() => setBackupLock('unknown'));
-        } catch (e) {
+        } catch (e: unknown) {
             if (nodeIdRef.current !== forNode) return;
             setConfirmReplace(false);
             if (proof.checkError(e, (c) => make(replace, c), code)) return;
-            setActionError(e instanceof Error ? e.message : 'The recovery code could not be made.');
+            setActionError(e instanceof Error && e.message ? e.message : 'The recovery code could not be made.');
             void load();
         } finally {
             setMaking(false);
@@ -202,8 +202,8 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
             if (r.typo) setCheckResult({ ok: false, text: r.message || 'That is not a recovery code: check what you typed.' });
             else if (r.matches) setCheckResult({ ok: true, text: `Yes — this is recovery code #${r.codeId}. Your paper is right.` });
             else setCheckResult({ ok: false, text: `No — this does not match recovery code #${r.codeId ?? status?.recoveryCode?.codeId ?? '?'}.` });
-        } catch (err) {
-            setCheckResult({ ok: false, text: err instanceof Error ? err.message : 'The node did not answer.' });
+        } catch (err: unknown) {
+            setCheckResult({ ok: false, text: err instanceof Error && err.message ? err.message : 'The node did not answer.' });
         } finally {
             setChecking(false);
         }

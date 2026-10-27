@@ -3162,13 +3162,17 @@ export function updateCrowdfundProject(
     // Its name and purpose, never its About (members.bio): that is its keepers' (PUT /api/treasury/:t/profile).
     const rowName = projectRowName(db, title, id);
 
+    // The projects row by its id alone: its creator_pubkey is whoever made the project, and the check above already
+    // holds the change to the lead today (getCrowdfundProject's creator_pubkey). Matched on the maker, a new lead's change
+    // (the leader closed their account, a keeper took over) was answered 200 and missed the row the return, the end-date
+    // notice and the pledge gate read (review of #2525).
     db.transaction(() => {
         if (deadline_at !== undefined) {
             db.prepare(`
                 UPDATE projects
                 SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
-                WHERE id = ? AND creator_pubkey = ?
-            `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, now, id, creator_pubkey);
+                WHERE id = ?
+            `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, now, id);
 
             db.prepare(`
                 UPDATE members
@@ -3179,8 +3183,8 @@ export function updateCrowdfundProject(
             db.prepare(`
                 UPDATE projects
                 SET title = ?, description = ?, photos = ?, goal_amount = ?, updated_at = ?
-                WHERE id = ? AND creator_pubkey = ?
-            `).run(title, description, JSON.stringify(photos), goal_amount, now, id, creator_pubkey);
+                WHERE id = ?
+            `).run(title, description, JSON.stringify(photos), goal_amount, now, id);
 
             db.prepare(`
                 UPDATE members

@@ -719,6 +719,37 @@ async function main(): Promise<void> {
     assert(seedsPageLater?.currentAmount === 0 && seedsPageLater?.pledgesReturnedAt === null,
         `and the page says 0 raised and nothing went back for that date, so neither app says Beans are due back (${seedsPageLater?.currentAmount}, ${seedsPageLater?.pledgesReturnedAt})`);
 
+    // ── 14. A new lead moves the end date: it reaches the row the return reads ─────────────────────────────────────────
+    // Review of #2525: the update wrote the projects row only where its creator_pubkey matched, and that column holds the
+    // project's maker. Once the lead had changed (the leader closed their account, a keeper took over) the new lead's move
+    // was answered 200, but the return, the end-date notice and the pledge gate still read the old date.
+    console.log('── 14. A new lead moves the end date ──');
+    const uma = makeMember('Uma');
+    const kim = makeMember('Kim');
+    const gate = await makeProject(uma, 'Garden Gate', 60, new Date(Date.now() + 10 * DAY).toISOString());
+    await pledge(ann, gate, 4, 'treasury');
+    // The lead passes to Kim, as a handover leaves it: the operators row moves, the projects row still names its maker.
+    db.prepare("UPDATE treasury_operators SET member_pubkey = ? WHERE treasury_pubkey = ? AND role = 'lead'").run(kim.pubKeyHex, gate);
+    assert(getCrowdfundProject(gate)?.creator_pubkey === kim.pubKeyHex, `Kim is the project's lead now (${getCrowdfundProject(gate)?.creator_pubkey})`);
+    // Its end date 3 days gone, in the week: Kim moves it 10 days on.
+    setDeadline(gate, new Date(Date.now() - 3 * DAY).toISOString());
+    const gateNewDeadline = new Date(Date.now() + 10 * DAY).toISOString();
+    const gateMoved = await signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: gate, creatorPubkey: kim.pubKeyHex, title: 'Garden Gate', description: 'Garden Gate, for the valley', goalAmount: 60, deadlineAt: gateNewDeadline }, kim);
+    assert(gateMoved.status === 200, `Kim, the lead, moves the end date (${gateMoved.status} ${gateMoved.body?.error ?? ''})`);
+    const gateRow = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(gate) as { deadline_at: string };
+    assert(gateRow?.deadline_at === gateNewDeadline, `the projects row the return reads has the new end date (${gateRow?.deadline_at})`);
+    const gateKept = keptFor(ann.pubKeyHex).filter((n) => kindOf(n) === 'project_end_date_moved' && n.body.includes('"Garden Gate"'));
+    assert(gateKept.length === 1, `Ann, a backer, is told the end date moved (${gateKept.length})`);
+    await pledge(ben, gate, 2, 'crowdfund');
+    assert(near(escrowOf(gate), 6), `and the project takes pledges again (escrow ${escrowOf(gate)})`);
+    // Uma, its maker but no longer its lead, can't change it.
+    const umaMove = await signedFetch('POST', '/api/crowdfund/projects/update',
+        { id: gate, creatorPubkey: uma.pubKeyHex, title: 'Garden Gate', description: 'Garden Gate, for the valley', goalAmount: 60, deadlineAt: new Date(Date.now() + 30 * DAY).toISOString() }, uma);
+    const gateAfter = db.prepare('SELECT deadline_at FROM projects WHERE id = ?').get(gate) as { deadline_at: string };
+    assert(umaMove.status !== 200 && gateAfter?.deadline_at === gateNewDeadline,
+        `Uma, who made it but no longer leads it, can't move it (${umaMove.status}; end date ${gateAfter?.deadline_at})`);
+
     // ── 10. A node killed in the middle of a return ───────────────────────────────────────────────────────────────────
     console.log('── 10. Killed in the middle of a return, then booted again ──');
     const dir = path.join(process.env.BEANPOOL_DATA_DIR!, 'killed-node');

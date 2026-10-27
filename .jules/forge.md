@@ -173,3 +173,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/agent/preview` in `apps/server/src/agent/grants-route.ts` returned HTTP `200 OK` with `{ tool: name, ok: false, error }` when `out.ok` was false.
 **Learning:** Returning HTTP 200 OK when tool execution fails misleads clients into treating failed preview execution requests as HTTP success responses.
 **Pattern:** Ensure route handlers that invoke domain/tool operations inspect `out.ok` and explicitly set `ctx.status = 400` on failure.
+
+### 2026-10-27 — "preview returning 200 on ok: false tool execution" — CLOSED BY DIRECTOR, INTENDED BEHAVIOR.
+`POST /api/local/admin/agent/preview` returns `200 OK` with `{ tool: name, ok: false, error }` when a tool's `run` function returns `out.ok = false`.
+This matches the `/mcp` API design: an assistant receiving a domain refusal or error response still gets an HTTP 200 with the formatted JSON tool payload (`ok: false`), and an actual server execution failure is already caught and answered with HTTP 500. Do not re-file.

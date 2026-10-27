@@ -435,7 +435,8 @@ export const AGENT_TOOLS: AgentTool[] = [
         outputSchema: OBJ({ open: NUM, returned: NUM, knocks: ARR, settingsPath: STR }),
         run: (_g, args, boundary) => {
             const withText = wantsText(args);
-            const { knocks, total } = listOpenKnocks(clampLimit(args.limit), 0);
+            // Requests to join switched off: the routes answer 404 and no screen lists them, so neither does this (#2523 review).
+            const { knocks, total } = getProfileSwitches().knocks ? listOpenKnocks(clampLimit(args.limit), 0) : { knocks: [], total: 0 };
             const result: Record<string, unknown> = {
                 open: total,
                 returned: knocks.length,

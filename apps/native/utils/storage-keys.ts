@@ -9,6 +9,18 @@ export const NOTIFICATION_PERMISSION_STORE_KEY = 'beanpool_notification_permissi
 /** The communities this key asked to join (utils/knock.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
 export const KNOCKS_STORE_KEY = 'beanpool_knocks';
 
+/**
+ * What the background sync last saw of the community's open requests to join, for the account on it (`{ community,
+ * publicKey, count }`; utils/sync-notices.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const ADMIN_KNOCKS_COUNT_STORE_KEY = 'beanpool_admin_knocks_last_count';
+
+/**
+ * The account's role on its community as `GET /api/node-admin/me` last said it, and when (`{ community, publicKey, role,
+ * at }`; utils/sync-notices.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const KNOCK_ROLE_STORE_KEY = 'beanpool_knock_role_checked';
+
 /** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
 export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
 

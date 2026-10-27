@@ -10,7 +10,7 @@ import { registerAccountForPush, retryDueRegistrations } from '../utils/push-reg
 import { checkWhileOpen, followTap, verifiedNotice, type IncomingNotice } from '../utils/push-notice-check';
 import { openNoticeIn } from '../utils/push-notice-switch';
 import { countNotice, watchNoticeCounts } from '../utils/notice-counts';
-import { postNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
+import { postAllNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
 import { notificationChannels } from '../utils/notification-channels';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 import { toolReminderRoute } from '../tools/reminders';
@@ -285,7 +285,9 @@ export async function postNoticesAfterSync(): Promise<number> {
     try {
         if (AppState.currentState === 'active') return 0;
         if ((await Notifications.getPermissionsAsync()).status !== 'granted') return 0;
-        return await postNoticesFromSync({ storage: AsyncStorage, account: await loadIdentity(), post: postLocalNotice });
+        // The unseen notices, the answers to this phone's requests to join, and new requests for an owner or admin with
+        // no push here, all at once under one deadline (utils/sync-notices.ts), inside the task's ~30 seconds.
+        return await postAllNoticesFromSync({ storage: AsyncStorage, account: await loadIdentity(), post: postLocalNotice });
     } catch (e) {
         console.warn('[Notices] The sync\'s notices were not posted', e);
         return 0;

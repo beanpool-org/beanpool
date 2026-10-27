@@ -107,6 +107,7 @@ import { directoryHeldBack, directoryPromiseStatus } from '../services/directory
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
+import { actionableKnockCount } from '../engine/knocks.js';
 import { likeContains, withoutTradeParty } from '@beanpool/engine';
 
 // The most post ids one POST /api/local/admin/posts/bulk-delete takes. The manager (PeopleSafetySection.tsx) and the
@@ -1153,6 +1154,9 @@ router.post('/api/local/admin/data', async (ctx) => {
             WHERE status = 'pending'
               AND (julianday('now') - julianday(created_at)) >= 7
         `).pluck().get() as number) || 0,
+        // Requests to join waiting for an answer (front doors S1): a count, no names. Home's Action Required says where
+        // they are answered (People → Invites in the app); the manager has no list of them.
+        knockCount: actionableKnockCount(),
         // Each member's posts and messages; of trades, only the community's totals (queue item 29, Marty 4 Oct).
         memberStats: getMemberStats(),
         tradeTotals: getTradeTotals(),

@@ -1957,6 +1957,46 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN promise TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))`).run(); } catch { }
+    // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
+    try {
+        const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;
+        if (jrSql && !jrSql.includes("'cancelled'")) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS join_requests_migration;
+                    CREATE TABLE join_requests_migration (
+                        id TEXT PRIMARY KEY,
+                        pubkey TEXT NOT NULL,
+                        callsign TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        avatar TEXT,
+                        from_node TEXT,
+                        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
+                        created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        decided_by TEXT,
+                        invite_code TEXT UNIQUE,
+                        decided_at TEXT,
+                        ip_hash TEXT,
+                        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        CHECK ((status = 'pending') = (decided_at IS NULL)),
+                        CHECK ((status = 'approved') = (invite_code IS NOT NULL))
+                    );
+                    INSERT INTO join_requests_migration SELECT * FROM join_requests;
+                    DROP TABLE join_requests;
+                    ALTER TABLE join_requests_migration RENAME TO join_requests;
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_join_requests_one_open ON join_requests(pubkey) WHERE status = 'pending';
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_pubkey ON join_requests(pubkey, created_at);
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_status ON join_requests(status, created_at);
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_ip ON join_requests(ip_hash, created_at) WHERE ip_hash IS NOT NULL;
+                    CREATE INDEX IF NOT EXISTS idx_join_requests_updated_at ON join_requests(updated_at);
+                `);
+            })();
+            console.log("[DB] ✅ Migrated join_requests CHECK constraint to allow 'cancelled'");
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate join_requests table for cancelled status:', err?.message || err);
+    }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).

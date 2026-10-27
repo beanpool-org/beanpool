@@ -9897,6 +9897,7 @@ export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTok
 
 export function getMemberPreference(publicKey: string, prefKey: string): string {
     const row = db.prepare(`SELECT pref_value FROM member_preferences WHERE public_key = ? AND pref_key = ?`).get(publicKey, prefKey) as any;
+    if (prefKey === 'notify_knocks') return row?.pref_value ?? 'false';
     return row?.pref_value ?? 'true'; // Default to 'true' (enabled)
 }
 
@@ -9906,7 +9907,7 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
  * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
-export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', 'eventReminderOffsets'];
 
 /**
  * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
@@ -9924,6 +9925,8 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     word("Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.");
 export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = word('Only a member of this community shows as a connection in common.');
+/** Requests to join go to members who may answer (front doors S1, design §5.2): a visitor's row can't, so it isn't told. */
+export const KNOCK_PUSH_MEMBERS_ONLY_MESSAGE = word('Only a member of this community is told when someone asks to join.');
 /** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
     `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
@@ -9949,6 +9952,7 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         notify_marketplace: 'true',
         notify_escrow: 'true',
         notify_recovery: 'true',
+        notify_knocks: 'false',
     };
     for (const r of rows) {
         // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.
@@ -9995,6 +9999,8 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     const namesHome = Object.keys(body).some(isHomeKey);
     if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
     if (Object.prototype.hasOwnProperty.call(body, SHOW_AS_CONNECTION_PREF) && !getActingMember(publicKey)) throw new Error(SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE);
+    // Turning it off is anyone's (the web app saves every switch at once); turning it on, a member's alone.
+    if (body.notify_knocks === true && !getActingMember(publicKey)) throw new Error(KNOCK_PUSH_MEMBERS_ONLY_MESSAGE);
     const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
@@ -10080,7 +10086,7 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 // ===================== GENERIC PUSH DISPATCHER =====================
 
 /** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
-export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
+export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery' | 'knocks';
 
 /**
  * Notices to a node's owners about the server itself (services/alerts.ts, services/standby-health.ts): sent whatever the
@@ -10143,6 +10149,7 @@ export function dispatchPushNotification(
         marketplace: 'marketplace',
         escrow: 'escrow',
         recovery: 'recovery',
+        knocks: 'knocks',
     };
 
     // Map categoryId to notification sound
@@ -10151,6 +10158,7 @@ export function dispatchPushNotification(
         marketplace: 'default',
         escrow: 'default',
         recovery: 'default',
+        knocks: 'default',
     };
 
     // The kind's words in each phone's language (its registration's `lang`; English without one), once per language a send.
@@ -10171,7 +10179,11 @@ export function dispatchPushNotification(
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
-        const pref = OWNER_SERVER_KINDS.has(kind) ? null : getMemberPreference(pk, prefKey);
+        // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
+        // for it. The role is looked up for that kind only.
+        const alwaysTold = OWNER_SERVER_KINDS.has(kind)
+            || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
+        const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;

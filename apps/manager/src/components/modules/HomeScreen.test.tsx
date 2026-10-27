@@ -118,6 +118,20 @@ describe('HomeScreen Component', () => {
         expect(screen.getByText(/Storage 82%/i)).toBeInTheDocument();
     });
 
+    it('lists requests to join in Action Required, saying where they are answered (the phone app), and opens Invites (front doors S1)', () => {
+        const onNavigate = vi.fn();
+        const { rerender } = render(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knockCount: 2 }} />);
+        const row = screen.getByRole('button', { name: /2 people asked to join/ });
+        expect(row).toHaveTextContent('2 people asked to join: answer them in the BeanPool app, under People → Invites');
+        fireEvent.click(row);
+        expect(onNavigate).toHaveBeenCalledWith('people', 'invites', undefined);
+
+        rerender(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knockCount: 1 }} />);
+        expect(screen.getByRole('button', { name: /^1 person asked to join/ })).toBeInTheDocument();
+        rerender(<HomeScreen {...defaultProps} onNavigate={onNavigate} nodeData={{ members: [], reportCount: 0, escrowDisputesCount: 0, knockCount: 0 }} />);
+        expect(screen.queryByRole('button', { name: /asked to join/ })).toBeNull();
+    });
+
     it('resets shutdownDismissed state when active node communityName or diagnostic status changes', async () => {
         const mockDiag1: any = {
             shutdownStatus: {

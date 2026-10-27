@@ -173,6 +173,8 @@ const node = vi.hoisted(() => ({
     consent: null as Record<string, unknown> | null,
     sessions: [] as Array<{ collectionId: string; startedAt: string }>,
     role: null as null | 'owner' | 'admin' | 'moderator',
+    /** Whether `GET /api/node-admin/me` answered at all (false: offline, a timeout, a 5xx). */
+    heard: true,
     ownerChecked: null as number | null,
     blocked: [] as string[],
     lastPlan: false,
@@ -206,11 +208,16 @@ vi.mock('../node-post', async (importOriginal) => {
     };
 });
 vi.mock('../membership-probe', () => ({ fetchMembership: async () => ({ ok: true, json: async () => ({ isMember: true }) }) }));
-vi.mock('../node-admin', () => ({
-    fetchMyNodeRole: async () => ({ role: node.role, communityName: 'Mullum Commons' }),
-    rememberNodeRole: () => {},
-    canManageNode: (role: string | null) => role === 'owner' || role === 'admin' || role === 'moderator',
-}));
+vi.mock('../node-admin', () => {
+    // As the real pair: askNodeRole is null when the node gave no answer, and fetchMyNodeRole makes that "no role".
+    const askNodeRole = async () => (node.heard ? { role: node.role, communityName: 'Mullum Commons' } : null);
+    return {
+        askNodeRole,
+        fetchMyNodeRole: async () => (await askNodeRole()) ?? { role: null, communityName: null },
+        rememberNodeRole: () => {},
+        canManageNode: (role: string | null) => role === 'owner' || role === 'admin' || role === 'moderator',
+    };
+});
 vi.mock('../owner-words', async (importOriginal) => ({
     ...(await importOriginal<Record<string, unknown>>()),
     fetchOwnerWordsStatus: async () => (node.role === 'owner' ? { owner: true, wordsCheckedAt: node.ownerChecked } : { owner: false, wordsCheckedAt: null }),
@@ -300,6 +307,7 @@ beforeEach(() => {
     node.consent = null;
     node.sessions = [];
     node.role = null;
+    node.heard = true;
     node.ownerChecked = null;
     node.blocked = [];
     node.lastPlan = false;
@@ -577,6 +585,33 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         }
         expect(byLabel('Edit profile')).not.toBeNull();
         expect(host.textContent).toMatch(/BEANPOOL OS \S+ \(Build \d+\)/);
+    });
+});
+
+describe('Notification Preferences: "Requests to join" only where it changes something (front doors S1)', () => {
+    const knockSwitch = () => byLabel('Requests to join notifications');
+    const openPreferences = async () => {
+        await renderIn('en');
+        await click(row('Notification Preferences', 'en'), 'Notification Preferences');
+        expect(host.textContent).toContain('1 day before');
+    };
+
+    it('a member, on a community where any member can invite: shown', async () => {
+        await openPreferences();
+        expect(knockSwitch()).not.toBeNull();
+    });
+
+    it('an owner, who is always told: not shown', async () => {
+        node.role = 'owner';
+        await openPreferences();
+        expect(knockSwitch()).toBeNull();
+    });
+
+    it('the community gave no answer about the role (offline, a timeout, a 5xx): not shown, since it may be an owner\'s', async () => {
+        node.role = 'owner';
+        node.heard = false;
+        await openPreferences();
+        expect(knockSwitch()).toBeNull();
     });
 });
 

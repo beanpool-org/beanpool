@@ -36,6 +36,10 @@ Your request goes straight to that community, not through the global community, 
 
 While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 
+If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours.
+
+When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
+
 If nobody answers within 30 days, the card says **No answer came. You can ask again.**
 
 If a community can't take your request, the card shows its own words, for example that too many requests came from your network today, or that it isn't taking requests to join right now.
@@ -58,7 +62,9 @@ You stay a member of the global community, and can switch between them: see "Mor
 
 ## If you are a member of a local community
 
-People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
+People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them.
+
+Tapping the line or the notification opens them in the phone app. Or tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
 
 - **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.

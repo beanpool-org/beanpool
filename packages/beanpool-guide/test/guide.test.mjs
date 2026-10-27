@@ -492,6 +492,17 @@ test("the names list's pages say the design's sentences, and none of the old pro
     }
 });
 
+test("no page promises a community's answers line before the directory carries it (front doors S1; S13 adds it)", () => {
+    // The live directory drops the `answers` field and no screen shows it yet (director, 27 Oct): no guide page may say
+    // a card shows how promptly a community answers, nor the operator rule behind it, until S13 ships them together.
+    const { guide, manual } = sourceGuides();
+    const words = (g) => g.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n').replace(/\*\*/g, '');
+    const said = [...guide.guides, ...manual.guides]
+        .filter((g) => /answers within a week|answered requests lately|how promptly/i.test(words(g)))
+        .map((g) => g.slug);
+    assert.deepEqual(said, []);
+});
+
 test('the manual names no removed button, page or route (owner-delete: no wipe, no snapshot delete, no legacy page, restore from the shell)', () => {
     const gone = ['Wipe & Reset', 'Factory reset', 'Delete snapshot', 'Legacy Settings', '/settings-legacy', '/api/local/admin/restore'];
     const pages = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'));

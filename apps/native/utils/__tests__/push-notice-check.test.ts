@@ -569,6 +569,27 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         expect((await tap(push({ ...LOCAL_NOTICE_DATA }))).kind).toBe('warn');
         expect(takeNoticeWarning()).toBe(true);
     });
+
+    it('the sync\'s own notices of a request to join open where it is answered: Invites for a new one, Find a community for an answer (front doors S1)', async () => {
+        const own = (data: Record<string, unknown>): IncomingNotice => ({ identifier: nodeCrypto.randomUUID(), remote: false, title: 'x', body: 'y', data });
+        expect(await tap(own({ ...LOCAL_NOTICE_DATA, type: 'admin-knocks' }))).toEqual({ kind: 'route', route: '/(tabs)/people?view=invites' });
+        expect(await tap(own({ ...LOCAL_NOTICE_DATA, type: 'knock-answer', url: MULLUM }))).toEqual({ kind: 'route', route: '/find-community' });
+        expect(navigated).toEqual(['/(tabs)/people?view=invites', '/find-community']);
+        // Any other type, one off an object's prototype included, opens the app where it was.
+        for (const type of ['nowhere', 'constructor', '__proto__', 'toString', '/find-community', 42, null]) {
+            expect(await tap(own({ ...LOCAL_NOTICE_DATA, type }))).toEqual({ kind: 'nothing', reason: 'local' });
+        }
+        expect(navigated).toHaveLength(2);
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('a push dressed as one of them is still a push: the warning, and no route', async () => {
+        for (const type of ['admin-knocks', 'knock-answer']) {
+            expect((await tap(push({ ...LOCAL_NOTICE_DATA, type }))).kind).toBe('warn');
+            expect(takeNoticeWarning()).toBe(true);
+        }
+        expect(navigated).toEqual([]);
+    });
 });
 
 // ── 4. No string from a push reaches a route ───────────────────────────────────────────────────────────────────
@@ -594,6 +615,12 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('account.recovery-started', { screen: 'settings', kind: 'recovery_started' })).toBe('/(tabs)/settings');
         expect(noticeRoute('owner.standby', null)).toBe('/(tabs)/settings');
         expect(noticeRoute('community.notice', { screen: 'nowhere' })).toBe('/(tabs)');
+    });
+
+    it('a request to join lands on People → Invites, where it is listed with Invite and Not now, whatever the answer says (front doors S1)', () => {
+        for (const d of [null, { screen: 'people' }, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) {
+            expect(noticeRoute('community.knock', d)).toBe('/(tabs)/people?view=invites');
+        }
     });
 
     it("a keepers' vote opening lands in the console of the enterprise it names (its Decisions block, S7), its key in the node's own shape; anything else on Home (opus-1767 N4)", () => {

@@ -38,6 +38,14 @@ import { KNOCKS_STORE_KEY } from './storage-keys';
 
 export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
+export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
+/** How long after "Cancel my request" the same key may ask that community again (the node's KNOCK_RULES.cancelBlockHours). */
+export const KNOCK_CANCEL_BLOCK_HOURS = 24;
+/**
+ * How long after a knock its community could still say yes: the node keeps it open 30 days (KNOCK_RULES.openDays) and
+ * an invite made for it lasts 30 days, so no status read can say `approved` after that; and a day for the clocks.
+ */
+export const KNOCK_ANSWERABLE_DAYS = 61;
 /** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending. */
 export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
@@ -58,6 +66,7 @@ export const KNOCK_MESSAGES = {
     unreadable: word("This community sent an answer the app couldn't read. Please try again later."),
     waiting: word('You asked to join. No answer yet: communities usually answer within a few days.'),
     none: word('No answer came. You can ask again.'),
+    cancelled: word('You cancelled your request. You can ask again after 24 hours.'),
     invited: word('A member invited you. Join now to become a member.'),
 } as const;
 
@@ -191,6 +200,29 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
 }
 
 /**
+ * "Cancel my request" on `communityUrl`. Done, the phone remembers when (`cancelledAt`), so the card says so and offers no
+ * "Ask to join" until the node would take one ({@link KNOCK_CANCEL_BLOCK_HOURS}). A community that has nothing open from
+ * this key (it lapsed, or a member said yes meanwhile) answers 404 in its own words, shown as they are.
+ */
+export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity, now: Date = new Date()): Promise<{ ok: true } | { ok: false; message: string }> {
+    const origin = communityOrigin(communityUrl);
+    if (!origin) return { ok: false, message: KNOCK_MESSAGES.noAddress };
+    let res: Response;
+    try {
+        res = await withTimeout(signedPost(origin, KNOCK_CANCEL_PATH, {}, identity));
+    } catch {
+        return { ok: false, message: KNOCK_MESSAGES.unreachable };
+    }
+    if (!res.ok) {
+        const { message } = await readError(res);
+        return { ok: false, message: message ?? KNOCK_MESSAGES.unreadable };
+    }
+    const knocks = await readStore(identity.publicKey);
+    await writeStore(identity.publicKey, knocks.map(k => (k.url === origin ? { ...k, cancelledAt: now.toISOString() } : k)));
+    return { ok: true };
+}
+
+/**
  * The status as the member will meet it. `approved` needs an invite to be one. Anything else a node might say
  * that isn't `none` (a `declined`, say) is shown as waiting: a no is never a message.
  */
@@ -214,6 +246,8 @@ export interface RememberedKnock {
     /** The directory's key for it, when known. */
     key: string | null;
     sentAt: string;
+    /** When this key cancelled it ("Cancel my request"): no longer waiting, and not to be asked again yet. */
+    cancelledAt?: string;
 }
 
 interface Store { pubkey: string; knocks: RememberedKnock[] }
@@ -238,10 +272,39 @@ async function writeStore(pubkey: string, knocks: RememberedKnock[]): Promise<vo
     }
 }
 
-/** The communities this key has asked, newest first. */
-export async function rememberedKnocks(pubkey: string): Promise<RememberedKnock[]> {
+/** Whether a remembered knock could still be answered at `now` (sent within {@link KNOCK_ANSWERABLE_DAYS}). */
+export function knockStillAnswerable(k: { sentAt?: unknown }, now: number = Date.now()): boolean {
+    const at = typeof k.sentAt === 'string' ? Date.parse(k.sentAt) : NaN;
+    return Number.isFinite(at) && now - at < KNOCK_ANSWERABLE_DAYS * 86_400_000;
+}
+
+/**
+ * The communities this key has asked and not cancelled, newest first. One too old to be answered
+ * ({@link knockStillAnswerable}) is forgotten here, so nothing reads its status again.
+ */
+export async function rememberedKnocks(pubkey: string, now: number = Date.now()): Promise<RememberedKnock[]> {
+    const stored = await readStore(pubkey);
+    const answerable = stored.filter(k => knockStillAnswerable(k, now));
+    if (answerable.length !== stored.length) await writeStore(pubkey, answerable);
+    return answerable.filter(k => !k.cancelledAt).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+}
+
+/**
+ * The communities this key cancelled a request to within {@link KNOCK_CANCEL_BLOCK_HOURS}: url → when. Older ones are
+ * forgotten here, so the card offers "Ask to join" again.
+ */
+export async function cancelledKnocks(pubkey: string, now: number = Date.now()): Promise<Record<string, number>> {
     const knocks = await readStore(pubkey);
-    return [...knocks].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+    const recent: Record<string, number> = {};
+    const kept = knocks.filter(k => {
+        if (!k.cancelledAt) return true;
+        const at = Date.parse(k.cancelledAt);
+        if (!Number.isFinite(at) || now - at >= KNOCK_CANCEL_BLOCK_HOURS * 3_600_000) return false;
+        recent[k.url] = at;
+        return true;
+    });
+    if (kept.length !== knocks.length) await writeStore(pubkey, kept);
+    return recent;
 }
 
 export async function rememberKnock(pubkey: string, community: { url: string | null; name: string | null; key?: string | null }, now: Date = new Date()): Promise<void> {
@@ -266,6 +329,8 @@ export type KnockCardState =
     | { kind: 'ask'; note: string | null }
     | { kind: 'checking' }
     | { kind: 'waiting'; note: string }
+    /** Cancelled within the day: said so, with nothing to press until it may be asked again. */
+    | { kind: 'cancelled'; note: string }
     | { kind: 'invited'; invite: string; note: string }
     | { kind: 'member'; note: string }
     /** The community refused, in its own words. `canAsk`: whether asking again could work. */

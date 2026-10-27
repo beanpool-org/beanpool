@@ -14,6 +14,7 @@ import { decisionsOn, openPauseVotes } from '../decisions-engine.js';
 import { standbyIncidentOpen } from '../services/standby-health.js';
 import { serverAlertCount } from '../services/alerts.js';
 import { suggestionCountFor } from '../agent/suggestions.js';
+import { actionableKnockCount } from './knocks.js';
 
 /**
  * Where an item is handled in /settings. The manager maps each id to a tab (and sub-tab); the id is
@@ -23,7 +24,7 @@ export const ADMIN_SETTINGS_SECTIONS = ['home', 'moderation', 'disputes', 'decis
 export type AdminSettingsSection = typeof ADMIN_SETTINGS_SECTIONS[number];
 
 export type AdminQueueKind = 'reports' | 'disputes' | 'suspensions' | 'removals' | 'unclean_shutdown' | 'standby' | 'server_alert'
-    | 'agent_suggestions';
+    | 'agent_suggestions' | 'knocks';
 
 export interface AdminQueueItem {
     kind: AdminQueueKind;
@@ -120,6 +121,12 @@ export function getAdminQueue(opts: { forModerator?: boolean; forOwner?: boolean
             count: opts.forMember ? suggestionCountFor(opts.forMember) : 0,
             label: 'Suggestions from your AI assistant to approve',
             section: 'moderation',
+        },
+        {
+            kind: 'knocks',
+            count: actionableKnockCount(),
+            label: 'Requests to join',
+            section: 'home',
         },
     ];
     const items = raw

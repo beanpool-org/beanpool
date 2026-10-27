@@ -1230,6 +1230,7 @@ async function main(): Promise<void> {
             'POST /api/invite/generate': { publicKey: pruned.pk },
             // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
             'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
+            'POST /api/join/knock/cancel': {},
             // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
             'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
                 signedFor: 'localhost', signature: 'AAAA' },
@@ -1328,7 +1329,7 @@ async function main(): Promise<void> {
             'GET /api/home',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
-            'POST /api/join', 'POST /api/join/knock',
+            'POST /api/join', 'POST /api/join/knock', 'POST /api/join/knock/cancel',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',

@@ -6,7 +6,7 @@
 import { t } from '@beanpool/core';
 
 export interface NotificationChannel {
-    id: 'default' | 'escrow' | 'chat' | 'marketplace' | 'recovery';
+    id: 'default' | 'escrow' | 'chat' | 'marketplace' | 'recovery' | 'knocks';
     name: string;
     description?: string;
     importance: 'MAX' | 'HIGH' | 'DEFAULT';
@@ -35,6 +35,12 @@ export function notificationChannels(): NotificationChannel[] {
         {
             id: 'recovery', name: t('Account Recovery Alerts'), description: t('Urgent alerts when someone tries to recover your account'),
             importance: 'MAX', vibrationPattern: [0, 500, 500, 500], lightColor: '#ef4444',
+        },
+        // Requests to join (front doors S1): the server's `community.knock` push names this channel. Android shows nothing
+        // for a channel the phone never made, so it is made here with the others; a member silences it on its own.
+        {
+            id: 'knocks', name: t('Requests to join'), description: t('When someone asks to join your community'),
+            importance: 'DEFAULT', vibrationPattern: [0, 250, 250, 250], lightColor: '#8b5cf6',
         },
     ];
 }

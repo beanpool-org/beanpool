@@ -75,10 +75,11 @@ import {
 import { type YourChatLastMessage } from '../engine/your-groups.js';
 import { featuresFor } from '../config/features-for.js';
 import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
-import { type Door } from '../config/door.js';
+import { getDoor, type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
+import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -176,7 +177,7 @@ export const HOME_INTERESTS_PREF_KEY = 'interests';
 
 // ── what the answer holds ────────────────────────────────────────────────────────────────────────────────────────────
 
-export type NeedsKind = 'admin' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
+export type NeedsKind = 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
 /** Where a tap lands: the same targets the header's "needs you" icons use (apps/native utils/needs-you.ts). */
 export type NeedsTarget =
     | { to: 'admin'; section: AdminSettingsSection }
@@ -195,7 +196,9 @@ export type NeedsTarget =
      * where each shows as invited. Only to an app that says it opens them (lands=invite).
      */
     | { to: 'invite'; id: string }
-    | { to: 'invites' };
+    | { to: 'invites' }
+    /** People → Invites, where requests to join are listed and answered (front doors S1): only to an app that says it opens it (lands=people). */
+    | { to: 'people' };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -366,8 +369,8 @@ export interface HomeReader {
 }
 
 /** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise' | 'group' | 'invite';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -504,6 +507,7 @@ function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>, d
         case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
         case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
         case 'agent_suggestions': return `${plural(n, 'suggestion', 'suggestions')} from your AI assistant to approve`;
+        case 'knocks': return n === 1 ? '1 person asked to join' : `${n} people asked to join`;
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
 }
@@ -543,13 +547,31 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     // visitor's, holding a node role. A moderator's queue is the reports alone.
     const role = nodeRoleOf(me);
     const row = getMember(me);
-    if (role && row?.status === 'active' && !isVisitorKey(me)) {
+    const active = row?.status === 'active' && !isVisitorKey(me);
+    // Requests to join (front doors S1) are answered in People → Invites, which the manager has no list for: their own
+    // line, landing there, for an app that opens it (lands=people). An older app keeps them in the admin line, as before.
+    const knocksApart = c.lands.has('people');
+    if (role && active) {
         const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner', forMember: me });
-        const work = queue.items.filter(i => i.count > 0);
-        if (queue.total > 0 && work.length) {
+        const work = queue.items.filter(i => i.count > 0 && !(knocksApart && i.kind === 'knocks'));
+        const total = work.reduce((n, i) => n + i.count, 0);
+        if (total > 0) {
             const parts = work.map(i => adminItemInWords(i, c.switches.decisions));
             const joined = parts.length <= 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-            items.push({ kind: 'admin', count: queue.total, accent: true, label: joined.charAt(0).toUpperCase() + joined.slice(1), target: { to: 'admin', section: work[0].section } });
+            items.push({ kind: 'admin', count: total, accent: true, label: joined.charAt(0).toUpperCase() + joined.slice(1), target: { to: 'admin', section: work[0].section } });
+        }
+    }
+    if (active && knocksApart) {
+        // Owners and admins: every open request, on any door. Any other member, where any member may answer (a members
+        // door): those that have waited 3 days, so a community whose admins are away still lets people in (design §5.7).
+        const waiting = role === 'owner' || role === 'admin' ? actionableKnockCount()
+            : getDoor() === 'members' ? actionableKnocksWaitingDays(3) : 0;
+        if (waiting > 0) {
+            items.push({
+                kind: 'knock', count: waiting, accent: true,
+                label: waiting === 1 ? '1 person asked to join' : `${waiting} people asked to join`,
+                target: { to: 'people' },
+            });
         }
     }
 

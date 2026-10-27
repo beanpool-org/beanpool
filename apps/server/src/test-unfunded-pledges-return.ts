@@ -528,7 +528,9 @@ async function main(): Promise<void> {
     assert(near(sumBalances(), benchBefore.sum) && tick(watched.hooks).left === 0, 'a second tick leaves nothing for the operator either');
     const benchPage = await readPage(dan, bench);
     const benchReturnedAt = benchRows.map((r) => r.timestamp).sort().at(-1);
-    assert(benchPage?.pledgesReturnedAt === benchReturnedAt && benchPage?.currentAmount === 0,
+    // 0 raised as both apps read it, in cents (pledgeReturnLine, the funding box): 65.01 less 40, 25 and 0.01 leaves the
+    // escrow a float residue far below a cent (5e-15, measured), under the dust the return and the hygiene sweep ignore.
+    assert(benchPage?.pledgesReturnedAt === benchReturnedAt && Math.round(Number(benchPage?.currentAmount) * 100) === 0,
         `the page, which both apps read, says the Beans went back (${benchPage?.pledgesReturnedAt} = ${benchReturnedAt}), and 0 raised (${benchPage?.currentAmount})`);
     for (const who of [dan, eve]) {
         const kept = keptFor(who.pubKeyHex).filter((n) => kindOf(n) === 'pledges_returned' && n.body.includes('"Park Bench"'));

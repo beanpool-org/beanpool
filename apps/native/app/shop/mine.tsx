@@ -39,7 +39,7 @@ import { getMemberProfile } from '../../utils/db';
 import { usePictureCrop } from '../../components/PictureCrop';
 import { Image } from 'expo-image';
 import { DefaultBanner } from '../../components/DefaultBanner';
-import { useNodeUri } from '../../components/shopfront/Shopfront';
+import { useNodeUri } from '../../utils/node-uri';
 
 type Where = 'screen' | 'text' | 'category' | 'banner' | 'pause' | 'close' | 'add';
 

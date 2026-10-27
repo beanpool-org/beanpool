@@ -22,7 +22,8 @@ import { CategoryTile } from '../CategoryTile';
 import { DefaultBanner } from '../DefaultBanner';
 import { categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
 import { shopCategoryLabel } from '../../utils/shop';
-import { anchorUrl } from '../../utils/node-post';
+import { useNodeUri } from '../../utils/node-uri';
+export { useNodeUri } from '../../utils/node-uri';
 import {
     keeperBadgeLine, listingPriceLine, listingStateLine, type ShopfrontKeeper, type ShopfrontListing, type ShopSection,
 } from '../../utils/shopfront';
@@ -107,23 +108,6 @@ function MoreLess({ open, onPress, testID }: { open: boolean; onPress: () => voi
     );
 }
 
-/**
- * A picture's address to draw: one of the node's own (`/api/…`, as a shop's banner comes) on the phone's community, once
- * its address is known; any other as it is (a photo just picked is a data URL). Null for none, and while it is read.
- */
-export function useNodeUri(url: string | null | undefined): string | null {
-    const relative = typeof url === 'string' && url.startsWith('/');
-    const [anchor, setAnchor] = useState<string | null>(null);
-    useEffect(() => {
-        if (!relative) return;
-        let live = true;
-        void anchorUrl().then((a) => { if (live) setAnchor(a); }).catch(() => {});
-        return () => { live = false; };
-    }, [relative]);
-    if (!url) return null;
-    if (!relative) return url;
-    return anchor ? `${anchor.replace(/\/+$/, '')}${url}` : null;
-}
 
 /**
  * The top of the shopfront: the banner (the shop's one photo, 3:1 as its keeper chose it, or a quiet block with its category's

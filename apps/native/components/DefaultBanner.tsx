@@ -14,7 +14,7 @@ import { View, StyleSheet, type ViewStyle, type StyleProp, I18nManager } from 'r
 import { Image } from 'expo-image';
 import { normalizeCategory, isBundledAvatar, bundledAvatarForPubkey, type ShopCategory } from '@beanpool/core';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
-import { useNodeUri } from './shopfront/Shopfront';
+import { useNodeUri } from '../utils/node-uri';
 import { useTheme } from '../app/ThemeContext';
 import type { AppColors } from '../constants/colors';
 

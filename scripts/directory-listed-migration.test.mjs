@@ -1,3 +1,4 @@
+/* global Buffer, URL -- a Node script */
 // The directory's two migrations (front doors S13; supabase/migrations/2026102800_directory_listed.sql and
 // 2026102801_directory_purge.sql). No Postgres runs here and no agent may reach the live project, so this reads the SQL
 // and holds it to the rules the readers depend on: the 7-day bound, the address-or-contact rule, the default name →

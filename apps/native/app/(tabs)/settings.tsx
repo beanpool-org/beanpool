@@ -1763,9 +1763,25 @@ export default function SettingsScreen() {
         );
     }
 
-
-
-
+    // Account Protection's ways back (vault rethink VR0, design §4.5), in a build with BeanPool's key vault: the 12 words
+    // first, then the sign-in row, which names the vault before Protect with is tapped. A build without a vault draws
+    // the panel above the words, exactly as before.
+    const waysBack = hasVault();
+    const protectionPanel = (
+        <KeeperProtectionPanel
+            colors={colors}
+            protection={protectionFrom(protectionResult)}
+            communityName={protectionNodeLabel || undefined}
+            hasWords={hasMnemonic(identity)}
+            waysBack={waysBack}
+            onProtectSso={Platform.OS !== 'web' ? (prov) => {
+                if (prov) setSsoEnrolProvider(prov);
+                skipNextFocusResetRef.current = true;
+                setShowSsoSheet(true);
+            } : undefined}
+            onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
+        />
+    );
 
     return (
         // KeyboardAwareScrollView scrolls the focused field (e.g. Edit Profile → Bio) above the keyboard and adds
@@ -2273,31 +2289,26 @@ export default function SettingsScreen() {
                             {protectionNote && (
                                 <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{settingsLineWords(protectionNote)}</Text>
                             )}
-                            <KeeperProtectionPanel
-                                colors={colors}
-                                protection={protectionFrom(protectionResult)}
-                                communityName={protectionNodeLabel || undefined}
-                                hasWords={hasMnemonic(identity)}
-                                onProtectSso={Platform.OS !== 'web' ? (prov) => {
-                                    if (prov) setSsoEnrolProvider(prov);
-                                    skipNextFocusResetRef.current = true;
-                                    setShowSsoSheet(true);
-                                } : undefined}
-                                onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
-                            />
+                            {!waysBack && protectionPanel}
                         </>
                     )}
 
                     <>
                         {/* On every phone. With the words it shows them here; on a phone with no copy (restored with a
-                            sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). */}
-                        <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                            <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }}>
-                                {t("🔑 12 Recovery Words")}
+                            sign-in) it says so in one line and opens "Add your 12 words" (openViewWords). With a key vault
+                            it is the first way back, and the sign-in row follows it (waysBack). */}
+                        <View style={waysBack
+                            ? { marginTop: 12, marginBottom: 16 }
+                            : { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border.default }}>
+                            <Text style={{ color: colors.text.heading, fontSize: 16, fontWeight: 'bold', marginBottom: 8 }} accessibilityRole={waysBack ? 'header' : undefined}>
+                                {waysBack ? t('🔑 Your 12 words') : t("🔑 12 Recovery Words")}
                             </Text>
                             <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>
+                                {waysBack && <><Text>{t('Always work, anywhere.')}</Text>{' '}</>}
                                 {hasMnemonic(identity)
-                                    ? t('Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.')
+                                    ? (waysBack
+                                        ? t('On this phone: keep them private and never share them with anyone.')
+                                        : t('Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'))
                                     : settingsLineWords(NO_WORDS_VIEW_LINE)}
                             </Text>
 
@@ -2368,6 +2379,9 @@ export default function SettingsScreen() {
                                 </View>
                             )}
                         </View>
+
+                        {/* The sign-in row, second, once the key vault has answered (the words above never wait for it). */}
+                        {waysBack && !protectionLoading && protectionPanel}
 
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>

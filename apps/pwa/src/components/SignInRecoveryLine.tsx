@@ -14,6 +14,12 @@ const LINE_WORDS = {
     openers: word("The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't."),
     wordsOnly: word('If you would rather nobody but you could get in, use only your 12 words.'),
     noWords: word("Your 12 words aren't saved in this browser."),
+    /**
+     * Where the copy is (vault rethink VR0): on the server that serves this page, whose list `enrolled` is. The web app has
+     * no key vault client and never asks it, so a copy the phone app put at BeanPool's key vault is not on this list.
+     */
+    keptHere: word("This community's server keeps the copy of your account that your sign-in opens."),
+    noneHere: word("This community's server keeps no copy of your account that a sign-in opens."),
 } as const;
 
 /**
@@ -86,6 +92,10 @@ export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [] }: Prop
                         : hasWords
                             ? t('Your 12 words are the way back to this account. Keep them safe.')
                             : twoSentences(noWordsHere(), waysBackWithoutWords(enrolled))}
+                </div>
+                {/* Where the copy is, connected or not (VR0): said by the server's own list, so never a guess. */}
+                <div data-testid="signin-recovery-where" className="mt-1.5 text-xs font-normal text-nature-600 dark:text-nature-400">
+                    {names ? t(LINE_WORDS.keptHere) : t(LINE_WORDS.noneHere)}
                 </div>
                 {names && (
                     // nature-600: 500 on white is 3.3:1, too faint for a sentence this long (measured by

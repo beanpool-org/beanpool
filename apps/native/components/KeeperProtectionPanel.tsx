@@ -18,6 +18,7 @@ import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
 import { hasVault } from '../utils/vault-config';
 import { t, tn, word } from '@beanpool/core';
 import { welcomeLineWords } from './welcome/welcome-lines';
+import { WhoCanOpen } from './WhoCanOpen';
 
 /**
  * Under a connected sign-in, in a build without a key vault (utils/vault.ts `signInCopiesAt`): who can open the copy
@@ -36,7 +37,8 @@ export const SIGN_IN_COPY_WORDS_ONLY = word('If you would rather nobody but you 
  * custodian, Marty, until the reshare to people in other countries, and the guide says so). The copy is at the vault,
  * not at any community. BeanPool can open it (the vault checks the sign-in itself, so it learns the id that opens the
  * copy: review FABLE-sec-crypto F1); the host can read the running server's memory; a court could order it; anyone
- * holding the sign-in account could get in, unless a phone of the member's stops the day's wait (the covered footnote). The guide says the same at length once the vault is live: the parked pages in issue #1349.
+ * holding the sign-in account could get in, unless a phone of the member's stops the day's wait (the covered footnote). The guide says the same at length: settings/recovery.md "Who can open the copy" (VR0 unparked issue #1349's pages).
+ * Behind "Who can open it ›" under the sign-in row (SIGN_IN_ROW), before a sign-in is linked as well as after.
  */
 export const VAULT_COPY_OPENERS =
     word("BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.");
@@ -50,9 +52,26 @@ export const VAULT_COPY_OPENERS =
 export const COMMUNITY_SSO_GROUP_NOTE =
     word("Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.");
 
-/** Above the sign-in buttons, in a build with a key vault: what a linked sign-in does now that the vault keeps the copy. */
-export const SSO_GROUP_NOTE =
-    word('Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.');
+/**
+ * The sign-in row in a build with a key vault, where the copy is at the vault (vault rethink VR0, design §4.5; Marty,
+ * 27 Oct, picks 10 and 14: he signs these off on the 320 dp shots). It says where the copy goes before **Protect with**
+ * is tapped, at Safety Backup and in Account Protection, and VAULT_COPY_OPENERS is one tap away under it ("Who can open
+ * it ›"). Each sentence its own Text. Apple is named only where it is offered (an iPhone). On a phone with no 12 words
+ * the copy carries none, so the vault's sentence names the key alone. Under a sign-in already connected the covered
+ * footnote says the first and the last (it brings the account back; a day's wait), so only the middle two are drawn.
+ */
+export const SIGN_IN_ROW = {
+    title: word('A sign-in you link'),
+    bringsBack: word('Google or Facebook brings your account back on a new phone.'),
+    bringsBackIos: word('Google, Apple or Facebook brings your account back on a new phone.'),
+    vaultKeeps: word("BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it."),
+    vaultKeepsKey: word("BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key for it."),
+    whoCanOpen: word('The people who look after the vault can open that copy, and so can anyone who gets into your sign-in account.'),
+    wait: word("It takes a day, or less if another phone of yours says it's you."),
+    /** Was SSO_GROUP_NOTE's first sentence; its second ("brings your account back on a new phone") is the row's first. */
+    moreThanOne: word('Connect more than one, in case you lose one.'),
+    whoCanOpenButton: word('Who can open it'),
+} as const;
 
 /** The sentences above, for t() where they are shown. */
 const PANEL_WORDS = {
@@ -60,7 +79,6 @@ const PANEL_WORDS = {
     signInCopyWordsOnly: SIGN_IN_COPY_WORDS_ONLY,
     vaultCopyOpeners: VAULT_COPY_OPENERS,
     communityGroupNote: COMMUNITY_SSO_GROUP_NOTE,
-    groupNote: SSO_GROUP_NOTE,
 } as const;
 
 
@@ -88,9 +106,16 @@ export function KeeperProtectionPanel({
     onProtectSso,
     onDisconnectSso,
     hasWords,
+    waysBack = false,
     colors = lightColors,
 }: {
     protection: Protection;
+    /**
+     * Account Protection in a build with a key vault (vault rethink VR0): the 12 words are the row above this panel
+     * there, so a phone with them that has no sign-in yet isn't told "your 12 words are your primary recovery" a
+     * second time; the panel is the sign-in row alone. Safety Backup leaves it off.
+     */
+    waysBack?: boolean;
     /** The drawn theme's colours. Settings passes them; welcome, which is light throughout, keeps the default. */
     colors?: AppColors;
     /**
@@ -124,15 +149,36 @@ export function KeeperProtectionPanel({
     const community = atVault ? null : formatCommunityName(communityName);
     const coveredHeading = community ? t("🛡️ You're covered on {community}", { community }) : t("🛡️ You're covered");
     const copyOpeners = atVault ? t(PANEL_WORDS.vaultCopyOpeners) : t(PANEL_WORDS.signInCopyOpeners);
+    const covered = protection.state === 'covered';
+    // Account Protection's sign-in row on its own: the words row above it already says what the words are.
+    const rowOnly = waysBack && atVault && !covered && hasWords;
+    const openersLine = (
+        <Text style={styles.copyOpeners}>
+            <Text>{copyOpeners}</Text>
+            {hasWords && <>{' '}<Text>{t(PANEL_WORDS.signInCopyWordsOnly)}</Text></>}
+        </Text>
+    );
 
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
 
         return (
-            <View style={styles.ssoGroup}>
-                <Text style={styles.ssoGroupTitle}>{t('Sign-In Recovery Providers (1-of-N)')}</Text>
+            <View style={[styles.ssoGroup, rowOnly && styles.ssoGroupFirst]}>
+                {atVault ? (
+                    <>
+                        <Text style={styles.ssoGroupTitle} accessibilityRole="header">{t(SIGN_IN_ROW.title)}</Text>
+                        <Text style={styles.signInRowLine}>
+                            {!covered && <><Text>{Platform.OS === 'ios' ? t(SIGN_IN_ROW.bringsBackIos) : t(SIGN_IN_ROW.bringsBack)}</Text>{' '}</>}
+                            <Text>{hasWords ? t(SIGN_IN_ROW.vaultKeeps) : t(SIGN_IN_ROW.vaultKeepsKey)}</Text>
+                            {' '}<Text>{t(SIGN_IN_ROW.whoCanOpen)}</Text>
+                            {!covered && <>{' '}<Text>{t(SIGN_IN_ROW.wait)}</Text></>}
+                        </Text>
+                    </>
+                ) : (
+                    <Text style={styles.ssoGroupTitle}>{t('Sign-In Recovery Providers (1-of-N)')}</Text>
+                )}
                 <Text style={styles.ssoGroupSubtitle}>
-                    <Text>{atVault ? t(PANEL_WORDS.groupNote) : t(PANEL_WORDS.communityGroupNote)}</Text>
+                    <Text>{atVault ? t(SIGN_IN_ROW.moreThanOne) : t(PANEL_WORDS.communityGroupNote)}</Text>
                     {hasWords && <>{' '}<Text>{welcomeLineWords(SSO_WORDS_NOTE)}</Text></>}
                     {(hasWords || !atVault) && (
                         <>
@@ -230,14 +276,12 @@ export function KeeperProtectionPanel({
                         />
                     );
                 })}
-                {/* Every enrolled sign-in, not just the ones this phone lists: Apple connected on an iPhone has no
-                    row on Android, and its copy is on the server all the same. */}
-                {enrolledSso.length > 0 && (
-                    <Text style={styles.copyOpeners}>
-                        <Text>{copyOpeners}</Text>
-                        {hasWords && <>{' '}<Text>{t(PANEL_WORDS.signInCopyWordsOnly)}</Text></>}
-                    </Text>
-                )}
+                {/* With a key vault: one tap away, before a sign-in is linked as well as after (VR0: said where the
+                    copy is made). Without one: every enrolled sign-in, not just the ones this phone lists: Apple
+                    connected on an iPhone has no row on Android, and its copy is on the server all the same. */}
+                {atVault ? (
+                    <WhoCanOpen label={t(SIGN_IN_ROW.whoCanOpenButton)} colors={colors}>{openersLine}</WhoCanOpen>
+                ) : enrolledSso.length > 0 && openersLine}
                 <Text style={styles.actionNote}>{t('This is not a login — your account stays your own key.')}</Text>
             </View>
         );
@@ -273,6 +317,10 @@ export function KeeperProtectionPanel({
                 {renderSsoProviders()}
             </View>
         );
+    }
+
+    if (rowOnly) {
+        return <View style={[styles.panel, styles.wordsOnly]}>{renderSsoProviders()}</View>;
     }
 
     // A phone restored with a sign-in has no words to call primary: one line says so, and what to do.
@@ -332,11 +380,20 @@ const make = (colors: AppColors) => StyleSheet.create({
         color: colors.text.heading,
         marginBottom: 4,
     },
+    // The sign-in row alone in its card (Account Protection, waysBack): no rule above it.
+    ssoGroupFirst: { marginTop: 0, paddingTop: 0, borderTopWidth: 0 },
     ssoGroupSubtitle: {
         fontSize: 12,
         lineHeight: 16,
         color: colors.text.secondary,
         marginBottom: 10,
+    },
+    // Where the copy goes, said before Protect with is tapped (VR0): body size, as it is the row's own sentence.
+    signInRowLine: {
+        fontSize: 13,
+        lineHeight: 18,
+        color: colors.text.body,
+        marginBottom: 6,
     },
     // Wraps: at 320dp and a 1.3x font the name and two buttons do not fit on one line.
     providerConnectedRow: {

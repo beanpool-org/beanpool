@@ -86,11 +86,15 @@ sudo usermod -aG docker $USER
 # Log out and back in, then verify:
 docker --version
 docker compose version
+```
 
+**Recommended: keep your community running when Docker updates.** With Docker live-restore on, Docker can restart, or take a patch update, without stopping your community. The step below needs root or `sudo` and is safe to skip: your community runs without it, and the operator manual's Updates and health page has the steps for doing it later. An AI assistant doing the install always does this step ([Setting up your server with an AI assistant](../../packages/beanpool-guide/operators/setup/install-with-ai.md)).
+
+```bash
 # Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl >/dev/null 2>&1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info >/dev/null 2>&1 </dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }

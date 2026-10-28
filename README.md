@@ -56,18 +56,40 @@ The members' guide explains each of these step by step.
 
 The software is free. A community runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system) or on a small rented server, about US$6 a month. You need Docker installed first; a freshly rented server has none. The published image runs on Intel/AMD and ARM64.
 
-On that machine, paste this one block. It fetches the compose file, turns on Docker live-restore (unless Docker already has it on) so Docker can restart, or take a patch update, without stopping the community, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
+On that machine, paste this one block. It fetches the compose file, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
 
 **Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
 
-**The live-restore step needs root.** As root it runs as it is. As any other user it uses `sudo`, which must not ask for a password in the middle of the paste (the lines after it would be typed into the prompt), so type `sudo -v` and your password first. If the machine has no systemd, or Docker is not running, the step says so, skips live-restore, and the install carries on; the operator manual's Updates and health page has the steps for doing it by hand later. Live-restore covers a restart and a patch update (the last number of Docker's version, for example 27.3.1 to 27.3.2). A new version number in the first two places (27.3 to 27.4) can still stop the community, so update Docker in a quiet hour, as before. If Docker already has live-restore on, for example as a flag in its systemd unit, the step leaves it alone.
-
 ```bash
 git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null && break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim
+```
+
+The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose, and what to do next. First, on the phone that will own the community, install BeanPool from [Google Play](https://play.google.com/store/apps/details?id=org.beanpool.pillar) or the [App Store](https://apps.apple.com/app/id6761870086). Then scan the QR code with your phone's camera, or open BeanPool and tap **Installed BeanPool on a server? Claim it**. The claim makes your BeanPool account on that phone, with no invite and nothing from the BeanPool project: type your name, tap **Claim and become owner**, and write down the 12 words it shows you. A phone that already has an account claims with it. That phone becomes the community's owner.
+
+Phones reach a community on the internet only over https. The choices for the last line:
+
+- **A rented server** with a public IP address and ports 80 and 443 open: `beanpool claim --ip 203.0.113.7`. The server gets its own certificate for that address.
+- **A computer at home**, or no open ports: `beanpool claim --name yourtown`. It asks for `yourtown.beanpool.org`, through a tunnel the server runs itself. This is the only choice that uses a BeanPool service.
+- **Your own domain**, pointed at the server: `beanpool claim --address https://your.domain`.
+
+A plain `http://` address works only on a home network, and `beanpool claim` warns you before it shows a QR code that a phone will refuse.
+
+Then open your address followed by `/settings`. The setup wizard names your community and asks you to add a second owner. Everything the server keeps is in the `data` folder next to `docker-compose.yml`, so back that folder up.
+
+**Recommended: keep your community running when Docker updates.** With Docker live-restore on, Docker can restart, or take a patch update, without stopping your community. The step below needs root or `sudo` and is safe to skip: your community runs without it, and the operator manual's Updates and health page has the steps for doing it later. An AI assistant doing the install always does this step ([Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md)).
+
+```bash
 # Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl >/dev/null 2>&1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info >/dev/null 2>&1 </dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -100,26 +122,7 @@ PY
 systemctl reload docker </dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' </dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
 EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null && break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim
 ```
-
-The last line, `beanpool claim`, shows a one-time claim code and a QR code, with the address you chose, and what to do next. First, on the phone that will own the community, install BeanPool from [Google Play](https://play.google.com/store/apps/details?id=org.beanpool.pillar) or the [App Store](https://apps.apple.com/app/id6761870086). Then scan the QR code with your phone's camera, or open BeanPool and tap **Installed BeanPool on a server? Claim it**. The claim makes your BeanPool account on that phone, with no invite and nothing from the BeanPool project: type your name, tap **Claim and become owner**, and write down the 12 words it shows you. A phone that already has an account claims with it. That phone becomes the community's owner.
-
-Phones reach a community on the internet only over https. The choices for the last line:
-
-- **A rented server** with a public IP address and ports 80 and 443 open: `beanpool claim --ip 203.0.113.7`. The server gets its own certificate for that address.
-- **A computer at home**, or no open ports: `beanpool claim --name yourtown`. It asks for `yourtown.beanpool.org`, through a tunnel the server runs itself. This is the only choice that uses a BeanPool service.
-- **Your own domain**, pointed at the server: `beanpool claim --address https://your.domain`.
-
-A plain `http://` address works only on a home network, and `beanpool claim` warns you before it shows a QR code that a phone will refuse.
-
-Then open your address followed by `/settings`. The setup wizard names your community and asks you to add a second owner. Everything the server keeps is in the `data` folder next to `docker-compose.yml`, so back that folder up.
 
 **To update**, back up `data`, then run `docker compose pull` and `docker compose up -d` in the same folder.
 

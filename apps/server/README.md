@@ -86,6 +86,11 @@ sudo usermod -aG docker $USER
 # Log out and back in, then verify:
 docker --version
 docker compose version
+
+# Enable Docker live-restore so Docker can restart or update without stopping containers:
+python3 -c 'import json, os; p="/etc/docker/daemon.json"; os.makedirs("/etc/docker", exist_ok=True); d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) > 0 else {}; d["live-restore"] = True; open(p, "w").write(json.dumps(d, indent=2) + "\n")'
+systemctl reload docker
+docker info --format '{{.LiveRestoreEnabled}}'
 ```
 
 #### Step 3: Create the Project Directory

@@ -56,12 +56,15 @@ The members' guide explains each of these step by step.
 
 The software is free. A community runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system) or on a small rented server, about US$6 a month. You need Docker installed first; a freshly rented server has none. The published image runs on Intel/AMD and ARM64.
 
-On that machine, paste this one block. It fetches the compose file, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
+On that machine, paste this one block. It fetches the compose file, turns on Docker live-restore so Docker can restart or update without stopping the community, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
 
 **Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
 
 ```bash
 git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
+python3 -c 'import json, os; p="/etc/docker/daemon.json"; os.makedirs("/etc/docker", exist_ok=True); d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) > 0 else {}; d["live-restore"] = True; open(p, "w").write(json.dumps(d, indent=2) + "\n")'
+systemctl reload docker
+docker info --format '{{.LiveRestoreEnabled}}'
 docker network create beanpool-shared
 docker compose pull
 docker compose up -d

@@ -995,7 +995,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} />
+                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} keepsNoCopies={communityInfo?.recoveryCopies === 'none'} />
                                 {/* Where a copy of this account is kept, as far as this browser can ask, and removing this
                                     server's (vault rethink VR1). After a removal the server's list is read again, so the
                                     line above says what it keeps now. */}

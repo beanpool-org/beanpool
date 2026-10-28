@@ -17,7 +17,14 @@ import {
     getConsequenceSentence,
     hoursWording,
     BEANS_PER_HOUR,
+    RECOVERY_COPIES_CHOICES,
+    recoveryCopiesName,
 } from '../../lib/community-shape';
+
+/** The honest words under a rule for where members' copies go, as the row shows them closed. */
+function recoveryCopiesWords(rule: string): string | undefined {
+    return RECOVERY_COPIES_CHOICES.find((c) => c.rule === rule)?.words;
+}
 
 export interface CommunityShapeSectionProps {
     activeNode: NodeProfile;
@@ -945,6 +952,61 @@ export function CommunityShapeSection({
                 </div>
             </div>
 
+            {/* ── WAYS BACK: where members' copies go (vault rethink VR2) ── */}
+            {settings.recoveryCopies !== undefined && (
+                <div className="space-y-4 pt-2 border-t border-nature-800/80">
+                    <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
+                        {t('WAYS BACK')}
+                    </h4>
+                    <div className="space-y-3">
+                        <ShapeRow
+                            id="recoveryCopies"
+                            icon="🗝️"
+                            name={t("Where members' copies go")}
+                            summary={t('When a member links Google, Apple or Facebook, a locked copy of their account is kept, so that sign-in brings it back on a new phone.')}
+                            extraLine={recoveryCopiesWords(settings.recoveryCopies.value)}
+                            displayValue={recoveryCopiesName(settings.recoveryCopies.value)}
+                            lock={settings.recoveryCopies.lock}
+                            isOwner={isOwner && !standby}
+                            isOpen={openSetting === 'recoveryCopies'}
+                            onToggle={() => handleOpenRow('recoveryCopies', settings.recoveryCopies?.value)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                <fieldset className="space-y-2 border-0 p-0 m-0" role="radiogroup" aria-label={t("Where members' copies go")}>
+                                    <legend className="sr-only">{t("Where members' copies go")}</legend>
+                                    {RECOVERY_COPIES_CHOICES.map((choice) => (
+                                        <label key={choice.rule} className="flex items-start gap-2.5 text-xs text-white cursor-pointer select-none">
+                                            <input
+                                                type="radio"
+                                                name="shape-recovery-copies-radio"
+                                                value={choice.rule}
+                                                checked={draftValue === choice.rule}
+                                                onChange={() => setDraftValue(choice.rule)}
+                                                className="mt-0.5 accent-terra-500"
+                                            />
+                                            <div>
+                                                <span className="font-bold">{choice.name}</span>
+                                                <p className="text-[11px] text-nature-400 m-0 mt-0.5">{choice.words}</p>
+                                            </div>
+                                        </label>
+                                    ))}
+                                </fieldset>
+                                <RowControls
+                                    onSave={() => handleSave('recoveryCopies')}
+                                    onCancel={handleCancel}
+                                    consequence={consequenceText}
+                                    note={note}
+                                    onNoteChange={setNote}
+                                    saving={saving}
+                                    error={rowError}
+                                    saveDisabled={draftValue === settings.recoveryCopies.value}
+                                />
+                            </div>
+                        </ShapeRow>
+                    </div>
+                </div>
+            )}
+
             {/* ── CONNECTIONS ── */}
             <div className="space-y-4 pt-2 border-t border-nature-800/80">
                 <h4 className="text-xs font-bold text-nature-400 tracking-wider m-0 uppercase">
@@ -1080,6 +1142,7 @@ export function logSettingName(setting: string): string {
         autoHide: t('Reported posts hidden automatically'),
         autoHideReports: t('Reported posts hidden automatically'),
         autoMute: t('Repeat offenders muted automatically'),
+        recoveryCopies: t("Where members' copies go"),
     };
     return table[setting] ?? setting;
 }
@@ -1089,6 +1152,7 @@ export function logValueDisplay(setting: string, val: string | null): string {
     if (setting === 'join') {
         return joinDisplay(val as JoinState);
     }
+    if (setting === 'recoveryCopies') return recoveryCopiesName(val);
     if (val === 'on' || val === 'true') return t('On');
     if (val === 'off' || val === 'false') return t('Off');
     return val;

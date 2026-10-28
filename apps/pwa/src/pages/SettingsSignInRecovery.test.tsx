@@ -120,6 +120,34 @@ describe('Settings: sign-in recovery', () => {
         expect(screen.queryByTestId('signin-recovery-where')).toBeNull();
     });
 
+    // Vault rethink VR2: a community whose rule is that it keeps no copies says so where the line says where the copy is.
+    it("a community that keeps no copies: said with none here, and a copy from before stays until it's removed", async () => {
+        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, recoveryCopies: 'none' as const };
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-where').textContent)
+            .toBe("This community keeps no copies of members' accounts: your 12 words are your way back here."));
+        cleanup();
+        resetCommunityInfoOnce();
+
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+        renderSettings();
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-where').textContent)
+            .toBe("This community's server keeps the copy of your account that your sign-in opens. This community keeps no new copies now. This one stays until you remove it."));
+        cleanup();
+        resetCommunityInfoOnce();
+
+        // `server` and `vault` read as before: the web app keeps its own copy on this server either way.
+        vi.mocked(api.getCommunityInfo).mockResolvedValue({ ...NONE, recoveryCopies: 'server' });
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(api.getCommunityInfo).toHaveBeenCalled());
+        expect(screen.getByTestId('signin-recovery-where').textContent).toBe("This community's server keeps no copy of your account that a sign-in opens.");
+    });
+
     it('the node could not be asked: no line at all, and the banner as it was', async () => {
         vi.mocked(api.getSignInRecovery).mockResolvedValue(null);
         renderSettings();

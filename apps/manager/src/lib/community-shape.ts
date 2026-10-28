@@ -28,6 +28,8 @@ export interface ShapeSetting<T> {
 
 export type JoinState = 'members' | 'admins' | 'paused' | 'open';
 export type VisitorsView = 'nothing' | 'listings' | 'open';
+/** Where members' copies go (apps/server config/recovery-copies.ts, vault rethink VR2). */
+export type RecoveryCopies = 'vault' | 'server' | 'none';
 export interface KnownFloorShape {
     on: boolean;
     floor: number;
@@ -57,6 +59,8 @@ export interface ShapeSettings {
     probation: ShapeSetting<boolean>;
     autoHide: ShapeSetting<boolean>;
     autoMute: ShapeSetting<boolean>;
+    /** Absent on a node from before the rule: there every copy goes where each app's build sends it. */
+    recoveryCopies?: ShapeSetting<RecoveryCopies>;
     connections: ShapeSetting<boolean>;
 }
 
@@ -110,6 +114,39 @@ export const DOOR_PRESETS: ReadonlyArray<{ door: 'members' | 'admins'; name: str
             + 'Owners and admins can also keep a names list of who the members are: it opens in the BeanPool app on their own phones, signed in with their key, not with this password.',
     },
 ];
+
+/**
+ * The three choices for where members' copies go, each with the honest words under it (design DESIGN-vault-rethink-fable.md
+ * §5.3, VR2). A copy is a member's key, and their 12 words, locked to a sign-in they link, so the sign-in brings the
+ * account back on a new phone. Only what exists today is said: the community path (VR3, VR4) adds its own sentence.
+ */
+export const RECOVERY_COPIES_CHOICES: ReadonlyArray<{ rule: RecoveryCopies; name: string; words: string }> = [
+    {
+        rule: 'vault',
+        name: "BeanPool's key vault",
+        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Nothing on your server needs the vault.",
+    },
+    {
+        rule: 'server',
+        name: 'This server',
+        words: "Your server keeps members' copies. The people who run it can open them. If this server is lost, those copies are lost; members' 12 words still work.",
+    },
+    {
+        rule: 'none',
+        name: 'Nowhere',
+        words: "This community keeps no copies and does not use BeanPool's key vault. Members' 12 words are their way back here, and an admin can re-key them to a new key. A copy a member made elsewhere is theirs: this community can't remove it.",
+    },
+];
+
+/** A rule's short name, for the row and the log ("BeanPool's key vault", "This server", "Nowhere"). */
+export function recoveryCopiesName(rule: string): string {
+    return RECOVERY_COPIES_CHOICES.find((c) => c.rule === rule)?.name ?? rule;
+}
+
+/** The rule /api/community/info says (`recoveryCopies`), or null when the node doesn't say: one from before the rule. */
+export function readRecoveryCopies(v: unknown): RecoveryCopies | null {
+    return v === 'vault' || v === 'server' || v === 'none' ? v : null;
+}
 
 export function readDoor(v: unknown): 'open' | 'members' | 'admins' | null {
     return v === 'open' || v === 'members' || v === 'admins' ? v : null;
@@ -319,6 +356,14 @@ export function getConsequenceSentence(
             return targetValue === true
                 ? t('People will be able to join with 12 secret words without a sign-in.')
                 : t('People will join with a sign-in only.');
+        case 'recoveryCopies':
+            // Nothing moves by itself (design §5.3): each says what happens to copies already made, and the one thing this
+            // server can't hold, a phone app from before the setting, which keeps sending its copies to the vault.
+            return targetValue === 'none'
+                ? t("No new copy is kept here, and this community's screens offer none. Copies already made stay until each member removes theirs. A phone app from before this setting still keeps new copies at the key vault until it is updated.")
+                : targetValue === 'server'
+                    ? t("A sign-in a member links keeps its copy on this server, locked with its recovery seal. A copy a member has at the key vault stays there until they move or remove it. A phone app from before this setting still keeps new copies at the key vault until it is updated.")
+                    : t("A sign-in a member links in the phone app keeps its copy at BeanPool's key vault. Copies already kept on this server stay until each member moves or removes theirs.");
         default:
             return '';
     }

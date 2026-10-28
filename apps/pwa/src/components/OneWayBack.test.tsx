@@ -10,7 +10,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import * as api from '../lib/api';
 import { generateIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { loadPendingLink } from '../lib/link-signin';
-import { OneWayBackCard, ONE_WAY_BACK } from './OneWayBack';
+import { OneWayBackCard, ONE_WAY_BACK, ONE_WAY_BACK_WORDS } from './OneWayBack';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -336,6 +336,23 @@ describe('adding a sign-in from the card', () => {
         await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
         expect(asked.filter((p) => p === '/api/join/link/sso-nonce')).toHaveLength(1);
         clock.mockRestore();
+    });
+
+    // Vault rethink VR2: where this community keeps no copies (its rule `none`), a sign-in only lifts the limits.
+    it('where this community keeps no copies: the sign-in is said to lift the limits, never to lock a copy or be a way back', async () => {
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words'));
+        render(<OneWayBackCard identity={identity} placement="settings" onSeeWords={() => {}} keepsNoCopies
+            result={{ kind: 'linked', provider: 'google', recoveryStored: false, noCopies: true }} />);
+        const add = await screen.findByTestId('add-sign-in');
+        expect(add).toHaveTextContent(ONE_WAY_BACK_WORDS.whyNoCopies);
+        expect(ONE_WAY_BACK_WORDS.whyNoCopies).toBe("A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back.");
+        expect(add).not.toHaveTextContent(/locks a copy|second way back/);
+        expect(screen.getByTestId('link-result')).toHaveTextContent("This community keeps no copies of members' accounts, so your 12 words are still your way back.");
+        cleanup();
+
+        // Anywhere else, as before.
+        render(<OneWayBackCard identity={identity} placement="settings" onSeeWords={() => {}} />);
+        expect(await screen.findByTestId('add-sign-in')).toHaveTextContent(ONE_WAY_BACK_WORDS.why);
     });
 
     it("a refusal is a sentence beside the button; the result of one that came back is said", async () => {

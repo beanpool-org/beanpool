@@ -38,6 +38,7 @@ import {
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
+import { useCommunityInfo } from '../lib/features';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
 import {
@@ -946,6 +947,9 @@ function CommunityBody({
 
 export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
+    // The node's info, read once per page load and shared (the app's own read): its rule for members' copies, for the
+    // "one way back" card's sign-in words. A visitor's Home asks nothing new.
+    const communityInfo = useCommunityInfo(!!publicKey);
     // Moves on when a clear (here or in another tab) has this page land again: the community may have changed with it.
     const [landing, setLanding] = useState(0);
     const cacheKey = useMemo(() => homeCacheKey(publicKey), [publicKey, landing]);
@@ -1910,7 +1914,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
                 // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
-                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn} frame={(oneWayBack) => (
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
+                        keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => (
                         <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                             {oneWayBack}

@@ -157,6 +157,22 @@ describe('the way back', () => {
         expect(linkResultMessage(result)).toMatch(/your 12 words are still your only way back/);
     });
 
+    // Vault rethink VR2: a community whose rule is that it keeps no copies adds the sign-in and keeps none, in its words.
+    it('a community that keeps no copies: the sign-in is added, and the result says it was the rule, never a copy that failed', async () => {
+        await leftForGoogle();
+        const calls = stubNode({
+            '/api/join/link': () => json(200, {
+                success: true, provider: 'google',
+                recovery: { enrolled: false, error: "This community keeps no copies of members' accounts, so nothing was kept here. Your 12 words are your way back here.", code: 'no_copies_here' },
+            }),
+        });
+        const result = await finishLink(member, googleReturn());
+        expect(result).toEqual({ kind: 'linked', provider: 'google', recoveryStored: false, noCopies: true });
+        expect(calls).toHaveLength(1);
+        expect(linkResultMessage(result)).toBe("Google is added, and your new-account limits are now the usual ones. This community keeps no copies of members' accounts, so your 12 words are still your way back.");
+        expect(linkResultMessage(result)).not.toMatch(/couldn't be saved/);
+    });
+
     it("the node's refusals of the link are sentences, and nothing is retried", async () => {
         const cases: Array<[Response, RegExp]> = [
             [json(409, { code: 'already_joined', error: 'x' }), /^This Google account already has another BeanPool account here, so it can't be added to this one\./],

@@ -78,7 +78,7 @@ Each community chooses where its members' copies go, and only its owners change 
 
 - **BeanPool's key vault**, where every community starts. A sign-in you link keeps its copy at the key vault.
 - **Its own server.** A sign-in you link keeps its copy on your community's server instead, and the app doesn't ask the key vault for it. The app still asks the key vault whether it has a copy of your account, so it can offer to move one to your community (see above).
-- **Nowhere.** The community keeps no copies and doesn't use the key vault. The app offers no sign-in to link there, and your 12 words are your way back there. If you lose your phone and your 12 words, an admin can move your Beans and your name to a new key (see "Lost your phone and your 12 words").
+- **Nowhere.** The community keeps no copies and doesn't use the key vault. The app offers no sign-in to link there, and your 12 words are your way back there. If you joined with 12 words, **Add a sign-in** is still offered, in the app and in a browser: it lifts the new-account limits, and keeps no copy. If you lose your phone and your 12 words, an admin can move your Beans and your name to a new key (see "Lost your phone and your 12 words").
 
 In the app, a sign-in's copy goes only where the screen told you it would. If your community changed its choice since the screen last checked, nothing is linked, the app says so, and the screen then shows where a copy goes now.
 

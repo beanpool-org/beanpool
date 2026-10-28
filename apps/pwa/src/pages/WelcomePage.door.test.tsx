@@ -375,6 +375,27 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         expect(order).toContain('funnel answered:guide_complete:before leaving');
     });
 
+    // Vault rethink VR2: where this community keeps no copies (its rule `none`), the sign-in is offered as what it is.
+    it('a community that keeps no copies: offered as "Add a sign-in", which only lifts the limits, never as a way back', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true }, recoveryCopies: 'none' }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        expect(within(screen.getByTestId('backup-add-sign-in')).queryByRole('button', { name: 'Add a sign-in as a second way back' })).toBeNull();
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in' }));
+        const offered = await screen.findByTestId('tour-add-sign-in');
+        await within(offered).findByTestId('add-sign-in-google');
+        expect(within(offered).getByRole('heading', { level: 4 })).toHaveTextContent(/^Add a sign-in$/);
+        expect(offered).toHaveTextContent("A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back.");
+        expect(offered).not.toHaveTextContent(/locks a copy|second way back/);
+    });
+
     it('"Let\'s Begin!" still goes in without the sign-in: nothing is lost by changing their mind', async () => {
         const t0 = Date.now();
         await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });

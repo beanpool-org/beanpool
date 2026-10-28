@@ -846,8 +846,10 @@ router.get('/api/community/info', async (ctx) => {
         globalCommunityUrl: getGlobalCommunityUrl() ?? undefined,
     };
     // A tag of the reader and the answer, so an app asking again for what it holds gets a 304 (slice L0). Never shared:
-    // a signer's answer carries their own count, and nobody's needs an edge (the counts are cached here already).
-    const etag = `W/"info-${crypto.createHash('sha256').update(`${actor ?? ''}\n${JSON.stringify(body)}`).digest('hex').slice(0, 24)}"`;
+    // a signer's answer carries their own count, and nobody's needs an edge (the counts are cached here already). The JSON
+    // is made once, tagged and sent as it is: handed the object, Koa made it again (review of #2558, test-api-compression §7).
+    const json = JSON.stringify(body);
+    const etag = `W/"info-${crypto.createHash('sha256').update(`${actor ?? ''}\n${json}`).digest('hex').slice(0, 24)}"`;
     ctx.set('ETag', etag);
     ctx.set('Cache-Control', READER_CACHE_CONTROL);
     const inm = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
@@ -855,7 +857,8 @@ router.get('/api/community/info', async (ctx) => {
         ctx.status = 304;
         return;
     }
-    ctx.body = body;
+    ctx.type = 'application/json';
+    ctx.body = json;
 });
 
 /**

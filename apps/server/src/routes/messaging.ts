@@ -434,7 +434,9 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     // The phone's message backstop reads this list every 120 s and the web app on every change (slice L0): a tag of the
     // reader and the answer itself, so a list that hasn't changed is a 304 and not the whole list again. Made of the
     // answer, never a counter, so no change it shows (a line, a read, a mute, a request) can be missed. The signer's own.
-    const etag = `W/"convs-${crypto.createHash('sha256').update(`${viewer}\n${JSON.stringify(body)}`).digest('hex').slice(0, 24)}"`;
+    // The JSON is made once, tagged and sent as it is (review of #2558, test-api-compression §7).
+    const json = JSON.stringify(body);
+    const etag = `W/"convs-${crypto.createHash('sha256').update(`${viewer}\n${json}`).digest('hex').slice(0, 24)}"`;
     ctx.set('ETag', etag);
     ctx.set('Cache-Control', READER_CACHE_CONTROL);
     const inm = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
@@ -442,7 +444,8 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         ctx.status = 304;
         return;
     }
-    ctx.body = body;
+    ctx.type = 'application/json';
+    ctx.body = json;
 });
 
 /**

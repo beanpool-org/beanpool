@@ -15,7 +15,8 @@
  *   5. a member's photo: its bytes as stored, never encoded, though they compress to nothing
  *   6. HEAD, a range request and a small answer: never encoded
  *   7. an object body is made its JSON once, gzipped or not, small, heavy or neither (the #1764 review, F1: twice whenever
- *      the middleware didn't compress)
+ *      the middleware didn't compress); so is an answer its route tags from that JSON (the community's card and a
+ *      member's conversation list, slice L0: review of #2558)
  * With API_GZIP=off (the operator's switch; its own run in scripts/server-suites.mjs), sections 1-6 give way to: every
  * answer as the route made it, no Vary of the middleware's, the route's own ETag; the snapshots' own gzip copy stays.
  *
@@ -119,7 +120,9 @@ async function main() {
         return id;
     };
     const alice = member('alice');
-    for (let i = 0; i < 40; i++) member(`neighbour${i}`);
+    const neighbours = Array.from({ length: 40 }, (_, i) => member(`neighbour${i}`));
+    // A DM of Alice's, so her conversation list is more than an empty one (`timesMade` counts texts over 100 characters).
+    se.createConversation('dm', [alice.pubKeyHex, neighbours[0].pubKeyHex], alice.pubKeyHex);
     for (let i = 0; i < 5; i++) {
         se.createGroup({ name: `Valley group ${i}`, description: `A group about the valley, number ${i}.`, joinPolicy: 'open', createdBy: alice.pubKeyHex });
     }
@@ -212,12 +215,24 @@ async function main() {
         ['the activity feed, read with gzip', '/api/activity/feed', alice, { 'Accept-Encoding': 'gzip' }],
         ['the activity feed, read without', '/api/activity/feed', alice, {}],
         ['a small answer, read with gzip', '/api/community/info', null, { 'Accept-Encoding': 'gzip' }],
+        ['a small answer, read without', '/api/community/info', null, {}],
+        ['a member\'s conversation list, read with gzip', `/api/messages/conversations/${alice.pubKeyHex}`, alice, { 'Accept-Encoding': 'gzip' }],
+        ['a member\'s conversation list, read without', `/api/messages/conversations/${alice.pubKeyHex}`, alice, {}],
         ['a heavy read (an object), read with gzip', '/api/groups?limit=100', alice, { 'Accept-Encoding': 'gzip' }],
         ['a heavy read (an object), read without', '/api/groups?limit=100', alice, {}],
         ['a heavy read (a string), read with gzip', '/api/community/members', alice, { 'Accept-Encoding': 'gzip' }],
     ] as const) {
         const { answer, made } = await timesMade(path, id, enc);
         assert(answer.status === 200 && made === 1, `${what}: made once (${answer.status}, ${encoding(answer) ?? 'plain'}, ${answer.bytes.length} bytes, made ${made} times)`);
+    }
+    // Sent as the text the tag was made of, each still says what it said as an object: JSON, its tag, the reader's own.
+    for (const [path, id, tag] of [['/api/community/info', null, 'info'], [`/api/messages/conversations/${alice.pubKeyHex}`, alice, 'convs']] as const) {
+        const a = await ask(path, id);
+        assert(a.status === 200 && a.headers['content-type'] === 'application/json; charset=utf-8'
+            && new RegExp(`^W/"${tag}-[0-9a-f]{24}"$`).test(String(a.headers.etag ?? '')) && a.headers['cache-control'] === 'private, max-age=0, must-revalidate',
+            `${path.replace(alice.pubKeyHex, '<alice>')}: JSON, tagged, the reader's own (${a.headers['content-type']}; ${a.headers.etag}; ${a.headers['cache-control']}; Vary: ${a.headers.vary})`);
+        const again = await ask(path, id, { 'If-None-Match': String(a.headers.etag ?? '') });
+        assert(again.status === 304 && again.bytes.length === 0, `${path.replace(alice.pubKeyHex, '<alice>')}: its tag again is a 304 with no body (${again.status}, ${again.bytes.length} bytes)`);
     }
 
     finish();

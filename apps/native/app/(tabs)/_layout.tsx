@@ -62,6 +62,8 @@ const LABEL_MAX_SCALE = 1.1;
 const LABEL_MIN_SCALE = 0.6;
 const UNDERLINE_HEIGHT = 3;
 const TAB_BUTTON_INSET = 5;
+/** A doorbell this soon after the last network read of the messages waits for the gap to pass (TabLayout's ws_activity). */
+const DOORBELL_READ_GAP_MS = 10_000;
 
 function TabItem({ label, icon, focused, color, count, badge }: {
     label: string;
@@ -269,16 +271,34 @@ export default function TabLayout() {
 
         const appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
-        const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
-            if (AppState.currentState === 'active' && Date.now() - lastNetSyncAtRef.current > 10000) {
+        // A doorbell within 10 s of the last network read doesn't read again at once. But that read may already have passed
+        // the doorbell's line (it was done, or past the list), and while the socket is alive the backstop is up to 120 s
+        // away, so the held doorbell reads once when the 10 s is up, unless a read has started since it rang (review of #2558).
+        let heldDoorbell: ReturnType<typeof setTimeout> | null = null;
+        let lastDoorbellAt = 0;
+        const readForDoorbell = () => {
+            if (AppState.currentState !== 'active') return;
+            const sinceRead = Date.now() - lastNetSyncAtRef.current;
+            if (sinceRead > DOORBELL_READ_GAP_MS) {
+                if (heldDoorbell) { clearTimeout(heldDoorbell); heldDoorbell = null; }
                 checkUnread(true);
+                return;
             }
+            if (!heldDoorbell) heldDoorbell = setTimeout(() => {
+                heldDoorbell = null;
+                if (lastNetSyncAtRef.current <= lastDoorbellAt) readForDoorbell();
+            }, DOORBELL_READ_GAP_MS - sinceRead + 1);
+        };
+        const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
+            lastDoorbellAt = Date.now();
+            readForDoorbell();
         });
 
         return () => {
             stopPolling();
             appStateSub.remove();
             wsSub.remove();
+            if (heldDoorbell) clearTimeout(heldDoorbell);
         };
     }, [identity]);
 

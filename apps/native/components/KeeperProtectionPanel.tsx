@@ -416,10 +416,13 @@ const make = (colors: AppColors) => StyleSheet.create({
         flex: 1,
         minWidth: 150,
     },
+    // No wider than the row: at 320dp with 1.3x text, Connect again and Disconnect side by side are wider than it, and
+    // Disconnect ran past the row, the panel and the card (ways-back-320.mjs, VR0); capped, the second wraps under.
     providerActions: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
+        maxWidth: '100%',
     },
     // Shrinks and wraps beside the tick: "{provider} Connected" runs longer than the row in some languages.
     providerName: {

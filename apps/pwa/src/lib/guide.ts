@@ -135,7 +135,7 @@ export function useGuide(): LoadedGuide {
         try {
             return sessionGuide ?? { guide: getBundledGuide(), source: 'bundled' };
         } catch {
-            return sessionGuide ?? { guide: { version: 0, schema: 1, hash: '', guides: [] }, source: 'bundled' };
+            return sessionGuide ?? { guide: { version: 0, schema: 1, hash: '', sections: [], guides: [] }, source: 'bundled' };
         }
     });
     const [lang] = useLanguage();

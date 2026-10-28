@@ -15,7 +15,7 @@ const source = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'ut
 
 /** Each list, and how its listing photo is drawn now. */
 const LISTS: [string, string[], RegExp[]][] = [
-    ['app/(tabs)/market.tsx', ['uri: listPhotoUrl(gridMedia) }} style={styles.gridImage}', 'uri: listPhotoUrl(listMedia) }} style={{ width: 80,'], [/uri: (coverImage|gridMedia|listMedia)\s*}/]],
+    ['app/(tabs)/market.tsx', ['uri: listPhotoUrl(picture) }} style={styles.gridImage}', 'uri: listPhotoUrl(picture) }} style={{ width: 80,'], [/uri: (coverImage|picture)\s*}/]],
     ['components/home/HomeCardBodies.tsx', ['<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))}'], [/<Thumb uri=\{onNode\(/]],
     ['components/EventCard.tsx', ['source={{ uri: listPhotoUrl(photo) }}'], [/uri: photo\s*}/]],
     ['components/MyDealsSheet.tsx', ['uri: listPhotoUrl(item.coverImage) }}', 'uri: listPhotoUrl(coverImage) }}'], [/uri: (item\.)?coverImage\s*}/]],

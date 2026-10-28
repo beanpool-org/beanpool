@@ -7,6 +7,7 @@ import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
 import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
+import { marketCardPicture } from '../../utils/market-card-picture';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { refusalHere, type Refusal } from '../../utils/members-only-listings';
 import { marketEmptyState, refusalLines } from '../../utils/market-empty-state';
@@ -1499,13 +1500,8 @@ export default function MarketScreen() {
             );
         }
 
-        let coverImage: string | null = null;
-        if (item.photos) {
-            try {
-                const arr = Array.isArray(item.photos) ? item.photos : JSON.parse(item.photos);
-                if (arr.length > 0) coverImage = arr[0];
-            } catch {}
-        }
+        // Its own first photo, else its enterprise's shop banner, else the CategoryTile (utils/market-card-picture.ts).
+        const { cover: coverImage, picture } = marketCardPicture(item);
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || t('Unknown');
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
@@ -1522,7 +1518,6 @@ export default function MarketScreen() {
         const catLabel = categoryLabel(item.category);
 
         if (viewMode === 'grid') {
-            const gridMedia = coverImage || item.authorBannerUrl || item.author_banner_url || null;
             return (
                 <Pressable
                     style={[
@@ -1536,8 +1531,8 @@ export default function MarketScreen() {
                     accessibilityRole={isPulse ? undefined : "button"}
                 >
                     <View style={styles.gridImageWrapper}>
-                        {gridMedia && typeof gridMedia === 'string' && gridMedia.trim() !== '' && gridMedia !== 'null' && gridMedia !== 'undefined' ? (
-                            <Image source={{ uri: listPhotoUrl(gridMedia) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
+                        {picture ? (
+                            <Image source={{ uri: listPhotoUrl(picture) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
                                 if (coverImage) {
                                     refreshListingAfterPhotoError(item.id, coverImage);
                                 }
@@ -1625,7 +1620,6 @@ export default function MarketScreen() {
 
         // Compact View
         if (viewMode === 'compact') {
-            const compactMedia = coverImage || item.authorBannerUrl || item.author_banner_url || null;
             return (
                 <Pressable
                     disabled={isPulse}
@@ -1634,8 +1628,8 @@ export default function MarketScreen() {
                 >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <View style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', marginRight: 10 }}>
-                            {compactMedia && typeof compactMedia === 'string' && compactMedia.trim() !== '' && compactMedia !== 'null' && compactMedia !== 'undefined' ? (
-                                <Image source={{ uri: listPhotoUrl(compactMedia) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                            {picture ? (
+                                <Image source={{ uri: listPhotoUrl(picture) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                             ) : (
                                 <CategoryTile
                                     category={item.category}
@@ -1692,7 +1686,6 @@ export default function MarketScreen() {
         }
 
         // List View
-        const listMedia = coverImage || item.authorBannerUrl || item.author_banner_url || null;
         return (
             <Pressable
                 disabled={isPulse}
@@ -1700,8 +1693,8 @@ export default function MarketScreen() {
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
-                    {listMedia && typeof listMedia === 'string' && listMedia.trim() !== '' && listMedia !== 'null' && listMedia !== 'undefined' ? (
-                        <Image source={{ uri: listPhotoUrl(listMedia) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
+                    {picture ? (
+                        <Image source={{ uri: listPhotoUrl(picture) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
                             if (coverImage) {
                                 refreshListingAfterPhotoError(item.id, coverImage);
                             }

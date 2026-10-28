@@ -5,30 +5,29 @@ import * as path from 'node:path';
 const APP = path.resolve(__dirname, '../..');
 const source = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'utf8');
 
+// Which picture a card gets from the phone's own copy (the default list) is checked on real rows in
+// market-banner-cache.test.ts (marketCardPicture over getPosts). This file checks that the screen draws that picture.
 describe('Phone Market card ladder (Pictures S6)', () => {
     const marketSrc = source('app/(tabs)/market.tsx');
+    const renderItemBlock = marketSrc.split('const renderItem =')[1] || '';
 
-    it('checks enterprise banner on the listing item when own photo is absent', () => {
-        expect(marketSrc).toMatch(/(?:item\.authorBannerUrl|item\.author_banner_url|coverImage)/);
-        // Must inspect authorBannerUrl or author_banner_url in addition to photos
-        expect(marketSrc).toMatch(/authorBannerUrl|author_banner_url/);
+    it('each card takes its picture from marketCardPicture: own photo, then the enterprise banner, then the tile', () => {
+        expect(renderItemBlock).toMatch(/const \{ cover: coverImage, picture \} = marketCardPicture\(item\);/);
     });
 
-    it('grid card displays enterprise banner before CategoryTile when photoless', () => {
-        // Grid image wrapper in renderItem must check for banner URL before falling back to CategoryTile
-        const renderItemBlock = marketSrc.split('const renderItem =')[1] || '';
+    it('grid card draws that picture before falling back to CategoryTile', () => {
         const gridBlock = renderItemBlock.split("if (viewMode === 'grid')")[1]?.split("if (viewMode === 'compact')")[0] || '';
-        expect(gridBlock).toMatch(/authorBannerUrl|author_banner_url/);
+        expect(gridBlock).toMatch(/\{picture \? \(\s*<Image source=\{\{ uri: listPhotoUrl\(picture\) \}\}[\s\S]*?\) : \(\s*<CategoryTile/);
     });
 
-    it('compact row displays enterprise banner before CategoryTile when photoless', () => {
+    it('compact row draws that picture before falling back to CategoryTile', () => {
         const compactBlock = marketSrc.split("if (viewMode === 'compact')")[1]?.split('// List View')[0] || '';
-        expect(compactBlock).toMatch(/authorBannerUrl|author_banner_url/);
+        expect(compactBlock).toMatch(/\{picture \? \(\s*<Image source=\{\{ uri: listPhotoUrl\(picture\) \}\}[\s\S]*?\) : \(\s*<CategoryTile/);
     });
 
-    it('list row displays enterprise banner before CategoryTile when photoless', () => {
+    it('list row draws that picture before falling back to CategoryTile', () => {
         const listBlock = marketSrc.split('// List View')[1] || '';
-        expect(listBlock).toMatch(/authorBannerUrl|author_banner_url/);
+        expect(listBlock).toMatch(/\{picture \? \(\s*<Image source=\{\{ uri: listPhotoUrl\(picture\) \}\}[\s\S]*?\) : \(\s*<View[^>]*>\s*<CategoryTile/);
     });
 
     it('Home MarketRow falls back to enterprise banner before CategoryTile', () => {

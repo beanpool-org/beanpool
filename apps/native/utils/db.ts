@@ -427,7 +427,8 @@ async function _doInitDB() {
             event_repeat TEXT,
             event_repeat_until TEXT,
             carried_callsign TEXT,
-            carried_avatar TEXT
+            carried_avatar TEXT,
+            carried_banner TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -676,6 +677,10 @@ ${TOOL_DOCS_TABLE}
         // Its face the same way (the node's `authorAvatarUrl`, DESIGN-global-members-by-area §2.2.6): a by-area listing
         // shows its author's face with no card for them. The card's face wins where the phone holds one.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_avatar TEXT;`); } catch (e) {}
+        // An enterprise's shop banner as its listing carried it (the node's `authorBannerUrl`, Pictures S6): the Market
+        // card's picture when the listing has none of its own (utils/market-card-picture.ts). A plain column, no default:
+        // a build from before it opens this table and writes past it.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
         // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
         // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}
@@ -1042,6 +1047,10 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
                 }
             } catch (e) { r.photos = []; }
         }
+        // Its enterprise's shop banner, on the node's address as its photos are: the card's picture when it has none of
+        // its own (utils/market-card-picture.ts).
+        const banner: string | null = r.carried_banner || null;
+        r.authorBannerUrl = banner && banner.startsWith('/') ? `${anchorUrl}${banner}` : banner;
         return r;
     });
 }
@@ -3569,7 +3578,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3618,6 +3627,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             carriesAuthorAvatar(p) ? 1 : 0,
             syncedAuthorAvatar(p),
             p.id ?? null,
+            syncedAuthorBanner(p),
         ]
     );
 }
@@ -3625,6 +3635,17 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
 /** The author's face URL a listing carries (the node's `authorAvatarUrl` on a by-area read), or null for a copy without one. */
 function syncedAuthorAvatar(p: any): string | null {
     const url = p.authorAvatarUrl ?? p.author_avatar_url;
+    return typeof url === 'string' && url.trim() !== '' ? url : null;
+}
+
+/**
+ * The enterprise's shop banner a listing carries (the node's `authorBannerUrl`, Pictures S6), or null. Unlike the face, a
+ * copy without it clears the row's: the node names a banner only where the enterprise has one (engine rowToPost) and never
+ * as null, so a copy without it says there is none now (a member's listing, a shop photo removed, a reader who is no
+ * longer a member); an older node never names one, so there is nothing to keep.
+ */
+function syncedAuthorBanner(p: any): string | null {
+    const url = p.authorBannerUrl ?? p.author_banner_url;
     return typeof url === 'string' && url.trim() !== '' ? url : null;
 }
 

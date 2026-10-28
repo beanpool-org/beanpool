@@ -393,6 +393,22 @@ async function press(words: string, lang: UiLang) {
     await act(async () => { b.click(); });
     await settle();
 }
+/**
+ * The first screen's Explore BeanPool worldwide, and the screen it opens. Before any door, it asks whether a phone with no
+ * account may look around first (slice S12, welcome.tsx exploreWorldwide): the phone's key store, the wizard's record and the
+ * door, through global-guest-visit.ts's own loads, which can outlast a settle on a busy machine (it did on main's tree under
+ * load, 8 runs in 12). So until the screen stops saying "Connecting to the global community…", the home's line while it
+ * asks and the door's own while it checks, never a fixed number of ticks.
+ */
+async function explore(lang: UiLang) {
+    await press('🌍 Explore BeanPool worldwide', lang);
+    const connecting = lang === 'xx' ? pseudoLocalise('Connecting to the global community…') : 'Connecting to the global community…';
+    for (const until = Date.now() + 5000; (host!.textContent ?? '').includes(connecting) && Date.now() < until;) {
+        await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    }
+    expect(host!.textContent, 'the look-first ask and the door\'s check answered').not.toContain(connecting);
+    await settle();
+}
 /** A button whose words are exactly these (a sentence with a name in it, as drawn). */
 async function pressExactly(words: string) {
     const b = all('button, [role="button"]').find((x) => x.textContent === words);
@@ -564,15 +580,21 @@ describe("the global community's door in the pseudo-locale", () => {
     it('shut: the door\'s own sentence, Try again and Join with an invite', async () => {
         door.check = { ok: false, reason: 'door_closed' };
         await mount('xx');
-        await press('🌍 Explore BeanPool worldwide', 'xx');
+        await explore('xx');
         expect(host!.textContent).toContain(pseudoLocalise(DOOR_MESSAGES.doorClosed));
+        expect(button('Try again', 'xx')).toBeTruthy();
+        expect(button('🎟️ Join with an invite', 'xx')).toBeTruthy();
+        // The global community's own door, on this screen in place of the first one: never the first screen left showing,
+        // and never another community's open door (app/join-open-door.tsx, slice S2), which is its own screen.
+        expect(host!.textContent).not.toContain(pseudoLocalise('Welcome to BeanPool'));
+        expect(nav.pushed).toEqual([]);
         check('the door, shut');
     });
 
     it('the sign-in, the name step, and an answer that sends the member to restore', async () => {
         useVault();
         await mount('xx');
-        await press('🌍 Explore BeanPool worldwide', 'xx');
+        await explore('xx');
         check('the door, signing in');
         await press('Continue with Google', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('✅ Signed in with {provider}').replace('{provider}', 'Google'));
@@ -587,7 +609,7 @@ describe("the global community's door in the pseudo-locale", () => {
     it('a door with the 12-words way: the two ways side by side (WordsDoor is a stand-in), and the sign-in again', async () => {
         door.check = { ok: true, profile: { features: { wordsDoor: true } } };
         await mount('xx');
-        await press('🌍 Explore BeanPool worldwide', 'xx');
+        await explore('xx');
         expect(host!.querySelector('[data-later-sweep="DoorChoices"]')).toBeTruthy();
         check('the door, two ways');
     });

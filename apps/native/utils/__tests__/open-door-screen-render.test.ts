@@ -399,6 +399,29 @@ describe("another community's door on a phone with no account (S2)", () => {
         },
     );
 
+    // Each its own screen: with the global community's door shut, the first screen draws global's refusal
+    // (welcome-words-render.test.ts, "shut"), and another community's open door is still this one.
+    it("the global community's door shut and this community's open: THIS door takes the new phone, never global's refusal or the first screen", async () => {
+        phone.key = null;
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [GLOBAL]: { profile: 'global', features: { beans: false, openJoin: false } }, [SELF]: OPEN });
+        await render();
+        expect(header()!.textContent).toBe('Riverbend Open');
+        expect(text()).toContain('Join Riverbend Open with a new BeanPool account on this phone: 12 words, or a sign-in.');
+        expect(text()).toContain('Create an account with 12 secret words');
+        expect(text()).not.toMatch(/global community/i);
+        expect(route.replaced).toEqual([]);
+        expect(new Set(asked.map(u => new URL(u).origin))).toEqual(new Set([SELF]));
+        nothingWritten();
+
+        // And the global community's own door (its old name, so a new screen) on the same phone: the first screen's.
+        route.params = {};
+        await render(JoinGlobalAlias);
+        expect(route.replaced).toEqual(['/welcome']);
+        expect(work.started).toEqual([]);
+        nothingWritten();
+    });
+
     it("a join wizard half done that is not this door's own: the first screen resumes it, and this door starts nothing", async () => {
         phone.key = null;
         store.map.set('beanpool_pending_onboarding', JSON.stringify({ step: 'create', inviteCode: 'INV-ABCD-EFGH', anchorUrl: 'https://riverside.example', callsign: 'Wren', redeemed: false }));

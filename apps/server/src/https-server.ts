@@ -487,6 +487,18 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
  */
 const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
+/**
+ * The two calls an applicant's web app makes to the community it asked to join (Lounge L1): how the request fares, and
+ * "Cancel my request". The web app runs on its own node, never the community's, so each is cross-origin; neither carries a
+ * cookie or a credential (the signature is in the headers, and the node answers only for the signer), so any origin may make
+ * them. Each is open for its own method and the signature's headers alone: nothing else under /api/join is.
+ */
+const SIGNED_KNOCK_CORS: ReadonlyMap<string, string> = new Map([
+    ['/api/join/knock/status', 'GET, OPTIONS'],
+    ['/api/join/knock/cancel', 'POST, OPTIONS'],
+]);
+const SIGNED_KNOCK_HEADERS = 'Content-Type, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
+
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
 export const LISTINGS_MEMBERS_ONLY = {
     error: word("This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
@@ -1371,6 +1383,10 @@ export async function startHttpsServer(port: number): Promise<number> {
                 ctx.set('Access-Control-Allow-Origin', '*');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            } else if (SIGNED_KNOCK_CORS.has(ctx.path)) {
+                ctx.set('Access-Control-Allow-Origin', '*');
+                ctx.set('Access-Control-Allow-Headers', SIGNED_KNOCK_HEADERS);
+                ctx.set('Access-Control-Allow-Methods', SIGNED_KNOCK_CORS.get(ctx.path)!);
             }
         }
 

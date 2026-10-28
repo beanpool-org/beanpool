@@ -79,7 +79,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const firstPhoto = post.photos && post.photos.length > 0 ? post.photos[0] : null;
     const bannerUrl = post.authorBannerUrl || (post as any)?.author_banner_url || null;
     const displayImage = firstPhoto || bannerUrl;
-    const photosToZoom = firstPhoto ? post.photos! : (bannerUrl ? [bannerUrl] : []);
+    // Only actual listing photos should open the zoom lightbox; shop banner is card branding fallback
+    const photosToZoom = firstPhoto ? post.photos! : [];
     // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`).
     const showPrice = !isPulse && !beansMarked;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
@@ -227,17 +228,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             >
                 {/* Left Thumbnail (80px) */}
                 <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
-                    {displayImage ? (
+                    {photosToZoom.length > 0 ? (
                         <button
                             type="button"
                             onClick={(e) => {
-                                if (onPhotoClick && photosToZoom.length > 0) {
+                                if (onPhotoClick) {
                                     e.stopPropagation();
                                     onPhotoClick(photosToZoom, 0, e);
                                 }
                             }}
                             onKeyDown={(e) => {
-                                if (onPhotoClick && photosToZoom.length > 0 && (e.key === 'Enter' || e.key === ' ')) {
+                                if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
                                     e.stopPropagation();
                                     e.preventDefault();
                                     onPhotoClick(photosToZoom, 0, e as any);
@@ -250,6 +251,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         >
                             <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                         </button>
+                    ) : displayImage ? (
+                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                     ) : (
                         <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                     )}
@@ -352,17 +355,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         >
             {/* Square Media Box at Card Top (edge to edge, radius 14) */}
             <div className="relative w-full aspect-square overflow-hidden">
-                {displayImage ? (
+                {photosToZoom.length > 0 ? (
                     <button
                         type="button"
                         onClick={(e) => {
-                            if (onPhotoClick && photosToZoom.length > 0) {
+                            if (onPhotoClick) {
                                 e.stopPropagation();
                                 onPhotoClick(photosToZoom, 0, e);
                             }
                         }}
                         onKeyDown={(e) => {
-                            if (onPhotoClick && photosToZoom.length > 0 && (e.key === 'Enter' || e.key === ' ')) {
+                            if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
                                 e.stopPropagation();
                                 e.preventDefault();
                                 onPhotoClick(photosToZoom, 0, e as any);
@@ -375,6 +378,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     >
                         <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                     </button>
+                ) : displayImage ? (
+                    <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                 ) : (
                     <CategoryTile
                         category={post.category}

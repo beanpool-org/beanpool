@@ -82,4 +82,14 @@ describe('MarketplaceCard picture ladder: banner before tile', () => {
         const img = container.querySelector(`img[alt="${post.title}"]`);
         expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
     });
+
+    it.each(['grid', 'list'] as const)('the %s card does not render a zoom button or trigger onPhotoClick for enterprise banner fallback', (viewMode) => {
+        const onPhotoClick = vi.fn();
+        const { queryByLabelText, container } = render(<MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} onPhotoClick={onPhotoClick} />);
+        expect(queryByLabelText(`View enlarged photo: ${postWithBannerOnly.title}`)).toBeNull();
+        const img = container.querySelector(`img[alt="${postWithBannerOnly.title}"]`);
+        expect(img).not.toBeNull();
+        fireEvent.click(img!);
+        expect(onPhotoClick).not.toHaveBeenCalled();
+    });
 });

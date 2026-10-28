@@ -10,6 +10,8 @@ const BAD_TEXT = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069]/gu;
 
 export const REGISTRAR_COMMUNITY_NAME_MAX = 120;
 export const REGISTRAR_CONTACT_MAX = 254;
+/** The longest town or area name a community's card shows (state-engine.ts NodeConfig `areaName`, routes/community-card.ts). */
+export const AREA_NAME_MAX = 60;
 
 export function cleanLabel(value: unknown, max: number): string | undefined {
     if (typeof value !== 'string') return undefined;

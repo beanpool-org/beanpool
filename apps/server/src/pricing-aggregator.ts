@@ -8,6 +8,7 @@
 
 import { db } from './db/db.js';
 import { standbyWritesNothing } from './config/node-role.js';
+import { getProfileSwitches } from './config/node-profile.js';
 import { aggregateObservedPrice, normalizeCategory, type PricingTrend } from '@beanpool/core';
 import { getPricingConfig } from './db/pricing-guide-db.js';
 
@@ -162,6 +163,16 @@ let aggregatorInterval: NodeJS.Timeout | null = null;
 let initialTimer: NodeJS.Timeout | null = null;
 
 /**
+ * One run of the worker: a cycle, where Beans are on. Where they are off nothing is priced in Beans, so the hourly read
+ * of every listing would aggregate prices that cannot exist, on the one core (DESIGN-global-lounge-fable.md §5.2 item 5,
+ * slice L0). The switch is read on every run: Beans switched back on are priced from the next one. Null when it didn't run.
+ */
+export function pricingAggregatorTick(): ReturnType<typeof runPricingAggregationCycle> | null {
+    if (!getProfileSwitches().beans) return null;
+    return runPricingAggregationCycle();
+}
+
+/**
  * Starts the hourly pricing aggregator worker.
  */
 export function startPricingAggregatorWorker(intervalMs: number = 3600_000): void {
@@ -171,7 +182,7 @@ export function startPricingAggregatorWorker(intervalMs: number = 3600_000): voi
     initialTimer = setTimeout(() => {
         initialTimer = null;
         try {
-            runPricingAggregationCycle();
+            pricingAggregatorTick();
         } catch (e) {
             console.error('[PricingAggregator] Error during initial cycle:', e);
         }
@@ -180,7 +191,7 @@ export function startPricingAggregatorWorker(intervalMs: number = 3600_000): voi
 
     aggregatorInterval = setInterval(() => {
         try {
-            runPricingAggregationCycle();
+            pricingAggregatorTick();
         } catch (e) {
             console.error('[PricingAggregator] Error during cycle:', e);
         }

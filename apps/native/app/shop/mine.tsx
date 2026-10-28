@@ -17,7 +17,7 @@
  *
  * Not here: "Give the shop its own account" (slice S7, after the node's step S6), and an enterprise's shopfront.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -35,7 +35,11 @@ import {
     shopTitle, type MyShop, type MyShopChanges, type MyShopRead, type ShopListing,
 } from '../../utils/shop';
 import { pickBannerPhoto } from '../../utils/banner-photo';
+import { getMemberProfile } from '../../utils/db';
 import { usePictureCrop } from '../../components/PictureCrop';
+import { Image } from 'expo-image';
+import { DefaultBanner } from '../../components/DefaultBanner';
+import { useNodeUri } from '../../utils/node-uri';
 
 type Where = 'screen' | 'text' | 'category' | 'banner' | 'pause' | 'close' | 'add';
 
@@ -65,7 +69,17 @@ export default function YourShopScreen() {
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
     const me = identity?.publicKey ?? '';
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getMemberProfile(identity.publicKey)
+                .then(p => setAvatarUrl(p?.avatar_url || null))
+                .catch(() => {});
+        }
+    }, [identity?.publicKey]);
     const s = homeStyles(colors);
+    const avatar = (identity as any)?.avatar || (identity as any)?.avatar_url || avatarUrl;
     const [read, setRead] = useState<MyShopRead | null>(null);
     /** Its Offers: undefined while read, null when they couldn't be. */
     const [listings, setListings] = useState<ShopListing[] | null | undefined>(undefined);
@@ -92,6 +106,8 @@ export default function YourShopScreen() {
     useFocusEffect(useCallback(() => { void load(); }, [load]));
 
     const shop = read?.state === 'open' ? read.shop : null;
+    const bannerUri = useNodeUri(shop?.photoUrl);
+    const [bannerFailed, setBannerFailed] = useState<string | null>(null);
     const refusedAt = (where: Where) => (refusal?.where === where ? refusal : null);
     const openDeals = () => {
         setSheet(null);
@@ -254,14 +270,48 @@ export default function YourShopScreen() {
                             <ToolRow title={t('Category')} state={categoryWords ?? t('Not chosen yet')} onPress={() => { setRefusal(null); setSheet('category'); }} testID="shop-field-category" />
                             <ToolRow title={t('About')} state={shop.blurb ?? notSet} onPress={() => { setRefusal(null); setEditing('blurb'); }} testID="shop-field-blurb" />
                             <ToolRow title={t('How I deal')} state={shop.howToDeal ?? notSet} onPress={() => { setRefusal(null); setEditing('howToDeal'); }} testID="shop-field-howToDeal" />
-                            {/* Its banner: one photo across the top of its shopfront, put up or changed with a tap, on its own. */}
-                            <ToolRow title={t('Banner photo')} state={shop.photoUrl ? t('Members see it across the top of your shop') : t('Not chosen yet')}
-                                onPress={() => { void pickBanner(); }} testID="shop-field-banner" />
-                            {shop.photoUrl ? (
+                            {/* Its banner: one photo across the top of its shopfront, or the drawn default banner. */}
+                            <View style={styles.bannerFieldContainer} testID="shop-field-banner-container">
+                                <Text style={[styles.fieldTitle, { color: colors.text.heading }]}>{t('Banner photo')}</Text>
+                                <View style={[styles.bannerPreview, { borderColor: colors.border.default }]} testID="shop-banner-preview">
+                                    {shop.photoUrl && (bannerUri || !shop.photoUrl.startsWith('/')) && shop.photoUrl !== bannerFailed ? (
+                                        <Image
+                                            source={{ uri: bannerUri ?? shop.photoUrl }}
+                                            style={styles.bannerImage}
+                                            contentFit="cover"
+                                            testID="shop-banner-image"
+                                            onError={() => setBannerFailed(shop.photoUrl)}
+                                        />
+                                    ) : (
+                                        <DefaultBanner category={shop.category} logoUrl={avatar} pubkey={identity?.publicKey} />
+                                    )}
+                                </View>
+                                {!shop.photoUrl ? (
+                                    <Text style={[styles.bannerNote, { color: colors.text.secondary }]}>
+                                        {t('Your picture, until you choose a banner.')}
+                                    </Text>
+                                ) : (
+                                    <Text style={[styles.bannerNote, { color: colors.text.secondary }]}>
+                                        {t('Members see it across the top of your shop')}
+                                    </Text>
+                                )}
                                 <ToolButtons>
-                                    <ToolButton text={t('Remove the banner photo')} disabled={busy} onPress={() => { void change({ photo: null }, 'banner'); }} testID="shop-banner-remove" />
+                                    <ToolButton
+                                        text={shop.photoUrl ? t('Change the banner photo') : t('Choose a banner photo')}
+                                        disabled={busy}
+                                        onPress={() => { void pickBanner(); }}
+                                        testID="shop-field-banner"
+                                    />
+                                    {shop.photoUrl ? (
+                                        <ToolButton
+                                            text={t('Remove the banner photo')}
+                                            disabled={busy}
+                                            onPress={() => { void change({ photo: null }, 'banner'); }}
+                                            testID="shop-banner-remove"
+                                        />
+                                    ) : null}
                                 </ToolButtons>
-                            ) : null}
+                            </View>
                             {refusedAt('banner') ? <Text style={[s.note, { color: colors.feedback.danger.fg }]} testID="shop-banner-error">{refusal!.message}</Text> : null}
                         </ToolSection>
 
@@ -327,4 +377,9 @@ const styles = StyleSheet.create({
     shopTitle: { fontSize: 20, fontWeight: '800', marginTop: 10 },
     line: { fontSize: 15, lineHeight: 21, marginTop: 4 },
     blurb: { fontSize: 15, lineHeight: 21, marginTop: 8, marginBottom: 4 },
+    bannerFieldContainer: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
+    fieldTitle: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
+    bannerPreview: { width: '100%', aspectRatio: 3, borderRadius: 12, overflow: 'hidden', borderWidth: 1, marginBottom: 8 },
+    bannerImage: { width: '100%', height: '100%' },
+    bannerNote: { fontSize: 13, lineHeight: 18, marginBottom: 8 },
 });

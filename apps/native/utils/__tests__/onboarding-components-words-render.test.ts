@@ -131,7 +131,7 @@ import { DEEP_RESONANCE_QUESTIONS, QUICK_SPARK_QUESTIONS, pseudoLocalise, setLan
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { OnboardingGuide } from '../../components/OnboardingGuide';
 import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
-import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { KeeperProtectionPanel, SIGN_IN_ROW, VAULT_COPY_OPENERS } from '../../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { RecoveryKitButtons } from '../../components/RecoveryKitButtons';
 import { CopyClearsNote, NoScreenLockNote } from '../../components/WordsOnScreen';
@@ -281,6 +281,26 @@ describe('the account-protection panel (KeeperProtectionPanel)', () => {
             }
         });
     }
+    // Vault rethink VR0: the row names the vault, and "Who can open it" opens the long sentence, closed when drawn.
+    it('a vault build: "Who can open it" opens who can open the copy and closes it again, before a sign-in and after; Account Protection\'s row alone too', async () => {
+        useVault();
+        const openers = pseudoLocalise(VAULT_COPY_OPENERS);
+        for (const [protection, waysBack] of [[protectionFrom(null), false], [protectionFrom(null), true], [covered(['google']), false]] as const) {
+            for (const hasWords of [true, false]) {
+                const step = `the panel, ${protection.state}, ${hasWords ? 'words' : 'no words'}${waysBack ? ', Account Protection' : ''}`;
+                await mount(createElement(KeeperProtectionPanel, { protection, hasWords, waysBack, onProtectSso() {}, onDisconnectSso() {} }));
+                expect(host!.textContent, step).toContain(pseudoLocalise(hasWords ? SIGN_IN_ROW.vaultKeeps : SIGN_IN_ROW.vaultKeepsKey));
+                expect(host!.textContent, step).not.toContain(openers);
+                const who = () => all('button').find((b) => b.getAttribute('aria-label') === pseudoLocalise(SIGN_IN_ROW.whoCanOpenButton));
+                await click(who(), `${step}: Who can open it`);
+                expect(host!.textContent, step).toContain(openers);
+                check(`${step}, opened`, ROW_LINE);
+                await click(who(), `${step}: Who can open it, again`);
+                expect(host!.textContent, step).not.toContain(openers);
+                act(() => root?.unmount()); host?.remove();
+            }
+        }
+    });
 });
 
 describe('the sign-in sheet (SsoEnrolSheet)', () => {

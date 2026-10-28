@@ -24,6 +24,7 @@ import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { claimInFlight, forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
+import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
@@ -55,6 +56,7 @@ import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
 import { isGlobalLink } from '../utils/global-link';
 import { doorLinkFromSystemPath } from '../utils/open-door';
+import { isCommunityCardPath } from '../utils/community-card-link';
 import * as WebBrowser from 'expo-web-browser';
 import { t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
@@ -192,6 +194,8 @@ function RootLayoutNav() {
     const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
     const recoveryPromptWait = useRef<(() => void) | null>(null); // it waits for the app to show (whenAppShows)
+    // Each look of the guard with no identity: only the latest one's answer about looking around is acted on.
+    const noKeyGuardTurn = useRef(0);
 
     // App Lock's lock screen and cover are one value for the whole app (utils/app-lock-screen.ts): every screen and pop-up
     // draws them inside itself, not only this layout.
@@ -342,6 +346,10 @@ function RootLayoutNav() {
         // route's name as one ("JOIN-OPEN-DOOR"), offer "Switch Nodes?" to the link's address, or put a welcome with that
         // "invite" over the first screen (PR #2131 review).
         if (doorLinkFromSystemPath(currentUrl)) return;
+        // A community's card, its bare address or `beanpool://community-card?node=…` (utils/community-card-link.ts, front
+        // doors S15): routed by +native-intent.ts. Not an invite: extractInviteToken reads the route's name as one
+        // ("COMMUNITY-CARD"), as it did the door screen's.
+        if (isCommunityCardPath(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).
@@ -619,6 +627,8 @@ function RootLayoutNav() {
     useEffect(() => {
         if (isLoading) return;
         const root = (segments as string[])[0];
+        // A look about looking around still out is for the screen before this one: its answer is dropped.
+        const guardTurn = ++noKeyGuardTurn.current;
 
         // If we have no identity, the only screens that make sense are the
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
@@ -626,12 +636,23 @@ function RootLayoutNav() {
         // the new identity itself at the "Submit Request" step — so it must be
         // reachable without one. So is the claim screen, whose claim makes the
         // account. Any other route → back to welcome (utils/auth-return.ts,
-        // `setupRedirect`).
+        // `setupRedirect`). Unless the phone is looking around the global
+        // community as a visitor, chosen on the first screen (slice S12,
+        // utils/look-around.ts): then its screens stay, and one that needs a
+        // key opens the door, where the key is made at Join.
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {
                 setTimeout(() => {
-                    router.replace(to);
+                    void lookingAroundHere().then((looking) => {
+                        // A later look of the guard (the screen moved, an account arrived) decides instead.
+                        if (!isComponentMounted.current || guardTurn !== noKeyGuardTurn.current) return;
+                        const where = looking ? setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false, lookingAround: true }) : to;
+                        if (!where) return;
+                        // The door from the look is the only screen: its Back returns to the look (app/welcome.tsx).
+                        if (where !== to && router.canDismiss()) router.dismissAll();
+                        router.replace(where);
+                    });
                 }, 50);
             }
             return;
@@ -908,6 +929,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="community-card" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />

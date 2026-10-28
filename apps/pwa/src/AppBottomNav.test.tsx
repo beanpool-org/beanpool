@@ -436,15 +436,21 @@ describe('the "?" opens the guide\'s words for the tab you are on (review of #18
         expect(market.title).toBeTruthy();
         expect(commons.title).toBeTruthy();
         expect(market.title).not.toBe(commons.title);
-        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(market.title!);
+        const marketHelp = await openWith('header-help');
+        expect(marketHelp.getByTestId('help-title')).toHaveTextContent(market.title!);
+        if (market.text) expect(marketHelp.getByTestId('help-text')).toHaveTextContent(market.text);
         fireEvent.click(screen.getByTestId('help-close'));
         await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
         fireEvent.click(within(screen.getByTestId('mobile-bottom-nav')).getByText(/Commons/i));
         await screen.findByTestId('projects-page');
-        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+        const commonsHelp = await openWith('header-help');
+        expect(commonsHelp.getByTestId('help-title')).toHaveTextContent(commons.title!);
+        if (commons.text) expect(commonsHelp.getByTestId('help-text')).toHaveTextContent(commons.text);
         fireEvent.click(screen.getByTestId('help-close'));
         await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
-        expect((await openWith('sidebar-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+        const sidebarHelp = await openWith('sidebar-help');
+        expect(sidebarHelp.getByTestId('help-title')).toHaveTextContent(commons.title!);
+        if (commons.text) expect(sidebarHelp.getByTestId('help-text')).toHaveTextContent(commons.text);
     });
 
     it('Take the tour again in the ? closes it, goes Home and asks Home to open the tour (review of #1857, NB1)', async () => {

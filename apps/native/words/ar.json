@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -661,7 +661,6 @@
   "Add a photo to your profile": "أضف صورة إلى ملفك الشخصي",
   "Pick a few things you like": "اختر بعض الأشياء التي تعجبك",
   "Post something free or for swap": "انشر شيئًا مجانيًا أو للتبادل",
-  "Ask a community to let you in": "اطلب من مجتمع السماح لك بالانضمام",
   "{n} day|{n} days": {
     "zero": "{n} يوم",
     "one": "{n} يوم",
@@ -692,7 +691,6 @@
   "Your credit opens with a first trade.": "يفتح حدك الائتماني مع أول معامله لك.",
   "Spending is paused for now. You can still receive and sell.": "الإنفاق متوقف مؤقتًا الآن. لا يزال بإمكانك الاستلام والبيع.",
   "{amount} · room to spend {room}": "{amount} · مجال للإنفاق {room}",
-  "The worldwide community": "المجتمع العالمي",
   "1 member. You're first. Invite someone.": "عضو واحد. أنت أولهم. ادعُ شخصًا ما.",
   "1 member. You're first.": "عضو واحد. أنت أولهم.",
   "{n} trade this month|{n} trades this month": {
@@ -5754,7 +5752,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "إذا كنت تفضل ألا يتمكن أحد سواك من الدخول، فاستخدم كلماتك الـ 12 فقط.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "تحتفظ خزينة مفاتيح BeanPool، وهي خادم صغير في آيسلندا، بنسخة من حسابك يفتحها تسجيل دخولك. يمكن لـ BeanPool فتح هذه النسخ: يدير الخزينة حاليًا شخص واحد، مؤسس BeanPool، ويجري نقلها إلى ثلاثة أشخاص في دول مختلفة، يجب أن يتصرف اثنان منهم معًا. تستطيع شركة الاستضافة قراءة ذاكرة الخادم أثناء تشغيله. قد تأمر محكمة بفتح نسخة، وأي شخص يستولي على حساب تسجيل الدخول الخاص بك يمكنه الدخول.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "اربط أكثر من حساب، تحسبًا لفقدان أحدها. أي منها يعيد حسابك على هاتف جديد، عبر خادم مجتمعك الذي يحتفظ بالنسخة.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "اربط أكثر من حساب، تحسبًا لفقدان أحدها. أي منها يعيد حسابك على هاتف جديد في كل مجتمع.",
   "🛡️ You're covered on {community}": "🛡️ حسابك محمي على {community}",
   "🛡️ You're covered": "🛡️ حسابك محمي",
   "Sign-In Recovery Providers (1-of-N)": "مزودو الاسترداد عبر تسجيل الدخول (1 من N)",
@@ -7068,5 +7065,20 @@
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها.",
-  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:"
+  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:",
+  "Choose a banner photo, or keep this one": "اختر صورة بانر، أو احتفظ بهذه الصورة",
+  "Your picture, until you choose a banner.": "صورتك، حتى تختار بانر.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "أنت تتجول كزائر. لا يُحفظ شيء حتى تنضم.",
+  "Join to post": "انضم لتنشر",
+  "Join to message": "انضم لترسل رسالة",
+  "The global community": "المجتمع العالمي",
+  "Choose a name": "اختر اسماً",
+  "Say roughly where you are": "حدد موقعك التقريبي",
+  "Add a picture (a preset counts)": "أضف صورة (الصور الجاهزة مقبولة)",
+  "Look at an example Ledger": "اطلع على دفتر حسابات نموذجي",
+  "Say hello to someone near you": "رحّب بشخص قريب منك",
+  "Tell me when a community starts here, or say you'd help start one": "أخبرني عندما يبدأ مجتمع هنا، أو ساهم في بدء واحد",
+  "Nothing within 250 km yet.": "لا يوجد شيء في نطاق 250 كم بعد.",
+  "See what people post elsewhere ›": "شاهد ما ينشره الآخرون في أماكن أخرى ›",
+  "Set your area": "حدد منطقتك"
 }

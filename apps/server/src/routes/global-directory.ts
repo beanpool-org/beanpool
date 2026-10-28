@@ -24,9 +24,11 @@
  * The watch routes act for the signer (`ctx.state.actor`) and nobody else: no route takes a member's key from the
  * body, and the signature middleware's spoof check refuses a body key that names anyone but the signer. The two reads
  * are on the public list (https-server.ts): a guest deciding whether to join can see what is near, and a signed read
- * adds the caller's own watches to the card. A guest's count of the posts near a point (anyone who doesn't read as a
- * member, whether or not the visitors' view `guestListingsOnly` is on) is worked out from each post's 0.1° area, as the
- * visitors' view of the listing is; the communities are the public directory's, each at the place it publishes there.
+ * adds the caller's own watches to the card. An unsigned read of either is everyone's, which an edge in front may keep for
+ * a minute; a signed one is the reader's alone (guest-cache.ts, slice L0). A guest's count of the posts near a point
+ * (anyone who doesn't read as a member, whether or not the visitors' view `guestListingsOnly` is on) is worked out from
+ * each post's 0.1° area, as the visitors' view of the listing is; the communities are the public directory's, each at the
+ * place it publishes there.
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';
@@ -35,13 +37,14 @@ import { getPosts, isNodeMember } from '../state-engine.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { viewerTier } from './viewer.js';
+import { setReadCaching } from '../guest-cache.js';
 import { isPoint, readMemberArea } from '../engine/member-area.js';
 import { listCommunities, listedCommunityCount, readMirrorStatus } from '../engine/directory-cache.js';
 import {
     listPlaceWatches, setPlaceWatch, removePlaceWatch, PlaceWatchLimitError, placeWatchLimit, PLACE_WATCH_RADIUS_KM,
 } from '../engine/place-watches.js';
 import type { RouteDeps } from './types.js';
-import { word } from '@beanpool/core';
+import { askHost, word } from '@beanpool/core';
 
 const MAX_QUERY_CHARS = 80;
 const DEFAULT_LIMIT = 20;
@@ -206,6 +209,10 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         if (!point.ok) return badRequest(ctx, point.error);
         const q = nameQuery(ctx.query);
         if (!q.ok) return badRequest(ctx, q.error);
+        // One community by its host (`?ask=<host>` from a community's card, front doors S15), as core's askHost reads it.
+        const rawHost = ctx.query.host;
+        if (rawHost !== undefined && (typeof rawHost !== 'string' || askHost(rawHost) === null)) return badRequest(ctx, 'host is not a host name.');
+        const host = typeof rawHost === 'string' ? askHost(rawHost) : null;
         const limit = whole(ctx.query, 'limit', DEFAULT_LIMIT, 1, MAX_LIMIT);
         if (!limit.ok) return badRequest(ctx, limit.error);
         const offset = whole(ctx.query, 'offset', 0, 0, MAX_OFFSET);
@@ -222,21 +229,24 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         const tag = crypto.createHash('sha256').update(`${status.fetchedAt ?? 'never'}|${ctx.querystring}`).digest('hex').slice(0, 16);
         const etag = `W/"communities-${tag}"`;
         ctx.set('ETag', etag);
-        // Public and the same for every reader, but short-lived: the cache changes hourly.
-        ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+        // The same for every reader, and the cache changes hourly: an edge in front may keep an unsigned reader's for a
+        // minute (guest-cache.ts, slice L0). A signed reader's is theirs alone, as every signed answer is.
+        setReadCaching(ctx, true);
         const inm = ctx.get('If-None-Match');
         if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
             ctx.status = 304;
             return;
         }
-        const { communities, total } = listCommunities({ point: point.value, q: q.value, limit: limit.value, offset: offset.value, order: order.value });
+        const { communities, total } = listCommunities({ point: point.value, q: q.value, host, limit: limit.value, offset: offset.value, order: order.value });
         ctx.body = { communities, total, limit: limit.value, offset: offset.value, fetchedAt: status.fetchedAt };
     });
 
     router.get('/api/global/home', async (ctx) => {
         const asked = parsePoint(ctx.query);
         if (!asked.ok) return badRequest(ctx, asked.error);
-        ctx.set('Cache-Control', 'private, no-store');
+        // An unsigned reader's card is everyone's: no watches, the shared order (cardOrder), the visitors' count. An edge
+        // in front may keep it for a minute (guest-cache.ts, slice L0). A signed reader's holds their own watches.
+        setReadCaching(ctx, !ctx.state.actor, 'private, no-store');
         ctx.body = landingCardFor(ctx.state.actor as string | undefined, asked.value, viewerTier(ctx) === 'guest');
     });
 

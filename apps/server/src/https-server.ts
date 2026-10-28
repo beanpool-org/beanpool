@@ -115,6 +115,7 @@ import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
 import { createAppAddressesRoutes } from './routes/app-addresses.js';
+import { createCommunityCardRoutes } from './routes/community-card.js';
 import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createEventsRoutes } from './routes/events.js';
@@ -190,6 +191,7 @@ import { requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMembe
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
 import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
 
@@ -329,6 +331,9 @@ function verifyWsConnect(pathname: string, params: URLSearchParams, client: stri
 export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
+    // A stranger at the community's door (front doors S15, routes/community-card.ts): its name, its member count and its area
+    // only where its switches publish them, and how it takes new members. Nobody named, nothing listed.
+    '/api/community/card',
     '/api/community/health',
     // The consent a known community asks for at joining (engine/community-health.ts): read before joining.
     '/api/community/consent-terms',
@@ -1231,6 +1236,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         await next();
     });
 
+    // Only an anonymous read's /api answer may say a shared cache can keep it (guest-cache.ts, slice L0): an answer to a
+    // signed request, an admin's or another web origin's, and every refusal or fault, leaves for the reader's own cache
+    // only, whatever its route said. Outside every middleware that sets an answer, so it reads the final one.
+    app.use(sharedCachesKeepOnlyAnonymousReads());
+
     // A large answer goes to a TLS connection 64 KB at a time, so an idle connection doesn't keep the answer's size in
     // memory after it has gone (tls-send-window.ts, #1746). Before every middleware that sets or changes a body, so it
     // sends the final one: its work is after next().
@@ -1880,6 +1890,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     const routeModules = [
         createSettingsRoutes(deps),
         createCommunityRoutes(deps),
+        createCommunityCardRoutes(deps),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
         createOffboxBackupRoutes(deps),

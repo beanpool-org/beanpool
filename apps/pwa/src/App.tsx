@@ -24,7 +24,8 @@ import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
-import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
+import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
+import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { readsOwn, useFeatureMode } from './lib/features';
@@ -43,11 +44,11 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
-import { getBundledGuide, inShownLanguage } from './lib/guide';
+import { getBundledGuide, loadBundledGuide, inShownLanguage } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -143,6 +144,11 @@ export function App() {
     const fitNavLabels = useFitNavLabels(lang);
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
+    // The hint the node reads at its bare address (front doors S15, lib/community-card.ts): with an account here `/`
+    // opens this app as before; without one it shows a stranger the community's card. Said once the identity has loaded.
+    useEffect(() => {
+        if (!loading) setAccountHint(!!identity);
+    }, [loading, identity]);
     /*
      * With no identity: the global lobby (G9b) when the node shows visitors its listings and nothing is part way through
      * a join in this browser; otherwise the welcome page, as always. Decided once, from the node's own word; a node
@@ -168,7 +174,7 @@ export function App() {
     const invitesMode = useFeatureMode('invites');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
+    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
     // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
     const [settingsGuidePage, setSettingsGuidePage] = useState<string | null>(null);
     // A sign-in added to an account made with 12 words (lib/link-signin.ts): what came of it, said in Settings.
@@ -206,12 +212,20 @@ export function App() {
         setActiveTab('home');
     };
     const [helpOpen, setHelpOpen] = useState(false);
+    const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
     useEffect(() => {
         const open = () => setHelpOpen(true);
         window.addEventListener(OPEN_HELP_EVENT, open);
         return () => window.removeEventListener(OPEN_HELP_EVENT, open);
     }, []);
-    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab: activeTab, settings: showSettings }));
+    useEffect(() => {
+        if (helpOpen && !helpGuide) {
+            loadBundledGuide().then(setHelpGuide).catch(() => {});
+        }
+    }, [helpOpen, helpGuide]);
+    const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
@@ -457,6 +471,11 @@ export function App() {
             setShowSettings(true);
             return;
         }
+        if (tab === 'settings-area') {
+            setSettingsInitialMode('area');
+            setShowSettings(true);
+            return;
+        }
         // A chat's "Rate your partner": the Market with that trade's rating form open.
         if (tab === 'marketplace-review') {
             setActiveTab('marketplace');
@@ -496,6 +515,24 @@ export function App() {
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
+
+    // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
+    // join, as it keeps a shared listing; a member lands on Home with the Find card on that community (above the cards
+    // where Home draws no Find card).
+    const [askParam] = useState(() => takeAskParam());
+    const [askedCommunity, setAskedCommunity] = useState<string | null>(null);
+    // Once per page, at the first identity: the identity object is replaced later (a profile saved), and that is no ask.
+    const askTaken = useRef(false);
+    useEffect(() => {
+        if (!identity || askTaken.current) return;
+        askTaken.current = true;
+        const kept = takeKeptAskedCommunity();
+        const asked = askParam ?? kept;
+        if (!asked) return;
+        setActiveTab('home');
+        setAskedCommunity(asked);
+    }, [identity, askParam]);
+    const clearAskedCommunity = useCallback(() => setAskedCommunity(null), []);
 
     // `/?shop=<id>` — a shared shop link.
     const [linkedShop, setLinkedShop] = useState<string | null>(null);
@@ -779,7 +816,7 @@ export function App() {
             setIdentity(signedIn);
         };
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
+            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
@@ -1079,6 +1116,8 @@ export function App() {
                                     onAddCardTaken={clearAddHomeCard}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                    askedCommunity={askedCommunity}
+                                    onAskedCommunitySeen={clearAskedCommunity}
                                 />
                             )}
                             {activeTab === 'marketplace' && (

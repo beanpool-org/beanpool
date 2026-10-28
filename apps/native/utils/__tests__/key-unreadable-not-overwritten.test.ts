@@ -11,6 +11,10 @@
  * writes leaves the member's account readable again, and a new key must not go over it. StoredKeyDiffersError, a kind of
  * StoredKeyUnreadableError. The same account's own writes (a new name, its words added, a legacy copy moved in, a re-key's
  * key, the iPhone's this-device-only move) still go through, compared on the public key alone.
+ *
+ * Nor does a look around (slice S12, look-around.ts) treat such an item as no account: an account arriving keeps the
+ * phone's guest marks, read through identity.ts readStoredIdentity, the read that tells none from unreadable (#2559
+ * review 4397083592: loadIdentity answers null for both).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { webcrypto } from 'node:crypto';
@@ -25,8 +29,13 @@ vi.mock('expo-crypto', () => ({
 const store = vi.hoisted(() => new Map<string, string>());
 const secure = vi.hoisted(() => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn(), deleteItemAsync: vi.fn() }));
 vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED: 5, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, ...secure }));
+const app = vi.hoisted(() => new Map<string, string>());
 vi.mock('@react-native-async-storage/async-storage', () => ({
-    default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() },
+    default: {
+        getItem: vi.fn(async (key: string) => app.get(key) ?? null),
+        setItem: vi.fn(async (key: string, value: string) => { app.set(key, value); }),
+        removeItem: vi.fn(async (key: string) => { app.delete(key); }),
+    },
 }));
 
 import type { BeanPoolIdentity } from '../identity';
@@ -50,6 +59,7 @@ async function onPhone(kind: 'ios' | 'android') {
 
 beforeEach(() => {
     store.clear();
+    app.clear();
     secure.getItemAsync.mockReset().mockImplementation(async (key: string) => store.get(key) ?? null);
     secure.setItemAsync.mockReset().mockImplementation(async (key: string, value: string) => { store.set(key, value); });
     secure.deleteItemAsync.mockReset().mockImplementation(async (key: string) => { store.delete(key); });
@@ -124,6 +134,55 @@ describe.each(['android', 'ios'] as const)('on %s: an account the phone can\'t r
         expect(store.get(ITEM)).toBe(JSON.stringify(ACCOUNT));
         expect(secure.setItemAsync).not.toHaveBeenCalled();
         await expect(identity.loadIdentity()).resolves.toEqual(ACCOUNT);
+    });
+});
+
+describe.each(['android', 'ios'] as const)('on %s: an account arriving on a phone whose item can\'t be read keeps its guest marks', (kind) => {
+    const GUESTS = 'beanpool_guest_nodes';
+    const MARKED = JSON.stringify(['https://global.beanpool.org']);
+
+    it('forgetTheLook, through the phone\'s own read: an item that isn\'t an account, a read that throws, or an account keeps the marks; no item loses them', async () => {
+        const identity = await onPhone(kind);
+        const { forgetTheLook } = await import('../look-around');
+        let readFails = false;
+        secure.getItemAsync.mockImplementation(async (key: string) => {
+            if (readFails) throw new Error('DecryptException: could not decrypt the value');
+            return store.get(key) ?? null;
+        });
+        for (const [held, fails] of [[UNREADABLE, false], [JSON.stringify(ACCOUNT), true], [JSON.stringify(ACCOUNT), false]] as const) {
+            store.set(ITEM, held);
+            readFails = fails;
+            app.set(GUESTS, MARKED);
+            // What loadIdentity can't tell apart, the read the look uses can.
+            if (held === UNREADABLE || fails) {
+                await expect(identity.loadIdentity()).resolves.toBeNull();
+                await expect(identity.readStoredIdentity()).rejects.toBeInstanceOf(identity.StoredKeyUnreadableError);
+            }
+            await forgetTheLook();
+            expect(app.get(GUESTS), `${held} ${fails ? 'read throws' : ''}`).toBe(MARKED);
+        }
+        readFails = false;
+        store.clear();
+        app.set(GUESTS, MARKED);
+        await expect(identity.readStoredIdentity()).resolves.toBeNull();
+        await forgetTheLook();
+        expect(app.has(GUESTS)).toBe(false);
+    });
+
+    it('a re-key code (finishRekey with the screen\'s forgetLook) onto an item it can\'t read: refused, the item kept, and the marks kept', async () => {
+        const identity = await onPhone(kind);
+        const { forgetTheLook } = await import('../look-around');
+        const draft = await identity.draftIdentity('');
+        const slot: RekeySlot = { community: 'https://x.example', code: 'RK-ABCD-1234', publicKey: draft.publicKey, madeHere: true, draft, startedAt: 0 };
+        const deps = {
+            slot: { get: async () => slot, set: async () => {}, clear: vi.fn(async () => {}) },
+            loadIdentity: identity.loadIdentity, importIdentity: identity.importIdentity, forgetLook: forgetTheLook,
+        } as unknown as RekeyDeps;
+        store.set(ITEM, UNREADABLE);
+        app.set(GUESTS, MARKED);
+        await expect(finishRekey(slot, { callsign: 'Sam' }, deps)).rejects.toBeInstanceOf(identity.StoredKeyUnreadableError);
+        expect(store.get(ITEM)).toBe(UNREADABLE);
+        expect(app.get(GUESTS)).toBe(MARKED);
     });
 });
 

@@ -9,7 +9,7 @@ import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLa
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
-    starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
+    starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
 
@@ -27,7 +27,7 @@ function answer(cards: HomeCards, over: Partial<HomeAnswer> = {}): HomeAnswer {
 }
 
 const find = { point: 'request' as const, communities: [{ key: 'k', name: 'Byron Shire BeanPool', url: 'https://byron.example', memberCount: 40, distanceKm: 12 }], communityCount: 38, nearbyPosts: { radiusKm: 25, count: 9, more: false }, watches: [], knock: null, directoryFetchedAt: null };
-const steps = { joinedAt: daysAgo(1), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null };
+const steps = { joinedAt: daysAgo(1), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null, saidHello: false, watch: false, sawLedger: false };
 const market = { items: [{ id: 'p1', type: 'offer' as const, title: 'Sourdough', category: 'food', photoUrl: null }], total14d: 1, more: false };
 const events = { items: [{ id: 'e1', title: 'Seed swap', startsAt: daysAgo(-1), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: null };
 const community = { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 };
@@ -136,6 +136,11 @@ describe('the words (§3.1, §9)', () => {
         expect(cardTitle('enterprise', ent('ongoing'))).toBe('Your enterprise');
         expect(cardTitle('enterprise', ent())).toBe('Your enterprise');
         expect(cardTitle('enterprise', { profile: 'local' })).toBe('Your enterprise');
+    });
+
+    it('steps card title: "Your first week" on global, "First steps" locally', () => {
+        expect(cardTitle('steps', { profile: 'global' })).toBe('Your first week');
+        expect(cardTitle('steps', { profile: 'local' })).toBe('First steps');
     });
 
     it('Beans: their own balance, plain for a new member, the tier as a word only', () => {
@@ -268,44 +273,46 @@ describe('the words (§3.1, §9)', () => {
     });
 });
 
-describe('First steps goes when it has nothing to say on the web (§6.1, PR #1479 review)', () => {
+describe('The first week on the web (L3, §3.2)', () => {
     const august = '2026-08-10T00:00:00.000Z';
+    const allDoneSteps = { area: true, photo: true, sawLedger: true, firstPost: true, saidHello: true, watch: true };
     const globalMember = (stepsOver: Partial<typeof steps>, findCard = { ...find, communities: [] as typeof find.communities }, meOver: Partial<HomeMe> = {}) =>
         answer({ find: findCard, steps: { ...steps, joinedAt: august, area: false, ...stepsOver }, community },
             { profile: 'global', features: GLOBAL_FEATURES, me: me({ joinedAt: august, interests: ['food'], ...meOver }) });
 
-    it('a global member a month in who has posted: the node still sends it (no area), the web leaves it out', () => {
-        const a = globalMember({ firstPost: true });
-        expect(a.cards.steps).toBeDefined();
-        expect(stepLines(a, ['food'])).toEqual([{ key: 'firstPost', done: true, text: 'Post something free or for swap' }]);
-        expect(stepsSaySomething(a, ['food'], NOW)).toBe(false);
-        expect(shown(a, { now: NOW })).not.toContain('steps');
+    it('the seven steps of §3.2 on global', () => {
+        const a = globalMember({});
+        expect(stepLines(a, ['food'])).toEqual([
+            { key: 'name', done: true, text: 'Choose a name' },
+            { key: 'area', done: false, text: 'Say roughly where you are' },
+            { key: 'photo', done: false, text: 'Add a picture (a preset counts)' },
+            { key: 'sawLedger', done: false, text: 'Look at an example Ledger' },
+            { key: 'firstPost', done: false, text: 'Post something free or for swap' },
+            { key: 'saidHello', done: false, text: 'Say hello to someone near you' },
+            { key: 'watch', done: false, text: "Tell me when a community starts here, or say you'd help start one" },
+        ]);
     });
 
-    it('"Ask X to let you in" is a suggestion the web can never tick: it keeps no card on its own', () => {
-        const a = globalMember({ firstPost: true }, find);
-        expect(stepLines(a, ['food']).map(l => l.key)).toEqual(['firstPost', 'ask']);
-        expect(shown(a, { now: NOW })).not.toContain('steps');
-    });
+    it('card ends after 14 days or all done on global', () => {
+        // More than 14 days old, undone: web leaves it out
+        const oldUndone = globalMember({ firstPost: true });
+        expect(stepsSaySomething(oldUndone, ['food'], NOW)).toBe(false);
+        expect(shown(oldUndone, { now: NOW })).not.toContain('steps');
 
-    it('"Ask X to let you in" only for a community within 250 km, the radius global\'s listings use (#1517)', () => {
-        // Core's NEAR_COMMUNITY_KM: one meaning of near on every screen (#1935), no copy of its own.
-        expect(NEAR_COMMUNITY_KM).toBe(250);
-        const at = (distanceKm: number | null) => stepLines(globalMember({ firstPost: true }, { ...find, communities: [{ ...find.communities[0], distanceKm: distanceKm as number }] }), ['food']).map(l => l.key);
-        expect(at(12)).toEqual(['firstPost', 'ask']);
-        expect(at(250)).toEqual(['firstPost', 'ask']);
-        expect(at(250.1)).toEqual(['firstPost']);
-        // A community 9,000 km away is not "within reach"; nor one with no distance (the node lists none without a point).
-        expect(at(9000)).toEqual(['firstPost']);
-        expect(at(null)).toEqual(['firstPost']);
-        expect(at(Number.NaN)).toEqual(['firstPost']);
-    });
+        // Young (< 14 days), undone: web shows it
+        const youngUndone = globalMember({ firstPost: true, joinedAt: daysAgo(3) }, find, { joinedAt: daysAgo(3) });
+        expect(stepsSaySomething(youngUndone, ['food'], NOW)).toBe(true);
+        expect(shown(youngUndone, { now: NOW })).toContain('steps');
 
-    it('it stays while a line is undone, the member is new, or the new-account limits apply', () => {
-        expect(shown(globalMember({ firstPost: false }), { now: NOW })).toContain('steps');
-        expect(shown(globalMember({ firstPost: true, joinedAt: daysAgo(3) }, find, { joinedAt: daysAgo(3) }), { now: NOW })).toContain('steps');
-        const limits = { onProbation: true, ageEndsAt: null, keptPosts: 1, keptPostsNeeded: 3, limits: { posts: { limit: 3 }, new_dm_recipients: { limit: 10 } }, endsWhen: { hours: 72, keptPosts: 3 } };
-        expect(shown(globalMember({ firstPost: true }, undefined, { probation: limits }), { now: NOW })).toContain('steps');
+        // Young (< 14 days), all done: card ends immediately
+        const youngAllDone = globalMember({ ...allDoneSteps, joinedAt: daysAgo(3) }, find, { joinedAt: daysAgo(3) });
+        expect(stepsSaySomething(youngAllDone, ['food'], NOW)).toBe(false);
+        expect(shown(youngAllDone, { now: NOW })).not.toContain('steps');
+
+        // More than 14 days old, all done: card ends
+        const oldAllDone = globalMember({ ...allDoneSteps, joinedAt: august }, find, { joinedAt: august });
+        expect(stepsSaySomething(oldAllDone, ['food'], NOW)).toBe(false);
+        expect(shown(oldAllDone, { now: NOW })).not.toContain('steps');
     });
 
     it('locally, by the same lines: a chip tapped ticks "Pick a few things you like" at once', () => {
@@ -431,5 +438,26 @@ describe('month summary line: partial month indication when more is set', () => 
 
     it('shows partial indicator when more is true', () => {
         expect(monthSummaryLine({ trades: 200, in: 500, out: 300, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
+    });
+});
+
+describe('usePhoneAppCardDue (front doors S4)', () => {
+    it('is not due when dismissed', () => {
+        expect(usePhoneAppCardDue({ dismissed: true, keptPosts: 2, weekOverAt: 1000, now: 2000 })).toBe(false);
+    });
+
+    it('is not due before first post and before week is over', () => {
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 2000, now: 1000 })).toBe(false);
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: null, now: 1000 })).toBe(false);
+    });
+
+    it('is due after first post', () => {
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 1, weekOverAt: 2000, now: 1000 })).toBe(true);
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 5, weekOverAt: null, now: 1000 })).toBe(true);
+    });
+
+    it('is due after first week is over', () => {
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 1000, now: 1000 })).toBe(true);
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 1000, now: 2000 })).toBe(true);
     });
 });

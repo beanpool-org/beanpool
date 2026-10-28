@@ -71,7 +71,7 @@ describe('one source: the web app bundles the same guide as the member app and t
         const offenders = files.filter(f => {
             const text = fs.readFileSync(path.join(srcDir, f), 'utf8');
             if (f.endsWith('.json')) return /"guides"\s*:/.test(text);
-            return /guide\.json/.test(text) && !/from '@beanpool\/guide\/generated\/guide\.json'/.test(text) && !f.endsWith('.test.tsx');
+            return /guide\.json/.test(text) && !/@beanpool\/guide\/generated\/guide\.json/.test(text) && !f.endsWith('.test.tsx');
         });
         expect(offenders).toEqual([]);
     });

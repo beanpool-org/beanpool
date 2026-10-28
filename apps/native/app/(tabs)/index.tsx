@@ -32,6 +32,9 @@ import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
+import { LookAroundCard } from '../../components/LookAroundCard';
+import { lookingAroundHere } from '../../utils/look-around';
+import { useLookingAround } from '../../utils/use-looking-around';
 import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { readTypedPlace } from '../../utils/typed-place';
 import {
@@ -47,7 +50,7 @@ import {
 } from '../../utils/home-cards';
 import {
     SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readPhoneOnlySent,
-    readStoredHome, reconcileInterests, readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writePhoneOnlyMark,
+    readStoredHome, readVisitorHome, reconcileInterests, readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writePhoneOnlyMark,
     writePhoneOnlySent, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
@@ -153,6 +156,7 @@ async function readsGlobal(url: string, kept: StoredHome | null): Promise<boolea
 export default function HomeScreen() {
     const { colors } = useTheme();
     const { identity } = useIdentity();
+    const lookingAround = useLookingAround();
     const { height: winH } = useWindowDimensions();
     const s = homeStyles(colors);
     const manage = useManageNode();
@@ -373,13 +377,51 @@ export default function HomeScreen() {
         if (next === record) { tipsRef.current = record; setTips(record); } else keepTips(whose, next);
     }, [keepTips]);
 
+    // ── Home for a visitor with no account, looking around (slice S12, utils/look-around.ts) ──
+    // The node's visitors' cards, read unsigned (home-store.ts readVisitorHome) and kept nowhere: drawn in the default
+    // order, as a guest's are, with nothing tailored, saved or sent. An account arriving meanwhile reads its own instead.
+    const refreshAsVisitor = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout' | 'again') => {
+        // Not looking around (an account still loading, say): nothing is asked, as before.
+        if (!(await lookingAroundHere())) return;
+        const raw = await anchorUrl().catch(() => null);
+        if (identityRef.current) return;
+        if (!raw) { setStatus('no_community'); return; }
+        const u = raw.replace(/\/+$/, '');
+        setUrl(u);
+        const held = storedRef.current?.url === u ? storedRef.current : null;
+        const asked = cardsToAsk(pickLayout(held?.answer.layout ?? null, null, held?.answer.layoutV1, null).layout, askPinned(held?.answer, Date.now()), held?.answer);
+        const point = (await readsGlobal(u, held)) ? await lastKnownPlace() : null;
+        const read = await readVisitorHome(u, asked, { point });
+        if (identityRef.current) return;
+        setPlace(was => (was?.lat === point?.lat && was?.lng === point?.lng ? was : point));
+        if (read.kind === 'answer') {
+            storedRef.current = read.stored;
+            setStored(read.stored);
+            setLayout(null);
+            setStatus('ok');
+            setOfflineNote(false);
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t('Home updated'));
+        } else if (read.kind === 'members_only') {
+            setStatus('members_only');
+        } else if (read.kind === 'needs_update') {
+            setStatus('needs_update');
+            storedRef.current = null;
+            setStored(null);
+            setOfflineNote(false);
+        } else {
+            setStatus(held ? 'ok' : 'offline');
+            setOfflineNote(!!held);
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility(t("Couldn't reach your community; showing what we had"));
+        }
+    }, []);
+
     // ── Reading Home ──
     // `focus` is a return to Home (the tab, the app coming back, another account): the only read that moves the Tips card.
     // `again` is a read while Home stays in front after the member's own step there (a notice opened, a poll or event made,
     // an edit made while the phone's list is the phone's only).
     const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout' | 'again') => {
         const id = identityRef.current;
-        if (!id) return;
+        if (!id) { await refreshAsVisitor(why); return; }
         const whose = homeAccount(id.publicKey);
         const raw = await anchorUrl().catch(() => null);
         if (!raw) { setStatus('no_community'); return; }
@@ -503,7 +545,7 @@ export default function HomeScreen() {
         }
         // No answer this time (offline, members only, needs an update): land from what the phone holds.
         if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
-    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips]);
+    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips, refreshAsVisitor]);
 
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
@@ -725,6 +767,11 @@ export default function HomeScreen() {
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
         else if (step === 'ask') router.push('/find-community');
+        else if (step === 'area') router.push('/your-area');
+        else if (step === 'sawLedger') router.push('/(tabs)/ledger');
+        else if (step === 'saidHello') router.push({ pathname: '/(tabs)/people', params: { view: 'community' } });
+        else if (step === 'watch') router.push('/find-community');
+        else if (step === 'name') { /* already done */ }
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     }, [openTune]);
 
@@ -1049,6 +1096,8 @@ export default function HomeScreen() {
                     testID="home-scroll"
                 >
                     <PageTitle title={t('Home')} testID="page-title-home" />
+                    {/* Looking around with no account (slice S12, utils/look-around.ts): nothing is kept until Join. */}
+                    {lookingAround && <LookAroundCard colors={colors} />}
                     <KeyMovedCard colors={colors} />
                     <AddressFollowCard colors={colors} />
                     <NotificationPermissionCard colors={colors} />

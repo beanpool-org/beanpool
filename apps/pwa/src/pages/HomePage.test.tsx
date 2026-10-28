@@ -631,7 +631,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
             expect(ex.querySelectorAll('button, a')).toHaveLength(0);
         }
         expect(screen.getByTestId('home-card-events')).toHaveTextContent('Place shown after you join');
-        expect(screen.getByTestId('home-card-community')).toHaveTextContent('The worldwide community');
+        expect(screen.getByTestId('home-card-community')).toHaveTextContent('The global community');
         expect(screen.getByTestId('home-card-community')).toHaveTextContent('2,310 members · 38 communities listed.');
         expect(page.textContent).not.toMatch(/Beans|Tune/);
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
@@ -950,29 +950,31 @@ describe('Find your community on the web: far is not near, none only once loaded
     });
 });
 
-describe('First steps on the global node, on the web (PR #1479 review)', () => {
-    const globalAnswer = (stepsOver: Partial<NonNullable<HomeAnswer['cards']['steps']>>) => answer({
+describe('The first week on the global node, on the web (L3, §3.2)', () => {
+    const DAY_MS = 86_400_000;
+    const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS).toISOString();
+    const globalAnswer = (stepsOver: Partial<NonNullable<HomeAnswer['cards']['steps']>>, days = 30) => answer({
         profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true },
-        me: { ...answer().me!, joinedAt: '2026-08-10T00:00:00.000Z', firstOffer: true },
+        me: { ...answer().me!, joinedAt: daysAgo(days), firstOffer: true },
     }, {
         beans: undefined,
         find: { point: 'area', communities: [{ key: 'b', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 }], communityCount: 2, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null },
-        steps: { joinedAt: '2026-08-10T00:00:00.000Z', firstOffer: true, firstPost: true, photo: false, interests: true, invited: null, area: false, knocked: null, ...stepsOver },
+        steps: { joinedAt: daysAgo(days), firstOffer: true, firstPost: true, photo: false, interests: true, invited: null, area: false, knocked: null, saidHello: false, watch: false, sawLedger: false, ...stepsOver },
     });
 
-    it('a member a month in who has posted: no First steps, though the node sends it for the area the web cannot set', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({})));
+    it('a member a month in who has undone steps: card ends after 14 days on global (§3.2, L3)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false }, 30)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-find');
         expect(screen.queryByTestId('home-card-steps')).toBeNull();
     });
 
-    it('before the first post it is there, with the ask as a link to the community', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false })));
+    it('a young member with undone steps sees The first week card (§3.2, L3)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false }, 2)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const steps = await screen.findByTestId('home-card-steps');
         expect(within(steps).getByRole('button', { name: 'To do: Post something free or for swap' })).toBeInTheDocument();
-        expect(within(steps).getByRole('link', { name: 'To do: Ask Byron Shire BeanPool to let you in' })).toHaveAttribute('href', 'https://byron.example.org');
+        expect(within(steps).getByRole('button', { name: 'To do: Say roughly where you are' })).toBeInTheDocument();
     });
 });
 
@@ -3490,6 +3492,146 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(asideText.className).toContain('min-w-0');
         expect(asideText.className).toContain('break-words');
         expect(asideText.className).toContain('text-right');
+    });
+
+    describe('Use the phone app card gating (front doors S4)', () => {
+        it('local profile: a new member does not see the card on day one; member past a week does; member with a post does', async () => {
+            const oneDayAgo = new Date(Date.now() - 1 * 86_400_000).toISOString();
+            const localNewMember = answer({
+                profile: 'local',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: null,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(localNewMember));
+            const { unmount: unmount1 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            unmount1();
+
+            const localPostedMember = answer({
+                profile: 'local',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: null,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: true,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(localPostedMember));
+            const { unmount: unmount2 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+            unmount2();
+
+            const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000).toISOString();
+            const localWeekOldMember = answer({
+                profile: 'local',
+                me: {
+                    joinedAt: eightDaysAgo,
+                    isKeeper: false,
+                    probation: null,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(localWeekOldMember));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+        });
+
+        it('global profile: a new member does not see the card on day one; member past a week does; member with a post does', async () => {
+            const oneDayAgo = new Date(Date.now() - 1 * 86_400_000).toISOString();
+            const globalNewMember = answer({
+                profile: 'global',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: {
+                        rules: 'ordinary',
+                        keptPosts: 0,
+                        keptPostsNeeded: 3,
+                        ageEndsAt: null,
+                        endsWhen: { hours: 72, keptPosts: 3 },
+                    } as any,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalNewMember));
+            const { unmount: unmount1 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            unmount1();
+
+            const globalPostedMember = answer({
+                profile: 'global',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: {
+                        rules: 'ordinary',
+                        keptPosts: 1,
+                        keptPostsNeeded: 3,
+                        ageEndsAt: null,
+                        endsWhen: { hours: 72, keptPosts: 3 },
+                    } as any,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalPostedMember));
+            const { unmount: unmount2 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+            unmount2();
+
+            const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000).toISOString();
+            const globalWeekOldMember = answer({
+                profile: 'global',
+                me: {
+                    joinedAt: eightDaysAgo,
+                    isKeeper: false,
+                    probation: {
+                        rules: 'ordinary',
+                        keptPosts: 0,
+                        keptPostsNeeded: 3,
+                        ageEndsAt: null,
+                        endsWhen: { hours: 72, keptPosts: 3 },
+                    } as any,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalWeekOldMember));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+        });
     });
 });
 

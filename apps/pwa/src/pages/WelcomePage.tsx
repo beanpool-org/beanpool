@@ -27,8 +27,10 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
-    getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
+    getCommunityCard, getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
+import { CommunityCardPanel } from '../components/CommunityCardPanel';
+import { takeWelcomeDoor } from '../lib/community-card';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
@@ -46,7 +48,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
+import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -113,7 +115,7 @@ const FAQ_ITEMS = [
     },
     {
         q: word('Can I use this on my phone?'),
-        a: word('Yes! BeanPool is a Progressive Web App. Open the app link in your browser, then "Add to Home Screen" for the full native-like experience — works on Android, iOS, and desktop.'),
+        a: word('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a computer, open the app link in Chrome or Edge and choose Install in the address bar or the menu; in Safari on a Mac, choose File, then Add to Dock.'),
     },
 ];
 
@@ -319,6 +321,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     useLanguage();
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
+    // The community's card at its bare address sends "I have an invite" here with `?door=invite` and "Already a member"
+    // with `?door=signin` (front doors S15): read once and taken out of the address.
+    const [welcomeDoor] = useState(() => (typeof window !== 'undefined' ? takeWelcomeDoor() : null));
     const [door, setDoor] = useState<Door>(() => (initialInfo ? doorOf(initialInfo) : 'checking'));
     // A local community (every node but the global one, an older node that says no profile included): its listings are
     // its members' (2026-09-28), so this page points a stranger to the global community to look around.
@@ -350,12 +355,28 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
+    // A local community's public card (front doors S15), drawn above the invite form: what a stranger may read about it,
+    // and its doors. None from a node too old to have one: the page is as before. 'loading' until the node has answered,
+    // when the page draws neither the card nor the old "No invite?" box, whose Look around links BeanPool's global
+    // community, which a node that names none (GLOBAL_COMMUNITY_URL=off) must never show.
+    const [communityCard, setCommunityCard] = useState<CommunityCard | null | 'loading'>('loading');
+    useEffect(() => {
+        if (!localCommunity) return;
+        let cancelled = false;
+        getCommunityCard()
+            .then((card) => { if (!cancelled) setCommunityCard(card); })
+            .catch(() => { if (!cancelled) setCommunityCard(null); });
+        return () => { cancelled = true; };
+    }, [localCommunity]);
     // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
     // there is no going back to a name screen.
     const [joinedByDoor, setJoinedByDoor] = useState(false);
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
     // The sign-in the door join also enrolled as this account's way back (G11-c), when the node stored the copy.
     const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
+    // A sign-in door join the node let in without its own answer about the copy the join carried (the member was found
+    // afterwards, or was one already): it may have stored it, so Safety Backup says nothing about a copy (review 4397050530).
+    const [copyNotSaid, setCopyNotSaid] = useState(false);
     // Joined with 12 words alone: the account has one way back, and the Safety Backup step says so (two-doors §2.5).
     const [joinedByWords, setJoinedByWords] = useState(false);
     // That member chose "Add a sign-in as a second way back" at Safety Backup: offered at the end of the tour, and the page
@@ -630,8 +651,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
      * address (`/?rekey=RK-…`), or '' from the restore options. Null: closed.
      */
     const [rekeyCode, setRekeyCode] = useState<string | null>(() => (typeof window !== 'undefined' ? rekeyCodeFromSearch(window.location.search) : null));
-    const [showNewUser, setShowNewUser] = useState(() => start !== 'restore');
-    const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore');
+    const [showNewUser, setShowNewUser] = useState(() => start !== 'restore' && welcomeDoor !== 'signin');
+    const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore' || welcomeDoor === 'signin');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
@@ -1267,6 +1288,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         setJoinedByDoor(true);
         setJoinedByWords(joined.door === 'words');
         setSignInRecovery(joined.recovery?.enrolled ? joined.recovery.provider : null);
+        setCopyNotSaid(joined.door !== 'words' && !joined.recovery);
         setInviteRedeemed(true);
         setJoinedAsNote(joined.earlierJoinKept
             // A key was brought here, but the join this browser sent earlier had landed: that one is the account.
@@ -2065,10 +2087,20 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         : <> <BoldWords text={t('This is the **only** way to recover your identity if you lose this device.')} /></>}
                                 </p>
                             )}
-                            {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words. */}
-                            {signInRecovery && (
+                            {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words, with
+                                where its copy is, at the moment it is made (vault rethink VR0, design §1.2): on this
+                                community's server, which said it keeps it (`recovery.enrolled`). The web app has no key
+                                vault client, so never the vault. "Keeps no copy" only where the page knows: a join that
+                                sent none (an invite, 12 words), or one the node answered it did not store. */}
+                            {signInRecovery ? (
                                 <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                     {t('Signing in with {provider} also brings this account back.', { provider: providerLabel(signInRecovery) })}
+                                    <> {t("This community's server keeps a locked copy of your key and 12 words for it.")}</>
+                                    <> {t('The people who run it can open that copy, and so can anyone who gets into your sign-in account.')}</>
+                                </p>
+                            ) : !copyNotSaid && (
+                                <p data-testid="backup-no-copy" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {t("This community's server keeps no copy of your account.")}
                                 </p>
                             )}
 
@@ -2665,6 +2697,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
+                            {localCommunity && communityCard && communityCard !== 'loading' && (
+                                <CommunityCardPanel
+                                    card={communityCard}
+                                    compact={welcomeDoor === 'invite'}
+                                    onSignIn={() => { setShowNewUser(false); setShowMemberOptions(true); setError(null); }}
+                                />
+                            )}
                             <OnboardingStepper area={byArea} step={1} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 {t('🎟️ Join with Invite Code')}
@@ -2697,6 +2736,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 placeholder={t('e.g. BP-7K3X-9M2W')}
                                 maxLength={800}
                                 disabled={loading}
+                                autoFocus={welcomeDoor === 'invite'}
                                 style={{
                                     ...inputStyle,
                                     fontFamily: 'monospace',
@@ -2773,8 +2813,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {loading ? t('Creating...') : t('Create Identity & Join →')}
                             </button>
 
-                            {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28) ===== */}
-                            {localCommunity && (
+                            {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28). Its card above
+                                says the same with its own doors (front doors S15); this is for a node too old to send one. ===== */}
+                            {localCommunity && communityCard === null && (
                                 <div data-testid="welcome-no-invite" style={{
                                     marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', textAlign: 'center',
                                     background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',

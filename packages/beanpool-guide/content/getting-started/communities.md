@@ -16,7 +16,18 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
 
-Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
+Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Tap **Next**, then check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool keeps one copy for all your communities.
+
+## Visiting a community's address
+
+A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join** or **Takes new members by invite**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name.
+
+- **Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you join the global community, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**
+- **I have an invite**: the form for your invite code.
+- **Already a member**: the ways back into your account.
+- **Look around the global community**: where the community links to one.
+
+In the app, a community's address opens its card too. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and send a few words about yourself: the request goes to that community, as from **Find a community**. With an invite, tap **I have an invite**, then paste it under **Join Another Community**.
 
 ## Joining the global community from your account
 
@@ -89,3 +100,5 @@ To delete your account in one community, open it and use **Permanently Delete Ac
 ## Visiting as a guest
 
 If you add a community without an invite, you are a guest there. A **Join** button shows at the top, beside the **?**. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with their 12 words or a sign-in instead: see "Joining the global community from your account" above.
+
+On a new phone with no account yet, **Explore BeanPool worldwide** on the first screen opens the global community as a guest too, before there is any account: you see its listings and its map, and nothing about you is made or sent until you tap **Join**. See "Joining BeanPool".

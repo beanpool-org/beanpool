@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-22",
@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Ajoutez une photo à votre profil",
   "Pick a few things you like": "Choisissez quelques centres d'intérêt",
   "Post something free or for swap": "Publiez un don ou un échange",
-  "Ask a community to let you in": "Demandez à une communauté de vous accueillir",
   "{n} day|{n} days": {
     "one": "{n} jour",
     "other": "{n} jours"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Votre crédit s'ouvre avec votre premier échange.",
   "Spending is paused for now. You can still receive and sell.": "Les dépenses sont suspendues pour l'instant. Vous pouvez toujours recevoir et vendre.",
   "{amount} · room to spend {room}": "{amount} · marge de dépense {room}",
-  "The worldwide community": "La communauté mondiale",
   "1 member. You're first. Invite someone.": "1 membre. Vous êtes le premier. Invitez quelqu'un.",
   "1 member. You're first.": "1 membre. Vous êtes le premier.",
   "{n} trade this month|{n} trades this month": {
@@ -4990,7 +4988,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Si vous préférez que personne d'autre que vous ne puisse accéder, utilisez uniquement vos 12 mots.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "Le coffre-fort de clés de BeanPool, un petit serveur en Islande, conserve la copie de votre compte ouverte par votre connexion. BeanPool peut ouvrir ces copies : pour l'instant une personne, le fondateur de BeanPool, s'occupe du coffre, et la gestion passe à trois personnes dans différents pays, dont deux doivent agir ensemble. L'hébergeur peut lire sa mémoire pendant son fonctionnement. Une décision de justice pourrait ordonner l'ouverture d'une copie, et quiconque prendrait le contrôle de votre compte de connexion pourrait y accéder.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Associez-en plusieurs, au cas où vous en perdriez un. N'importe lequel peut restaurer votre compte sur un nouveau téléphone, par l'intermédiaire du serveur de votre communauté, qui conserve la copie.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Associez-en plusieurs, au cas où vous en perdriez un. N'importe lequel peut restaurer votre compte sur un nouveau téléphone, dans chaque communauté.",
   "🛡️ You're covered on {community}": "🛡️ Vous êtes protégé sur {community}",
   "🛡️ You're covered": "🛡️ Vous êtes protégé",
   "Sign-In Recovery Providers (1-of-N)": "Fournisseurs de récupération par connexion (1 parmi N)",
@@ -6116,5 +6113,20 @@
   "Turn on notifications?": "Activer les notifications ?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Pour savoir quand quelqu'un vous répond, vous envoie un message ou demande à rejoindre. Rien d'autre.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Les notifications de BeanPool sont désactivées dans les réglages de votre téléphone. Ouvrez les paramètres pour les activer.",
-  "Nothing here yet. Be the first:": "Rien ici pour le moment. Soyez le premier :"
+  "Nothing here yet. Be the first:": "Rien ici pour le moment. Soyez le premier :",
+  "Choose a banner photo, or keep this one": "Choisissez une photo de bannière, ou gardez celle-ci",
+  "Your picture, until you choose a banner.": "Votre photo, jusqu'à ce que vous choisissiez une bannière.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Vous faites le tour en tant que visiteur. Rien n'est enregistré tant que vous n'avez pas rejoint.",
+  "Join to post": "Rejoindre pour publier",
+  "Join to message": "Rejoindre pour écrire",
+  "The global community": "La communauté globale",
+  "Choose a name": "Choisissez un nom",
+  "Say roughly where you are": "Indiquez approximativement où vous êtes",
+  "Add a picture (a preset counts)": "Ajoutez une photo (une prédéfinie compte)",
+  "Look at an example Ledger": "Consultez un grand livre d'exemple",
+  "Say hello to someone near you": "Dites bonjour à quelqu'un près de chez vous",
+  "Tell me when a community starts here, or say you'd help start one": "Prévenez-moi quand une communauté démarre ici, ou proposez d'en créer une",
+  "Nothing within 250 km yet.": "Rien dans un rayon de 250 km pour l'instant.",
+  "See what people post elsewhere ›": "Voir ce que les gens publient ailleurs ›",
+  "Set your area": "Définissez votre zone"
 }

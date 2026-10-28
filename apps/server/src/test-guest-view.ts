@@ -1279,7 +1279,7 @@ async function main(): Promise<void> {
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
             'POST /api/commons/decisions/:id/vote', 'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
-            'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area',
+            'GET /api/community/card', 'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area',
             'POST /api/community/me/key-succession', 'GET /api/community/members',
             'GET /api/community/membership/:publicKey', 'POST /api/community/register',
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',

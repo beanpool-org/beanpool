@@ -20,6 +20,8 @@ import { SAMPLE_COMMUNITY } from '@beanpool/core';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+// The default banner (DefaultBanner) draws the bundled avatars, whose require(…jpg) vitest cannot load.
+vi.mock('../bundled-avatars', () => ({ BUNDLED_AVATARS: [], resolveBundledAvatar: () => 1 }));
 vi.mock('expo', () => ({
     requireNativeModule: vi.fn(() => ({})),
     requireOptionalNativeModule: vi.fn(() => null),
@@ -60,6 +62,7 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
         Alert: { alert() {} },
         DeviceEventEmitter: { addListener: listener, emit() {} },
+        I18nManager: { isRTL: false },
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),

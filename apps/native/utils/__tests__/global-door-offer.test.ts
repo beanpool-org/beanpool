@@ -293,7 +293,9 @@ describe('the welcome screen', () => {
 
     it('draws the two doors on every home, whatever the door said: nothing wraps them in a condition', () => {
         const h = home();
-        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{\(\) => setMode\('create'\)\} openGlobalDoor=\{openGlobalDoor\} styles=\{styles\} \/>$/m);
+        // Explore looks first on a phone with no account (slice S12, welcome's exploreWorldwide), which opens the door itself
+        // wherever looking can't happen; `exploring` is the line under it while it asks.
+        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{\(\) => setMode\('create'\)\} openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\} exploring=\{exploring\} styles=\{styles\} \/>$/m);
         expect(doors).not.toBeNull();
         // On a line of its own: no `{x && (`, no ternary, in front of it.
         expect(doors![2]).toBe('');
@@ -309,7 +311,7 @@ describe('the welcome screen', () => {
         }
         // The buttons themselves are the component's alone.
         expect(h).not.toMatch(/Explore BeanPool worldwide|Join with an invite/);
-        expect(src().match(/openGlobalDoor=\{openGlobalDoor\}/g)).toHaveLength(1);
+        expect(src().match(/openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\}/g)).toHaveLength(1);
     });
 
     it('nothing waits for the door: no fade, no pinning, no layout read for it', () => {

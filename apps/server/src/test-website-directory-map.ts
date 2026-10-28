@@ -246,9 +246,9 @@ async function main() {
         `its name, member count and radius show (${JSON.stringify(normalText)})`);
     assert(normal?.querySelector('strong')?.textContent === 'Mullum Creek', 'its name is the popup\'s heading');
     const visit = normal?.querySelector('a[href^="https:"]');
-    assert(visit?.getAttribute('href') === 'https://mullum.example.org' && visit?.textContent === 'Visit mullum.example.org →'
+    assert(visit?.getAttribute('href') === 'https://mullum.example.org' && visit?.textContent === 'See Mullum Creek'
         && visit?.getAttribute('target') === '_blank' && visit?.getAttribute('rel') === 'noopener',
-        `its bare node_url is a link to its https address, opening in a new tab (${visit?.outerHTML ?? 'no link'})`);
+        `its bare node_url is a "See {name}" link to its https address, opening in a new tab (${visit?.outerHTML ?? 'no link'})`);
 
     console.log('\n── 3 and 4. a place that isn\'t one, and the totals ──');
     assert(!markers.some((m) => isNaN(m.lat)) && markers.some((m) => m.lat === -28.55),

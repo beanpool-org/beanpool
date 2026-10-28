@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -541,7 +541,6 @@
   "Add a photo to your profile": "আপনার প্রোফাইলে একটি ছবি যোগ করুন",
   "Pick a few things you like": "আপনার পছন্দের কয়েকটি বিষয় বেছে নিন",
   "Post something free or for swap": "বিনামূল্যে বা বিনিময়ের জন্য কিছু পোস্ট করুন",
-  "Ask a community to let you in": "একটি সম্প্রদায়ে যোগদানের অনুরোধ করুন",
   "{n} day|{n} days": {
     "one": "{n} দিন",
     "other": "{n} দিন"
@@ -560,7 +559,6 @@
   "Your credit opens with a first trade.": "প্রথম বাণিজ্যের সাথে আপনার ক্রেডিট খোলে।",
   "Spending is paused for now. You can still receive and sell.": "ব্যয় আপাতত স্থগিত। আপনি এখনও গ্রহণ ও বিক্রি করতে পারবেন।",
   "{amount} · room to spend {room}": "{amount} · ব্যয়ের সীমা {room}",
-  "The worldwide community": "বিশ্বব্যাপী সম্প্রদায়",
   "1 member. You're first. Invite someone.": "১ সদস্য। আপনি প্রথম। কাউকে আমন্ত্রণ জানান।",
   "1 member. You're first.": "১ সদস্য। আপনি প্রথম।",
   "{n} trade this month|{n} trades this month": {
@@ -4990,7 +4988,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "যদি চান আপনি ছাড়া আর কেউ প্রবেশ করতে না পারুক, তবে শুধু আপনার ১২টি শব্দ ব্যবহার করুন।",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "আইসল্যান্ডে BeanPool-এর কী ভল্ট একটি কপি রাখে যা সাইন-ইন দিয়ে খোলে। BeanPool এই কপি খুলতে পারে: এখন শুধু প্রতিষ্ঠাতা এটি দেখাশোনা করেন, ভবিষ্যতে ৩টি দেশে ৩ জনের অধীনে যাবে যাদের ২ জনকে একসাথে কাজ করতে হবে। হোস্টিং কোম্পানি এর মেমরি পড়তে পারে। আদালতের আদেশে কপি খোলা হতে পারে এবং সাইন-ইন দখলকারীও এতে ঢুকতে পারে।",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "একটি হারালে অন্যটি কাজে লাগার জন্য একাধিক অ্যাকাউন্ট যুক্ত করুন। যেকোনো একটি কমিউনিটি সার্ভারের মাধ্যমে নতুন ফোনে অ্যাকাউন্ট ফিরিয়ে আনতে পারে।",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "একাধিক অ্যাকাউন্ট যুক্ত করুন। যেকোনো একটি সব কমিউনিটিতে নতুন ফোনে অ্যাকাউন্ট ফিরিয়ে আনতে পারে।",
   "🛡️ You're covered on {community}": "🛡️ {community}-এ আপনি সুরক্ষিত",
   "🛡️ You're covered": "🛡️ আপনি সুরক্ষিত",
   "Sign-In Recovery Providers (1-of-N)": "সাইন-ইন পুনরুদ্ধার মাধ্যম (1-of-N)",
@@ -6116,5 +6113,20 @@
   "Turn on notifications?": "বিজ্ঞপ্তি চালু করবেন?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "যাতে কেউ উত্তর দিলে, বার্তা পাঠালে বা যোগদানের অনুরোধ করলে জানতে পারেন। আর কিছুই নয়।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "আপনার ফোনের সেটিংসে BeanPool-এর বিজ্ঞপ্তি বন্ধ আছে। চালু করতে সেটিংস খুলুন।",
-  "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:"
+  "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:",
+  "Choose a banner photo, or keep this one": "একটি ব্যানার ছবি বেছে নিন, অথবা এটি রেখে দিন",
+  "Your picture, until you choose a banner.": "আপনার ছবি, যতক্ষণ না আপনি একটি ব্যানার বেছে নিচ্ছেন।",
+  "You're looking around as a visitor. Nothing is saved until you join.": "আপনি অতিথি হিসেবে ঘুরে দেখছেন। যোগ না দেওয়া পর্যন্ত কিছুই সংরক্ষিত হয় না।",
+  "Join to post": "পোস্ট করতে যোগ দিন",
+  "Join to message": "বার্তা পাঠাতে যোগ দিন",
+  "The global community": "বিশ্বব্যাপী সম্প্রদায়",
+  "Choose a name": "একটি নাম চয়ন করুন",
+  "Say roughly where you are": "মোটামুটি আপনি কোথায় আছেন তা বলুন",
+  "Add a picture (a preset counts)": "একটি ছবি যোগ করুন (প্রিসেটও গ্রহণযোগ্য)",
+  "Look at an example Ledger": "একটি উদাহরণ লেজার দেখুন",
+  "Say hello to someone near you": "আপনার কাছের কাউকে হ্যালো বলুন",
+  "Tell me when a community starts here, or say you'd help start one": "এখানে কোনো সম্প্রদায় শুরু হলে আমাকে জানান, বা শুরু করতে সাহায্য করুন",
+  "Nothing within 250 km yet.": "এখনও ২৫০ কিলোমিটারের মধ্যে কিছু নেই।",
+  "See what people post elsewhere ›": "অন্যত্র মানুষ কী পোস্ট করে তা দেখুন ›",
+  "Set your area": "আপনার এলাকা সেট করুন"
 }

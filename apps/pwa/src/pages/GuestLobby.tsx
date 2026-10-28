@@ -23,7 +23,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import type { AppStoreVersions, CommunityInfo } from '../lib/api';
 import { connectToAnchor, reconnectToAnchor } from '../lib/sync';
 import { browserKeyProblem } from '../lib/web-join';
-import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
+import { beansOn, keepAskedCommunity, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
 import { HomePage } from './HomePage';
 import { WelcomePage } from './WelcomePage';
@@ -40,7 +40,8 @@ import { helpSheetFor, t, webHelpKey, word, type WordKey } from '@beanpool/core'
 import { HelpDialog } from '../components/HelpDialog';
 import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
-import { getBundledGuide, inShownLanguage } from '../lib/guide';
+import { loadBundledGuide, getBundledGuide, inShownLanguage } from '../lib/guide';
+import type { Guide } from '@beanpool/core';
 
 type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
@@ -63,15 +64,25 @@ interface Props {
     /** `/?post=<id>`, a shared listing: opened in the lobby's Market, and kept for after the join. */
     linkedPostId?: string | null;
     onLinkedPostTaken?: () => void;
+    /** `/?ask=<host>`, from a local community's card (front doors S15): kept for after the join, when Home's Find card opens on it. */
+    askedCommunity?: string | null;
 }
 
-export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
+export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLinkedPostTaken, askedCommunity = null }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
     const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
     // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
     const [helpOpen, setHelpOpen] = useState(false);
+    const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
+    useEffect(() => {
+        if (helpOpen && !helpGuide) {
+            loadBundledGuide().then(setHelpGuide).catch(() => {});
+        }
+    }, [helpOpen, helpGuide]);
     const [guideAt, setGuideAt] = useState<string | null | undefined>(undefined);
-    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab, lobby: true }));
+    const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab, lobby: true }));
     const helpButton = (className: string) => <LobbyHelpButton onClick={() => setHelpOpen(true)} className={className} />;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
@@ -104,6 +115,12 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
         keepLinkedPost(linkedPostId);
         onLinkedPostTaken?.();
     }, [linkedPostId, onLinkedPostTaken]);
+
+    // A community the visitor came to ask to join: kept in this tab, as the shared listing is, so a join by a sign-in
+    // that leaves the page still lands on the Find card on that community (App takes it when the identity is set).
+    useEffect(() => {
+        if (askedCommunity) keepAskedCommunity(askedCommunity);
+    }, [askedCommunity]);
 
     const doorOpen = info.profile === 'global' && info.features?.openJoin === true;
     const beans = beansOn(info);

@@ -911,8 +911,8 @@ export default function MarketScreen() {
                             author_pubkey: p.author_pubkey ?? p.authorPublicKey,
                             author_callsign: p.author_callsign ?? p.authorCallsign,
                             author_avatar: p.author_avatar ?? p.authorAvatarUrl ?? null,
-                            author_banner_url: p.author_banner_url ?? absoluteBannerUrl,
-                            authorBannerUrl: p.authorBannerUrl ?? absoluteBannerUrl,
+                            author_banner_url: absoluteBannerUrl,
+                            authorBannerUrl: absoluteBannerUrl,
                             author_energy_cycled: p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                             authorFoundingNeeded: p.authorFoundingNeeded ?? (p.author_founding_needed === 1),
                             author_founding_needed: p.author_founding_needed ?? (p.authorFoundingNeeded ? 1 : 0),
@@ -1537,7 +1537,11 @@ export default function MarketScreen() {
                 >
                     <View style={styles.gridImageWrapper}>
                         {gridMedia && typeof gridMedia === 'string' && gridMedia.trim() !== '' && gridMedia !== 'null' && gridMedia !== 'undefined' ? (
-                            <Image source={{ uri: listPhotoUrl(gridMedia) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, gridMedia)} />
+                            <Image source={{ uri: listPhotoUrl(gridMedia) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
+                                if (coverImage) {
+                                    refreshListingAfterPhotoError(item.id, coverImage);
+                                }
+                            }} />
                         ) : (
                             <CategoryTile
                                 category={item.category}
@@ -1697,7 +1701,11 @@ export default function MarketScreen() {
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {listMedia && typeof listMedia === 'string' && listMedia.trim() !== '' && listMedia !== 'null' && listMedia !== 'undefined' ? (
-                        <Image source={{ uri: listPhotoUrl(listMedia) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, listMedia)} />
+                        <Image source={{ uri: listPhotoUrl(listMedia) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
+                            if (coverImage) {
+                                refreshListingAfterPhotoError(item.id, coverImage);
+                            }
+                        }} />
                     ) : (
                         <View style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
                             <CategoryTile

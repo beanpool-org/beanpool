@@ -15,8 +15,8 @@ const source = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'ut
 
 /** Each list, and how its listing photo is drawn now. */
 const LISTS: [string, string[], RegExp[]][] = [
-    ['app/(tabs)/market.tsx', ['uri: listPhotoUrl(coverImage) }} style={styles.gridImage}', 'uri: listPhotoUrl(coverImage) }} style={{ width: 80,'], [/uri: coverImage\s*}/]],
-    ['components/home/HomeCardBodies.tsx', ['<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))}'], [/<Thumb uri=\{onNode\(/]],
+    ['app/(tabs)/market.tsx', ['uri: listPhotoUrl(gridMedia) }} style={styles.gridImage}', 'uri: listPhotoUrl(listMedia) }} style={{ width: 80,'], [/uri: (coverImage|gridMedia|listMedia)\s*}/]],
+    ['components/home/HomeCardBodies.tsx', ['<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))}'], [/<Thumb uri=\{onNode\(/]],
     ['components/EventCard.tsx', ['source={{ uri: listPhotoUrl(photo) }}'], [/uri: photo\s*}/]],
     ['components/MyDealsSheet.tsx', ['uri: listPhotoUrl(item.coverImage) }}', 'uri: listPhotoUrl(coverImage) }}'], [/uri: (item\.)?coverImage\s*}/]],
     ['app/public-profile.tsx', ['uri: listPhotoUrl(coverImage) }} style={styles.dealThumb}'], [/uri: coverImage\s*}/]],
@@ -34,7 +34,7 @@ describe("the phone's lists draw the small copy", () => {
 
     it("a Market row that fails to load still heals by the photo's own URL", () => {
         const src = source('app/(tabs)/market.tsx');
-        expect(src.match(/onError=\{\(\) => refreshListingAfterPhotoError\(item\.id, coverImage\)\}/g)?.length).toBe(2);
+        expect(src.match(/refreshListingAfterPhotoError\(item\.id, coverImage\)/g)?.length).toBe(2);
     });
 
     it.each(DETAILS)('%s draws the photo itself', (file) => {

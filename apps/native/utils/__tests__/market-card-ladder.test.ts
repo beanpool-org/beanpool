@@ -35,4 +35,14 @@ describe('Phone Market card ladder (Pictures S6)', () => {
         const homeBodiesSrc = source('components/home/HomeCardBodies.tsx');
         expect(homeBodiesSrc).toMatch(/p\.photoUrl \|\| p\.bannerUrl/);
     });
+
+    it('sets absolute banner URL directly to prevent relative paths resolving on native', () => {
+        expect(marketSrc).toMatch(/author_banner_url:\s*absoluteBannerUrl/);
+        expect(marketSrc).toMatch(/authorBannerUrl:\s*absoluteBannerUrl/);
+        expect(marketSrc).not.toMatch(/authorBannerUrl:\s*p\.authorBannerUrl\s*\?\?\s*absoluteBannerUrl/);
+    });
+
+    it('onError only heals listings with actual coverImage photos', () => {
+        expect(marketSrc.match(/if \(coverImage\) \{\s*refreshListingAfterPhotoError\(item\.id, coverImage\);/g)?.length).toBe(2);
+    });
 });

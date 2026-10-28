@@ -375,7 +375,7 @@ async function main() {
         const kept = attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(annNotice.data.i)) as any;
         assert(left?.n === 0 && kept?.n === 1, `the hourly tidy deletes it, and keeps a newer one (${left?.n}, ${kept?.n})`);
         const catBefore = (attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk)) as any)?.n;
-        se.adminPruneUser(cat.pk, owner.pk);
+        se.adminPruneUser(cat.pk, se.COMMUNITY_DECISION_ACTOR);
         const catAfter = (attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk)) as any)?.n;
         assert(catBefore > 0 && catAfter === 0, `a pruned member's notice details go with them (${catBefore} → ${catAfter})`);
 

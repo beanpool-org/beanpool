@@ -275,7 +275,7 @@ describe('the root guard while a phone with no account looks around the global c
     });
 
     it('keeps the screens a phone with no account always had: welcome, guardian recovery, a re-key code, a claim, a community\'s card', () => {
-        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card']) {
+        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card', 'peek']) {
             expect(setupRedirect([root], LOOKING), root).toBeNull();
         }
         // The bare root is the app's start: the first screen, as always (app/index.tsx redirects there too), never the door.
@@ -301,6 +301,7 @@ describe('the root guard while a phone with no account looks around the global c
         for (const state of [LOOKING, NO_IDENTITY]) {
             expect(setupRedirect(['join-open-door'], state), `door, looking ${state === LOOKING}`).toBeNull();
             expect(setupRedirect(['community-card'], state), `card, looking ${state === LOOKING}`).toBeNull();
+            expect(setupRedirect(['peek'], state), `peek, looking ${state === LOOKING}`).toBeNull();
         }
         // The rest of the merged guard as each slice left it: a screen that needs a key opens the look's door while looking
         // and the first screen otherwise; the global community's door is not let through with no account (S2).

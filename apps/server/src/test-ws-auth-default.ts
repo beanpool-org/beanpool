@@ -251,7 +251,7 @@ async function main() {
     // ── 4b. A pruned member's open socket is demoted ──
     if (!OPEN_FEED) {
         console.log('\n— pruned while connected —');
-        se.adminPruneUser(carol.pubKeyHex, 'owner:password');
+        se.adminPruneUser(carol.pubKeyHex, se.COMMUNITY_DECISION_ACTOR);
         await sleep(150);
         carolWs.events.length = 0; carolWs.raw.length = 0; aliceWs.events.length = 0;
         const AFTER_PRUNE = 'after-prune-' + crypto.randomBytes(4).toString('hex');

@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 অর্থায়িত",
   "🌱 PROJECT": "🌱 প্রকল্প",
   "🏛️ ENTERPRISE": "🏛️ উদ্যোগ",
-  "Enterprise Balance": "উদ্যোগের ব্যালেন্স",
   "in deficit (keepers eat last)": "ঘাটতিতে (পরিচালকরা শেষে পান)",
   "Pledge Beans": "শিমের অঙ্গীকার করুন",
   "Word {n}: {word}": "শব্দ {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "উদ্দেশ্য বিবরণ *",
   "Purpose statement": "উদ্দেশ্য বিবরণ",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "এই উদ্যোগটি কী কাজের জন্য তৈরি তা স্পষ্টভাবে বলুন (যেমন 'আমরা নভেম্বরের মধ্যে একটি কমিউনিটি শেড হাউস তৈরি ও রক্ষণাবেক্ষণ করব')।",
-  "The purpose statement is what the community judges the initiative against.": "উদ্দেশ্য বিবরণের ভিত্তিতেই কমিউনিটি উদ্যোগটি মূল্যায়ন করে।",
   "FUNDING GOAL ({currency}) *": "তহবিলের লক্ষ্য ({currency}) *",
   "Funding goal amount": "তহবিলের লক্ষ্যের পরিমাণ",
   "Pledges are held safely in the enterprise account.": "অঙ্গীকারগুলো উদ্যোগের অ্যাকাউন্টে নিরাপদে রাখা হয়।",
@@ -2970,7 +2968,6 @@
   "Post\u0004button: publish": "পোস্ট করুন",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 প্রতিবেশীদের তাৎক্ষণিকভাবে ক্রেডিট পাঠাতে {ledger} ট্যাবটি ব্যবহার করুন।",
   "Member\u0004what a Decision touches": "সদস্য",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "এই সার্ভার থেকে বহিষ্কার (৬৬% বিশেষ সংখ্যাগরিষ্ঠতা, ২৫% কোরাম, ৭ দিনের বিবেচনা সময়)",
   "Temporary freeze of trading and messaging": "লেনদেন ও বার্তাপ্রেরণে সাময়িক স্থগিতাদেশ",
   "Restore member to active standing (simple majority)": "সদস্যকে পুনরায় সক্রিয় মর্যাদায় ফিরিয়ে আনা (সাধারণ সংখ্যাগরিষ্ঠতা)",
   "Cancel pending removal and restore account (simple majority)": "মুলতুবি বহিষ্কার বাতিল করা ও অ্যাকাউন্ট ফিরিয়ে আনা (সাধারণ সংখ্যাগরিষ্ঠতা)",
@@ -2998,10 +2995,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "অনুগ্রহ করে প্রধান কিপার বা দলপ্রধানের কলসাইন বা পাবলিক কী লিখুন।",
   "The lead keeper or leader to remove: callsign or public key": "যাঁকে সরানো হবে সেই প্রধান কিপার বা দলপ্রধান: কলসাইন বা পাবলিক কী",
   "Enter the lead keeper or leader's callsign or pubkey...": "প্রধান কিপার বা দলপ্রধানের কলসাইন বা pubkey লিখুন...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "ব্যালেন্স ব্যক্তিগত: আপনি {name}-এর ব্যালেন্স দেখতে পারবেন না। এই ভোট শুরু হলে কমিউনিটি তাঁর ব্যালেন্স ও যেকোনো ঋণ রেকর্ড করে এবং যাঁরা ভোট দিতে পারবেন তাঁদের সবাইকে দেখায়। তাঁকে সরিয়ে দেওয়া হলে যৌথ তহবিলের ওপর ঋণ ধার্য করা হয়, যেখানে এখন {n}টি শিম রয়েছে।",
-    "other": "ব্যালেন্স ব্যক্তিগত: আপনি {name}-এর ব্যালেন্স দেখতে পারবেন না। এই ভোট শুরু হলে কমিউনিটি তাঁর ব্যালেন্স ও যেকোনো ঋণ রেকর্ড করে এবং যাঁরা ভোট দিতে পারবেন তাঁদের সবাইকে দেখায়। তাঁকে সরিয়ে দেওয়া হলে যৌথ তহবিলের ওপর ঋণ ধার্য করা হয়, যেখানে এখন {n}টি শিম রয়েছে।"
-  },
   "Missing Title": "শিরোনাম নেই",
   "Please enter a clear, concise title for this decision.": "অনুগ্রহ করে এই সিদ্ধান্তের জন্য একটি স্পষ্ট ও সংক্ষিপ্ত শিরোনাম লিখুন।",
   "Missing Description": "বিবরণ নেই",
@@ -6118,6 +6111,7 @@
   "Turn on notifications?": "বিজ্ঞপ্তি চালু করবেন?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "যাতে কেউ উত্তর দিলে, বার্তা পাঠালে বা যোগদানের অনুরোধ করলে জানতে পারেন। আর কিছুই নয়।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "আপনার ফোনের সেটিংসে BeanPool-এর বিজ্ঞপ্তি বন্ধ আছে। চালু করতে সেটিংস খুলুন।",
+  "Cancel request": "অনুরোধ বাতিল করুন",
   "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:",
   "Choose a banner photo, or keep this one": "একটি ব্যানার ছবি বেছে নিন, অথবা এটি রেখে দিন",
   "Your picture, until you choose a banner.": "আপনার ছবি, যতক্ষণ না আপনি একটি ব্যানার বেছে নিচ্ছেন।",
@@ -6133,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "এখানে কোনো সম্প্রদায় শুরু হলে আমাকে জানান, বা শুরু করতে সাহায্য করুন",
   "Nothing within 250 km yet.": "এখনও ২৫০ কিলোমিটারের মধ্যে কিছু নেই।",
   "See what people post elsewhere ›": "অন্যত্র মানুষ কী পোস্ট করে তা দেখুন ›",
-  "Set your area": "আপনার এলাকা সেট করুন"
+  "Set your area": "আপনার এলাকা সেট করুন",
+  "The purpose statement is what the community judges the project or enterprise against.": "উদ্দেশ্য বিবরণের ভিত্তিতেই কমিউনিটি প্রকল্পটি বা উদ্যোগটি মূল্যায়ন করে।"
 }

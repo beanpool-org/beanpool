@@ -27,7 +27,7 @@ export function MemberAvatar({
     onClick,
 }: MemberAvatarProps) {
     const key = pubkey || callsign;
-    const src = resolveAvatarUrl(avatarUrl, key) || resolveAvatarUrl(null, key) || '/avatars/avatar_bean_green.jpg';
+    const src = resolveAvatarUrl(avatarUrl, key) || resolveAvatarUrl(null, key) || '/avatars/avatar_bean_green.webp';
 
     return (
         <img

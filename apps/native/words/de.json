@@ -764,7 +764,6 @@
   "🎉 FUNDED": "🎉 FINANZIERT",
   "🌱 PROJECT": "🌱 PROJEKT",
   "🏛️ ENTERPRISE": "🏛️ BETRIEB",
-  "Enterprise Balance": "Betriebsguthaben",
   "in deficit (keepers eat last)": "im Minus (Verwalter essen zuletzt)",
   "Pledge Beans": "Bohnen zusagen",
   "Word {n}: {word}": "Wort {n}: {word}",
@@ -2668,7 +2667,6 @@
   "PURPOSE STATEMENT *": "ZWECKBESCHREIBUNG *",
   "Purpose statement": "Zweckbeschreibung",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Beschreibe klar, was dieser Betrieb bezweckt (z. B. ‚Wir bauen und pflegen bis November ein Gemeinschafts-Gewächshaus‘).",
-  "The purpose statement is what the community judges the initiative against.": "An der Zweckbeschreibung misst die Community die Initiative.",
   "FUNDING GOAL ({currency}) *": "FINANZIERUNGSZIEL ({currency}) *",
   "Funding goal amount": "Betrag des Finanzierungsziels",
   "Pledges are held safely in the enterprise account.": "Zusagen werden sicher auf dem Betriebskonto verwahrt.",
@@ -2972,7 +2970,6 @@
   "Post\u0004button: publish": "Veröffentlichen",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Nutze den Tab {ledger}, um Nachbarn sofort Guthaben zu senden.",
   "Member\u0004what a Decision touches": "Mitglied",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Ausschluss von diesem Node (66 % qualifizierte Mehrheit, 25 % Quorum, 7-tägige Nachfrist)",
   "Temporary freeze of trading and messaging": "Vorübergehende Sperre von Handel und Nachrichten",
   "Restore member to active standing (simple majority)": "Mitglied wieder in aktiven Status versetzen (einfache Mehrheit)",
   "Cancel pending removal and restore account (simple majority)": "Ausstehenden Ausschluss aufheben und Konto wiederherstellen (einfache Mehrheit)",
@@ -3000,10 +2997,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Bitte gib das Rufzeichen oder den öffentlichen Schlüssel des Hauptverwalters oder Projektleiters ein.",
   "The lead keeper or leader to remove: callsign or public key": "Der zu entfernende Hauptverwalter oder Projektleiter: Rufzeichen oder öffentlicher Schlüssel",
   "Enter the lead keeper or leader's callsign or pubkey...": "Rufzeichen oder PubKey des Hauptverwalters oder Projektleiters eingeben...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Kontostände sind privat: Du kannst den von {name} nicht sehen. Wenn diese Abstimmung beginnt, erfasst die Community den Kontostand und etwaige Schulden und zeigt sie allen, die mitstimmen können. Wird das Mitglied ausgeschlossen, werden Schulden dem Gemeinschaftspool angelastet, der jetzt {n} Bohne enthält.",
-    "other": "Kontostände sind privat: Du kannst den von {name} nicht sehen. Wenn diese Abstimmung beginnt, erfasst die Community den Kontostand und etwaige Schulden und zeigt sie allen, die mitstimmen können. Wird das Mitglied ausgeschlossen, werden Schulden dem Gemeinschaftspool angelastet, der jetzt {n} Bohnen enthält."
-  },
   "Missing Title": "Fehlender Titel",
   "Please enter a clear, concise title for this decision.": "Bitte gib einen klaren, prägnanten Titel für diesen Beschluss ein.",
   "Missing Description": "Fehlende Beschreibung",
@@ -6118,6 +6111,7 @@
   "Turn on notifications?": "Mitteilungen einschalten?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Damit du mitbekommst, wenn dir jemand antwortet, dir eine Nachricht schickt oder beitreten möchte. Sonst nichts.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Benachrichtigungen für BeanPool sind in den Einstellungen deines Telefons ausgeschaltet. Öffne die Einstellungen, um sie einzuschalten.",
+  "Cancel request": "Anfrage abbrechen",
   "Nothing here yet. Be the first:": "Hier gibt es noch nichts. Sei der Erste:",
   "Choose a banner photo, or keep this one": "Wählen Sie ein Bannerfoto oder behalten Sie dieses",
   "Your picture, until you choose a banner.": "Ihr Bild, bis Sie ein Banner wählen.",
@@ -6133,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Benachrichtigen, wenn hier eine Community startet, oder beim Start helfen",
   "Nothing within 250 km yet.": "Noch nichts im Umkreis von 250 km.",
   "See what people post elsewhere ›": "Beiträge von anderswo ansehen ›",
-  "Set your area": "Lege deinen Bereich fest"
+  "Set your area": "Lege deinen Bereich fest",
+  "The purpose statement is what the community judges the project or enterprise against.": "An der Zweckbeschreibung misst die Community das Projekt oder den Betrieb."
 }

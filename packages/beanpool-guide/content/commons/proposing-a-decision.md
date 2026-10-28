@@ -7,7 +7,8 @@ related: decisions, rules, polls, enterprises
 
 ## Before you start
 
-- A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.
+- A Decision is for something your community's server can carry out: suspending a member or reinstating one, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.
+- Nobody proposes removing a member. That vote opens only when an admin suspends someone, and the community then decides. To ask for it, report them (see "Reporting a problem").
 - A Decision cannot remove or suspend an owner or admin of your community's server. See "Rules and how decisions work".
 - You can propose once you have completed a trade. Your community's admins can always propose. A trust badge or a vouch is not enough.
 - In a community with Beans switched off, nobody can complete a new trade, so its admins can propose, and so can members who completed a trade before Beans were switched off.
@@ -20,7 +21,7 @@ related: decisions, rules, polls, enterprises
 - Choose what it is about: **Member** or **Commons Pool**.
 - **Title:** one line, like "Grant 200 beans to the Tool Library".
 - **Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.
-- From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.
+- From the list below that, choose exactly what should happen. For example, for a member: Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.
 - Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. To pay off a debt or replace a lead, tap the project or enterprise in the list, or type its key.
 - Tap **Submit Community Decision**.
 
@@ -45,6 +46,7 @@ This keeps the queue free. If a grant passes when the Commons is short, it waits
 - **No Trades Here** (on the phone): your community has Beans switched off, so you can't complete the trade you need. Its admins can propose.
 - **Limit Reached** (on the phone): you already have an open Decision. Wait for it to close. In the web app the button is greyed out here too, with a line saying why.
 - **A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.
+- **A vote on removing a member opens only when an admin pauses them:** nobody proposes one. Report the member instead.
 - **This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.
 - **Invalid Amount** (in the web app, "Please enter a valid positive grant amount in Beans"): fill in how many beans.
 - **Error:** check your description is at least 10 characters long.

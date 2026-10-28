@@ -14,7 +14,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlOf, lendBackAroundOf, tierForCredit, wordsFor } from '@beanpool/core';
+import { avatarUrlOf, lendBackAroundOf, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -137,6 +137,11 @@ export interface MarketplacePost {
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
+    /**
+     * The shop banner URL of the author enterprise (Pictures S6): only on an enterprise's listing, from its shop
+     * row's photo_ref. A member's listing carries none; a visitor (unsigned or non-member) gets none.
+     */
+    authorBannerUrl?: string | null;
     createdBy?: string;
     pollOptions?: PollOption[];
     pollClosesAt?: string;
@@ -738,6 +743,10 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
         authorAvatarUrl: forGuest ? null : avatarUrlOf(row.author_pubkey, row.author_avatar),
+        ...(!forGuest && row.enterprise_shop_id && row.enterprise_shop_photo_ref ? (() => {
+            const u = shopPhotoUrlOf(row.enterprise_shop_id, row.enterprise_shop_photo_ref);
+            return u ? { authorBannerUrl: u } : {};
+        })() : {}),
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
@@ -1070,7 +1079,17 @@ const POST_ROW_SELECT = `
                  COALESCE((SELECT COUNT(*) FROM marketplace_transactions mt
                       WHERE (mt.buyer_pubkey = m.public_key OR mt.seller_pubkey = m.public_key)
                         AND mt.status = 'completed'), 0)
-               ) as author_trade_count
+               ) as author_trade_count,
+               CASE WHEN m.is_treasury = 1 THEN (
+                   SELECT s.id FROM shops s
+                   WHERE s.owner_pubkey = p.author_pubkey
+                   ORDER BY s.opened_at DESC, s.rowid DESC LIMIT 1
+               ) ELSE NULL END as enterprise_shop_id,
+               CASE WHEN m.is_treasury = 1 THEN (
+                   SELECT s.photo_ref FROM shops s
+                   WHERE s.owner_pubkey = p.author_pubkey
+                   ORDER BY s.opened_at DESC, s.rowid DESC LIMIT 1
+               ) ELSE NULL END as enterprise_shop_photo_ref
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
@@ -1085,7 +1104,8 @@ const POST_ROW_SELECT = `
  */
 const GUEST_POST_ROW_SELECT = `
         SELECT p.*, NULL as author_callsign, NULL as author_avatar, NULL as accepted_callsign,
-               NULL as target_group_name, 0 as author_earned_credit, 0 as author_trade_count
+               NULL as target_group_name, 0 as author_earned_credit, 0 as author_trade_count,
+               NULL as enterprise_shop_id, NULL as enterprise_shop_photo_ref
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key`;
 
@@ -2330,6 +2350,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     authorCallsign: () => '',
     acceptedByCallsign: () => '',
     authorAvatarUrl: () => null,
+    authorBannerUrl: 'drop',
     authorEnergyCycled: () => 0,
     authorFoundingNeeded: () => false,
     // The area, and a whole-km distance from it. A read made with `coarse` has both already; rounding again changes

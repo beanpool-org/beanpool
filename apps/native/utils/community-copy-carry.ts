@@ -4,7 +4,8 @@
  *
  * The phone keeps one SQLite file per address (utils/nodes.ts getDatabaseFilenameForNode), and per file what guards the
  * member's chats against the node itself: each DM's pinned key and what the member's reset set aside, the DM guard list
- * and its set-aside, the lines the update held (storage-keys.ts PER_FILE_STORE_KEYS, per account), the group chats' keys
+ * and its set-aside, the lines the update held, the requests its node last listed (storage-keys.ts PER_FILE_STORE_KEYS, per
+ * account), the group chats' keys
  * with their highest epoch and sticky lock (in the file itself: utils/group-chat-store.ts), and the sync cursors with the
  * server's take-over count (`pillar_sync_<file>_*`). A switch to the new address alone opens an empty file there: the pins
  * seeded again from whatever the node lists then (#1863 T5), every group chat back at epoch 0, and the whole community
@@ -46,7 +47,7 @@ import { copyCopyFile, databaseDirectory, deleteCopyFile, exists, fileUri } from
 import { getDatabaseFilenameForNode } from './nodes';
 import {
     PER_FILE_STORE_KEYS, dmConversationsSeenSetAsideStoreKey, dmConversationsSeenStoreKey, dmLinesAtUpdateStoreKey,
-    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey,
+    dmPeerPinsSetAsideStoreKey, dmPeerPinsStoreKey, messageRequestsStoreKey,
 } from './storage-keys';
 import { pinsWithCarried } from './dm-peer-pins';
 import { seenWithCarried } from './dm-guard-list';
@@ -74,6 +75,8 @@ export const MERGES: ReadonlyMap<KeyOf, Merge> = new Map<KeyOf, Merge>([
     [dmConversationsSeenStoreKey, (here, carried, { copyHere, now }) => seenWithCarried(here, carried, copyHere, now)],
     [dmConversationsSeenSetAsideStoreKey, keepHere],
     [dmLinesAtUpdateStoreKey, (here, carried) => linesHeldWithCarried(here, carried)],
+    // The node's last list of the member's requests, which its next sync replaces: the new name's own stays.
+    [messageRequestsStoreKey, keepHere],
 ]);
 
 /** One per-account key of a file: its key now, how it goes, and the same key under another file's name. */

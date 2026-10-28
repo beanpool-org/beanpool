@@ -8,7 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
-import { formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type RemovedLineKind, type WordKey } from '@beanpool/core';
+import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type RemovedLineKind, type WordKey } from '@beanpool/core';
 import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 import { chatLineWords } from './chat-line-words';
 
@@ -561,6 +561,25 @@ export function chatActionErrorMessage(err: ChatActionError | null | undefined):
     // An up-to-date node refusing THIS action. Its sentence is the true one; ours would be a lie. (A refusal this phone
     // wrote, a group line's key not here, reads in the member's language; the node's own words are slice S4.)
     return text ? chatLineWords(text) : chatWords(CHAT_ACTION_GENERIC_ERROR);
+}
+
+/**
+ * A message request the node has none of for this member any more (404 `request_not_found`): its opener cancelled it, or
+ * requests were turned off. Nothing is left to accept or ignore, so the card or the chat's bar goes, as on the web
+ * (MessageRequests.tsx; PR #2540 review 4395541944).
+ */
+export function requestIsGone(err: { code?: unknown } | null | undefined): boolean {
+    return err?.code === 'request_not_found';
+}
+
+/**
+ * What Accept or Ignore says when it didn't go through, in the web's words (core decisionFailureWords): the node's own
+ * sentence when it answered and refused (a standby, an accepted request), else the community out of reach. A body that
+ * wasn't the node's (a proxy's `Server returned 502`, no JSON `error` field) is no answer of its (utils/db _signedRequest's
+ * `nodeAnswered`, the web's `unsaid` turned round).
+ */
+export function requestDecisionFailureWords(err: ChatActionError | null | undefined): string {
+    return decisionFailureWords({ status: err?.status, message: err?.message, unsaid: !err?.nodeAnswered });
 }
 
 /**

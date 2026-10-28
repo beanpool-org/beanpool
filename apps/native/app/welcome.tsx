@@ -90,6 +90,7 @@ import { readConsentTerms, joinAsksConsent, type ConsentTerms } from '../utils/k
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
+import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
@@ -798,6 +799,12 @@ export default function WelcomeScreen() {
                 setInviteCode(referred.invite);
                 if (referred.server) setCreateAnchorUrl(referred.server);
                 setMode('create');
+                return;
+            }
+            // A post a member shared outside their community (front doors S6): the app opens on it, as a visitor, over this
+            // screen, whose doors are still here behind it.
+            if (referred.kind === 'peek') {
+                router.push(peekRoute(referred.origin, referred.postId, referred.ticket) as any);
                 return;
             }
             await openDoorFromLink();

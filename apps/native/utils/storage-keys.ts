@@ -63,6 +63,21 @@ export function communityBlocksStoreKey(publicKey: string): string {
     return `beanpool_community_blocks:${publicKey.toLowerCase()}`;
 }
 
+/** Every {@link messageRequestsStoreKey} key starts with this. */
+export const MESSAGE_REQUESTS_STORE_PREFIX = 'beanpool_message_requests:';
+
+/**
+ * The message requests waiting for one account in one community file, as that community's node last listed them (utils/db.ts
+ * saveMessageRequests): one value per (account, file), as every other piece of a community's conversations is kept apart,
+ * so a switch of community never shows another's strangers, nor sends their ids to this one's node (PR #2540 review
+ * 4394120364). `file`: the name db.ts opens the community under. A copy the next sync replaces, naming who wrote to the
+ * account: Sign Out and Replace wipe every one by {@link MESSAGE_REQUESTS_STORE_PREFIX} (utils/identity.ts
+ * wipeIdentityScopedStorage; review 4394671101).
+ */
+export function messageRequestsStoreKey(publicKey: string, file: string): string {
+    return `${MESSAGE_REQUESTS_STORE_PREFIX}${publicKey.toLowerCase()}:${file}`;
+}
+
 /**
  * The key each of one account's direct messages in one community file is sealed to, as this phone pinned it
  * (utils/dm-peer-pins.ts): `{ pins }`, conversation id lower-cased → pin. One value per (account, file), so no community's
@@ -122,6 +137,7 @@ export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string
  */
 export const PER_FILE_STORE_KEYS: readonly ((publicKey: string, file: string) => string)[] = [
     dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey, dmConversationsSeenStoreKey, dmConversationsSeenSetAsideStoreKey, dmLinesAtUpdateStoreKey,
+    messageRequestsStoreKey,
 ];
 
 /**
@@ -251,6 +267,15 @@ export function vaultApprovedHoldsStoreKey(publicKey: string): string {
  */
 export function oneWayBackStoreKey(publicKey: string): string {
     return `beanpool_one_way_back:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * One account's say-so that its 12 words are written down ('1', or '0' once taken back), from "Where your account can be
+ * brought back from" (utils/ways-back.ts). A flag only, nothing of the words. Kept when the account leaves the phone, as
+ * the "one way back" card is: the paper is the same paper when the account comes back.
+ */
+export function wordsWrittenDownStoreKey(publicKey: string): string {
+    return `beanpool_words_written_down:${publicKey.toLowerCase()}`;
 }
 
 /** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */

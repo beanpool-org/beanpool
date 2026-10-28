@@ -107,6 +107,7 @@ async function main(): Promise<void> {
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig, getGatewayConfig } = await import('./config/local-config.js');
+    const { setSwitchOverride } = await import('./config/node-profile.js');
     const { resetAdminAuthTarpit, requireFreshProof } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { turnOn2faForTests, ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
@@ -853,6 +854,9 @@ async function main(): Promise<void> {
                 send: (root, h, x = {}) => call('POST', `/api/local/admin/branches/${root}/prune`, h, x),
                 done: (root) => statusOf(root) === 'pruned' },
         ];
+        // Pruning or offboarding someone outright happens only where community votes are switched off (removal by vote S3;
+        // test-removal-doors has the votes-on refusals): the proof those ask is checked there.
+        setSwitchOverride('decisions', false);
         for (const row of removals) {
             console.log(`  · ${row.what}`);
             const [target, ownerKey] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
@@ -913,6 +917,8 @@ async function main(): Promise<void> {
         assert(rekeyeePhone.status === 200 && suspendedAside(rekeyee2),
             `emergency-suspend an owner whose key waits on a re-key code, Manage pressed just now → 200, the role held aside, a vote open (${short(rekeyeePhone)})`);
 
+        setSwitchOverride('decisions', true);
+
         // Cutting short an owner's removal in its grace window (the deciding review of #1992, NB 4), over real HTTP: the
         // owner is suspended with the role held aside until the removal runs. Each refusal leaves it waiting.
         console.log("  · cut short an owner's removal");
@@ -945,6 +951,7 @@ async function main(): Promise<void> {
         // An admin or a member as target: the step-up, as before. The password with an earlier 2FA session, an owner's
         // computer, an admin's computer: no code asked.
         const asked = (r: any) => r.status === 401 || r.json?.code === 'phone_required' || r.json?.code === 'step_up_required';
+        setSwitchOverride('decisions', false);
         for (const [what, make, send, done] of [
             ['prune an admin, the password with an earlier 2FA session', () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
                 (t: string) => call('POST', `/api/local/admin/users/${t}/prune`, earlier2fa(), {}), (t: string) => statusOf(t) === 'pruned'],
@@ -967,6 +974,7 @@ async function main(): Promise<void> {
             const r = await send(t);
             assert(r.status === 200 && !asked(r) && done(t), `${what}: no proof asked, 200, done (${short(r)}; ${statusOf(t)})`);
         }
+        setSwitchOverride('decisions', true);
         for (const pk of coOwners) if (roleRow(pk)) revokeNodeRole(pk, roleRow(pk), owner);
 
         // A shorter span of snapshots asks the same fresh proof (#1984 confirmation N-2; #1992 confirmation NB 2): a lower

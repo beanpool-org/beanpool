@@ -58,7 +58,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, purgeMemberSelf, exportSyncState, signSyncPayload, importRemoteState,
+    initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, purgeMemberSelf, exportSyncState, signSyncPayload, importRemoteState,
     setNodeRole, reconcileLedgerFromDb, createProject, updateProject, createPost as rawCreatePost,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
@@ -559,7 +559,7 @@ async function main(): Promise<void> {
     assert(shopRowOf(dave.pk) === undefined && typeof shopTomb(daveShop) === 'string' && daveThings.length > 0 && daveThings.every(id => shopIdOf(id) === null),
         'a member\'s deletion takes their shop with a tombstone, and their listings name it no more');
     const boShopId = shopRowOf(bo.pk)?.id ?? '';
-    attempt(() => adminPruneUser(bo.pk, 'owner:password'));
+    attempt(() => adminPruneUser(bo.pk, COMMUNITY_DECISION_ACTOR));
     assert(boShopId !== '' && shopRowOf(bo.pk) === undefined && typeof shopTomb(boShopId) === 'string' && !!shopRowOf(bikes),
         'an admin\'s removal takes theirs too, and the enterprise they led keeps its own');
 

@@ -30,7 +30,7 @@ import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting
 import { EnterpriseCard } from '../components/EnterpriseCard';
 import { LocalCommunitySheet } from '../components/LocalCommunityMark';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
-import { commonsHeading, findHeading, yoursEmpty, enterprisesOn, type GroupKind } from '../lib/commons-sections';
+import { commonsHeading, findEmptyTitle, findHeading, yoursEmpty, enterprisesOn, type GroupKind } from '../lib/commons-sections';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -43,6 +43,10 @@ interface Props {
      * waits for the answer. Omitted means a member.
      */
     isMember?: boolean | null;
+    /** Talk's group form hands over here: open on the Start something dialog (the page asks to be told once it has, see onStartOpened). */
+    initialStart?: boolean;
+    /** The page has opened the dialog the link asked for; the caller drops the ask, so the next visit to Commons opens as usual. */
+    onStartOpened?: () => void;
 }
 
 /** Shown when the browser cannot read, decode or draw the picked photo (the crop rejected): a word() key, put through t() where shown. */
@@ -83,7 +87,7 @@ const localToday = (): string => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember, initialStart, onStartOpened }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
     // The reader's balance is Beans: where they are in preview (the global node) it is never asked (lib/features readsOwn).
     const readsBalance = useReadsOwn('beans', canLoadBalance);
@@ -183,7 +187,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // "＋ Start something": where focus goes back when the sheet, or a sheet it opened, closes.
     const startButtonRef = useRef<HTMLButtonElement>(null);
     // Start something dialog
-    const [showStartSomething, setShowStartSomething] = useState(false);
+    const [showStartSomething, setShowStartSomething] = useState(!!initialStart);
+    useEffect(() => {
+        if (!initialStart) return;
+        setShowStartSomething(true);
+        onStartOpened?.();
+    }, [initialStart, onStartOpened]);
     const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
     const [showStartCommunity, setShowStartCommunity] = useState(false);
 
@@ -493,6 +502,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     const headingInfo = commonsHeading(communityInfo?.features);
     const findHeadingLine = { text: findHeading(groupCategoryFilter, communityInfo?.features) };
+    const emptyFindLine = { text: findEmptyTitle(groupCategoryFilter, communityInfo?.features) };
     const emptyYoursLine = { text: yoursEmpty(communityInfo?.features) };
 
     return (
@@ -552,15 +562,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     {showsOwnVoiceCredits && (
                         <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${enterprisesMode === 'preview' ? 'col-span-2' : ''}`} data-testid="voice-credits-card">
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                                {t('Voice credits for money votes')}
+                                {t('Voice credits')}
                             </div>
                             <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
                                 {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
                             </div>
                             <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
                                 {myPoolVoting && !myPoolVoting.hasCompletedTrade
-                                    ? t('Opens after your first completed trade')
-                                    : t('From completed trades · N votes cost N×N')}
+                                    ? t('For money votes · opens after your first completed trade')
+                                    : t('For money votes · from completed trades · N votes cost N×N')}
                             </div>
                         </div>
                     )}
@@ -916,7 +926,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 onClick={() => setShowCreateGroupModal(true)}
                                 className="px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-xs font-bold transition-colors"
                             >
-                                {t('+ Create a Group')}
+                                {t('Start a group')}
                             </button>
                         </div>
                     ) : (
@@ -1001,11 +1011,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     !beansOn ? null : (
                     <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
                         <p className="text-4xl opacity-50 mb-3">🌱</p>
-                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">{t('No enterprises found')}</p>
+                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">{t(emptyFindLine.text)}</p>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-6">
-                            {t('Got an idea that benefits the community? Start an enterprise or propose a project to get started.')}
+                            {groupCategoryFilter === 'projects'
+                                ? t('Got an idea that needs Beans? Start a project.')
+                                : groupCategoryFilter === 'enterprises'
+                                ? t('Something that keeps going and trades? Start an enterprise.')
+                                : t('Start one with +: a chat group, a project or an enterprise.')}
                         </p>
-                        {identity && (
+                        {identity && groupCategoryFilter !== 'all' && (
                             <button
                                 onClick={() => {
                                     setNewLifecycle(groupCategoryFilter === 'enterprises' ? 'ongoing' : 'bounded');
@@ -1014,7 +1028,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 }}
                                 className="bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
-                                {groupCategoryFilter === 'enterprises' ? t('Start an enterprise') : groupCategoryFilter === 'projects' ? t('Start a project') : t('+ Propose a Project')}
+                                {groupCategoryFilter === 'enterprises' ? t('Start an enterprise') : t('Start a project')}
                             </button>
                         )}
                     </div>
@@ -1070,7 +1084,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {/* Lifecycle choice: Bounded Project vs Ongoing Enterprise */}
                             <div>
                                 <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-2">
-                                    {t('Initiative Type')}
+                                    {t('WHAT IS IT?')}
                                 </label>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button

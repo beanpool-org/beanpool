@@ -17,7 +17,7 @@ import {
     noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
     type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
-import { dmLinesAtUpdateStoreKey } from './storage-keys';
+import { dmLinesAtUpdateStoreKey, messageRequestsStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './nodes';
@@ -33,7 +33,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind, t } from '@beanpool/core';
+import { reportKind, t, requestAfterOwnLine, requestAfterRead } from '@beanpool/core';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -427,7 +427,8 @@ async function _doInitDB() {
             event_repeat TEXT,
             event_repeat_until TEXT,
             carried_callsign TEXT,
-            carried_avatar TEXT
+            carried_avatar TEXT,
+            carried_banner TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -518,7 +519,8 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_title TEXT,
             post_status TEXT,
             post_photo TEXT,
-            post_credits REAL
+            post_credits REAL,
+            request TEXT
         );
 
         CREATE TABLE IF NOT EXISTS conversation_participants (
@@ -639,6 +641,9 @@ ${TOOL_DOCS_TABLE}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_status TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_photo TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_credits REAL;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN request TEXT;`); } catch (e) {}
+        // 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
+        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN listed INTEGER;`); } catch (e) {}
 
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
@@ -676,6 +681,34 @@ ${TOOL_DOCS_TABLE}
         // Its face the same way (the node's `authorAvatarUrl`, DESIGN-global-members-by-area §2.2.6): a by-area listing
         // shows its author's face with no card for them. The card's face wins where the phone holds one.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_avatar TEXT;`); } catch (e) {}
+        // An enterprise's shop banner as its listing carried it (the node's `authorBannerUrl`, Pictures S6): the Market
+        // card's picture when the listing has none of its own (utils/market-card-picture.ts). A plain column, no default:
+        // a build from before it opens this table and writes past it.
+        // A copy from before the column holds its enterprises' listings without their banner, and the node sends a listing
+        // again only when it changes (since #2508 the photoless listings this serves are the older ones): such a copy is
+        // read whole once (review of #2565 at c05a9e37, blocking 2). Every cursor of the copy goes (syncCursorKeysOf), the
+        // held read and the checkpoint among them, so the read starts at its first page (#1719 B1), as a Force Resync's
+        // does, but nothing held is cleared. The cursors go before the column comes: an open cut off between the two finds
+        // the column still missing and forgets them again. A fresh copy has the column and no cursor to forget.
+        if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'carried_banner')) {
+            // A sync cycle already under way read its cursor before this open (Android's background sync after an app
+            // update): a new copy generation makes it store nothing, so it cannot put back the cursor forgotten below
+            // (review of #2565 at f72b4204, as clearDB does).
+            newCopyGeneration();
+            try {
+                const file = dbFileOf.get(database);
+                const { syncCursorKeysOf } = await import('../services/pillar-sync');
+                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+            } catch (e) {
+                console.warn('[SQLite] Could not forget the sync cursors of a copy from before carried_banner:', e);
+            }
+            try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
+            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
+            try {
+                const { requestSync } = require('../services/pillar-sync');
+                requestSync().catch(() => {});
+            } catch (e) {}
+        }
         // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
         // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}
@@ -1042,6 +1075,10 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
                 }
             } catch (e) { r.photos = []; }
         }
+        // Its enterprise's shop banner, on the node's address as its photos are: the card's picture when it has none of
+        // its own (utils/market-card-picture.ts).
+        const banner: string | null = r.carried_banner || null;
+        r.authorBannerUrl = banner && banner.startsWith('/') ? `${anchorUrl}${banner}` : banner;
         return r;
     });
 }
@@ -1228,10 +1265,26 @@ function formatSystemMessage(
     return txt;
 }
 
+/** A message request (a row's `request`, as stored or parsed) for `me` that isn't accepted: waiting, ignored or lapsed. */
+function isRequestFor(request: unknown, me: string): boolean {
+    let r: any = request;
+    if (typeof r === 'string') { try { r = JSON.parse(r); } catch { return false; } }
+    return !!r && typeof r === 'object' && typeof r.from === 'string' && r.from !== me && r.state !== 'accepted';
+}
+
+/**
+ * isRequestFor in SQL, over a conversations row's `request` column: true when the row is NOT a request for the member its
+ * one `?` binds. A request's card preview writes its people and lines (syncSingleConversation), so joining
+ * conversation_participants no longer leaves it out: every reader of the phone's chats that counts or names them (the Talk
+ * badge, Needs you, Recents) applies this, as the node's own unread counts leave requests out. Unreadable JSON is no request.
+ */
+const NOT_A_REQUEST_FOR_ME = (column: string) => `(CASE WHEN json_valid(${column}) THEN (CASE WHEN json_type(${column}, '$.from') = 'text'
+    AND json_extract(${column}, '$.from') != ? AND json_extract(${column}, '$.state') IS NOT 'accepted' THEN 0 ELSE 1 END) ELSE 1 END)`;
+
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT c.id, c.name, c.post_id, c.type as convType,
+        SELECT c.id, c.name, c.post_id, c.type as convType, c.request as request,
                COALESCE(p.title, c.post_title) as postTitle,
                COALESCE(
                    (SELECT mt2.status FROM marketplace_transactions mt2
@@ -1310,7 +1363,9 @@ export async function getConversations(myPubkey: string) {
     let previewPins: DmPeerPins | null = null;
     try { previewPins = previewIdentity?.publicKey ? await dmPins.read(previewIdentity.publicKey, database) : null; } catch { previewPins = null; }
 
-    return rows.map(row => {
+    // A request for this member they haven't accepted is no chat of theirs: the node lists it under Requests, or nowhere
+    // once ignored or lapsed (sortRequestsOut). Its row is here for its card's preview and its own screen only.
+    return rows.filter(row => !isRequestFor(row.request, myPubkey)).map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
         // Whether BeanPool wrote the preview: a stand-in for a line it can't show, a deleted line's fixed text, a system
         // line (a trade's, the node's own: nonce 00000, type system or author SYSTEM). Only then is it translated where
@@ -1363,6 +1418,11 @@ export async function getConversations(myPubkey: string) {
         const isPayer = row.txBuyerPubkey === myPubkey;
         const isPayee = row.txSellerPubkey === myPubkey;
 
+        let parsedRequest = undefined;
+        if (row.request) {
+            try { parsedRequest = typeof row.request === 'string' ? JSON.parse(row.request) : row.request; } catch {}
+        }
+
         // Extract first photo from post photos JSON
         let postPhoto: string | null = null;
         if (row.postPhotos) {
@@ -1407,6 +1467,7 @@ export async function getConversations(myPubkey: string) {
             pendingTxId: row.pendingTxId || null,
             hasRated: row.hasRated > 0,
             dealCount: row.dealCount || 0,
+            request: parsedRequest,
         };
     });
 }
@@ -1500,11 +1561,12 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
         FROM messages m
         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
         JOIN conversations c ON c.id = m.conversation_id
-        WHERE cp.public_key = ? 
+        WHERE cp.public_key = ?
         AND (c.type IS NULL OR c.type != 'enterprise_thread')
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
-    `, [myPubkey, myPubkey]);
+        AND ${NOT_A_REQUEST_FOR_ME('c.request')}
+    `, [myPubkey, myPubkey, myPubkey]);
     return result?.count || 0;
 }
 
@@ -1527,8 +1589,9 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
         AND (c.type IS NULL OR c.type != 'enterprise_thread')
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
+        AND ${NOT_A_REQUEST_FOR_ME('c.request')}
         GROUP BY c.id
-    `, [myPubkey, myPubkey, myPubkey]);
+    `, [myPubkey, myPubkey, myPubkey, myPubkey]);
     return rows.map(r => ({
         id: r.id,
         type: r.type || 'dm',
@@ -3569,7 +3632,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3618,6 +3681,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             carriesAuthorAvatar(p) ? 1 : 0,
             syncedAuthorAvatar(p),
             p.id ?? null,
+            syncedAuthorBanner(p),
         ]
     );
 }
@@ -3625,6 +3689,17 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
 /** The author's face URL a listing carries (the node's `authorAvatarUrl` on a by-area read), or null for a copy without one. */
 function syncedAuthorAvatar(p: any): string | null {
     const url = p.authorAvatarUrl ?? p.author_avatar_url;
+    return typeof url === 'string' && url.trim() !== '' ? url : null;
+}
+
+/**
+ * The enterprise's shop banner a listing carries (the node's `authorBannerUrl`, Pictures S6), or null. Unlike the face, a
+ * copy without it clears the row's: the node names a banner only where the enterprise has one (engine rowToPost) and never
+ * as null, so a copy without it says there is none now (a member's listing, a shop photo removed, a reader who is no
+ * longer a member); an older node never names one, so there is nothing to keep.
+ */
+function syncedAuthorBanner(p: any): string | null {
+    const url = p.authorBannerUrl ?? p.author_banner_url;
     return typeof url === 'string' && url.trim() !== '' ? url : null;
 }
 
@@ -4358,6 +4433,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         const timeout1 = setTimeout(() => controller1.abort(), 10000);
         
         let convRes;
+        const decidedBefore = _requestDecisions;
         try {
             convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal });
         } catch (e) {
@@ -4475,6 +4551,10 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // into its rows, so the chat names the person it is sealed to, and no reader has to put the rows back (each pass
         // writing the offered key in and each read taking it out again: #1872 ultrareview, U7).
         const pinsNow = myIdentity?.publicKey && !pinsUnread ? await dmPins.read(myIdentity.publicKey, database).catch(() => null) : null;
+        // Kept for the community the list came from, and not at all if the phone has moved to another while it was out.
+        if (myIdentity?.publicKey && await stillOnCommunity(anchorUrl)) {
+            await saveMessageRequests(myIdentity.publicKey, expectedDbName, convData.requests ?? null);
+        }
         // Whether every chat's page this pass asked for came back: one that didn't may hold the line a doorbell rang for. A
         // chat left out of the pass to wait for the next one counts as not read too, so the next tick reads it.
         let everyPageRead = true;
@@ -4494,9 +4574,15 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             // The chat's ⋮ menu reads this to show Mute or Unmute without a request of its own.
             if ('mute' in conv) rememberChatMute(conv.id, conv.mute ?? null);
             let needsConvWrite = false;
+            // The row's request as this list leaves it (requestAfterReadHere): asked again just before the write, so a
+            // decision taken here since the list was asked is never written over (PR #2540 review 4395706539).
+            let heldRequest: string | null | undefined = null;
+            const requestAfterList = () => requestAfterReadHere(conv.id, heldRequest, conv.request, decidedBefore);
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, type, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, post_credits, request, listed FROM conversations WHERE id = ?', [conv.id]);
+                heldRequest = localConv?.request;
+                const requestJson = requestAfterList();
                 // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
                 if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
                     console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
@@ -4507,7 +4593,9 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                     (localConv.post_title ?? null) !== (conv.postTitle ?? null) ||
                     (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
                     (localConv.post_photo ?? null) !== postPhotoString ||
-                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null)
+                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null) ||
+                    (requestJson !== undefined && (localConv.request ?? null) !== requestJson) ||
+                    localConv.listed !== 1
                 ) {
                     needsConvWrite = true;
                 } else if (people) {
@@ -4550,7 +4638,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                     const localConv = await txn.getFirstAsync<any>('SELECT id FROM conversations WHERE id = ?', [conv.id]);
                     if (!localConv) {
                         await txn.runAsync(
-                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits, request, listed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
                             [
                                 conv.id,
                                 heldType,
@@ -4561,17 +4649,21 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
-                                conv.postCredits || null
+                                conv.postCredits || null,
+                                requestAfterList() ?? null
                             ]
                         );
                     } else {
+                        // Undefined: the row keeps the request it holds.
+                        const requestJson = requestAfterList();
                         await txn.runAsync(
-                            'UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ? WHERE id = ?',
+                            `UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, ${requestJson === undefined ? '' : 'request = ?, '}listed = 1 WHERE id = ?`,
                             [
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
                                 conv.postCredits || null,
+                                ...(requestJson === undefined ? [] : [requestJson]),
                                 conv.id
                             ]
                         );
@@ -4653,7 +4745,10 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
         // Local cleanup of conversations that were deleted/consolidated on the server; none while the pins are unread (the
         // gate: a prune is the node's word on a DM's rows too).
         try {
-            const serverIds = convData.conversations.map((c: any) => c.id);
+            const requestIds = (convData.requests?.conversations || []).map((c: any) => c.id);
+            // One the list now names as a request waiting for the member is no longer known to be an ordinary chat.
+            for (const id of requestIds) await database.runAsync('UPDATE conversations SET listed = NULL WHERE id = ? AND listed IS NOT NULL', [id]);
+            const serverIds = [...convData.conversations.map((c: any) => c.id), ...requestIds];
             const localConvs = await database.getAllAsync<any>(
                 'SELECT conversation_id FROM conversation_participants WHERE public_key = ?',
                 [publicKey]
@@ -4700,14 +4795,59 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
 // 3s AND on every WS nudge; when the node is slow (observed 5-10s responses on the
 // 1cpu test VM under load), stacking overlapping requests onto it makes it slower —
 // each tick must skip, not pile on.
-const _conversationSyncsInFlight = new Set<string>();
+// A caller that asks while one is in flight shares its answer: the chat's first poll then waits for the Requests card's
+// preview fetch instead of returning before the node has answered (PR #2540 review 4393642152).
+const _conversationSyncsInFlight = new Map<string, Promise<boolean>>();
 
-export async function syncSingleConversation(conversationId: string) {
-    if (_conversationSyncsInFlight.has(conversationId)) return;
-    _conversationSyncsInFlight.add(conversationId);
+// How many lines of mine the node has taken (its 200) per conversation, counted before the line's row says so: a page asked
+// for before one of them was taken doesn't have it, so its poll drops none of my lines (dropMyWithdrawnRequestLines).
+const _ownLinesTaken = new Map<string, number>();
+function ownLineTaken(conversationId: string): void {
+    _ownLinesTaken.set(conversationId, (_ownLinesTaken.get(conversationId) ?? 0) + 1);
+}
+
+// The decisions on a message request the node took from this phone (its 200), numbered, with the request as each one
+// answered it: a read asked for before one of them doesn't carry it, so it writes that answer in place of its own (PR #2540
+// review 4395706539). Each read notes the count as it is asked.
+let _requestDecisions = 0;
+const _requestDecided = new Map<string, { n: number; request: string }>();
+
+/**
+ * The request a read of the node's leaves on one conversation, the read asked for when `asOf` decisions had been taken
+ * here, over the row's (`held`, its stored JSON; null or undefined for none): a decision taken since writes its own answer;
+ * an acceptance held stays against a read of the same request still naming it waiting (core requestAfterRead), and
+ * undefined says to leave the row as it is; otherwise the read's, as stored JSON or null. Asked just before the write, with
+ * no await between, so a decision landing first is always seen.
+ */
+function requestAfterReadHere(conversationId: string, held: string | null | undefined, read: unknown, asOf: number): string | null | undefined {
+    const decided = _requestDecided.get(conversationId);
+    if (decided && decided.n > asOf) return decided.request;
+    let prev: any = null;
+    if (typeof held === 'string') { try { prev = JSON.parse(held); } catch { prev = null; } }
+    const next = requestAfterRead(prev, { request: (read ?? null) as any });
+    if (prev && next === prev) return undefined;
+    return next ? JSON.stringify(next) : null;
+}
+
+/**
+ * This conversation's newest lines and its request from the node, written to this phone. True once the node's answer has
+ * been written here (its lines, and a request's people and withdrawn lines); false when there was no answer, or the pins'
+ * gate kept it out, so the chat screen knows whether what it reads is the node's word yet.
+ */
+export function syncSingleConversation(conversationId: string): Promise<boolean> {
+    const running = _conversationSyncsInFlight.get(conversationId);
+    if (running) return running;
+    const run = syncSingleConversationOnce(conversationId).finally(() => _conversationSyncsInFlight.delete(conversationId));
+    _conversationSyncsInFlight.set(conversationId, run);
+    return run;
+}
+
+async function syncSingleConversationOnce(conversationId: string): Promise<boolean> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (!anchorUrl) return;
+        if (!anchorUrl) return false;
+        const takenBefore = _ownLinesTaken.get(conversationId) ?? 0;
+        const decidedBefore = _requestDecisions;
 
         // 12s (not 5s) to ride out a slow node: an abort throws the whole response
         // away and the incoming message waits for the NEXT tick to try again — that
@@ -4719,14 +4859,14 @@ export async function syncSingleConversation(conversationId: string) {
             msgRes = await signedGet(`/api/messages/${conversationId}`, { signal: controller.signal });
         } catch (e: any) {
             console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch failed/timed out: ${e?.message || e}`);
-            return;
+            return false;
         } finally {
             clearTimeout(timeout);
         }
 
         if (!msgRes.ok) {
             console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} fetch returned ${msgRes.status}`);
-            return;
+            return false;
         }
 
         const msgData = await msgRes.json();
@@ -4734,7 +4874,7 @@ export async function syncSingleConversation(conversationId: string) {
             rememberChatMute(conversationId, msgData.conversation.mute ?? null);
         }
         const messages = msgData.messages;
-        if (!Array.isArray(messages)) return;
+        if (!Array.isArray(messages)) return false;
 
         const database = await getDb();
 
@@ -4757,8 +4897,78 @@ export async function syncSingleConversation(conversationId: string) {
             try {
                 await dmPins.read(myIdentity.publicKey, database);
             } catch {
-                if (await isDmHere(database, conversationId, msgData.conversation?.type)) return;
+                if (await isDmHere(database, conversationId, msgData.conversation?.type)) return false;
                 pollPinsUnread = true;
+            }
+        }
+        // The node's word on the chat's request, after the gate and never while the pins are unread: it decides whether the
+        // chat is in the list (isRequestFor) and whether it has a composer (requestModeOf), so a node answering a request on a
+        // DM held here would hide that chat and stop its sends in the very state the gate exists for (review 4395542064).
+        // Never over a decision taken here since this page was asked, nor an acceptance it still names waiting (review
+        // 4395706539).
+        if (!pollPinsUnread && msgData?.conversation && 'request' in msgData.conversation) {
+            try {
+                const conv = msgData.conversation;
+                const held = await database.getFirstAsync<{ request: string | null }>('SELECT request FROM conversations WHERE id = ?', [conversationId]);
+                const reqJson = requestAfterReadHere(conversationId, held?.request, conv.request, decidedBefore);
+                if (reqJson !== undefined) await database.runAsync(`
+                    INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET request = excluded.request
+                    WHERE request IS NOT excluded.request
+                `, [
+                    conversationId,
+                    conv.type || 'dm',
+                    conv.postId || conv.post_id || null,
+                    conv.name || null,
+                    conv.createdBy || '',
+                    conv.createdAt || new Date().toISOString(),
+                    reqJson
+                ]);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not update conversation request: ${e?.message || e}`);
+            }
+        }
+        // A message request for this reader: its people, so its line opens and the chat is named (PR #2540 review
+        // 4393642140), and none of its opener's lines the node no longer has (review 4393642158). None of this while the
+        // pins are unread: the gate above.
+        let withdrawn = 0;
+        const req = msgData.conversation?.request;
+        if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
+            try {
+                const mine = await database.getFirstAsync('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?', [conversationId, myIdentity.publicKey]);
+                if (!mine) await writeConversationFromNode(database, { ...msgData.conversation, id: conversationId }, decidedBefore);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not write the request's people: ${e?.message || e}`);
+            }
+            try {
+                withdrawn = await dropWithdrawnRequestLines(database, conversationId, req, messages);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not drop the request's withdrawn lines: ${e?.message || e}`);
+            }
+        } else if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && req?.from === myIdentity.publicKey && req.state !== 'accepted') {
+            // My own request, not accepted: none of my lines the node withdrew stay here either (Cancel request from the web
+            // app, or a page from before this phone's own cancel; review 4394119880). Never one still sending or failed, and
+            // none at all on a page asked for before the node took a line of mine.
+            try {
+                withdrawn = await dropMyWithdrawnRequestLines(database, conversationId, myIdentity.publicKey, messages,
+                    () => (_ownLinesTaken.get(conversationId) ?? 0) === takenBefore);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not drop my request's withdrawn lines: ${e?.message || e}`);
+            }
+        } else if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && req?.from === myIdentity.publicKey && req.state === 'accepted') {
+            // My own request, accepted: none of the other person's lines the node withdrew stay here either (review
+            // 4399348635). The one I made after they withdrew theirs, while they blocked me, reads as mine (the node turns
+            // the row round for me); their line answered it, and their Cancel request took that line back. The stretch the
+            // page covers alone, as for a request I accepted (above).
+            const others = (Array.isArray(msgData.conversation.participants) ? msgData.conversation.participants : [])
+                .filter((pk: unknown): pk is string => typeof pk === 'string' && pk !== '' && pk !== myIdentity.publicKey);
+            if (others.length === 1) {
+                try {
+                    withdrawn = await dropWithdrawnRequestLines(database, conversationId, { from: others[0], state: 'accepted' }, messages);
+                } catch (e: any) {
+                    console.warn(`[Sync] Could not drop the other's withdrawn lines: ${e?.message || e}`);
+                }
             }
         }
         const cursors = msgData.conversation?.readCursors;
@@ -4794,11 +5004,10 @@ export async function syncSingleConversation(conversationId: string) {
         }
 
         if (changed.length === 0 && cursorAdvances.length === 0) {
-            if (blanked > 0) {
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
+            if (blanked > 0 || withdrawn > 0) {
+                emitAppEvent('sync_data_updated');
             }
-            return;
+            return true;
         }
 
         const own = pollPinsUnread ? await ownLinesOnly(database, conversationId, changed) : changed;
@@ -4824,21 +5033,74 @@ export async function syncSingleConversation(conversationId: string) {
         if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId], database);
         await holdDmTypes(database);
 
-        const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit('sync_data_updated');
+        emitAppEvent('sync_data_updated');
+        return true;
     } catch (err: any) {
         // Background polling — don't alert, but DO leave a trace for USB debugging.
         console.warn(`[Sync] conversation ${String(conversationId).slice(0, 8)} sync failed: ${err?.message || err}`);
-    } finally {
-        _conversationSyncsInFlight.delete(conversationId);
+        return false;
     }
 }
 
+/** How many lines the node answers a conversation's read with when the phone names no limit (its clampLimit). */
+const NODE_PAGE_LINES = 50;
+
+/**
+ * A request's lines on the phone of the person it was for that the node no longer has: its opener withdrew them (Cancel
+ * request; PR #2540 review 4393642158), whatever the request's state now and however many lines the node still holds.
+ * While it isn't accepted every line in it is the opener's, one a request, so the newest page holds them all; once
+ * accepted, only the stretch the page covers is judged, as a line older than the page's oldest is still theirs. Only the
+ * opener's lines go, never one of this reader's (their unsent ones neither). Their photos' decrypted copies go with them.
+ * Also the other person's lines in the reader's own request once it is accepted (`req.from` is then that person; review
+ * 4399348635).
+ */
+async function dropWithdrawnRequestLines(database: SQLite.SQLiteDatabase, conversationId: string, req: { from: string; state?: string }, messages: any[]): Promise<number> {
+    const { where, args } = linesNotOnPage(conversationId, req.from, messages, req.state === 'accepted');
+    const gone = await database.getAllAsync<{ id: string }>(`SELECT id FROM messages WHERE ${where}`, args);
+    if (gone.length === 0) return 0;
+    await database.runAsync(`DELETE FROM messages WHERE ${where}`, args);
+    for (const g of gone) await forgetCachedChatImage(g.id);
+    return gone.length;
+}
+
+/**
+ * My own request's lines, not accepted, on my phone that the node no longer has (review 4394119880): I cancelled it from the
+ * web app, or a page from before this phone's own cancel brought them back. Every line in it is mine, so the newest page
+ * holds them all; a full one judges only the stretch it covers. One still sending or failed isn't on the node yet and stays
+ * (review 4390653768), and none go when `pageIsCurrent` says, once they are read, that the node took a line of mine after
+ * the page was asked for: the page lacks it. Each goes by its id, so a line written meanwhile is never among them. Their
+ * photos' decrypted copies go with them.
+ */
+async function dropMyWithdrawnRequestLines(database: SQLite.SQLiteDatabase, conversationId: string, me: string, messages: any[], pageIsCurrent: () => boolean): Promise<number> {
+    const { where, args } = linesNotOnPage(conversationId, me, messages, true);
+    const rows = await database.getAllAsync<{ id: string; metadata: string | null }>(`SELECT id, metadata FROM messages WHERE ${where}`, args);
+    const gone = rows.filter(r => !isUndeliveredRow(r.metadata, me, me));
+    if (gone.length === 0 || !pageIsCurrent()) return 0;
+    for (const g of gone) {
+        await database.runAsync('DELETE FROM messages WHERE id = ? AND conversation_id = ?', [g.id, conversationId]);
+        await forgetCachedChatImage(g.id);
+    }
+    return gone.length;
+}
+
+/** `author`'s lines in a conversation that the node's page doesn't list; with `pageOnly`, a full page's stretch alone. */
+function linesNotOnPage(conversationId: string, author: string, messages: any[], pageOnly: boolean): { where: string; args: string[] } {
+    const onNode = messages.map((m: any) => m?.id).filter((id: unknown): id is string => typeof id === 'string');
+    const stamps = messages.map((m: any) => m?.timestamp).filter((t: unknown): t is string => typeof t === 'string').sort();
+    const where = ['conversation_id = ?', 'author_pubkey = ?'];
+    const args: string[] = [conversationId, author];
+    if (onNode.length > 0) { where.push(`id NOT IN (${onNode.map(() => '?').join(', ')})`); args.push(...onNode); }
+    if (pageOnly && messages.length >= NODE_PAGE_LINES && stamps.length > 0) { where.push('timestamp > ?'); args.push(stamps[0]); }
+    return { where: where.join(' AND '), args };
+}
+
+
 export async function getConversation(id: string, myPubkey?: string) {
     const database = await getDb();
+    let res: any;
     if (myPubkey) {
-        return await database.getFirstAsync<any>(`
-            SELECT c.name, c.type as type, c.post_id as postId, p.title as postTitle,
+        res = await database.getFirstAsync<any>(`
+            SELECT c.name, c.type as type, c.post_id as postId, c.request as request, c.listed as listed, c.created_by as createdBy, p.title as postTitle,
             COALESCE(
                 (SELECT mt2.status FROM marketplace_transactions mt2
                  WHERE mt2.post_id = c.post_id
@@ -4867,8 +5129,13 @@ export async function getConversation(id: string, myPubkey?: string) {
                 AND (mt.buyer_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id)
                      AND mt.seller_pubkey IN (SELECT public_key FROM conversation_participants WHERE conversation_id = c.id))
             WHERE c.id = ?`, [myPubkey, myPubkey, myPubkey, id]);
+    } else {
+        res = await database.getFirstAsync<any>('SELECT name, post_id as postId, request FROM conversations WHERE id = ?', [id]);
     }
-    return await database.getFirstAsync<any>('SELECT name, post_id as postId FROM conversations WHERE id = ?', [id]);
+    if (res?.request && typeof res.request === 'string') {
+        try { res.request = JSON.parse(res.request); } catch {}
+    }
+    return res;
 }
 
 /**
@@ -5580,40 +5847,58 @@ function heardFromListing(c: any, others: string[]): DmHeard | undefined {
 async function refreshConversationFromNode(conversationId: string): Promise<void> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const decidedBefore = _requestDecisions;
     try {
         const res = await signedGet(`/api/messages/${encodeURIComponent(conversationId)}?limit=1`, { signal: controller.signal });
         if (!res.ok) return;
         const conv = (await res.json())?.conversation;
         if (!conv?.id || typeof conv.type !== 'string') return;
-        const database = await getDb();
-        // The pins before the node's rows, through the handle they are written with: the account's first read with this file
-        // open seeds it from the rows and lines held before these (dmPins), so the node's answer is only ever a listing,
-        // judged on the lines held then.
-        const identity = await loadIdentity().catch(() => null);
-        const me = identity?.publicKey;
-        const before = me ? await dmPins.read(me, database).catch(() => null) : null;
-        // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written into a DM here. Any other
-        // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
-        if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
-        const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
-        await database.runAsync(
-            'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
-        );
-        // A pinned DM's rows are [me, the pinned key], as the sync writes them; the listing is heard by the pin below.
-        const pinned = me && before ? dmPinFor(before, conv.id) : null;
-        for (const pk of pinned ? [me, pinned.peer] : Array.isArray(conv.participants) ? conv.participants : []) {
-            if (typeof pk === 'string' && pk) {
-                await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
-            }
-        }
-        // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-        if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
+        await writeConversationFromNode(await getDb(), conv, decidedBefore);
     } catch {
         // Offline or refused: the lock simply fails, and says so.
     } finally {
         clearTimeout(timeoutId);
     }
+}
+
+/**
+ * The node's answer for one conversation (GET /api/messages/:id's `conversation`) written to this phone: its row, with its
+ * message request when the answer names one, so a request opened from a push or a link is one before its lines arrive
+ * (PR #2540 review 4393642152), and its people, so its lines open and its chat is named (review 4393642140).
+ */
+async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: any, asOf: number): Promise<void> {
+    // The pins before the node's rows, through the handle they are written with: the account's first read with this file
+    // open seeds it from the rows and lines held before these (dmPins), so the node's answer is only ever a listing,
+    // judged on the lines held then.
+    const identity = await loadIdentity().catch(() => null);
+    const me = identity?.publicKey;
+    const before = me ? await dmPins.read(me, database).catch(() => null) : null;
+    // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written into a DM here. Any other
+    // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
+    if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
+    const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
+    // Its request as a read asked for when `asOf` decisions had been taken here leaves it (requestAfterReadHere), worked out
+    // just before each write: a decision landing between them is never written over (PR #2540 review 4395706539).
+    const read = 'request' in conv;
+    const type = await heldConversationType(conv.id, conv.type);
+    await database.runAsync(
+        'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [conv.id, type, conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString(), read ? requestAfterReadHere(conv.id, null, conv.request, asOf) ?? null : null]
+    );
+    if (read) {
+        const held = await database.getFirstAsync<{ request: string | null }>('SELECT request FROM conversations WHERE id = ?', [conv.id]);
+        const request = requestAfterReadHere(conv.id, held?.request, conv.request, asOf);
+        if (request !== undefined) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ? AND request IS NOT ?', [request, conv.id, request]);
+    }
+    // A pinned DM's rows are [me, the pinned key], as the sync writes them; the listing is heard by the pin below.
+    const pinned = me && before ? dmPinFor(before, conv.id) : null;
+    for (const pk of pinned ? [me, pinned.peer] : Array.isArray(conv.participants) ? conv.participants : []) {
+        if (typeof pk === 'string' && pk) {
+            await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
+        }
+    }
+    // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
+    if (me && before) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
 }
 
 /**
@@ -6170,6 +6455,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         return {
             id: row.id,
             senderId: row.author_pubkey,
+            authorPubkey: row.author_pubkey,
             text: displayTxt,
             type: row.type || 'text',
             systemType: row.system_type,
@@ -6262,6 +6548,8 @@ export async function insertMessage(conversationId: string, authorPubkey: string
 
     // Fire-and-forget: the returned promise is intentionally not awaited.
     _deliverPendingMessage(anchorUrl, identity, tempId, { id: tempId, conversationId, authorPubkey, ciphertext, nonce, metadata });
+    // The line's id, which the node keeps: the chat follows it to the node's answer (a request's line waits for the 200).
+    return tempId;
 }
 
 /** Background half of the optimistic send: POST to the node, then either adopt the
@@ -6300,6 +6588,7 @@ async function _deliverPendingMessage(
             throw new Error(errMsg);
         }
 
+        ownLineTaken(body.conversationId);
         const data = await res.json();
         const serverMsg = data.message;
 
@@ -6310,6 +6599,7 @@ async function _deliverPendingMessage(
             'UPDATE OR REPLACE messages SET id=?, timestamp=?, metadata=? WHERE id=?',
             [serverMsg.id, serverMsg.timestamp, body.metadata || null, tempId]
         );
+        await requestLineTaken(database, body.conversationId, identity.publicKey);
     } catch (deliverErr: any) {
         console.warn(`[Messaging] Delivery failed for message ${tempId.slice(0, 8)}:`, deliverErr?.message || deliverErr);
         try {
@@ -6319,6 +6609,7 @@ async function _deliverPendingMessage(
                 try { meta = JSON.parse(row.metadata) || {}; } catch {}
             }
             meta.__sendState = 'failed';
+            if (deliverErr?.message) meta.__sendError = deliverErr.message;
             await database.runAsync('UPDATE messages SET metadata=? WHERE id=?', [JSON.stringify(meta), tempId]);
         } catch {}
     } finally {
@@ -6326,10 +6617,45 @@ async function _deliverPendingMessage(
     }
 }
 
-/** Remove a local-only message row (used to discard or resend a failed optimistic send). */
+/**
+ * The node took a line of `me`'s (200): where it was their message request's line, the chat's request now waits for the
+ * other's answer (core requestAfterOwnLine), here as on the node, so the chat reads as waiting only from the 200 and a
+ * reread of the row keeps it so until the next poll brings the node's word (PR #2540 review 4393642166). Never throws.
+ */
+async function requestLineTaken(database: SQLite.SQLiteDatabase, conversationId: string, me: string): Promise<void> {
+    try {
+        const row = await database.getFirstAsync<{ request: string | null }>('SELECT request FROM conversations WHERE id = ?', [conversationId]);
+        if (!row?.request) return;
+        const was = JSON.parse(row.request);
+        const now = requestAfterOwnLine(was, me);
+        if (now !== was) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [JSON.stringify(now), conversationId]);
+    } catch { /* the next poll brings the node's word */ }
+}
+
+/**
+ * The node took a decision on the chat's request (its 200; `request` the request as the member now reads it): written to
+ * this phone's row, as on the node, and kept for a read asked for before it, which writes it in place of its own
+ * (requestAfterReadHere): an open chat's poll, or a card's preview, in flight when Accept was tapped answers the request
+ * waiting, and a list from before Cancel request names its line waiting (PR #2540 review 4395706539). Never throws.
+ */
+async function requestDecided(conversationId: string, request: unknown): Promise<void> {
+    if (!request || typeof request !== 'object') return;
+    try {
+        const json = JSON.stringify(request);
+        _requestDecided.set(conversationId, { n: ++_requestDecisions, request: json });
+        const database = await getDb();
+        await database.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [json, conversationId]);
+    } catch { /* the next poll brings the node's word */ }
+}
+
+/**
+ * Remove a message row from this phone, and its photo's decrypted copy with it (used to discard or resend a failed
+ * optimistic send, and by Cancel request, which takes the opener's own lines off: PR #2540 review 4397153864).
+ */
 export async function deleteLocalMessage(messageId: string) {
     const database = await getDb();
     await database.runAsync('DELETE FROM messages WHERE id = ?', [messageId]);
+    await forgetCachedChatImage(messageId);
 }
 
 /**
@@ -6440,11 +6766,13 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
         try { const j = JSON.parse(await res.text()); if (j.error) errMsg = j.error; } catch {}
         throw new Error(errMsg);
     }
+    ownLineTaken(conversationId);
     const serverMsg = (await res.json()).message;
     await database.runAsync(
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [serverMsg.id, conversationId, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image', metadata || null, serverMsg.timestamp]
     );
+    await requestLineTaken(database, conversationId, identity.publicKey);
 }
 
 /**
@@ -7098,6 +7426,44 @@ async function _signedRequest(endpoint: string, payload: any) {
 // through here.
 export async function signedRequest(endpoint: string, payload: any) {
     return _signedRequest(endpoint, payload);
+}
+
+/** The message requests waiting for the member in the community the phone is on, as its node last listed them. */
+export async function getMessageRequests(myPubkey: string): Promise<{ count: number; conversations: any[] } | null> {
+    try {
+        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        if (!anchorUrl) return null;
+        const raw = await AsyncStorage.getItem(messageRequestsStoreKey(myPubkey, getDatabaseFilenameForNode(anchorUrl)));
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+/** The message requests one community's node listed for the member, kept for that community (`file`) alone. */
+export async function saveMessageRequests(myPubkey: string, file: string, requests: { count: number; conversations: any[] } | null): Promise<void> {
+    try {
+        if (requests) {
+            await AsyncStorage.setItem(messageRequestsStoreKey(myPubkey, file), JSON.stringify(requests));
+        } else {
+            await AsyncStorage.removeItem(messageRequestsStoreKey(myPubkey, file));
+        }
+    } catch {}
+}
+
+/**
+ * Accept, Ignore or Cancel request on the node. Its answer (200) is the request as the member now reads it, and it goes
+ * into this phone's row before this returns (requestDecided): the chat opened next, as after Accept on a Requests card,
+ * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539).
+ */
+export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel'): Promise<{ success: boolean; request?: any }> {
+    const answer = await _signedRequest('/api/messages/request', { conversationId, decision });
+    await requestDecided(conversationId, answer?.request);
+    return answer;
+}
+
+export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {
+    return _signedRequest('/api/messages/request/ignore-all', {});
 }
 
 /**
@@ -7998,10 +8364,11 @@ export async function getRecentChatMembers(myPubkey: string, limit = 10): Promis
          JOIN members m ON m.public_key = cp2.public_key
          LEFT JOIN messages msg ON msg.conversation_id = c.id
          WHERE cp.public_key = ? AND c.type = 'dm' AND c.post_id IS NULL
+           AND ${NOT_A_REQUEST_FOR_ME('c.request')}
          GROUP BY m.public_key
          ORDER BY lastChatAt DESC
          LIMIT ?`,
-        [myPubkey, myPubkey, limit]
+        [myPubkey, myPubkey, myPubkey, limit]
     );
 }
 

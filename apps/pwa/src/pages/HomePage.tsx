@@ -315,7 +315,12 @@ function MarketListingItem({
     onNavigate: (page: string, id?: string) => void;
     nextImageLoading: () => 'eager' | 'lazy';
 }) {
-    const photo = resolveImageUrl(item.photoUrl);
+    // Its own photo, else its enterprise's banner (Pictures S6). A banner that will not load gives way to the tile, never
+    // an empty box (review of #2565, finding 8); the URL that failed is kept, so a new one is tried.
+    const [failedBanner, setFailedBanner] = useState<string | null>(null);
+    const banner = item.bannerUrl && item.bannerUrl !== failedBanner ? item.bannerUrl : null;
+    const photo = resolveImageUrl(item.photoUrl || banner);
+    const onPictureError = item.photoUrl ? undefined : () => setFailedBanner(item.bannerUrl ?? null);
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
     const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
         : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
@@ -344,6 +349,7 @@ function MarketListingItem({
                         alt=""
                         loading={nextImageLoading()}
                         decoding="async"
+                        onError={onPictureError}
                         className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
                     />
                 ) : (
@@ -383,6 +389,7 @@ function MarketListingItem({
                     alt=""
                     loading={nextImageLoading()}
                     decoding="async"
+                    onError={onPictureError}
                     className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
                 />
             ) : (

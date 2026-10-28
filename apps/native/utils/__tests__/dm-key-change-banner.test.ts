@@ -297,7 +297,7 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         expect(src).toMatch(/const keyChangePending = !!keyChange;\s*const unplaced = !!keyChange\?\.unplaced;/);
         expect(src).not.toMatch(/isDmUnplaced/);
         expect(src).toMatch(/disabled=\{keyChangePending\}/);
-        expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice \? chatLineWords\(lockNotice\) : null\}/);
+        expect(src).toMatch(/notice=\{unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : lockNotice \? chatLineWords\(lockNotice\) : (?:null\}|\()/); // the three security lines first, in this order; a message request's own words may only follow them
         expect(src).toMatch(/const canSendNow = \(\) => [^;]*!keyChangePending/);
         // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);

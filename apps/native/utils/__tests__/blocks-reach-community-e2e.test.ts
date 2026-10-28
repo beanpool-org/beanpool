@@ -265,7 +265,8 @@ describe('a member the community removes and a vote brings back, against a real 
         await phone.syncBlocks();
         expect(await blockedAtNode(ria.publicKey)).toEqual([ned.publicKey]);
 
-        // A moderator removes her (adminPruneUser): her list goes with the account, and her key signs nothing here.
+        // The community's vote removes her (adminPruneUser, as the vote does: the only removal where the community votes): her
+        // list goes with the account, and her key signs nothing here.
         await control('prune', { key: ria.publicKey });
         expect(await blockedAtNode(ria.publicKey)).toEqual([]);
         // The phone's own check of its community (NodeStatusContext) reads the node's answer as 'closed', and says so.

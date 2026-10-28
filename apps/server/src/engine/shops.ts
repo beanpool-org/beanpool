@@ -322,6 +322,22 @@ export function setShopPhoto(shopId: string, photo: string | null): boolean {
     return true;
 }
 
+/**
+ * An enterprise's banner was set, replaced or taken down (setShopPhoto said so). Its listings carry the banner's keyed URL
+ * (engine posts.ts authorBannerUrl), but no listing row moves, and a phone's copy of a listing changes only when a delta
+ * sends it again (apps/native utils/db.ts carried_banner): until the listing itself changed, that copy kept a URL that
+ * opens nothing, or no banner at all. Stamping the enterprise's members.board_standing_changed_at sends every one of its
+ * listings in every phone's next delta (engine posts.ts getPosts, `updatedAfter`), each with its reader's mask, and moves
+ * a by-area set's tag (NearbySet.stamp); updated_at with it, as setHolidayMode's does, so delta sync takes the stamp to a
+ * standby. A delta reader learns only that something about the enterprise's listings moved then, as a pause tells it.
+ * A member's shop banner rides none of their listings (the engine reads it for an enterprise's alone), so a member's row
+ * is never stamped. In the caller's transaction.
+ */
+function enterpriseBannerMoved(owner: string): void {
+    db.prepare(`UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ? AND is_treasury = 1`).run(owner);
+}
+
 /** What a change did to the shop's listings, for the route to tell the apps. */
 export interface ShopListingsMoved {
     /** Offers a pause took off the board. */
@@ -355,6 +371,7 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
     if (photo && photo.bytes > 0) assertMayStorePhotoBytes(actor, photo.bytes, now);
     const nowIso = iso(now);
     const moved: ShopListingsMoved = { paused: [], resumed: [] };
+    let photoMoved = false;
 
     const shop = db.transaction((): ShopRow => {
         const before = openShop(owner, now);
@@ -384,10 +401,15 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
             sets.push('paused_at = NULL', 'back_on = NULL', 'paused_posts = NULL');
         }
         if (sets.length > 0) db.prepare(`UPDATE shops SET ${sets.join(', ')} WHERE id = ?`).run(...values, before.id);
-        if (photo !== undefined && setShopPhoto(before.id, photo?.photo ?? null) && photo) recordStoredPhotoBytes(actor, photo.bytes, now);
+        if (photo !== undefined) photoMoved = setShopPhoto(before.id, photo?.photo ?? null);
+        if (photoMoved) enterpriseBannerMoved(owner);
+        if (photoMoved && photo) recordStoredPhotoBytes(actor, photo.bytes, now);
         return shopById(before.id)!;
     })();
-    if (moved.paused.length + moved.resumed.length > 0) bumpPostsVersion();
+    // A banner set, replaced or taken down moves no listing, but an enterprise's listings carry its keyed URL (engine
+    // posts.ts authorBannerUrl), and the old one opens nothing: the list's tag moves, so a copy held from before is not
+    // confirmed with a 304.
+    if (moved.paused.length + moved.resumed.length > 0 || photoMoved) bumpPostsVersion();
     return { shop, ...moved };
 }
 
@@ -406,6 +428,7 @@ function putBackUp(shop: ShopRow, nowIso: string): string[] {
 export function closeShop(owner: string, endOffers: boolean, now: number = Date.now()): { shopId: string; cleared: string[]; ended: string[] } & ShopListingsMoved {
     assertPlainTablesWritable();
     const nowIso = iso(now);
+    let bannerGone = false;
     const out = db.transaction(() => {
         const shop = shopOf(owner);
         if (!shop) throw new ShopRefusal(404, 'shop_not_found', SHOP_NONE);
@@ -422,12 +445,14 @@ export function closeShop(owner: string, endOffers: boolean, now: number = Date.
             for (const id of ended) { end.run(nowIso, id); wages.run(id); }
         }
         db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(nowIso, shop.id);
-        setShopPhoto(shop.id, null);
+        bannerGone = setShopPhoto(shop.id, null);
+        if (bannerGone) enterpriseBannerMoved(owner);
         db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
         writeTombstone('shops', shop.id);
         return { shopId: shop.id, cleared: named, ended, paused: [] as string[], resumed };
     })();
-    if (out.cleared.length > 0) bumpPostsVersion();
+    // The banner is read by the owner (engine posts.ts), so an enterprise's listings that were never in the shop lose it too.
+    if (out.cleared.length > 0 || bannerGone) bumpPostsVersion();
     return out;
 }
 
@@ -470,7 +495,7 @@ export function dropShopOf(owner: string, now: number = Date.now()): string | nu
     const shop = shopOf(owner);
     if (!shop) return null;
     db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(iso(now), shop.id);
-    setShopPhoto(shop.id, null);
+    if (setShopPhoto(shop.id, null)) enterpriseBannerMoved(owner);
     db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
     writeTombstone('shops', shop.id);
     return shop.id;

@@ -109,6 +109,11 @@ async function child(): Promise<void> {
     const fetches = guardFetch();
     await runNodeChild({
         ...serveCommands,
+        /** A removal a member proposed before removal by vote S3, still open (since then only an admin's pause opens one). */
+        'removal-from-before': async (a: { authorPubkey: string; title: string; description: string; subject: string; closesAt?: string }) => {
+            const { removalProposedFromBefore } = await import('./decisions-from-before-test-fixture.js');
+            return removalProposedFromBefore(a);
+        },
         'setup-primary': async (a: { replicationToken: string; genesis: string }) => {
             const { seedGenesisMember } = await import('./engine/members.js');
             const { setReplicationToken } = await import('./config/local-config.js');
@@ -594,10 +599,11 @@ async function main(): Promise<void> {
             title: 'Make Cy a voucher', description: 'Cy has helped half the street', touches: 'member', effect: 'grant_voucher', subject: cy.pk,
         })).decision;
         for (const v of [gwen, bo, nia]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${grant.id}/vote`, { support: true }));
-        const removal = built('Kip proposes removing Rex, closing in a few seconds', await S_(kip, '/api/commons/decisions', {
-            title: 'Remove Rex', description: 'Rex has not been seen in a year', touches: 'member', effect: 'remove_member', subject: rex.pk,
+        // Kip's removal of Rex, proposed before removal by vote S3 (a member proposes none since), closing in a few seconds.
+        const removal = await main.send('removal-from-before', {
+            authorPubkey: kip.pk, title: 'Remove Rex', description: 'Rex has not been seen in a year', subject: rex.pk,
             closesAt: new Date(Date.now() + 2500).toISOString(),
-        })).decision;
+        });
         for (const v of [gwen, kip, nia, bo]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${removal.id}/vote`, { support: true }));
         // Granting owner asks the owner's fresh proof (design case 18, C8): Manage on the phone, pressed just now.
         built('the admin makes Lou an owner', await api(m, 'POST', '/api/local/admin/node-roles', { admin: await main.send('owner-phone-session'), body: { pubkey: lou.pk, role: 'owner' } }));

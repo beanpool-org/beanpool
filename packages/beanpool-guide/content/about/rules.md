@@ -20,7 +20,7 @@ About a member:
 - Freeze a member's credit, or unfreeze it.
 - Give a member the right to vouch for newcomers, or take it away.
 - Remove a lead keeper from an enterprise, or a leader from a project.
-- Remove a member from the community, or reinstate them.
+- Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see "Emergency suspension").
 
 About the Commons:
 
@@ -85,6 +85,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 
 ## Removing a member
 
+- In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. For now one thing still does without a vote: an owner can remove a member together with everyone they invited, and everyone those people invited.
 - If a removal passes, the member is suspended and their credit frozen at once.
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
@@ -111,6 +112,7 @@ Your community's server has owners and admins. They look after it.
 
 - An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.
 - If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
+- An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.
 - Admins can give members the right to vouch for newcomers.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
 - Admins sort out stuck trades, but never one they are part of.

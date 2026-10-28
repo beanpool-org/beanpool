@@ -444,3 +444,50 @@ describe('a conversation at 320 dp with 1.3× text, in the pseudo-locale', () =>
         expect(widthOf(label.textContent!, 13 * SCALE) * Number(label.getAttribute('data-min-scale'))).toBeLessThanOrEqual(200 - 20 - 24);
     });
 });
+
+describe('message request on the phone (phone-web-parity)', () => {
+    it('in mine-waiting: shows waiting line, no live composer, and Cancel request calls decideMessageRequest', async () => {
+        const reqConv = {
+            ...DM_CONVERSATION,
+            request: { state: 'pending', from: ME.publicKey, at: iso(now - 60_000) },
+        };
+        const reqMessages = [
+            { id: 'm1', senderId: ME.publicKey, authorPubkey: ME.publicKey, text: 'Hi Kofi', type: 'text', rawTimestamp: iso(now - 60_000), timestamp: '' },
+        ];
+        net.answer = node({
+            getConversation: reqConv,
+            getMessages: reqMessages,
+            decideMessageRequest: { success: true },
+        });
+        await renderIn('en');
+        expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
+        expect(host.textContent).toContain('Sent as a request. Kofi will see it under Requests. You can write more once they accept.');
+        expect(host.querySelector('input[placeholder="Message..."]')).toBeNull();
+
+        const cancelBtn = host.querySelector('[data-testid="request-cancel"]');
+        expect(cancelBtn).not.toBeNull();
+        expect(cancelBtn!.textContent).toContain('Cancel request');
+        await click(cancelBtn, 'Cancel request');
+        expect(net.calls.some((c) => c.startsWith('db.decideMessageRequest'))).toBe(true);
+    });
+
+    it('failed message bubble shows server words in alert', async () => {
+        const SERVER_ERROR = 'Your first message is waiting for Kofi. You can write more once they accept it.';
+        const failedMsg = {
+            id: 'm-fail',
+            senderId: ME.publicKey,
+            text: 'second message',
+            type: 'text',
+            outgoing: true,
+            sendState: 'failed',
+            metadata: { __sendError: SERVER_ERROR },
+            rawTimestamp: iso(now - 10_000),
+            timestamp: '',
+        };
+        net.answer = node({ getMessages: [failedMsg] });
+        await renderIn('en');
+        await click(bubbleWith('second message'), 'the failed send');
+        expect(alerts.said).toContain('Message not delivered');
+        expect(alerts.said).toContain(SERVER_ERROR);
+    });
+});

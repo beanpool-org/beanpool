@@ -515,7 +515,7 @@ export const TABLES: Record<string, TableEntry> = {
     // A direct conversation waiting as a message request, and what became of it (engine/dm-requests.ts), so a standby
     // that takes over holds back the same lines and lists the same requests. Only a real conversation's: one kept for a
     // blocked opener alone is never in a copy (withheld_conversations), and its row starts travelling when it becomes real.
-    dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before updated_at', { rows: REAL_CONVERSATIONS }),
+    dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before reached_out_at reach_out_withdrawn_at updated_at', { rows: REAL_CONVERSATIONS }),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
@@ -538,6 +538,7 @@ export const TABLES: Record<string, TableEntry> = {
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    peek_tickets: { kind: 'local', reason: "the links members shared outside, each opening one post for seven days (engine/peek-tickets.ts): a promoted server starts with none, so each reads as stopped, never as open, and its member shares again" },
     photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
     photo_budget_log: { kind: 'local', reason: "this server's own sliding-window photo upload byte log (engine/photo-upload-budget.ts), pruned > 48h; a promoted server starts its day afresh" },
     message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },

@@ -427,7 +427,8 @@ describe('N2: a 2xx status answer that isn\'t a status is never recorded as "non
     }
 
     it('the vault\'s own status still counts: "none" is recorded from a real one', async () => {
-        expect(await vaultStatus(member)).toEqual({ providers: [], holds: [] });
+        // `copies` (vault rethink VR1): the same sign-ins with since when each is kept; none here.
+        expect(await vaultStatus(member)).toEqual({ providers: [], copies: [], holds: [] });
         expect(await vaultCopyKnowledge(member.publicKey)).toBe('none');
     });
 });

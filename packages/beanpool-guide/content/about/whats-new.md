@@ -12,6 +12,7 @@ On the phone you get these with an up-to-date app; in a web browser, when your c
 - **Said where it is made.** When you link Google, Apple or Facebook in the phone app, or join with one, **Safety Backup** and **Account Protection** now say, under **A sign-in you link**, that BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it, and who can open that copy, with the whole answer under **Who can open it**. See "Getting your account back".
 - **Your 12 words first.** **Account Protection** lists **Your 12 words** first, then **A sign-in you link**.
 - **In a web browser.** **Safety Backup** and Settings say whether the community's server keeps a copy of your account: on the global community it does, for a sign-in you joined with. The web app never uses BeanPool's key vault.
+- **Where your account can be brought back from.** In **Account Protection**, a new screen lists every copy of your account your phone can find, at the key vault (with the day each was made) and at your communities' servers, with **Remove** next to each and **Remove everything**. Before the last one goes, it asks **Show my 12 words first?**. The web app's Settings lists the copy that community's server keeps. See "Getting your account back".
 
 ## The global community, near you
 

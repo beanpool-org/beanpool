@@ -74,4 +74,18 @@ In the web app the buttons on a post are **💬 Message** and **🚩 Report**. B
 
 On the global community a post has no price in Beans: it says what the person would like in return. Where the price would be, it says "🏘️ In a local community this is a price in Beans ›". In place of asking for it, the post shows **Request · Beans held safely 🏘️**: tap it to see how a deal works in a local community. Messaging the person works as anywhere. See "Beans and the global community".
 
-You cannot save or share a post yet.
+You cannot save a post yet.
+
+## Sharing a post
+
+Open a post and tap **Share with members**. Your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. Anyone in your community who taps it opens the post. Someone who isn't a member lands on your community's own page, with how to ask to join.
+
+Where your community allows it, you can also tap **Share outside the community**. It is for showing one listing to a friend or a neighbour who isn't in BeanPool yet, in a chat or a message:
+
+- The link shows that one post for 7 days: its title, words, photos, price and roughly where it is (the area, never the exact place).
+- It never shows a name, a face or anything else about the person who posted it, or about you. It says only that a member of your community shared it.
+- It opens nothing else: no other post, no member, nothing about your community beyond what its public card says.
+- Whoever opens it can ask to join your community, open it in the app, or look around the global community.
+- A post only your group or one person can see can't be shared outside.
+
+Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off.

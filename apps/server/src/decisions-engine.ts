@@ -430,6 +430,14 @@ const NODE_OPERATOR_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffec
 export const NODE_OPERATOR_VOTE_REFUSAL = word("A community vote can't remove or suspend an owner or admin of this community's server: they run the server itself. An owner can take that role away first; after that, they are a member like any other.");
 
 /**
+ * Why nobody proposes a vote on removing a member (removal by vote S3; Amendment A of scratch/fable-design/
+ * DESIGN-removal-by-vote-fable.md, point 1, Marty 24 Oct): it opens only when an admin pauses them (pauseMember), so an
+ * admin has looked first, usually at a report, and still can't remove anyone alone. A group can't start one on a made-up
+ * accusation without an admin going along.
+ */
+export const REMOVAL_FOLLOWS_A_PAUSE = word('A vote on removing a member opens only when an admin pauses them, so nobody proposes one. To ask for it, report the member.');
+
+/**
  * The node profile switch an effect needs (config/node-profile.ts), or null. Every effect needs `decisions`: with
  * formal Decisions off nothing a vote decides is carried out. The pool effects pay Beans out of the Commons, outside
  * transfer(), so they are refused here when Beans are off: at the proposal, and again at execution.
@@ -894,11 +902,11 @@ export const DECISION_TITLE_TOO_LONG = textTooLongMessage("A Decision's title", 
 export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's description", DECISION_DESCRIPTION_LIMIT);
 
 /**
- * What a vote on removing this member records when it opens (createDecision; pauseMember for a pause's own vote), so its
- * voters can weigh it: their name, balance and any debt, and what the Commons holds, from the ledger. The balance and the
- * debt go to those voters and the member only (decisionForReader).
+ * What a vote on removing this member records when it opens (pauseMember; a member's proposal recorded it too, before
+ * removal by vote S3), so its voters can weigh it: their name, balance and any debt, and what the Commons holds, from the
+ * ledger. The balance and the debt go to those voters and the member only (decisionForReader).
  */
-function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance: number } {
+export function removalBalanceParams(subjectPubkey: string, nameGiven?: any): { memberName: any; debt: number; commonsPool: number; balance: number } {
     const member = getMember(subjectPubkey);
     const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(subjectPubkey) as { balance: number } | undefined;
     const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(subjectPubkey)?.balance ?? 0);
@@ -969,6 +977,9 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (NODE_OPERATOR_EFFECTS.has(opts.effect) && opts.subject && heldPrivilegedRole(opts.subject)) {
         throw new Error(NODE_OPERATOR_VOTE_REFUSAL);
     }
+    // A vote on removing a member opens only with an admin's pause (pauseMember), never from a proposal, a member's or an
+    // admin's (REMOVAL_FOLLOWS_A_PAUSE). One proposed before then still ends as any Decision does.
+    if (opts.effect === 'remove_member') throw new Error(REMOVAL_FOLLOWS_A_PAUSE);
 
     // A debt is forgiven only while it is open (design §4.2 (c)); its subject is the record's id, never a name.
     if (opts.effect === 'forgive_debt') {
@@ -985,10 +996,7 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     const opensAt = now.toISOString();
     const closesAt = opts.closesAt || new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    let finalParams = opts.params !== undefined && opts.params !== null ? { ...opts.params } : (opts.effect === 'remove_member' && opts.subject ? {} : opts.params);
-    if (opts.effect === 'remove_member' && opts.subject) {
-        finalParams = { ...opts.params, ...removalBalanceParams(opts.subject, opts.params?.memberName) };
-    }
+    const finalParams = opts.params !== undefined && opts.params !== null ? { ...opts.params } : opts.params;
     // A pause's own vote is the node's alone (isPauseVote): a member's proposal never carries its marks.
     if (finalParams && typeof finalParams === 'object') {
         for (const mark of PAUSE_VOTE_MARKS) delete finalParams[mark];
@@ -1897,6 +1905,22 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) };
     }
+}
+
+/** Why a removal the community voted for was completed before its grace window ended (closeRemovalSettledEarly). */
+export const SETTLED_BY_OFFBOARDING = "Completed early: an admin settled the member's Beans with the offboarding wizard";
+
+/**
+ * A removal the community voted for, completed early by the offboarding wizard (removal by vote S3, design §2 row 5, §10
+ * Q6): member-wizards.ts executeOffboard settles the member's Beans as the admin chose and removes them as the community's
+ * vote (COMMUNITY_DECISION_ACTOR), and the Decision closes here as Accelerate closes one. Rows only: call inside that
+ * transaction, after the removal; announceDecisionUpdated tells everyone once it has committed.
+ */
+export function closeRemovalSettledEarly(decisionId: string, nowIso: string): void {
+    db.prepare(`
+        UPDATE decisions SET status = 'executed', executed_at = ?, execution_reason = ?, updated_at = ?
+        WHERE id = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
+    `).run(nowIso, SETTLED_BY_OFFBOARDING, nowIso, decisionId);
 }
 
 // ── Emergency Suspension (§3.8, answer L) ───────────────────────────────
@@ -2892,7 +2916,7 @@ function electorsOf(decisionId: string): string[] {
  * A Decision's change, announced: a community one to everyone, as before; a scoped one only to its roll (§2.5), so
  * nobody else learns it exists.
  */
-function announceDecisionUpdated(decisionId: string): void {
+export function announceDecisionUpdated(decisionId: string): void {
     const d = getDecision(decisionId);
     if (!d) return;
     if (d.scopeKind === 'community') broadcast({ type: 'decision_updated', decision: publicDecision(d) });

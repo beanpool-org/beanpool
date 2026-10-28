@@ -30,7 +30,6 @@ const CARD_SCREEN_WORDS = {
     title: word('COMMUNITY'),
     member: word("You're a member of {name}."),
     open: word('Open {name}'),
-    needsAccount: word('To ask, you need a BeanPool account first: tap Explore BeanPool worldwide on the first screen, then find {name} in Find a community.'),
     noCommunity: word("This link doesn't name a community this app can open."),
 } as const;
 
@@ -68,8 +67,8 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  *     from Find a community: utils/knock.ts); once asked, what the community answered (waiting, a yes to join with, or
  *     ask again), as Find a community shows it; and I have an invite (People's Join Another Community, as it is: no route
  *     fills its server box, so no link can point a member's join at another server: pair-link.test.ts holds it);
- *   - no account yet: the first screen, for an invite (Join with an invite), the ways back (Already a member), or an
- *     account to ask with (Explore BeanPool worldwide).
+ *   - no account yet: the first screen, for an invite (Join with an invite), the ways back (Already a member), or
+ *     look around global first, join there and find it in Find a community.
  * Nothing is read but the community's public card; nothing is sent until the member taps Send.
  */
 export default function CommunityCardScreen() {
@@ -318,7 +317,7 @@ export default function CommunityCardScreen() {
                     </View>
                 ) : (
                     <View>
-                        {card.joining === 'requests' && <Text style={styles.note} testID="community-card-needs-account">{t(CARD_SCREEN_WORDS.needsAccount, { name })}</Text>}
+                        {card.joining === 'requests' && <Text style={styles.note} testID="community-card-needs-account">{t(W.askViaGlobal, { name })}</Text>}
                         <View style={styles.actions}>
                             {card.joining === 'requests' && (
                                 <Pressable style={styles.primary} onPress={() => welcome()} accessibilityRole="button" testID="community-card-ask">

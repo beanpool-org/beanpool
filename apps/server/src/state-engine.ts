@@ -156,6 +156,8 @@ import {
     suspendReasonProblem,
     removalCoolDownRefusal,
     REMOVAL_COOL_DOWN_CODE,
+    eraseRepliesOf,
+    announceDecisionUpdated,
     ENTERPRISE_NOT_PAUSED,
     type Decision,
     type DecisionVote,
@@ -8815,7 +8817,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
  *    it deleted by its owner.
  * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
  *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
- *    Every line it wrote in a chat becomes a tombstone, and the photos it sent go (engine/message-tombstone.ts).
+ *    Every line it wrote in a chat becomes a tombstone, and the photos it sent go (engine/message-tombstone.ts). So does
+ *    its reply to the case on each vote on removing it, open or closed (decisions-engine.ts eraseRepliesOf).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
@@ -8877,6 +8880,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
     // The enterprises they leave (step 7), announced once the transaction has committed.
     const leftEnterprises: { enterprise: string; promoted: string | null }[] = [];
+    // The votes whose reply to the case went with them (step 4), announced then too.
+    const repliesErased: string[] = [];
     // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
@@ -8945,6 +8950,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
         // Not in a try either, for the same reason.
         blankMessagesOf(publicKey);
+        // And their reply to the case on each vote on removing them, open or closed, which every member reads beside it
+        // (decisions-engine.ts eraseRepliesOf). Not in a try either.
+        repliesErased.push(...eraseRepliesOf(publicKey, now));
 
         // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
         // with a tombstone each, so a standby drops them too.
@@ -9057,6 +9065,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
+    // Each vote that lost their reply, as members read it now.
+    for (const id of repliesErased) announceDecisionUpdated(id);
     // What adminRevokeTreasuryOperator announces for a keeper it unbinds: the keeper promoted to lead, and the enterprise.
     for (const { enterprise, promoted } of leftEnterprises) {
         clearEnterpriseFloorCache(enterprise);

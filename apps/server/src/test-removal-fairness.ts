@@ -17,7 +17,9 @@
  *     password, as such; a member's own proposal from before, by name. Another Decision names nobody.
  *  3. The right of reply: the member (paused) replies, signed, and everyone who reads the vote sees it beside the case;
  *     they can change it; nobody else can write it; empty, too long, or once the vote has closed is refused; the words go
- *     nowhere but the vote (no push, no notice, no log line). Votes off: 404 feature_off.
+ *     nowhere but the vote (no push, no notice, no log line). Votes off: 404 feature_off. A member who deletes their
+ *     account takes their reply with them, while the vote is open or after it removed them: gone from the card, the row
+ *     and a standby's copy.
  *  4. A case shown false is hidden: an admin hides it with a public reason, and members (the member included) read that
  *     reason in its place, no case, no reason in the params, a member's own title replaced, on Decide and on Home; who
  *     brought it and the reply stay; the admin's list keeps the case and who hid it. Once only; a reason of 10+
@@ -359,6 +361,43 @@ async function main() {
     const noSuch = await signed('POST', `/api/commons/decisions/${crypto.randomUUID()}/reply`, dave, { reply: 'To nothing' });
     const notRemoval = await signed('POST', `/api/commons/decisions/${freeze.id}/reply`, voters[4], { reply: 'A freeze has no case to reply to here' });
     assert(noSuch.status === 404 && notRemoval.status === 404, `no such vote, or a Decision that removes nobody: 404 (${noSuch.status} ${notRemoval.status})`);
+    // Deleting the account takes the reply with it, as it does every message the member wrote: Ivy deletes hers while her
+    // vote is open; Jo, whom his vote removed, deletes his after it, through the one route a removed member's key still signs.
+    const ivy = seed('IvyInk');
+    const jo = seed('JoJones');
+    const IVY_REPLY = 'My phone is 0400 123 456 and I live at 12 Example Street. This is false.';
+    const JO_REPLY = 'Ring me on 0400 654 321 and I will tell you what happened at the market.';
+    const ivyVote = (await pause(abeSession, ivy, 'Took a deposit for a market stall and kept it')).body?.decision?.id as string;
+    const joVote = (await pause(abeSession, jo, 'Took a deposit for a bike repair and kept it')).body?.decision?.id as string;
+    fresh();
+    const ivyReplied = await signed('POST', `/api/commons/decisions/${ivyVote}/reply`, ivy, { reply: IVY_REPLY });
+    const joReplied = await signed('POST', `/api/commons/decisions/${joVote}/reply`, jo, { reply: JO_REPLY });
+    assert(ivyReplied.status === 200 && joReplied.status === 200 && row(ivyVote).subject_reply === IVY_REPLY && row(joVote).subject_reply === JO_REPLY,
+        `Ivy and Jo, each paused, reply to their cases (${ivyReplied.status} ${joReplied.status})`);
+    voteAndClose(joVote, true);
+    db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(ago(1000), joVote);
+    de.tickDecisions();
+    assert(row(joVote).status === 'executed' && statusOf(jo) === 'pruned' && row(joVote).subject_reply === JO_REPLY,
+        `the community removes Jo, and his reply stays on the closed vote (${row(joVote).status} ${statusOf(jo)})`);
+    const beforeDeleting = new Date().toISOString();
+    await new Promise(r => setTimeout(r, 5));
+    fresh();
+    const ivyDeletes = await signed('POST', '/api/member/purge', ivy);
+    const joDeletes = await signed('POST', '/api/member/purge', jo);
+    assert(ivyDeletes.status === 200 && ivyDeletes.body?.ok === true && joDeletes.status === 200 && joDeletes.body?.ok === true,
+        `Ivy deletes her account, and Jo, removed, deletes his (${ivyDeletes.status} ${ivyDeletes.text.slice(0, 80)}; ${joDeletes.status} ${joDeletes.text.slice(0, 80)})`);
+    for (const [who, vote, words] of [['Ivy', ivyVote, IVY_REPLY], ['Jo', joVote, JO_REPLY]]) {
+        const c = await cardFor(vi, vote);
+        assert(!!c.card && c.card.subjectReply === null && c.card.subjectRepliedAt === null && !c.text.includes(words),
+            `${who}'s reply is gone from the card a voter reads, and from the whole list (${c.status} ${JSON.stringify(c.card?.subjectReply)})`);
+        assert(row(vote).subject_reply === null && row(vote).subject_replied_at === null, `and from the vote's row: ${who}'s words and when they were written`);
+    }
+    const delta = await se.exportSyncState('removal-fairness', beforeDeleting) as { plainTables?: Record<string, any[]> };
+    const carried = (delta.plainTables?.decisions ?? []).filter((d: any) => d.id === ivyVote || d.id === joVote);
+    assert(carried.length === 2 && carried.every((d: any) => d.subject_reply === null && d.subject_replied_at === null),
+        `a standby's next copy carries both votes without the replies, so it drops them too (${carried.length} rows)`);
+    const wholeCopy = JSON.stringify(await se.exportSyncState('removal-fairness'));
+    assert(![IVY_REPLY, JO_REPLY].some(w => wholeCopy.includes(w)), 'and a whole copy holds neither reply');
 
     // ── 4. A case shown false is hidden ─────────────────────────────────────────────────────────────────────────────
     console.log('\n4. A case shown false is hidden, with a public reason');

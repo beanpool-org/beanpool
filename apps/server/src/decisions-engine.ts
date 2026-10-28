@@ -242,7 +242,8 @@ export interface Decision {
     scopeId: string | null;
     /**
      * A vote on removing a member: their own reply to the case, in their words, and when they last wrote it (removal by
-     * vote, Amendment A point 2: replyToRemovalCase). Shown beside the case to everyone who reads the vote.
+     * vote, Amendment A point 2: replyToRemovalCase). Shown beside the case to everyone who reads the vote; erased when
+     * they delete their account (eraseRepliesOf).
      */
     subjectReply: string | null;
     subjectRepliedAt: string | null;
@@ -2447,7 +2448,7 @@ export const REPLY_TOO_LONG = word('A reply can be at most 1,000 characters. Ple
  * the case to everyone who reads the vote. While the vote is open, when it can still change a vote; written again, it
  * replaces the last, and once the vote closes it stays as it was. Only the member themself, signed: a paused member
  * included, since a pause's own vote is always about one. The words go on the Decision and nowhere else: no log, no push,
- * no alert.
+ * no alert. They go with the member's account when they delete it (eraseRepliesOf).
  */
 export function replyToRemovalCase(decisionId: string, actor: string, reply: unknown): FairVoteResult {
     assertPlainTablesWritable();
@@ -2465,6 +2466,20 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
     db.prepare('UPDATE decisions SET subject_reply = ?, subject_replied_at = ?, updated_at = ? WHERE id = ?').run(text, now, now, decisionId);
     announceDecisionUpdated(decisionId);
     return { success: true };
+}
+
+/**
+ * A member deletes their account (state-engine purgeMemberSelf), and their replies go with it, as every message they wrote
+ * does: on each vote about them, open or closed (a member the vote removed deletes after it), the words and when they
+ * wrote them. Stamped, so a standby's next copy drops them too. Inside the caller's transaction. Returns the votes it
+ * changed, for announceDecisionUpdated once that has committed.
+ */
+export function eraseRepliesOf(subjectPubkey: string, at: string): string[] {
+    const ids = (db.prepare('SELECT id FROM decisions WHERE subject = ? AND (subject_reply IS NOT NULL OR subject_replied_at IS NOT NULL)')
+        .all(subjectPubkey) as { id: string }[]).map(r => r.id);
+    const erase = db.prepare('UPDATE decisions SET subject_reply = NULL, subject_replied_at = NULL, updated_at = ? WHERE id = ?');
+    for (const id of ids) erase.run(at, id);
+    return ids;
 }
 
 /** The fewest characters of an admin's public reason for hiding a case, as for a halt (adminHaltDecision). */

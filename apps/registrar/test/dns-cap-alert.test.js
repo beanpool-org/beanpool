@@ -11,11 +11,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { attestSweep } from '../src/index.js';
+import worker from '../src/index.js';
 import * as alerts from '../src/alerts.js';
 import * as cf from '../src/cf.js';
 import { checkDnsRecordCap, getOrCountDnsRecords, dnsRecordCap, dnsRecordAlertPct } from '../src/dns-cap.js';
-import { dailyLine } from '../src/watch.js';
+import { dailyLine, watchOurServers } from '../src/watch.js';
 import { world } from './harness.js';
 
 const T0 = Date.UTC(2026, 9, 28, 12, 0, 0); // 12:00 UTC
@@ -70,7 +70,7 @@ test('alert: raised at 160/200, not at 159; cleared at 150', async () => {
 
         // 1. Not raised at 159/200 (79.5% < 80%)
         w.cf.paging.dnsTotal = 159;
-        await attestSweep(w.env);
+        await watchOurServers(w.env);
         assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined, 'not raised at 159/200');
         assert.equal(w.sqlite.prepare("SELECT count(*) as n FROM alert_outbox WHERE category='health'").get().n, 0);
 
@@ -80,7 +80,7 @@ test('alert: raised at 160/200, not at 159; cleared at 150', async () => {
         Date.now = () => now * 1000;
         try {
             w.cf.paging.dnsTotal = 160;
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             const state = w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get();
             assert.ok(state, 'raised at 160/200');
             assert.equal(state.detail, 'beanpool.org has 160 of 200 DNS records (80%). Time to move the zone to Cloudflare Pro, or free unused names.');
@@ -93,7 +93,7 @@ test('alert: raised at 160/200, not at 159; cleared at 150', async () => {
             // 3. Cleared at 150/200 (75% < 80%) after 1 hour
             now += 3600;
             w.cf.paging.dnsTotal = 150;
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined, 'cleared at 150');
 
             const cleared = w.sqlite.prepare("SELECT * FROM alert_outbox WHERE title = 'Resolved: DNS records near cap'").get();
@@ -122,13 +122,13 @@ test('cap/threshold vars honoured: DNS_RECORD_CAP and DNS_RECORD_ALERT_PCT', asy
 
             // At 740/1000 (74% < 75%): not raised
             w.cf.paging.dnsTotal = 740;
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined);
 
             // At 750/1000 (75% >= 75%): raised
             now += 3600;
             w.cf.paging.dnsTotal = 750;
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             const state = w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get();
             assert.ok(state);
             assert.equal(state.detail, 'beanpool.org has 750 of 1000 DNS records (75%). Time to move the zone to Cloudflare Pro, or free unused names.');
@@ -154,19 +154,19 @@ test('count at most once per hour (sweep cadence; no call on /admin or within 1 
             w.cf.paging.dnsTotal = 100;
             const cfDnsCalls = () => w.cf.calls.filter((c) => c.includes('GET /zones/zone/dns_records')).length;
 
-            // 1st sweep: calls CF
+            // 1st tick: calls CF
             assert.equal(cfDnsCalls(), 0);
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             assert.equal(cfDnsCalls(), 1);
 
-            // 2nd sweep 5 min later: does NOT call CF
+            // 2nd tick 5 min later: does NOT call CF
             now += 300;
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             assert.equal(cfDnsCalls(), 1, 'piggybacks hourly sweep cadence, no call at 5m');
 
-            // 3rd sweep 55 min later (total 60 min): calls CF
+            // 3rd tick 55 min later (total 60 min): calls CF
             now += 3300;
-            await attestSweep(w.env);
+            await watchOurServers(w.env);
             assert.equal(cfDnsCalls(), 2, 'calls CF after 1 hour');
         } finally {
             Date.now = realNow;
@@ -177,9 +177,9 @@ test('count at most once per hour (sweep cadence; no call on /admin or within 1 
 test('/admin shows the same count beside the other control-room facts', async () => {
     const w = await world();
     try {
-        // Set up count in mark (as from sweep)
+        // Set up count in mark (as from watch cron)
         w.cf.paging.dnsTotal = 160;
-        await attestSweep(w.env);
+        await watchOurServers(w.env);
 
         // GET /api/local/admin/registrar/alerts (which feeds the alerts panel)
         const res = await worker.fetch(new Request('https://beanpool.org/api/local/admin/registrar/alerts', {

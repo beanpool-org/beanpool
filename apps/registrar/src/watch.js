@@ -22,7 +22,7 @@
 
 import * as alerts from './alerts.js';
 import * as db from './db.js';
-import { getOrCountDnsRecords } from './dns-cap.js';
+import { getOrCountDnsRecords, checkDnsRecordCap } from './dns-cap.js';
 import * as settings from './settings.js';
 import { verifyEd25519 } from './sign.js';
 import { writeStatus } from './status.js';
@@ -380,13 +380,17 @@ async function inTurns(items, n, fn) {
 export async function watchOurServers(env) {
     try {
         const targets = watchTargets(env);
+        const now = nowS();
         if (!targets.length) {
             // Nothing to watch (WATCH_TARGETS unset): no looks and no daily line; what was raised before ends.
             const ended = await unwatched(env, targets);
+            try {
+                const dnsCond = await checkDnsRecordCap(env, now);
+                if (dnsCond) ended.push(dnsCond);
+            } catch (e) { console.error('[WATCH]', 'dns-cap', String(e?.message || e).slice(0, 200)); }
             if (ended.length) await alerts.updateConditions(env, ended);
             return [];
         }
-        const now = nowS();
         const nowMs = now * 1000;
         const seen = await inTurns(targets, AT_ONCE, (t) => (t.kind === 'vault' ? lookAtVault(env, t, nowMs) : lookAtNode(t))
             .catch(() => ({ ok: false, status: 'unreachable', ms: null })));
@@ -412,6 +416,10 @@ export async function watchOurServers(env) {
         }
         try { conditions.push(await fleetCondition(env, targets, now)); } catch (e) { console.error('[WATCH]', 'fleet', String(e?.message || e).slice(0, 200)); }
         try { conditions.push(...await unwatched(env, targets)); } catch (e) { console.error('[WATCH]', 'unwatched', String(e?.message || e).slice(0, 200)); }
+        try {
+            const dnsCond = await checkDnsRecordCap(env, now);
+            if (dnsCond) conditions.push(dnsCond);
+        } catch (e) { console.error('[WATCH]', 'dns-cap', String(e?.message || e).slice(0, 200)); }
         await alerts.updateConditions(env, conditions);
         try { await dailyLine(env, targets, now); } catch (e) { console.error('[WATCH]', 'daily', String(e?.message || e).slice(0, 200)); }
         // After the alerts and the daily line, so on a tick past D1's budget what is refused is this (src/status.js).

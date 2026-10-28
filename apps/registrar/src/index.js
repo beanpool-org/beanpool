@@ -21,7 +21,6 @@ import { ADMIN_HTML } from './admin-html.js';
 import * as alerts from './alerts.js';
 import * as settings from './settings.js';
 import { accessMode, accessIdentity } from './access.js';
-import { checkDnsRecordCap } from './dns-cap.js';
 import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
 import { handleStatusJson } from './status.js';
 
@@ -2194,10 +2193,6 @@ async function alertConditions(env, s, settingsRead = null) {
             const owed = await db.owedSince(env, now - 86400);
             conditions.push(alerts.teardownCondition(owed.n, owed.oldest, now));
         } catch (e) { console.error('[ALERT_CONDITION]', 'teardown-owed', e.message || e); }
-        try {
-            const dnsCond = await checkDnsRecordCap(env, now);
-            if (dnsCond) conditions.push(dnsCond);
-        } catch (e) { console.error('[ALERT_CONDITION]', 'dns-cap', e.message || e); }
         await alerts.updateConditions(env, conditions, { send: false });
     } catch (e) { console.error('[ALERT_CONDITION]', e.message || e); }
 }

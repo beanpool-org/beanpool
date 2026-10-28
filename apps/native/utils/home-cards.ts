@@ -872,16 +872,18 @@ export function firstSteps(
 ): { lines: StepLine[]; note: string | null; show: boolean } {
     const s = answer.cards.steps;
     if (!s) return { lines: [], note: null, show: false };
-    if (answer.profile !== 'global') {
-        const lines = stepLines(s, ctx.interests.length > 0, invitesForReader(answer.features, ctx.role));
-        return { lines, note: null, show: lines.some(l => !l.done) };
-    }
-    const lines = globalStepLines(s, answer.cards.find, !!ctx.knocked);
-    const note = probationSentence(answer.me?.probation);
+    const global = answer.profile === 'global';
+    const lines = global
+        ? globalStepLines(s, answer.cards.find, !!ctx.knocked)
+        : stepLines(s, ctx.interests.length > 0, invitesForReader(answer.features, ctx.role));
+    const note = global ? probationSentence(answer.me?.probation) : null;
     const joined = Date.parse(answer.me?.joinedAt ?? s.joinedAt ?? '');
     const young = Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined < STEPS_NEW_DAYS * DAY_MS;
-    // §3.2, §6: the card ends after 14 days or all done
-    return { lines, note, show: young && lines.some(l => !l.done) };
+    if (global) {
+        // §3.2, §6: the card ends after 14 days or all done
+        return { lines, note, show: young && lines.some(l => !l.done) };
+    }
+    return { lines, note, show: young || lines.some(l => !l.done && !l.suggestion) || note !== null };
 }
 
 /**

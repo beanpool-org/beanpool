@@ -48,9 +48,10 @@ export function getBundledGuide(): Guide {
     if (!BUNDLED) {
         if (typeof process !== 'undefined' && process.versions?.node) {
             try {
-                const req = new Function('m', 'return require(m)');
-                const raw = req('@beanpool/guide/generated/guide.json');
-                BUNDLED = validateGuide(raw);
+                const createReq = (process as any).getBuiltinModule?.('module')?.createRequire;
+                const req = createReq ? createReq(import.meta.url) : (globalThis as any).require;
+                const raw = req?.('@beanpool/guide/generated/guide.json');
+                if (raw) BUNDLED = validateGuide(raw);
             } catch {
                 // not in node
             }

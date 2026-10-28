@@ -100,7 +100,7 @@ export function UsePhoneAppCard({
             <button
                 type="button"
                 onClick={handleDismiss}
-                className="absolute top-3 right-3 text-nature-400 dark:text-nature-500 hover:text-nature-600 dark:hover:text-nature-300 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg bg-transparent border-none cursor-pointer p-0"
+                className="absolute top-3 right-3 text-nature-400 dark:text-nature-300 hover:text-nature-600 dark:hover:text-nature-200 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg bg-transparent border-none cursor-pointer p-0"
                 aria-label={t('Dismiss')}
             >
                 ✕

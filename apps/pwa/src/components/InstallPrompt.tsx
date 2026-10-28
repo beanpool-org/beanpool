@@ -71,7 +71,7 @@ export function DesktopInstallSteps() {
             <Sentence
                 text={t('Look for the {icon} (⊕) in your browser\'s address bar, or use your browser menu → "Install app"')}
                 parts={{
-                    icon: <strong className="font-semibold text-bp-commit-fill dark:text-blue-400">{t('install icon')}</strong>,
+                    icon: <strong className="font-semibold text-bp-commit-fill dark:text-blue-300">{t('install icon')}</strong>,
                 }}
             />
         </div>

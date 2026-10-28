@@ -643,3 +643,54 @@ describe('a decision on a request, on the phone before anything reads it (review
         });
     });
 });
+
+describe('a member who reached out while blocked (Marty, 28 Oct 2026, PR #2540: "B: shows as accepted")', () => {
+    const requestOf = (id: string) => JSON.parse((sql.prepare('SELECT request FROM conversations WHERE id = ?').get(id) as any)?.request ?? 'null');
+    /** Where Bo's phone has the chat, how it opens with its lines, and the Talk badge, Needs you and Recents. */
+    async function seen(id: string) {
+        return {
+            chats: (await withScreens(() => getConversations(bo.publicKey))).some((c: any) => c.id === id),
+            requests: ((await getMessageRequests(bo.publicKey))?.conversations ?? []).some((c: any) => c.id === id),
+            mode: requestModeOf(await getConversation(id, bo.publicKey), bo.publicKey, await withScreens(() => getMessages(id, { limit: 50 }))),
+            badge: await getGlobalUnreadCount(bo.publicKey),
+            needsYou: (await getUnreadByConversation(bo.publicKey)).some((c) => c.id === id),
+            recents: (await getRecentChatMembers(bo.publicKey)).map((m: any) => m.publicKey),
+        };
+    }
+    /** Bo writes to `other` (his own request, waiting), then `other` writes and the node answers him `answered`. */
+    async function reachOutThenTheyWrite(id: string, other: Person) {
+        const at = new Date(clock + 500).toISOString();
+        const conv: Conv = { id, participants: [other.publicKey, bo.publicKey], request: { state: 'pending', from: bo.publicKey, at, nextLineIsRequest: false } };
+        node.convs.push(conv);
+        write(conv, bo, 'are you still there?');
+        await withScreens(() => syncMessages(bo.publicKey));
+        await withScreens(() => syncSingleConversation(id));
+        const before = await seen(id);
+        write(conv, other, 'sorry, yes');
+        conv.request = { state: 'accepted', from: bo.publicKey, at };
+        await withScreens(() => syncMessages(bo.publicKey));
+        await withScreens(() => syncSingleConversation(id));
+        return { at, before, after: await seen(id), texts: await texts(id) };
+    }
+
+    it('a blocked member who reached out sees their request accepted when the blocker writes; nothing tells them they are blocked', async () => {
+        // Rhea cancelled her request to Bo and blocked him; Bo wrote (his own request, kept for him alone, which he reads as
+        // his, waiting); then Rhea wrote. The node answers Bo as it answers a member nobody blocked (test-dm-request-cancel
+        // step 11, where Kai stands for one): his own request accepted, at the time he reached out, her line an ordinary one.
+        // His phone keeps the chat among his chats at every step, never under Requests, opens it with the composer, and counts
+        // her line, exactly as for Kai's.
+        for (const p of [kai, rhea]) sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign) VALUES (?, ?)').run(p.publicKey, p.name);
+        const blocked = await reachOutThenTheyWrite('dm-rhea-bo-b1', rhea);
+        expect(blocked.before).toMatchObject({ chats: true, requests: false, mode: 'mine-waiting' });
+        expect(blocked.after).toMatchObject({ chats: true, requests: false, mode: 'none', needsYou: true });
+        expect(blocked.after.recents).toContain(rhea.publicKey);
+        expect(requestOf('dm-rhea-bo-b1')).toEqual({ state: 'accepted', from: bo.publicKey, at: blocked.at });
+        expect(blocked.texts).toEqual(expect.arrayContaining(['are you still there?', 'sorry, yes']));
+
+        const control = await reachOutThenTheyWrite('dm-kai-bo-b2', kai);
+        const asSeen = (s: Awaited<ReturnType<typeof seen>>, who: Person) => ({ ...s, badge: undefined, recents: s.recents.includes(who.publicKey) });
+        expect(asSeen(blocked.after, rhea)).toEqual(asSeen(control.after, kai));
+        expect(asSeen(blocked.before, rhea)).toEqual(asSeen(control.before, kai));
+        expect(control.after.badge).toBe(blocked.after.badge + 1);
+    });
+});

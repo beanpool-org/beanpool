@@ -721,6 +721,48 @@ describe('the sender\'s side', () => {
         expect(await screen.findByPlaceholderText('Edit message...')).toBeInTheDocument();
     });
 
+    it('a blocked member who reached out sees their request accepted when the blocker writes; nothing tells them they are blocked', async () => {
+        // Marty, 28 Oct 2026 (PR #2540, "B: shows as accepted"): Ann cancelled her request to Bo and blocked him; Bo wrote (his
+        // own request, kept for him alone, which he reads as his, waiting). Then Ann writes: the node answers Bo as it answers
+        // a member nobody blocked (test-dm-request-cancel step 11), his own request accepted, at the time he reached out, and
+        // her line an ordinary one in his chats. His page shows that and nothing else; hers shows her own request waiting.
+        const REACHED_AT = '2026-10-23T02:00:00.000Z';
+        const his = { state: 'pending', from: bo.publicKey, at: REACHED_AT, nextLineIsRequest: false };
+        const accepted = { state: 'accepted', from: bo.publicKey, at: REACHED_AT };
+        const hisLine = line(bo, 'Are you still there?', '2026-10-23T02:00:00.001Z');
+        const herLine = line(ann, 'Sorry, yes', '2026-10-23T02:05:00.000Z');
+        node.list = boList(his);
+        node.reads[CONV] = readOf(his, [hisLine]);
+        const first = render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        expect(await screen.findByTestId('request-waiting')).toBeInTheDocument();
+
+        node.list = boList(accepted);
+        node.reads[CONV] = readOf(accepted, [hisLine, herLine]);
+        await ringDoorbell();
+        expect(await screen.findByText('Sorry, yes')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Message...')).toBeEnabled();
+        expect(screen.queryByTestId('request-waiting')).toBeNull();
+        expect(screen.queryByTestId('request-mode')).toBeNull();
+        expect(screen.queryByTestId('request-first-line')).toBeNull();
+        expect(screen.queryByText(/wants to message you|as a request|ignored|blocked/i)).toBeNull();
+        first.unmount();
+
+        // His list: the chat among his chats, and no Requests at all.
+        const list = render(<MessagesPage identity={idOf(bo)} />);
+        expect((await screen.findAllByText('Ann')).length).toBeGreaterThan(0);
+        expect(within(await chips()).queryByRole('button', { name: /Requests/ })).toBeNull();
+        list.unmount();
+
+        // Ann, who blocks him, reads the request her line made as waiting: his lines never reach her.
+        const hers = { state: 'pending', from: ann.publicKey, at: '2026-10-23T02:05:00.000Z', nextLineIsRequest: false };
+        node.list = { ...boList(hers), conversations: [{ ...boList(hers).conversations[0], peerCallsign: 'Bo' }] };
+        node.reads[CONV] = readOf(hers, [herLine]);
+        render(<MessagesPage identity={idOf(ann)} openConversationId={CONV} />);
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Bo will see it under Requests. You can write more once they accept.');
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        expect(screen.queryByText('Are you still there?')).toBeNull();
+    });
+
     it('when Ann accepts, the doorbell brings the composer back', async () => {
         node.list = boList(pending());
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);

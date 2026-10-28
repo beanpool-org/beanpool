@@ -512,3 +512,37 @@ describe("the opener's first line, on the phone", () => {
         expect(host.textContent).toContain('! not delivered');
     });
 });
+
+describe('a member who reached out while blocked, on the phone (Marty, 28 Oct 2026, PR #2540: "B: shows as accepted")', () => {
+    it('a blocked member who reached out sees their request accepted when the blocker writes; nothing tells them they are blocked', async () => {
+        // Kofi cancelled his request to Ana and blocked her; Ana wrote (her own request, kept for her alone, which she reads as
+        // hers, waiting). Then Kofi writes: the node answers her as it answers a member nobody blocked (test-dm-request-cancel
+        // step 11): her own request accepted, at the time she reached out, and his line an ordinary one. The screen shows that
+        // and nothing else: his line, the composer back, and no word of waiting, a request or a block.
+        const at = iso(now - 120_000);
+        let request: Record<string, unknown> = { state: 'pending', from: 'me-key', at, nextLineIsRequest: false };
+        const hers = { id: 'a1', senderId: 'me-key', authorPubkey: 'me-key', type: 'text', text: 'are you still there?', outgoing: true, rawTimestamp: iso(now - 110_000), timestamp: '' };
+        let lines: unknown[] = [hers];
+        standIn({
+            getConversation: () => Promise.resolve({ name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', createdBy: 'kofi-key', request }),
+            getMessages: () => Promise.resolve(lines),
+            syncSingleConversation: true,
+            insertMessage: 'line-2',
+        });
+        await open();
+        expect(host.querySelector('[data-testid="request-waiting"]')).not.toBeNull();
+        expect(box()).toBeNull();
+
+        request = { state: 'accepted', from: 'me-key', at };
+        lines = [hers, { id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'sorry, yes', rawTimestamp: iso(now - 5_000), timestamp: '' }];
+        await syncLanded();
+        expect(host.textContent).toContain('sorry, yes');
+        expect(host.querySelector('[data-testid="request-waiting"]')).toBeNull();
+        expect(host.textContent).not.toContain('wants to message you');
+        expect(host.textContent).not.toContain('as a request');
+        expect(host.textContent).not.toMatch(/blocked|ignored/i);
+        expect(box()).not.toBeNull();
+        await typeAndSend('glad to hear it');
+        expect(sent()).toBe(1);
+    });
+});

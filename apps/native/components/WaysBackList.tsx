@@ -247,6 +247,7 @@ const make = (colors: AppColors) => StyleSheet.create({
     secondaryText: { fontSize: 14, fontWeight: '600', color: colors.text.heading, textAlign: 'center' },
     wordsOnly: { fontSize: 14, lineHeight: 20, color: colors.text.body, backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 12 },
     result: { backgroundColor: colors.surface.subtle, borderRadius: 10, padding: 12, marginBottom: 12 },
-    resultLine: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginBottom: 2 },
+    // A keeper per line, apart enough to read as separate answers.
+    resultLine: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginBottom: 8 },
     disabled: { opacity: 0.5 },
 });

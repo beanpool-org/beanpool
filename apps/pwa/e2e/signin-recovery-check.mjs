@@ -15,6 +15,9 @@
  * Connected at global.beanpool.org, with the lines on putting the same account on a phone (W1): both lines, whole,
  * inside the card, at 4.5:1 or more.
  *
+ * "Where your account can be brought back from" (vault rethink VR1) on the real Settings page: opened, and with the
+ * confirm of removing the server's last copy, with the words and without, light and dark (see WAYS_CASES below).
+ *
  * Nothing here touches a BeanPool node: the line takes the node's answer as a prop, and any /api or /ws request is
  * aborted and counted, so a stray fetch fails the run instead of escaping.
  *
@@ -265,6 +268,105 @@ try {
                     + `line ${JSON.stringify(m.wayBack)}${m.notHere ? `, words screen ${JSON.stringify(m.notHere)}` : ''}, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
                 await context.close();
             }
+        }
+    }
+    // "Where your account can be brought back from" (vault rethink VR1): the section opened on the real Settings page, and
+    // for a server that keeps a copy the confirm of removing it (its last copy, so the 12 words line is in it), with the
+    // words and without, light and dark, at 320px and 1.3x text. Every text in the section at 4.5:1 on what it is drawn
+    // on (3:1 from 18.66px bold), every button 44px tall, nothing past the viewport, and the vault named only as managed in
+    // the phone app.
+    const WAYS_CASES = [
+        { name: 'words-google', words: true, enrolled: ['google'] },
+        { name: 'nowords-google', words: false, enrolled: ['google'] },
+        { name: 'words-none', words: true, enrolled: [] },
+    ];
+    for (const theme of ['light', 'dark']) {
+        for (const wc of WAYS_CASES) {
+            const context = await browser.newContext({ viewport: { width: 320, height: 900 }, colorScheme: theme });
+            await context.route('**/*', (route) => {
+                const url = route.request().url();
+                if (url.includes('/api/recovery/shares/status')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enrolledSso: wc.enrolled }) });
+                if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
+                return route.continue();
+            });
+            const page = await context.newPage();
+            const pageErrors = [];
+            page.on('pageerror', (e) => pageErrors.push(e.message));
+            await page.goto(`${base}/e2e/settings-recovery-harness.html?words=${wc.words ? 1 : 0}`, { waitUntil: 'networkidle' });
+            await page.evaluate((t) => {
+                document.documentElement.classList.toggle('dark', t === 'dark');
+                document.documentElement.classList.toggle('dark-theme', t === 'dark');
+                document.documentElement.style.fontSize = '130%';
+            }, theme);
+            await page.waitForSelector('[data-testid="signin-recovery"]');
+            await page.getByRole('button', { name: /Where your account can be brought back from/ }).click();
+            await page.waitForSelector('[data-testid="ways-back"]');
+            if (wc.enrolled.length) {
+                await page.getByRole('button', { name: "Remove the Google copy at this community's server" }).click();
+                await page.waitForSelector('[data-testid="ways-back-confirm"]');
+            }
+            await page.evaluate(() => document.fonts.ready);
+            const shot = `ways-back-${wc.name}-${theme}.png`;
+            const section = page.locator('[data-testid="ways-back"]').locator('xpath=..');
+            await section.screenshot({ path: path.join(OUT_DIR, shot) });
+            const m = await page.evaluate(() => {
+                const vw = document.documentElement.clientWidth;
+                const out = [];
+                const rgba = (s) => { const p = (s.match(/[\d.]+/g) || []).map(Number); return p.length >= 3 ? { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 } : null; };
+                const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+                const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+                const backdrop = (el) => {
+                    const layers = [];
+                    for (let e = el; e; e = e.parentElement) {
+                        const c = rgba(getComputedStyle(e).backgroundColor);
+                        if (c && c.a > 0) { layers.push(c); if (c.a >= 0.999) break; }
+                    }
+                    let base = { r: 255, g: 255, b: 255, a: 1 };
+                    for (const l of layers.reverse()) base = over(l, base);
+                    return base;
+                };
+                const box = document.querySelector('[data-testid="ways-back"]');
+                for (const el of document.querySelectorAll('#root *')) {
+                    const r = el.getBoundingClientRect();
+                    if (r.width === 0 && r.height === 0) continue;
+                    if (r.right > vw + 0.5 || r.left < -0.5) out.push(`${el.tagName.toLowerCase()} "${(el.textContent || '').slice(0, 40)}" spans ${Math.round(r.left)}..${Math.round(r.right)} of ${vw}`);
+                }
+                const faint = [];
+                for (const el of box.querySelectorAll('*')) {
+                    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+                    if (/^[\p{Extended_Pictographic}️\s]+$/u.test(el.textContent)) continue;
+                    const cs = getComputedStyle(el);
+                    const fg = rgba(cs.color);
+                    if (!fg) continue;
+                    const bg = backdrop(el);
+                    const [a, b] = [lum(over(fg, bg)), lum(bg)].sort((x, y) => y - x);
+                    const ratio = (a + 0.05) / (b + 0.05);
+                    const size = parseFloat(cs.fontSize);
+                    const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
+                    if (ratio < (large ? 3 : 4.5)) faint.push(`"${el.textContent.trim().slice(0, 40)}" ${ratio.toFixed(2)}:1`);
+                }
+                const short = [...box.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().height < 43.5).map((b) => b.textContent.trim());
+                return {
+                    overflow: out,
+                    pageScrollsSideways: document.documentElement.scrollWidth > vw,
+                    faint,
+                    short,
+                    vault: box.querySelector('[data-testid="ways-back-vault"]')?.textContent ?? null,
+                    text: box.textContent,
+                    wordsFirst: box.querySelector('[data-testid="ways-back-words-first"]')?.textContent ?? null,
+                };
+            });
+            if (m.pageScrollsSideways) failures.push(`${shot}: the page scrolls sideways`);
+            for (const o of m.overflow) failures.push(`${shot}: ${o}`);
+            for (const f of m.faint) failures.push(`${shot}: too faint to read: ${f}`);
+            for (const s of m.short) failures.push(`${shot}: the button "${s}" is under 44px tall`);
+            if (m.vault !== "Copies in BeanPool's key vault are managed in the phone app.") failures.push(`${shot}: the vault line reads ${JSON.stringify(m.vault)}`);
+            if (/Iceland|since/.test(m.text)) failures.push(`${shot}: the web app says more of the key vault than that it is managed in the phone app`);
+            if (wc.enrolled.length && !m.wordsFirst) failures.push(`${shot}: removing the server's last copy doesn't ask about the 12 words first`);
+            if (wc.enrolled.length && !wc.words && !/This browser has no 12 words/.test(m.wordsFirst ?? '')) failures.push(`${shot}: without the words, the line reads ${JSON.stringify(m.wordsFirst)}`);
+            if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
+            console.log(`${shot}: ${m.faint.length} faint, ${m.short.length} short buttons, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
+            await context.close();
         }
     }
 } finally {

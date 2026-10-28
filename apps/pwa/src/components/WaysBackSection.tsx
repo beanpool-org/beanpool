@@ -77,7 +77,8 @@ export function WaysBackSection({ enrolled, hasWords, onShowWords, onChanged }: 
             <div data-testid="ways-back-confirm" role="alertdialog" aria-label={t('Remove your {provider} copy?', { provider: name })}
                 className="mt-2 p-3 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700">
                 <p className="m-0 text-sm font-bold">{t('Remove your {provider} copy?', { provider: name })}</p>
-                <p className={`m-0 mt-1 ${SMALL}`}>{t("This community's server deletes it. Copies already in that server's backups stay there.")}</p>
+                {/* nature-300 in dark: SMALL's 400 is 3.8:1 on this box's nature-800 (e2e/signin-recovery-check.mjs). */}
+                <p className="m-0 mt-1 text-xs font-normal text-nature-600 dark:text-nature-300">{t("This community's server deletes it. Copies already in that server's backups stay there.")}</p>
                 {last && (
                     <p data-testid="ways-back-words-first" className="m-0 mt-1 text-xs font-bold text-nature-900 dark:text-white">
                         {hasWords

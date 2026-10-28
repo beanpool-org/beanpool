@@ -1,4 +1,4 @@
-<!-- source-hash: 755df1d20735daf7 -->
+<!-- source-hash: 1196041826430bdd -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -537,6 +537,9 @@
                         <div class="cta-step">
                             <span class="cta-step-label">單一指令區塊：取得、建立網路、拉取、啟動、等待、認領</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+python3 -c 'import json, os; p="/etc/docker/daemon.json"; os.makedirs("/etc/docker", exist_ok=True); d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) &gt; 0 else {}; d["live-restore"] = True; open(p, "w").write(json.dumps(d, indent=2) + "\n")'
+systemctl reload docker
+docker info --format '{{.LiveRestoreEnabled}}'
 docker network create beanpool-shared
 docker compose pull
 docker compose up -d

@@ -323,7 +323,7 @@ export function RekeyMemberWizard({
             setNewPubkey(res.newPubkey);
             setStep(3);
             onSuccess?.(res.newPubkey);
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Refused before the number was checked (no try counted): the number stays for the same press again.
             if (proof.checkError(err, (c) => handleBindByMatch(c), code)) return;
             setTypedMatch('');
@@ -334,7 +334,7 @@ export function RekeyMemberWizard({
                 if (err.triesLeft !== undefined) setWrongNumbers(3 - err.triesLeft);
                 setError(`${err.message}${err.triesLeft !== undefined ? ` ${err.triesLeft === 1 ? 'One more wrong number stops this code.' : `${err.triesLeft} tries left.`}` : ''}`);
             } else {
-                setError(err?.message || 'Failed to complete re-keying');
+                setError(err instanceof Error ? err.message : 'Failed to complete re-keying');
             }
         } finally {
             binding.current = false;
@@ -380,8 +380,8 @@ export function RekeyMemberWizard({
         try {
             await declineRekeyProposalApi(nodeUrl, member.publicKey, key, adminPassword, tfaToken);
             setProposals((list) => list.filter((p) => p.newPubkey !== key));
-        } catch (err: any) {
-            setError(err?.message || 'Failed to decline that phone');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to decline that phone');
         } finally {
             setDeclining(null);
         }

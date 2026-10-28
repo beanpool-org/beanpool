@@ -30,6 +30,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { fetchMyNodeRole, rememberNodeRole, canManageNode, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
+import type { NodeFeatures } from '../utils/node-profile';
 import { offersNamesList } from '../utils/names-list';
 import { issueBreakGlassCodeOnce, forgetBreakGlassCode } from '../utils/break-glass';
 import { signOutEverywhereOnce, signOutEverywhereDone } from '../utils/sign-out-everywhere';
@@ -47,13 +48,14 @@ interface MenuStyles {
     menuIconWrap: any; menuIcon: any; menuText: any; menuSub: any; menuChevron: any;
 }
 
-export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedOn, onRoleChange }: {
+export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedOn, onRoleChange, activeFeatures }: {
     styles: MenuStyles;
     fallbackCommunityName?: string | null;
     /** Settings' App Lock switch, told when this turned App Lock on for a role holder. */
     onAppLockTurnedOn?: () => void;
     /** Told when the role is determined or changed, so Settings knows whether to draw the Community section for non-role holders. */
     onRoleChange?: (role: ManageRole | null) => void;
+    activeFeatures?: NodeFeatures | null;
 }) {
     const { identity } = useIdentity();
     const { colors } = useTheme();
@@ -179,6 +181,11 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     </View>
                     {busy ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                 </Pressable>
+                {numberOnly ? (
+                    <View style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle }} testID="owner-number-nudge">
+                        <Text style={{ fontSize: 14, lineHeight: 20, color: colors.text.body }}>{numberNudge(numberOnly)}</Text>
+                    </View>
+                ) : null}
                 <Pressable
                     style={[styles.menuBtn, { minHeight: 48 }]}
                     onPress={() => setShapeOpen(true)}
@@ -194,11 +201,6 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>
-                {numberOnly ? (
-                    <View style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle }} testID="owner-number-nudge">
-                        <Text style={{ fontSize: 14, lineHeight: 20, color: colors.text.body }}>{numberNudge(numberOnly)}</Text>
-                    </View>
-                ) : null}
                 {offersNamesList(role, profile?.profile) ? (
                     <Pressable
                         style={[styles.menuBtn, { minHeight: 48 }]}
@@ -269,7 +271,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
 
             {dialog}
             <CommunityShapeSheet
-                features={profile?.features}
+                features={activeFeatures ?? profile?.features}
                 visible={shapeOpen}
                 onClose={() => setShapeOpen(false)}
             />

@@ -1886,7 +1886,7 @@ export default function SettingsScreen() {
                 {/* A sign-in copy a community still keeps, moved to BeanPool's key vault with one sign-in (utils/vault-move.ts). */}
                 <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
-                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} onRoleChange={(r) => setHasRole(!!r && canManageNode(r))} />
+                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} onRoleChange={(r) => setHasRole(!!r && canManageNode(r))} activeFeatures={activeFeatures} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
                 <OwnerWordsCard styles={styles} />
                 {!hasRole && (

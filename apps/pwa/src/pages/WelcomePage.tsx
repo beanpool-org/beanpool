@@ -2072,8 +2072,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             {signInRecovery ? (
                                 <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                     {t('Signing in with {provider} also brings this account back.', { provider: providerLabel(signInRecovery) })}
-                                    {' '}<>{t("This community's server keeps a locked copy of your key and 12 words for it.")}</>
-                                    {' '}<>{t('The people who run it can open that copy, and so can anyone who gets into your sign-in account.')}</>
+                                    <> {t("This community's server keeps a locked copy of your key and 12 words for it.")}</>
+                                    <> {t('The people who run it can open that copy, and so can anyone who gets into your sign-in account.')}</>
                                 </p>
                             ) : (
                                 <p data-testid="backup-no-copy" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>

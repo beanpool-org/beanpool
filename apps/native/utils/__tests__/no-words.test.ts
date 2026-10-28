@@ -14,7 +14,7 @@ vi.mock('react-native', () => ({
 // "Who can open it ›" keeps its own open/closed state (a hook, which this hand-made renderer can't run): drawn here as
 // a host with its label, and what it opens drawn as if open. onboarding-components-words-render.test.ts presses the real one.
 vi.mock('../../components/WhoCanOpen', () => ({
-    WhoCanOpen: (props: { label: string; children: unknown }) => React.createElement('WhoCanOpen', { label: props.label }, props.children),
+    WhoCanOpen: (props: { label: string; children: React.ReactNode }) => React.createElement('WhoCanOpen', { label: props.label }, props.children),
 }));
 
 // The provider buttons draw SVG logos; only their titles matter here.
@@ -268,6 +268,9 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
 
 // Vault rethink VR0 (DESIGN-vault-rethink-fable.md §4.5, §7; Marty, 27 Oct, picks 10 and 14): where the copy goes is said
 // on the panel itself, before Protect with is tapped, at Safety Backup (both doors) and in Account Protection.
+// The row's own sentences, but moreThanOne: that one opens a build without a vault's group note too (COMMUNITY_SSO_GROUP_NOTE).
+const VAULT_ONLY = Object.entries(SIGN_IN_ROW).filter(([k]) => k !== 'moreThanOne').map(([, v]) => v);
+
 describe('KeeperProtectionPanel, VR0: the sign-in row names the key vault where the copy is made', () => {
     it('the sentences, word for word', () => {
         expect(SIGN_IN_ROW).toEqual({
@@ -331,7 +334,7 @@ describe('KeeperProtectionPanel, VR0: the sign-in row names the key vault where 
                 protection, hasWords: true, copyAt: 'community', communityName: 'Valley Hub', onProtectSso: vi.fn(),
             }));
             const text = textOf(tree);
-            for (const line of Object.values(SIGN_IN_ROW)) expect(text).not.toContain(line);
+            for (const line of VAULT_ONLY) expect(text).not.toContain(line);
             expect(findAll(tree, 'WhoCanOpen')).toEqual([]);
         }
     });

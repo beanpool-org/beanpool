@@ -229,6 +229,9 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
 });
 
 // Vault rethink VR0: a build with no vault configured reads exactly as before. Account Protection's waysBack too.
+// The row's own sentences, but moreThanOne: that one opens a build without a vault's group note too (COMMUNITY_SSO_GROUP_NOTE).
+const VAULT_ONLY = Object.entries(SIGN_IN_ROW).filter(([k]) => k !== 'moreThanOne').map(([, v]) => v);
+
 describe('KeeperProtectionPanel, VR0: a build without a key vault draws none of the vault sign-in row', () => {
     it('no row, no "Who can open it", and the sign-in group as it was, with waysBack or without', () => {
         for (const protection of [WORDS_ONLY, COVERED]) {
@@ -236,7 +239,7 @@ describe('KeeperProtectionPanel, VR0: a build without a key vault draws none of 
                 const plain = textOf(panel(protection, hasWords));
                 const waysBack = textOf(render(React.createElement(KeeperProtectionPanel, { protection, hasWords, onProtectSso: vi.fn(), onDisconnectSso: vi.fn(), waysBack: true })));
                 expect(waysBack).toBe(plain);
-                for (const line of Object.values(SIGN_IN_ROW)) expect(plain).not.toContain(line);
+                for (const line of VAULT_ONLY) expect(plain).not.toContain(line);
                 expect(plain).toContain('Sign-In Recovery Providers (1-of-N)');
                 expect(plain).toContain(COMMUNITY_SSO_GROUP_NOTE);
                 expect(plain).not.toMatch(/key vault|Iceland/);

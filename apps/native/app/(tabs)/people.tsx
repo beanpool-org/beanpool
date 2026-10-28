@@ -16,7 +16,7 @@ import { useTabRetapScrollTop } from '../../components/PageTitle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { normaliseInviteCode, redeemTargetUrl } from '../../utils/invite-parser';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -303,6 +303,17 @@ export default function PeopleScreen() {
             // debounced effect's run 400 ms later for the same empty search.
             onDemandOpened.current = membersOnDemand;
         }
+    }, [view]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (view === 'community' && listNote === 'noArea') {
+                loadMembers('', sortOption);
+            }
+        }, [view, listNote, sortOption, membersOnDemand])
+    );
+
+    useEffect(() => {
         if (view === 'invites') {
             checkOnlineStatus();
         }

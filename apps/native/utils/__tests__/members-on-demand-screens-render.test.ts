@@ -97,12 +97,15 @@ vi.mock('react-native', () => {
         I18nManager: { isRTL: false },
     };
 });
-const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, pushed: [] as unknown[] }));
+const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, pushed: [] as unknown[], focus: undefined as undefined | (() => void) }));
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => nav.pushed.push(to), navigate: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), back: () => {}, setParams: () => {}, canGoBack: () => true },
     useLocalSearchParams: () => nav.params,
     useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true, setOptions: () => {} }),
-    useFocusEffect: (cb: () => void | (() => void)) => { useEffect(() => cb() ?? undefined, [cb]); },
+    useFocusEffect: (cb: () => void | (() => void)) => {
+        nav.focus = () => cb();
+        useEffect(() => cb() ?? undefined, [cb]);
+    },
     ErrorBoundary: () => null,
     Link: ({ children }: { children?: ReactNode }) => children,
 }));
@@ -563,6 +566,13 @@ for (const scheme of ['light', 'dark'] as const) {
                 await press(setAreaBtn!);
                 expect(nav.pushed).toContain('/your-area');
                 await fits([OWN]);
+
+                // Returning from /your-area with area now set refreshes the list on focus (L4)
+                community.area = { lat: -28.55, lng: 153.5 };
+                await act(async () => { nav.focus?.(); });
+                await settle();
+                expect(membersRequests().length).toBeGreaterThan(0);
+                expect(host.querySelector('[data-testid="people-community-set-area"]')).toBeNull();
             });
 
             it("offline: the cards held under \"People you've dealt with\", searched on the phone, never \"Loading\"", async () => {

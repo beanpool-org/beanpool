@@ -517,10 +517,11 @@ test('the daily line: at 08:00 Brisbane (22:00 UTC, winter and summer alike — 
         assert.equal(body[1], 'global 1.2.30 (aaaaaaa) · mullum 1.2.30 (aaaaaaa)');
         assert.equal(body[2], 'vault: open, release rel-1111aaaa, report fine.');
         assert.equal(body[3], '0 names live.');
-        assert.equal(body[4], 'Nothing raised.');
-        assert.equal(body[5], 'Held for this summary (2):');
-        assert.match(body[6], /^- 2026-10-10 12:00 UTC: You approved sydney\.beanpool\.org\.$/);
-        assert.match(body[7], /^- 2026-10-10 12:00 UTC: You paused sydney\.beanpool\.org\.$/);
+        assert.equal(body[4], 'DNS records: 0 of 200 (0%)');
+        assert.equal(body[5], 'Nothing raised.');
+        assert.equal(body[6], 'Held for this summary (2):');
+        assert.match(body[7], /^- 2026-10-10 12:00 UTC: You approved sydney\.beanpool\.org\.$/);
+        assert.match(body[8], /^- 2026-10-10 12:00 UTC: You paused sydney\.beanpool\.org\.$/);
         assert.ok(!m.body.includes('ops@sydney'), 'never the contact');
         const st = (await r.admin('alerts')).body;
         assert.equal(st.held_for_digest, 0, 'what it carried is no longer held');

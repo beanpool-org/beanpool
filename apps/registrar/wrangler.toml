@@ -19,6 +19,8 @@ crons = ["*/5 * * * *", "2-57/5 * * * *"]
 # Public, non-secret config.
 [vars]
 BASE_DOMAIN = "beanpool.org"
+DNS_RECORD_CAP = "200"              # Cloudflare Free plan zone record cap (Pro is 1,000)
+DNS_RECORD_ALERT_PCT = "80"         # Alert threshold percentage when zone capacity is near full
 RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this long for the same key only
                                 # (design D3), then free. An admin release frees at once.
 # The live limits are NOT here (Marty, 2026-10-18: open code, private settings). Names per key, the budgets of new names

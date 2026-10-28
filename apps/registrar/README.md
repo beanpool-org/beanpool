@@ -156,6 +156,7 @@ The Worker tells its admin, through one [ntfy](https://ntfy.sh) topic, what only
 | A heal refused, a name repaired by the registrar | low | names |
 | The sweep suspended itself (canary, mass, unverifiable, settings unread) — raised, still every 24 h, cleared | urgent | health |
 | Deletions Cloudflare has refused for over a day; the nonce table missing — raised, still, cleared | default | health |
+| DNS zone near record cap (≥ 80%, env `DNS_RECORD_ALERT_PCT` / `DNS_RECORD_CAP`) — raised, still every 24 h, cleared | high | health |
 | Your own approve, pause, resume, block, release | low | admin |
 
 A message says a name, the community name its operator published, and counts — **never the `contact` column** (a
@@ -196,7 +197,7 @@ signed `/v1/report`.
 | `<server> now runs …` | the version or commit changed since the last look; told once | default (the vault: high) |
 | `<server> restarted by its watchdog` | its health's `watchdog.recoveries` rose; told once | high |
 | `Our nodes run different releases` | our nodes (not the vault) on different versions for over a day; then daily while it lasts | default |
-| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, what is raised, and every event the digest held since the last one. A message of its own, never batched and never muted by the hourly cap; the held events it carries are marked sent only once it is sent (a failed send is tried again with the rest, 5 minutes on; with no `NTFY_URL` they stay held and `/admin` says so). A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
+| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, DNS records against the plan's cap (DNS records: N of CAP (P%), env `DNS_RECORD_CAP`, default 200), what is raised, and every event the digest held since the last one. A message of its own, never batched and never muted by the hourly cap; the held events it carries are marked sent only once it is sent (a failed send is tried again with the rest, 5 minutes on; with no `NTFY_URL` they stay held and `/admin` says so). A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
 
 The vault's report is believed only under `VAULT_TICKET_KEYS` (a var, not a secret: the ticket PUBLIC key(s) the apps
 are built with, 64 hex each, newest first, two at most), with strict Ed25519 (RFC 8032; a ZIP-215-only signature is
@@ -242,7 +243,9 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
 - **The DNS cap.** The zone's record cap (`capacity`; Cloudflare's Free plan gives a zone made after 1 Sep 2024 200
   records, our own hand records included) has two lines: past the alert line the admin is told once a day ("Names near
   the DNS cap"), past the hold line every new auto name is held — the last places are the admin's to give. Both lines
-  follow the capacity unless set (60% and 80% of it).
+  follow the capacity unless set (60% and 80% of it). In addition, the Worker counts every record in the zone (website,
+  static tunnels, mail and community nodes) at most once per hour from Cloudflare: the daily digest reports "DNS records: N of CAP (P%)"
+  (`DNS_RECORD_CAP`, default 200), and an alert is raised at ≥ 80% (`DNS_RECORD_ALERT_PCT`, default 80): "beanpool.org has N of CAP DNS records (P%). Time to move the zone to Cloudflare Pro, or free unused names." Cleared below the threshold.
 - **Probation.** A new tenure (another key's claim; a key's own release taken back keeps what it had) is live but on
   probation (`verified_at` NULL) until it has attested `ok` in enough sweeps in a row and been live long enough. Until
   then its node is told `probation: true` by `/status` (and the claim and

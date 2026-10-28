@@ -98,7 +98,7 @@ export function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, created_at, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
-    const fail = { createTunnel: false, deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false };
+    const fail = { createTunnel: false, deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false, countDns: false };
     const hooks = [];
     const paging = { max: 1000 };
     let seq = 0;
@@ -152,8 +152,19 @@ export function fakeCloudflare() {
             t.ingress = body.config.ingress;
             return ok({});
         }
-        if (p === '/zones/zone/dns_records' && method === 'GET')
-            return ok([...dns.values()].filter((r) => r.name === url.searchParams.get('name')));
+        if (p === '/zones/zone/dns_records' && method === 'GET') {
+            if (fail.countDns) return err(500, 1000, 'internal error');
+            const name = url.searchParams.get('name');
+            if (name) return ok([...dns.values()].filter((r) => r.name === name));
+            const all = [...dns.values()];
+            const total = paging.dnsTotal !== undefined ? paging.dnsTotal : all.length;
+            const per = Number(url.searchParams.get('per_page')) || 20;
+            const page = Number(url.searchParams.get('page')) || 1;
+            const result = all.slice((page - 1) * per, page * per);
+            const info = { page, per_page: per, count: result.length, total_count: total, total_pages: Math.max(1, Math.ceil(total / per)) };
+            const shown = paging.dnsInfo ? paging.dnsInfo(info) : info;
+            return Response.json({ success: true, result, ...(shown === undefined ? {} : { result_info: shown }) });
+        }
         if (p === '/zones/zone/dns_records' && method === 'POST') {
             if (fail.postDns) return err(500, 1000, 'internal error');
             const fqdn = `${body.name}.beanpool.org`;

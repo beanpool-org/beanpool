@@ -708,6 +708,14 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
                 (st.held_for_digest ? ' ' + esc(st.held_for_digest) + (noDaily ? ' held, but there is no daily summary: WATCH_TARGETS is not set, and the daily line comes with the outside checks.'
                     : ch.set ? ' held for the daily summary (08:00 Brisbane): shown below.' : ' held — no channel set, so no daily summary carries them yet: shown below.') : '') + '</p>';
+            const dns = st.dns_records;
+            if (dns) {
+                if (dns.count != null) {
+                    html += '<p style="font-size: 0.8rem; color: ' + (dns.pct >= (st.dns_alert_pct || 80) ? '#fbbf24' : 'var(--text-muted)') + ';">DNS records: <b>' + esc(dns.count) + '</b> of ' + esc(dns.cap) + ' (' + esc(dns.pct) + '%)' + (dns.checked_at ? ' · checked ' + esc(when(dns.checked_at)) : '') + '.</p>';
+                } else if (dns.error) {
+                    html += '<p style="font-size: 0.8rem; color: #f87171;">DNS records: couldn\'t count (' + esc(dns.error) + ')' + (dns.checked_at ? ' · checked ' + esc(when(dns.checked_at)) : '') + '.</p>';
+                }
+            }
             html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
                 const mode = (st.settings || {})[c] || 'on';
                 return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {

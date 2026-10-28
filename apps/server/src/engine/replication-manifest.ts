@@ -538,6 +538,7 @@ export const TABLES: Record<string, TableEntry> = {
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    peek_tickets: { kind: 'local', reason: "the links members shared outside, each opening one post for seven days (engine/peek-tickets.ts): a promoted server starts with none, so each reads as stopped, never as open, and its member shares again" },
     photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
     photo_budget_log: { kind: 'local', reason: "this server's own sliding-window photo upload byte log (engine/photo-upload-budget.ts), pruned > 48h; a promoted server starts its day afresh" },
     message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },

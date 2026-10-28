@@ -2892,3 +2892,25 @@ CREATE TABLE IF NOT EXISTS dm_requests (
 -- The requests waiting for a member (their list, Ignore all, the folded push), and a member's own (a removal, a re-key).
 CREATE INDEX IF NOT EXISTS idx_dm_requests_to ON dm_requests(to_pubkey, state);
 CREATE INDEX IF NOT EXISTS idx_dm_requests_from ON dm_requests(from_pubkey);
+
+-- 31. Peek tickets (front doors S6, scratch/fable-design/DESIGN-entry-points-fable.md §2.5 C, §3.4; engine/peek-tickets.ts):
+-- a member shared ONE post outside the community, and whoever holds the link reads that post under the visitors' rules
+-- (the engine's guestPost) until it ends. One row per link made. The ticket itself is never stored: `ticket_hash` is its
+-- SHA-256, so a copy of this database opens no post. `id` is what the member's own list names, and Stop sharing too.
+-- Local to this server (engine/replication-manifest.ts): a standby that takes over starts with none, and every link made
+-- before then reads as stopped, never as open.
+CREATE TABLE IF NOT EXISTS peek_tickets (
+    id            TEXT PRIMARY KEY,
+    ticket_hash   TEXT NOT NULL UNIQUE,
+    -- The one post it opens, and the member who shared it (who alone lists and stops it).
+    post_id       TEXT NOT NULL,
+    sharer_pubkey TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    -- Seven days after it was made (@beanpool/core PEEK_TICKET_DAYS); a row is deleted 30 days after this.
+    expires_at    TEXT NOT NULL,
+    -- Set when the member stops sharing it, or when the community turns outside sharing off: it opens nothing from then.
+    revoked_at    TEXT
+);
+-- A member's open links (their list, and the cap on how many), and the prune by when they ran out.
+CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey, expires_at);
+CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);

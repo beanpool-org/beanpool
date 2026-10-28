@@ -184,6 +184,13 @@ export interface ProfileSwitches {
      *  runs on members writing to each other, so a direct message arrives as before. The operator's switch in Settings
      *  (`dmRequests`) is this switch's override. Off again, a request still waiting is an ordinary chat. */
     dmRequests: boolean;
+    /** A member may share one listing, event or Pulse post outside the community: a link that opens that post, under the
+     *  visitors' rules (the engine's guestPost), to whoever holds it, for seven days or until the member stops it
+     *  (engine/peek-tickets.ts; front doors S6, DESIGN-entry-points-fable.md §3.4, Marty 2026-10-27). On (a local
+     *  community): the owners may turn it off under How this community works ("Members may share listings outside the
+     *  community"), which stops every link at once. Off (the global community): its listings are a visitor's read
+     *  already, so a plain link shows them. Never on in a private preview, which shows visitors nothing. */
+    shareOutside: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -220,6 +227,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         openMembership: false,
         retention: false,
         dmRequests: false,
+        shareOutside: true,
     },
     global: {
         openJoin: true,
@@ -265,6 +273,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         retention: true,
         // A stranger's first message waits until it is accepted (Marty, 2026-10-23): the lobby is where strangers are.
         dmRequests: true,
+        // Its listings are a visitor's read already (guestListingsOnly): a plain link to one shows it to anyone.
+        shareOutside: false,
     },
 };
 
@@ -339,6 +349,11 @@ export interface NodeFeatures {
      *  conversation in the lists says whether it is one (`request`), and a member's list holds the requests waiting for
      *  them apart (`requests`). Absent (a local community, or a server from before it): every message arrives as before. */
     dmRequests?: true;
+    /** Present, and true, only where members may share a post outside the community (`shareOutside`, and no private
+     *  preview): the apps offer "Share outside the community" beside the members' link, and list the member's open links
+     *  under Shared outside. Absent (the global community, a community that turned it off, a server from before it): the
+     *  apps offer only the members' link, as before. */
+    shareOutside?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -560,9 +575,14 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.showcase ? { showcase: true as const } : {}),
         ...(s.openMembership ? { openMembership: true as const } : {}),
         ...(s.dmRequests ? { dmRequests: true as const } : {}),
+        ...(s.shareOutside ? { shareOutside: true as const } : {}),
     };
-    // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
-    if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };
+    // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
+    // post go outside: the preview shows visitors nothing.
+    if (isPrivatePreview()) {
+        const { shareOutside: _off, ...rest } = features;
+        return { ...rest, openJoin: false, wordsDoor: false, privatePreview: true };
+    }
     return features;
 }
 

@@ -46,6 +46,8 @@ class WebSocketSyncClient {
     public static readonly PONG_TIMEOUT_MS = 75_000;
 
     private lastPongAt: number | null = null;
+    /** When the socket now open opened; null while there is none. A line sent before then never rang its doorbell. */
+    private openedAt: number | null = null;
     private watchdogArmed = false;
     private watchdogTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -191,6 +193,7 @@ class WebSocketSyncClient {
                 this.reconnectAttempt = 0;
                 this.watchdogArmed = false;
                 this.lastPongAt = null;
+                this.openedAt = Date.now();
                 if (this.watchdogTimeoutId) {
                     clearTimeout(this.watchdogTimeoutId);
                     this.watchdogTimeoutId = null;
@@ -247,6 +250,7 @@ class WebSocketSyncClient {
                     this.stopHeartbeat();
                     this.watchdogArmed = false;
                     this.lastPongAt = null;
+                    this.openedAt = null;
                     // A full node: wait what it asked (5 minutes, growing) instead of coming back within 30 s. The
                     // catch-up sync each try opens with keeps the screens current over HTTP meanwhile.
                     const askedSec = wsNoRoomRetrySec(e?.code, e?.reason);
@@ -332,7 +336,8 @@ class WebSocketSyncClient {
         this.stopHeartbeat();
         this.watchdogArmed = false;
         this.lastPongAt = null;
-        
+        this.openedAt = null;
+
         if (this.ws) {
             const socket = this.ws;
             this.ws = null; // Unbind immediately to avoid handling the imminent close event
@@ -417,6 +422,16 @@ class WebSocketSyncClient {
         return socketAlive(!!socket && socket.readyState === WebSocket.OPEN, this.signed, this.lastPongAt, now, WebSocketSyncClient.PONG_TIMEOUT_MS);
     }
 
+    /**
+     * Whether this socket's doorbell has brought every new message since a read of them that started at `readAt`: alive,
+     * and open since before that read. A line sent while the socket was down never rang, and a reopening reads no
+     * messages (its requestSync is the pillar sync), so the tabs' backstop counts the socket only once a read has started
+     * since it opened: the first tick after a drop reads, as every tick did before slice L0 (review of #2558).
+     */
+    public isAliveSince(readAt: number, now: number = Date.now()): boolean {
+        return this.openedAt !== null && this.openedAt <= readAt && this.isAlive(now);
+    }
+
     public getWatchdogArmedForTest(): boolean {
         return this.watchdogArmed;
     }
@@ -447,6 +462,6 @@ class WebSocketSyncClient {
 const clientInstance = new WebSocketSyncClient();
 export function startWebSocketSync() { clientInstance.start(); }
 export function stopWebSocketSync() { clientInstance.stop(); }
-/** Whether the member's socket is alive now (WebSocketSyncClient.isAlive). */
-export function webSocketAlive(): boolean { return clientInstance.isAlive(); }
+/** Whether the member's socket is alive now and has been open since the read at `readAt` (WebSocketSyncClient.isAliveSince). */
+export function webSocketAliveSince(readAt: number): boolean { return clientInstance.isAliveSince(readAt); }
 export { WebSocketSyncClient };

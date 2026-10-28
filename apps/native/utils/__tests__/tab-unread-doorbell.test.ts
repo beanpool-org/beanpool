@@ -68,8 +68,12 @@ vi.mock('../tour-store', () => ({
 vi.mock('../db', () => ({
     getGlobalUnreadCount: vi.fn(async () => 0), syncMessages: vi.fn(async () => undefined), getPosts: vi.fn(async () => []), getMarketplaceTransactions: vi.fn(async () => []),
 }));
-// The member's socket is alive: the backstop reads only once its last read is 120 s old (@beanpool/core messageBackstopDue).
-vi.mock('../../services/ws-client', () => ({ webSocketAlive: () => true }));
+// The member's socket is alive, open since before the first read: the backstop reads only once its last read is 120 s old
+// (@beanpool/core messageBackstopDue). A test drops and reopens it by moving `openedAt` (ws-client.ts isAliveSince).
+const socket = vi.hoisted(() => ({ openedAt: null as number | null }));
+vi.mock('../../services/ws-client', () => ({
+    webSocketAliveSince: (readAt: number) => socket.openedAt !== null && socket.openedAt <= readAt,
+}));
 vi.mock('../node-profile', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../node-profile')>()),
     fetchNodeProfile: vi.fn(async () => null), getCachedNodeProfile: vi.fn(async () => null),
@@ -98,6 +102,7 @@ beforeEach(async () => {
     vi.useFakeTimers({ now: new Date('2026-10-28T06:00:00Z') });
     vi.mocked(syncMessages).mockClear();
     rn.appState.current = 'active';
+    socket.openedAt = Date.now() - 60_000;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -164,6 +169,18 @@ describe('the tabs\' unread doorbell, with the socket alive', () => {
         await ring();                 // held
         await appGoes('background');
         await after(20_000);
+        expect(reads()).toBe(2);
+    });
+
+    it('a socket that dropped and reopened since the last read: the next tick reads, not the 120 s backstop (review of #2558)', async () => {
+        expect(reads()).toBe(1);      // t=0
+        await after(20_000);
+        socket.openedAt = null;       // t=20 s: the socket drops, and a line sent now rings no doorbell
+        await after(1_000);
+        socket.openedAt = Date.now(); // t=21 s: the retry reopens it, and the reopening reads no messages
+        await after(20_000);          // t=41 s: the tick at 24–36 s reads, not one ~105 s after the read at t=0
+        expect(reads()).toBe(2);
+        await after(40_000);          // t=81 s: that read started after the socket opened, so the backstop is 120 s again
         expect(reads()).toBe(2);
     });
 

@@ -79,7 +79,7 @@ vi.mock('../db', () => ({
     getGlobalUnreadCount: vi.fn(async () => 0), syncMessages: vi.fn(async () => undefined), getPosts: vi.fn(async () => []), getMarketplaceTransactions: vi.fn(async () => []),
 }));
 // The message backstop asks whether the socket is alive (slice L0); the socket itself loads Expo's native modules.
-vi.mock('../../services/ws-client', () => ({ webSocketAlive: () => false }));
+vi.mock('../../services/ws-client', () => ({ webSocketAliveSince: () => false }));
 vi.mock('../node-profile', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../node-profile')>()),
     fetchNodeProfile: vi.fn(async () => null), getCachedNodeProfile: vi.fn(async () => null),

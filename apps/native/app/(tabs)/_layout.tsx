@@ -8,7 +8,7 @@ import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
 import { dealsNeedingMe, helpSheetFor, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
-import { webSocketAlive } from '../../services/ws-client';
+import { webSocketAliveSince } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
 import { HelpSheet } from '../../components/HelpSheet';
@@ -238,10 +238,12 @@ export default function TabLayout() {
                 checkUnread(true);
                 // Local badge refresh every 5s; full network message-sync only as a backstop — real-time arrival is
                 // covered by the ws_activity nudge below. Every 120 s while the member's socket is alive, every 30 s
-                // while it is not (@beanpool/core messageBackstopDue, slice L0).
+                // while it is not (@beanpool/core messageBackstopDue, slice L0). A socket that opened after the last read
+                // doesn't count yet: a line sent while it was down never rang, so the next tick reads (review of #2558).
                 iv = setInterval(() => checkUnread(false), withJitter(5000));
                 netIv = setInterval(() => {
-                    if (messageBackstopDue(lastNetSyncAtRef.current, Date.now(), webSocketAlive())) checkUnread(true);
+                    const lastRead = lastNetSyncAtRef.current;
+                    if (messageBackstopDue(lastRead, Date.now(), webSocketAliveSince(lastRead))) checkUnread(true);
                 }, withJitter(MESSAGE_BACKSTOP_TICK_MS));
             }
         };

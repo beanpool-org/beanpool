@@ -179,7 +179,8 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(text()).not.toMatch(/Invite others to join/);
             expect(text()).not.toMatch(/Anyone can invite/);
             expect(text()).toMatch(/Levels are merit badges — they don't gate any action\. Direct sends require a positive balance/);
-            expect(net.calls).toEqual([]);
+            // L3: a member visiting the preview ledger records saw_ledger: true once on mount
+            expect(net.calls).toEqual(['db.signedRequest']);
         });
 
         it('local: the perk and "Anyone can invite" stay, and the send says Send Beans in its words and its label', async () => {

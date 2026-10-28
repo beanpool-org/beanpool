@@ -111,6 +111,13 @@ describe('Settings: sign-in recovery', () => {
         renderSettings(noWordsIdentity);
         await screen.findByTestId('signin-recovery');
         expect(screen.getByTestId('signin-recovery-where').textContent).toBe("This community's server keeps no copy of your account that a sign-in opens.");
+        cleanup();
+
+        // A list naming only a sign-in the app no longer offers (an old GitHub copy): never "keeps no copy".
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['github']);
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        expect(screen.queryByTestId('signin-recovery-where')).toBeNull();
     });
 
     it('the node could not be asked: no line at all, and the banner as it was', async () => {

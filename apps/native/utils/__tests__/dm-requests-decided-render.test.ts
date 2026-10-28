@@ -9,6 +9,9 @@
  *
  * decideMessageRequest stored nothing: the chat opened after Accept on a Requests card drew "{name} wants to message you"
  * again, with no composer, and Accept or Cancel request inside the chat came back on the next reread of the row.
+ *
+ * Cancel request in the chat took its lines off the phone but left the decrypted copy of a photo among them, opened by the
+ * chat, in the cache (review 4397153864).
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 // The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
@@ -17,6 +20,7 @@ vi.hoisted(() => {
     Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
 });
 import Module from 'node:module';
+import { randomUUID } from 'node:crypto';
 import { act, createElement, Fragment, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -34,6 +38,8 @@ const h = vi.hoisted(() => ({
     me: { publicKey: '', privateKey: '' },
     /** The member signed in, one object for the whole test, as IdentityContext hands it over. */
     identity: { publicKey: '', privateKey: '', callsign: 'Bo' },
+    /** The phone's files by path: one written is there until it is deleted. */
+    files: new Map<string, string>(),
 }));
 
 vi.mock('react-native', () => {
@@ -131,9 +137,9 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsy
 vi.mock('expo-crypto', async () => ({ randomUUID: (await import('node:crypto')).randomUUID, getRandomBytes: (n: number) => new Uint8Array(n) }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.0.0' } } }));
 vi.mock('expo-file-system/legacy', () => ({
-    cacheDirectory: 'file:///nowhere/', documentDirectory: 'file:///nowhere/doc/',
-    getInfoAsync: vi.fn(async () => ({ exists: false })), deleteAsync: vi.fn(async () => {}), makeDirectoryAsync: vi.fn(async () => {}),
-    writeAsStringAsync: vi.fn(async () => {}), readAsStringAsync: vi.fn(async () => ''), moveAsync: vi.fn(async () => {}),
+    cacheDirectory: 'file:///nowhere/', documentDirectory: 'file:///nowhere/doc/', EncodingType: { Base64: 'base64', UTF8: 'utf8' },
+    getInfoAsync: vi.fn(async (path: string) => ({ exists: h.files.has(path) })), deleteAsync: vi.fn(async (path: string) => { h.files.delete(path); }), makeDirectoryAsync: vi.fn(async () => {}),
+    writeAsStringAsync: vi.fn(async (path: string, data: string) => { h.files.set(path, data); }), readAsStringAsync: vi.fn(async () => ''), moveAsync: vi.fn(async () => {}),
 }));
 vi.mock('expo-file-system', () => ({}));
 vi.mock('expo-local-authentication', () => ({ SecurityLevel: { NONE: 0 }, hasHardwareAsync: async () => false, isEnrolledAsync: async () => false, authenticateAsync: async () => ({ success: false }) }));
@@ -186,7 +192,7 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { MessageRequestsPane } from '../../components/MessageRequestsPane';
 import ChatRoute from '../../app/chat/[id]';
 import { getDb, getMessageRequests, syncMessages, syncSingleConversation } from '../db';
-import { encryptDmFormat2 } from '../e2e-crypto';
+import { encryptDmFormat2, sealDmLine } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
 const sql = (globalThis as any).__phoneSql as import('node:sqlite').DatabaseSync;
@@ -205,6 +211,8 @@ interface Conv { id: string; participants: string[]; request: { state: string; f
 const node = {
     lines: [] as Line[],
     convs: [] as Conv[],
+    /** A photo line's picture, locked, by the line's id: served while the line is. */
+    photos: new Map<string, { data: string; nonce: string }>(),
     /** While true, a read the node has answered (the list, a page of lines) doesn't arrive until released: a slow node. */
     readsHeld: false,
     held: [] as Array<() => void>,
@@ -233,6 +241,12 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
             conv.request = { ...conv.request, state: b.decision === 'accept' ? 'accepted' : 'ignored' };
         }
         return answer(200, { success: true, request: { ...conv.request } });
+    }
+    const attachment = u.pathname.match(/^\/api\/messages\/([^/]+)\/attachment$/);
+    if (attachment) {
+        const id = decodeURIComponent(attachment[1]);
+        const photo = node.lines.some((l) => l.id === id) ? node.photos.get(id) : undefined;
+        return photo ? answer(200, { ...photo, mime: 'image/jpeg' }) : answer(404, { error: 'Attachment not found' });
     }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
     if (list) {
@@ -270,6 +284,20 @@ function write(conv: Conv, author: Person, text: string): Line {
     return line;
 }
 
+/** A DM photo line on the node as sendImageMessage seals one (format 3, the author's first): its caption the words, its picture beside them. */
+function writePhoto(conv: Conv, author: Person, caption: string, dataUri: string): Line {
+    const peer = conv.participants.find((p) => p !== author.publicKey)!;
+    const ctx = { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id };
+    const bind = { senderPubHex: author.publicKey, messageId: randomUUID() };
+    const words = sealDmLine(caption, ctx, { ...bind, part: 'body', after: null });
+    const picture = sealDmLine(dataUri, ctx, { ...bind, part: 'attachment' });
+    clock += 1000;
+    const line: Line = { id: bind.messageId, conversationId: conv.id, authorPubkey: author.publicKey, ciphertext: words.ciphertext, nonce: words.nonce, type: 'image', systemType: null, metadata: null, timestamp: new Date(clock).toISOString(), editedAt: null };
+    node.lines.push(line);
+    node.photos.set(line.id, { data: picture.ciphertext, nonce: picture.nonce });
+    return line;
+}
+
 // ── The phone ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 // utils/db reaches DeviceEventEmitter through require('react-native'), which vi.mock doesn't see: the same stand-in.
@@ -304,6 +332,8 @@ beforeEach(async () => {
     h.identity = { ...h.me, callsign: 'Bo' };
     node.lines = [];
     node.convs = [];
+    node.photos.clear();
+    h.files.clear();
     node.readsHeld = false;
     node.held = [];
     alerts.said.length = 0;
@@ -421,5 +451,30 @@ describe('a decision on a message request, then the chat, on the phone (review 4
         expect(host.textContent).not.toContain('his first words');
         expect(host.querySelector('[data-testid="request-waiting"]')).toBeNull();
         expect(box()).not.toBeNull();
+    });
+});
+
+describe('Cancel request on the phone, and the photo the request opened with (review 4397153864)', () => {
+    const PHOTO_B64 = Buffer.from('a decrypted jpeg').toString('base64');
+    const cachedPhoto = (id: string) => `file:///nowhere/chat-images/${id}.jpg`;
+
+    it('Cancel request in the chat takes the decrypted copy of his photo off the phone with its line', async () => {
+        const req: Conv = { id: 'dm-bo-rhea-photo', participants: [bo.publicKey, rhea.publicKey], request: { state: 'pending', from: bo.publicKey, at: new Date(clock + 500).toISOString(), nextLineIsRequest: false } };
+        node.convs.push(req);
+        const photo = writePhoto(req, bo, 'his photo', `data:image/jpeg;base64,${PHOTO_B64}`);
+        await syncMessages(bo.publicKey);
+        await syncSingleConversation(req.id);
+        node.readsHeld = true;
+        await openChat(req.id);
+        // Control: the chat drew his photo, opened on this phone, so its decrypted copy is in the cache.
+        expect(host.querySelector('img[aria-label="Photo message"]')).not.toBeNull();
+        expect(h.files.get(cachedPhoto(photo.id))).toBe(PHOTO_B64);
+
+        await tap('Cancel request');
+        await syncLanded();
+
+        expect(host.textContent).not.toContain('his photo');
+        expect(host.querySelector('img[aria-label="Photo message"]')).toBeNull();
+        expect(h.files.has(cachedPhoto(photo.id))).toBe(false);
     });
 });

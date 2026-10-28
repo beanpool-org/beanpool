@@ -6574,10 +6574,14 @@ async function requestDecided(conversationId: string, request: unknown): Promise
     } catch { /* the next poll brings the node's word */ }
 }
 
-/** Remove a local-only message row (used to discard or resend a failed optimistic send). */
+/**
+ * Remove a message row from this phone, and its photo's decrypted copy with it (used to discard or resend a failed
+ * optimistic send, and by Cancel request, which takes the opener's own lines off: PR #2540 review 4397153864).
+ */
 export async function deleteLocalMessage(messageId: string) {
     const database = await getDb();
     await database.runAsync('DELETE FROM messages WHERE id = ?', [messageId]);
+    await forgetCachedChatImage(messageId);
 }
 
 /**
